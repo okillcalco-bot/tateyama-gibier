@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>館山ジビエセンター｜在庫登録</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #222536;
+    --border: #2e3148;
+    --accent: #e8572a;
+    --accent2: #f4a24a;
+    --green: #2ecc71;
+    --blue: #3b82f6;
+    --red: #ef4444;
+    --yellow: #f59e0b;
+    --text: #f0f0f0;
+    --text2: #9ca3af;
+    --font: 'Noto Sans JP', sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ヘッダー */
+  .header {
+    background: var(--surface);
+    border-bottom: 2px solid var(--accent);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .header-title { font-size: 18px; font-weight: 900; letter-spacing: 0.05em; }
+  .header-title span { color: var(--accent); }
+  .header-status {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: var(--text2);
+  }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* メインレイアウト */
+  .main { display: grid; grid-template-columns: 1fr 1fr; gap: 0; height: calc(100vh - 60px); }
+  @media (max-width: 768px) { .main { grid-template-columns: 1fr; height: auto; } }
+
+  /* 左パネル：現在の状態 */
+  .panel-left {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 20px;
+    display: flex; flex-direction: column; gap: 16px;
+    overflow-y: auto;
+  }
+
+  .info-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .info-card-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.15em;
+    color: var(--text2); text-transform: uppercase; margin-bottom: 6px;
+  }
+  .info-card-value {
+    font-size: 28px; font-weight: 900; line-height: 1.1;
+  }
+  .info-card-value.accent { color: var(--accent); }
+  .info-card-value.green { color: var(--green); }
+  .info-card-value.blue { color: var(--blue); }
+  .info-card-value.empty { color: var(--text2); font-size: 18px; font-weight: 400; }
+
+  .info-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+
+  /* モードバッジ */
+  .mode-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 100px;
+    font-size: 13px; font-weight: 700;
+    background: var(--surface2); border: 1px solid var(--border);
+  }
+  .mode-badge.normal { border-color: var(--green); color: var(--green); }
+  .mode-badge.process { border-color: var(--yellow); color: var(--yellow); }
+
+  /* 入力エリア */
+  .input-area {
+    background: var(--surface2);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    transition: border-color 0.2s;
+  }
+  .input-area:focus-within { border-color: var(--accent); }
+  .input-area label {
+    display: block; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.15em; color: var(--text2); margin-bottom: 8px;
+  }
+  .input-area input {
+    width: 100%; background: transparent; border: none; outline: none;
+    color: var(--text); font-family: var(--mono); font-size: 22px; font-weight: 700;
+  }
+  .input-area input::placeholder { color: var(--border); font-size: 16px; }
+
+  /* ステータス表示 */
+  .status-box {
+    border-radius: 12px; padding: 14px 16px;
+    font-size: 15px; font-weight: 700;
+    display: flex; align-items: center; gap: 10px;
+    transition: all 0.3s;
+  }
+  .status-box.waiting { background: rgba(59,130,246,0.15); border: 1px solid var(--blue); color: var(--blue); }
+  .status-box.success { background: rgba(46,204,113,0.15); border: 1px solid var(--green); color: var(--green); }
+  .status-box.error   { background: rgba(239,68,68,0.15);  border: 1px solid var(--red);   color: var(--red); }
+  .status-box.warning { background: rgba(245,158,11,0.15); border: 1px solid var(--yellow); color: var(--yellow); }
+
+  /* 右パネル：ボタン */
+  .panel-right {
+    padding: 20px;
+    display: flex; flex-direction: column; gap: 12px;
+    overflow-y: auto;
+  }
+
+  .section-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.15em;
+    color: var(--text2); text-transform: uppercase;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+
+  /* タッチボタン */
+  .btn {
+    width: 100%; padding: 18px 20px;
+    border: none; border-radius: 12px; cursor: pointer;
+    font-family: var(--font); font-size: 16px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    transition: all 0.15s; position: relative; overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+    box-shadow: 0 4px 20px rgba(232,87,42,0.3);
+  }
+  .btn-primary:hover { background: #d44a1e; }
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--text2); }
+  .btn-green {
+    background: rgba(46,204,113,0.2);
+    color: var(--green);
+    border: 1px solid var(--green);
+  }
+  .btn-yellow {
+    background: rgba(245,158,11,0.2);
+    color: var(--yellow);
+    border: 1px solid var(--yellow);
+  }
+  .btn-blue {
+    background: rgba(59,130,246,0.2);
+    color: var(--blue);
+    border: 1px solid var(--blue);
+  }
+  .btn-red {
+    background: rgba(239,68,68,0.2);
+    color: var(--red);
+    border: 1px solid var(--red);
+  }
+  .btn-lg { padding: 22px 20px; font-size: 18px; }
+  .btn-icon { font-size: 20px; }
+
+  /* 個体選択モーダル */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7); z-index: 200;
+    align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    width: min(500px, 95vw);
+    max-height: 85vh;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .modal-header {
+    padding: 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-header h2 { font-size: 18px; font-weight: 900; }
+  .modal-body { flex: 1; overflow-y: auto; padding: 16px; }
+  .modal-footer { padding: 16px; border-top: 1px solid var(--border); }
+
+  .search-input {
+    width: 100%; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 16px; color: var(--text);
+    font-family: var(--mono); font-size: 16px;
+    outline: none; margin-bottom: 12px;
+  }
+  .search-input:focus { border-color: var(--accent); }
+
+  .individual-list { display: flex; flex-direction: column; gap: 8px; }
+  .individual-item {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .individual-item:hover, .individual-item.selected {
+    border-color: var(--accent); background: rgba(232,87,42,0.1);
+  }
+  .individual-item .item-id { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--accent); }
+  .individual-item .item-info { font-size: 13px; color: var(--text2); margin-top: 4px; }
+
+  /* 部位選択グリッド */
+  .part-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  }
+  .part-btn {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 8px; cursor: pointer;
+    text-align: center; transition: all 0.15s;
+    font-family: var(--font); color: var(--text);
+  }
+  .part-btn:hover, .part-btn.selected {
+    border-color: var(--blue); background: rgba(59,130,246,0.15); color: var(--blue);
+  }
+  .part-btn .part-name { font-size: 14px; font-weight: 700; }
+  .part-btn .part-price { font-size: 11px; color: var(--text2); margin-top: 4px; }
+
+  /* 在庫ログ */
+  .log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .log-table th {
+    text-align: left; padding: 8px 12px;
+    background: var(--surface2); color: var(--text2);
+    font-size: 11px; letter-spacing: 0.1em;
+    border-bottom: 1px solid var(--border);
+    font-weight: 700;
+  }
+  .log-table td {
+    padding: 10px 12px; border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  .log-table tr:hover td { background: var(--surface2); }
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 100px;
+    font-size: 11px; font-weight: 700;
+  }
+  .badge-green { background: rgba(46,204,113,0.2); color: var(--green); }
+  .badge-yellow { background: rgba(245,158,11,0.2); color: var(--yellow); }
+  .badge-red { background: rgba(239,68,68,0.2); color: var(--red); }
+  .badge-blue { background: rgba(59,130,246,0.2); color: var(--blue); }
+
+  /* ナビタブ */
+  .nav-tabs {
+    display: flex; gap: 4px;
+    background: var(--surface2); border-radius: 10px; padding: 4px;
+    margin-bottom: 16px;
+  }
+  .nav-tab {
+    flex: 1; padding: 10px; border: none; border-radius: 7px;
+    background: transparent; color: var(--text2);
+    font-family: var(--font); font-size: 13px; font-weight: 700;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .nav-tab.active {
+    background: var(--accent); color: white;
+  }
+
+  /* ページ */
+  .page { display: none; }
+  .page.active { display: flex; flex-direction: column; height: calc(100vh - 60px); }
+
+  /* スクロールバー */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .divider { height: 1px; background: var(--border); margin: 4px 0; }
+  .text-small { font-size: 12px; color: var(--text2); }
+  .mt-8 { margin-top: 8px; }
+
+  /* 担当者選択 */
+  .operator-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    padding: 8px 16px; border-radius: 100px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface2);
+    font-size: 14px; font-weight: 700; transition: all 0.15s;
+  }
+  .chip.selected { border-color: var(--accent); background: rgba(232,87,42,0.2); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-title">館山<span>ジビエ</span>センター</div>
+  <div class="header-status">
+    <div class="status-dot"></div>
+    <span id="headerOperator">担当者未設定</span>
+    <span id="headerTime"></span>
+  </div>
+</header>
+
+<!-- ナビ -->
+<div style="background:var(--surface);border-bottom:1px solid var(--border);padding:8px 16px;">
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showPage('register')">📦 在庫登録</button>
+    <button class="nav-tab" onclick="showPage('inventory')">📋 在庫一覧</button>
+    <button class="nav-tab" onclick="showPage('settings')">⚙️ 設定</button>
+  </div>
+</div>
+
+<!-- ページ: 在庫登録 -->
+<div class="page active" id="page-register">
+  <div class="main">
+    <!-- 左パネル -->
+    <div class="panel-left">
+
+      <!-- モード -->
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div class="mode-badge normal" id="modeBadge">● 通常モード</div>
+        <div class="text-small" id="currentTime2"></div>
+      </div>
+
+      <!-- 個体情報 -->
+      <div class="info-card">
+        <div class="info-card-label">現在の個体</div>
+        <div class="info-card-value accent" id="dispIndividual">未設定</div>
+        <div class="text-small mt-8" id="dispOriginSpecies">産地・獣種を設定してください</div>
+      </div>
+
+      <div class="info-row">
+        <div class="info-card">
+          <div class="info-card-label">産地</div>
+          <div class="info-card-value blue" id="dispOrigin" style="font-size:18px;">---</div>
+        </div>
+        <div class="info-card">
+          <div class="info-card-label">獣種</div>
+          <div class="info-card-value green" id="dispSpecies" style="font-size:18px;">---</div>
+        </div>
+      </div>
+
+      <!-- 部位情報 -->
+      <div class="info-card">
+        <div class="info-card-label">現在の部位</div>
+        <div class="info-card-value" id="dispPart" style="color:var(--accent2);">未設定</div>
+        <div class="text-small mt-8" id="dispPrice">単価: ---</div>
+      </div>
+
+      <!-- 入力エリア（スキャナ・はかり） -->
+      <div class="input-area">
+        <label>📡 スキャン / 計量入力（Enterで確定）</label>
+        <input type="text" id="scanInput" placeholder="バーコードスキャンまたは重量入力..."
+               autocomplete="off" autocorrect="off" spellcheck="false">
+      </div>
+
+      <!-- ステータス -->
+      <div class="status-box waiting" id="statusBox">
+        <span id="statusIcon">⏳</span>
+        <span id="statusText">スキャンまたは重量を入力してください</span>
+      </div>
+
+    </div>
+
+    <!-- 右パネル -->
+    <div class="panel-right">
+      <div class="section-title">操作</div>
+
+      <button class="btn btn-primary btn-lg" onclick="openIndividualModal()">
+        <span class="btn-icon">🔄</span> 個体切替
+      </button>
+
+      <button class="btn btn-blue" onclick="openPartModal()">
+        <span class="btn-icon">🥩</span> 部位選択
+      </button>
+
+      <div class="divider"></div>
+      <div class="section-title">モード切替</div>
+
+      <button class="btn btn-yellow" id="processModeBtn" onclick="toggleProcessMode()">
+        <span class="btn-icon">⚙️</span> 加工モード OFF
+      </button>
+
+      <div class="divider"></div>
+      <div class="section-title">手動操作</div>
+
+      <button class="btn btn-secondary" onclick="manualWeight()">
+        <span class="btn-icon">✏️</span> 重量を手動入力
+      </button>
+
+      <button class="btn btn-secondary" onclick="openOperatorModal()">
+        <span class="btn-icon">👤</span> 担当者変更
+      </button>
+
+      <div class="divider"></div>
+      <div class="section-title">直近の登録</div>
+
+      <div id="recentLog" style="font-size:13px;color:var(--text2);">読み込み中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ページ: 在庫一覧 -->
+<div class="page" id="page-inventory">
+  <div style="padding:20px;flex:1;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <h2 style="font-size:18px;font-weight:900;">在庫一覧</h2>
+      <button class="btn btn-secondary" style="width:auto;padding:10px 16px;font-size:14px;" onclick="loadInventory()">🔄 更新</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+      <select id="filterStatus" onchange="loadInventory()" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;">
+        <option value="">全ステータス</option>
+        <option value="在庫">在庫</option>
+        <option value="引当済">引当済</option>
+        <option value="出荷済">出荷済</option>
+        <option value="加工済">加工済</option>
+      </select>
+      <select id="filterSpecies" onchange="loadInventory()" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;">
+        <option value="">全獣種</option>
+        <option value="イノシシ">イノシシ</option>
+        <option value="シカ">シカ</option>
+        <option value="中型獣">中型獣</option>
+      </select>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="log-table">
+        <thead>
+          <tr>
+            <th>個体ID</th>
+            <th>獣種</th>
+            <th>部位</th>
+            <th>重量</th>
+            <th>単価</th>
+            <th>金額</th>
+            <th>担当</th>
+            <th>ステータス</th>
+            <th>登録日時</th>
+          </tr>
+        </thead>
+        <tbody id="inventoryBody">
+          <tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text2);">読み込み中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ページ: 設定 -->
+<div class="page" id="page-settings">
+  <div style="padding:20px;max-width:500px;">
+    <h2 style="font-size:18px;font-weight:900;margin-bottom:20px;">設定</h2>
+
+    <div class="info-card" style="margin-bottom:16px;">
+      <div class="info-card-label">担当者設定</div>
+      <div class="operator-chips mt-8" id="operatorChips"></div>
+      <div style="margin-top:12px;display:flex;gap:8px;">
+        <input type="text" id="newOperatorInput" placeholder="担当者名を追加..."
+               style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;outline:none;">
+        <button class="btn btn-primary" style="width:auto;padding:10px 16px;font-size:14px;" onclick="addOperator()">追加</button>
+      </div>
+    </div>
+
+    <div class="info-card">
+      <div class="info-card-label">接続情報</div>
+      <div class="text-small mt-8">Supabase: clpdyrehdgzgiidbfucj.supabase.co</div>
+      <div class="text-small" style="margin-top:4px;">プロジェクト: tateyama-gibier</div>
+    </div>
+  </div>
+</div>
+
+<!-- モーダル: 個体選択 -->
+<div class="modal-overlay" id="individualModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>個体を選択</h2>
+      <button onclick="closeModal('individualModal')" style="background:none;border:none;color:var(--text2);font-size:24px;cursor:pointer;">×</button>
+    </div>
+    <div class="modal-body">
+      <input class="search-input" type="text" placeholder="🔍 個体IDや産地で絞り込み..." id="individualSearch" oninput="filterIndividuals()">
+      <div class="individual-list" id="individualList">読み込み中...</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('individualModal')">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<!-- モーダル: 部位選択 -->
+<div class="modal-overlay" id="partModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>部位を選択</h2>
+      <button onclick="closeModal('partModal')" style="background:none;border:none;color:var(--text2);font-size:24px;cursor:pointer;">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="part-grid" id="partGrid"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('partModal')">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<!-- モーダル: 担当者 -->
+<div class="modal-overlay" id="operatorModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>担当者を選択</h2>
+      <button onclick="closeModal('operatorModal')" style="background:none;border:none;color:var(--text2);font-size:24px;cursor:pointer;">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="operator-chips" id="operatorChipsModal"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('operatorModal')">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// =============================================
+// Supabase 初期化
+// =============================================
+const SUPABASE_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// =============================================
+// グローバル状態
+// =============================================
+let state = {
+  individualId: '',
+  origin: '',
+  species: '',
+  partName: '',
+  barcodeNum: '',
+  unitPrice: 0,
+  operator: '',
+  processMode: false,
+  parentCode: ''
+};
+
+let allIndividuals = [];
+let allParts = [];
+let operators = JSON.parse(localStorage.getItem('gibier_operators') || '["山田","鈴木","佐藤"]');
+
+// =============================================
+// 初期化
+// =============================================
+window.addEventListener('DOMContentLoaded', async () => {
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  // スキャン入力
+  const scanInput = document.getElementById('scanInput');
+  scanInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') handleScanInput(scanInput.value.trim());
+  });
+
+  // フォーカス維持
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.modal-overlay') &&
+        !e.target.closest('button') &&
+        !e.target.closest('input') &&
+        !e.target.closest('select')) {
+      scanInput.focus();
+    }
+  });
+
+  await loadIndividuals();
+  await loadParts();
+  renderOperatorChips();
+  await loadRecentLog();
+  scanInput.focus();
+});
+
+function updateClock() {
+  const now = new Date();
+  const t = now.toLocaleTimeString('ja-JP');
+  document.getElementById('headerTime').textContent = t;
+}
+
+// =============================================
+// スキャン入力処理（メインロジック）
+// =============================================
+async function handleScanInput(val) {
+  document.getElementById('scanInput').value = '';
+  if (!val) return;
+
+  // パターン1: ID-xxx → 個体変更
+  if (val.startsWith('ID-')) {
+    const newId = val.slice(3);
+    const found = allIndividuals.find(i => i.label_id === newId);
+    if (found) {
+      selectIndividual(found);
+      showStatus('success', `✅ 個体変更: ${newId}`);
+    } else {
+      showStatus('error', `❌ 個体未登録: ${newId}`);
+    }
+    return;
+  }
+
+  // パターン2: 部位バーコード（数字3桁）
+  if (/^\d{3}$/.test(val)) {
+    const part = allParts.find(p => p.barcode_num === val);
+    if (part) {
+      selectPart(part);
+      showStatus('success', `✅ 部位変更: ${part.part_name}`);
+    } else {
+      showStatus('error', `❌ 部位番号未登録: ${val}`);
+    }
+    return;
+  }
+
+  // パターン3: 加工モードで既存識別コードスキャン
+  if (state.processMode && val.includes('-') && isNaN(val)) {
+    state.parentCode = val;
+    showStatus('warning', `⚙️ 親コード設定: ${val}`);
+    updateDisplay();
+    return;
+  }
+
+  // パターン4: 数値 → 重量として記録
+  if (!isNaN(val) && val !== '') {
+    const weight = parseFloat(val);
+    if (weight <= 0 || weight > 99999) {
+      showStatus('error', '❌ 重量が範囲外です');
+      return;
+    }
+    await recordInventory(weight);
+    return;
+  }
+
+  showStatus('error', `❓ 不明な入力: ${val}`);
+}
+
+// =============================================
+// 在庫登録
+// =============================================
+async function recordInventory(weight) {
+  if (!state.individualId) {
+    showStatus('error', '❌ 個体IDが未設定です');
+    return;
+  }
+  if (!state.partName) {
+    showStatus('error', '❌ 部位が未設定です');
+    return;
+  }
+  if (!state.operator) {
+    showStatus('error', '❌ 担当者を設定してください');
+    openOperatorModal();
+    return;
+  }
+
+  showStatus('waiting', '⏳ 登録中...');
+
+  const identCode = `${state.individualId}-${state.partName}-${weight}g-${Date.now()}`;
+  const amount = Math.round(weight / 1000 * state.unitPrice);
+
+  const record = {
+    individual_id: state.individualId,
+    part_name: state.partName,
+    barcode_num: state.barcodeNum,
+    weight: weight,
+    ident_code: identCode,
+    status: '在庫',
+    operator: state.operator,
+    grade: '上',
+    unit_price: state.unitPrice
+  };
+
+  const { error } = await db.from('inventory').insert(record);
+
+  if (error) {
+    showStatus('error', `❌ 登録失敗: ${error.message}`);
+    return;
+  }
+
+  // 加工モード：親を加工済に更新
+  if (state.processMode && state.parentCode) {
+    await db.from('inventory').update({ status: '加工済' }).eq('ident_code', state.parentCode);
+    await db.from('processing_log').insert({
+      parent_ident_code: state.parentCode,
+      child_ident_code: identCode,
+      weight: weight,
+      operator: state.operator
+    });
+  }
+
+  showStatus('success', `✅ 登録完了: ${state.partName} ${weight}g（¥${amount.toLocaleString()}）`);
+  await loadRecentLog();
+}
+
+// =============================================
+// データ読み込み
+// =============================================
+async function loadIndividuals() {
+  const { data } = await db.from('individuals').select('*').order('created_at', { ascending: false });
+  allIndividuals = data || [];
+}
+
+async function loadParts() {
+  const species = state.species || 'イノシシ';
+  const { data } = await db.from('price_master').select('*').eq('species', species).order('barcode_num');
+  allParts = data || [];
+}
+
+async function loadRecentLog() {
+  const { data } = await db.from('inventory').select('*').order('created_at', { ascending: false }).limit(5);
+  const el = document.getElementById('recentLog');
+  if (!data || data.length === 0) {
+    el.innerHTML = '<div style="color:var(--text2);text-align:center;padding:10px;">まだ登録がありません</div>';
+    return;
+  }
+  el.innerHTML = data.map(r => `
+    <div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-weight:700;font-size:13px;">${r.individual_id} / ${r.part_name}</div>
+        <div style="font-size:11px;color:var(--text2);">${r.weight}g · ${r.operator}</div>
+      </div>
+      <span class="badge badge-green">${r.status}</span>
+    </div>
+  `).join('');
+}
+
+async function loadInventory() {
+  const statusFilter = document.getElementById('filterStatus').value;
+  const speciesFilter = document.getElementById('filterSpecies').value;
+
+  let query = db.from('inventory').select('*').order('created_at', { ascending: false }).limit(200);
+  if (statusFilter) query = query.eq('status', statusFilter);
+
+  const { data } = await query;
+  let rows = data || [];
+
+  // 獣種フィルター（個体台帳と結合は後で実装、今はident_codeに含まれる場合のみ）
+  const tbody = document.getElementById('inventoryBody');
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text2);">データなし</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(r => {
+    const amount = r.weight && r.unit_price ? Math.round(r.weight / 1000 * r.unit_price) : 0;
+    const statusBadge = r.status === '在庫' ? 'badge-green' :
+                        r.status === '引当済' ? 'badge-yellow' :
+                        r.status === '出荷済' ? 'badge-blue' : 'badge-red';
+    const date = new Date(r.created_at).toLocaleString('ja-JP', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+    return `
+      <tr>
+        <td style="font-family:var(--mono);font-weight:700;color:var(--accent);">${r.individual_id || '-'}</td>
+        <td>${r.species || '-'}</td>
+        <td style="font-weight:700;">${r.part_name}</td>
+        <td style="font-family:var(--mono);">${r.weight}g</td>
+        <td style="font-family:var(--mono);">${r.unit_price ? r.unit_price.toLocaleString()+'円/kg' : '-'}</td>
+        <td style="font-family:var(--mono);">${amount ? '¥'+amount.toLocaleString() : '-'}</td>
+        <td>${r.operator || '-'}</td>
+        <td><span class="badge ${statusBadge}">${r.status}</span></td>
+        <td style="font-size:12px;color:var(--text2);">${date}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// =============================================
+// 選択処理
+// =============================================
+function selectIndividual(ind) {
+  state.individualId = ind.label_id;
+  state.origin = ind.origin || '';
+  state.species = ind.species || '';
+  updateDisplay();
+  loadParts().then(() => {});
+  closeModal('individualModal');
+}
+
+function selectPart(part) {
+  state.partName = part.part_name;
+  state.barcodeNum = part.barcode_num;
+  state.unitPrice = part.price_standard || 0;
+  updateDisplay();
+  closeModal('partModal');
+}
+
+// =============================================
+// 表示更新
+// =============================================
+function updateDisplay() {
+  document.getElementById('dispIndividual').textContent = state.individualId || '未設定';
+  document.getElementById('dispOrigin').textContent = state.origin || '---';
+  document.getElementById('dispSpecies').textContent = state.species || '---';
+  document.getElementById('dispOriginSpecies').textContent =
+    state.origin && state.species ? `${state.origin} / ${state.species}` : '産地・獣種を設定してください';
+  document.getElementById('dispPart').textContent = state.partName || '未設定';
+  document.getElementById('dispPrice').textContent = state.unitPrice ? `単価: ${state.unitPrice.toLocaleString()}円/kg` : '単価: ---';
+  document.getElementById('headerOperator').textContent = state.operator || '担当者未設定';
+
+  const badge = document.getElementById('modeBadge');
+  const btn = document.getElementById('processModeBtn');
+  if (state.processMode) {
+    badge.className = 'mode-badge process';
+    badge.textContent = '⚙️ 加工モード ON';
+    btn.textContent = '⚙️ 加工モード ON（タップで解除）';
+  } else {
+    badge.className = 'mode-badge normal';
+    badge.textContent = '● 通常モード';
+    btn.textContent = '⚙️ 加工モード OFF';
+  }
+}
+
+function showStatus(type, msg) {
+  const box = document.getElementById('statusBox');
+  box.className = `status-box ${type}`;
+  document.getElementById('statusText').textContent = msg;
+}
+
+// =============================================
+// モーダル操作
+// =============================================
+function openIndividualModal() {
+  loadIndividuals().then(() => {
+    renderIndividualList(allIndividuals);
+    document.getElementById('individualSearch').value = '';
+    document.getElementById('individualModal').classList.add('open');
+  });
+}
+
+function renderIndividualList(list) {
+  const el = document.getElementById('individualList');
+  if (list.length === 0) {
+    el.innerHTML = '<div style="text-align:center;color:var(--text2);padding:20px;">個体がありません<br><small>個体台帳に登録してください</small></div>';
+    return;
+  }
+  el.innerHTML = list.map(ind => `
+    <div class="individual-item ${state.individualId === ind.label_id ? 'selected' : ''}"
+         onclick="selectIndividual(${JSON.stringify(ind).replace(/"/g, '&quot;')})">
+      <div class="item-id">${ind.label_id}</div>
+      <div class="item-info">${ind.origin || '産地不明'} / ${ind.species || '獣種不明'}</div>
+    </div>
+  `).join('');
+}
+
+function filterIndividuals() {
+  const q = document.getElementById('individualSearch').value.toLowerCase();
+  const filtered = allIndividuals.filter(i =>
+    i.label_id.toLowerCase().includes(q) ||
+    (i.origin || '').toLowerCase().includes(q) ||
+    (i.species || '').toLowerCase().includes(q)
+  );
+  renderIndividualList(filtered);
+}
+
+function openPartModal() {
+  const el = document.getElementById('partGrid');
+  if (allParts.length === 0) {
+    el.innerHTML = '<div style="color:var(--text2);">部位データなし</div>';
+  } else {
+    el.innerHTML = allParts.map(p => `
+      <div class="part-btn ${state.partName === p.part_name ? 'selected' : ''}"
+           onclick="selectPart(${JSON.stringify(p).replace(/"/g, '&quot;')})">
+        <div class="part-name">${p.part_name}</div>
+        <div class="part-price">${p.price_standard ? p.price_standard.toLocaleString()+'円/kg' : ''}</div>
+      </div>
+    `).join('');
+  }
+  document.getElementById('partModal').classList.add('open');
+}
+
+function openOperatorModal() {
+  renderOperatorChipsModal();
+  document.getElementById('operatorModal').classList.add('open');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  document.getElementById('scanInput').focus();
+}
+
+// =============================================
+// 担当者
+// =============================================
+function renderOperatorChips() {
+  const el = document.getElementById('operatorChips');
+  if (!el) return;
+  el.innerHTML = operators.map(op => `
+    <div class="chip ${state.operator === op ? 'selected' : ''}" onclick="setOperator('${op}')">${op}</div>
+  `).join('');
+}
+
+function renderOperatorChipsModal() {
+  const el = document.getElementById('operatorChipsModal');
+  el.innerHTML = operators.map(op => `
+    <div class="chip ${state.operator === op ? 'selected' : ''}"
+         onclick="setOperator('${op}');closeModal('operatorModal')">${op}</div>
+  `).join('');
+}
+
+function setOperator(name) {
+  state.operator = name;
+  updateDisplay();
+  renderOperatorChips();
+}
+
+function addOperator() {
+  const val = document.getElementById('newOperatorInput').value.trim();
+  if (val && !operators.includes(val)) {
+    operators.push(val);
+    localStorage.setItem('gibier_operators', JSON.stringify(operators));
+    document.getElementById('newOperatorInput').value = '';
+    renderOperatorChips();
+  }
+}
+
+// =============================================
+// その他
+// =============================================
+function toggleProcessMode() {
+  state.processMode = !state.processMode;
+  if (!state.processMode) state.parentCode = '';
+  updateDisplay();
+  document.getElementById('scanInput').focus();
+}
+
+function manualWeight() {
+  const w = prompt('重量を入力してください (g):');
+  if (w && !isNaN(w)) recordInventory(parseFloat(w));
+}
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`page-${name}`).classList.add('active');
+  event.target.classList.add('active');
+  if (name === 'inventory') loadInventory();
+  if (name === 'register') {
+    setTimeout(() => document.getElementById('scanInput').focus(), 100);
+  }
+}
+</script>
+</body>
+</html>
