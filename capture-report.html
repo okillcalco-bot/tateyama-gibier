@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>館山ジビエセンター | 放射能検査台帳</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    /* ===== CSS Variables ===== */
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1e2a;
+      --surface2: #222736;
+      --border: #2e3447;
+      --accent: #e8a44a;
+      --accent2: #c06a2a;
+      --green: #4caf7d;
+      --red: #e05555;
+      --yellow: #f0c040;
+      --blue: #4a9eff;
+      --text: #e8eaf0;
+      --text2: #8b90a8;
+      --radius: 8px;
+      --font: 'Noto Sans JP', sans-serif;
+      --serif: 'Noto Serif JP', serif;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; }
+
+    /* ===== HEADER ===== */
+    .header {
+      background: var(--surface);
+      border-bottom: 2px solid var(--accent);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .header a.back {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      transition: background 0.2s;
+    }
+    .header a.back:hover { background: var(--surface2); }
+    .header h1 { font-size: 16px; font-weight: 700; color: var(--accent); }
+    .header .subtitle { font-size: 12px; color: var(--text2); margin-left: auto; }
+
+    /* ===== FILTERS ===== */
+    .filters {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: flex-end;
+    }
+    .filter-group { display: flex; flex-direction: column; gap: 4px; }
+    .filter-group label { font-size: 11px; color: var(--text2); font-weight: 500; }
+    .filter-group input, .filter-group select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: var(--font);
+    }
+    .filter-group input[type="date"] { width: 140px; }
+    .filter-group select { width: 120px; }
+    .btn {
+      padding: 8px 18px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: var(--font);
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: var(--accent); color: #000; }
+    .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-print { background: var(--blue); color: #fff; }
+    .btn-danger { background: var(--red); color: #fff; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ===== TOOLBAR ===== */
+    .toolbar {
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+    }
+    .toolbar .count { font-size: 12px; color: var(--text2); margin-left: auto; }
+
+    /* ===== TABLE ===== */
+    .table-wrap { overflow-x: auto; padding: 16px 20px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    thead tr { background: var(--surface2); }
+    th {
+      padding: 9px 10px;
+      text-align: left;
+      color: var(--text2);
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    tr:hover td { background: var(--surface); }
+    tr.selected td { background: rgba(232,164,74,0.08); }
+    input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-boar { background: rgba(232,164,74,0.2); color: var(--accent); }
+    .badge-deer { background: rgba(74,158,255,0.2); color: var(--blue); }
+    .badge-other { background: rgba(139,144,168,0.2); color: var(--text2); }
+
+    /* ===== LOADING / EMPTY ===== */
+    .loading { text-align: center; padding: 40px; color: var(--text2); }
+    .empty { text-align: center; padding: 60px; color: var(--text2); }
+    .empty-icon { font-size: 40px; margin-bottom: 12px; }
+
+    /* ===== STATUS BAR ===== */
+    #statusBar {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      display: none;
+      z-index: 999;
+    }
+    #statusBar.info { background: var(--blue); color: #fff; display: block; }
+    #statusBar.error { background: var(--red); color: #fff; display: block; }
+
+    /* ================================================
+       PRINT STYLES
+    ================================================ */
+    @media screen {
+      #printArea { display: none; }
+    }
+
+    @media print {
+      body { background: #fff; color: #000; font-family: var(--serif); }
+      .screen-only { display: none !important; }
+      #printArea { display: block; }
+      @page {
+        size: A4 portrait;
+        margin: 8mm 10mm;
+      }
+
+      /* 3 blocks per page, each exactly 1/3 of usable page height */
+      .record-block {
+        width: 100%;
+        height: 87mm; /* (297mm - 16mm margins) / 3 ≈ 93mm; leave ~6mm gap */
+        box-sizing: border-box;
+        border: 1.5px solid #333;
+        margin-bottom: 4mm;
+        page-break-inside: avoid;
+        break-inside: avoid;
+        font-size: 9pt;
+        font-family: var(--serif);
+        overflow: hidden;
+      }
+      .record-block:nth-child(3n) {
+        margin-bottom: 0;
+        page-break-after: always;
+        break-after: page;
+      }
+
+      /* Block header */
+      .block-header {
+        background: #f0f0f0;
+        padding: 2mm 3mm;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid #333;
+      }
+      .block-title { font-size: 10pt; font-weight: bold; }
+      .block-id { font-size: 9pt; color: #555; }
+      .block-no { font-size: 9pt; font-weight: bold; }
+
+      /* Info table inside each block */
+      .block-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 8.5pt;
+      }
+      .block-table td, .block-table th {
+        border: 0.5px solid #aaa;
+        padding: 1.2mm 2mm;
+        vertical-align: middle;
+      }
+      .block-table .lbl {
+        background: #f5f5f5;
+        font-weight: bold;
+        width: 18mm;
+        white-space: nowrap;
+        font-size: 7.5pt;
+      }
+      .block-table .val { min-width: 20mm; }
+      .block-table .wide { min-width: 40mm; }
+      .block-table .span2 { colspan: 3; }
+
+      /* Section divider */
+      .block-section {
+        background: #e8e8e8;
+        font-size: 8pt;
+        font-weight: bold;
+        padding: 0.8mm 2mm;
+        border-top: 1px solid #333;
+        border-bottom: 0.5px solid #aaa;
+        letter-spacing: 0.5mm;
+      }
+
+      /* Checkboxes in print */
+      .check-box {
+        display: inline-block;
+        width: 3.5mm;
+        height: 3.5mm;
+        border: 0.8px solid #333;
+        vertical-align: middle;
+        margin-right: 0.5mm;
+      }
+      .check-filled { background: #333; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ============================================================
+  SCREEN UI
+============================================================ -->
+<div class="screen-only">
+  <header class="header">
+    <a href="index.html" class="back">← 在庫登録</a>
+    <h1>🔬 放射能検査台帳</h1>
+    <span class="subtitle">A4縦 / 3レコード印刷</span>
+  </header>
+
+  <div class="filters">
+    <div class="filter-group">
+      <label>捕獲日（開始）</label>
+      <input type="date" id="dateFrom">
+    </div>
+    <div class="filter-group">
+      <label>捕獲日（終了）</label>
+      <input type="date" id="dateTo">
+    </div>
+    <div class="filter-group">
+      <label>種別</label>
+      <select id="speciesFilter">
+        <option value="">すべて</option>
+        <option value="イノシシ'>イノシシ</option>
+        <option value="シカ">シカ</option>
+        <option value="その他">その他</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>フリーワード</label>
+      <input type="text" id="keywordFilter" placeholder="個体ID・猟師名…" style="width:160px">
+    </div>
+    <button class="btn btn-primary" onclick="loadData()">🔍 検索</button>
+    <button class="btn btn-secondary" onclick="resetFilters()">リセット</button>
+  </div>
+
+  <div class="toolbar">
+    <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)">
+    <label for="selectAll" style="font-size:12px;cursor:pointer">全選択</label>
+    <button class="btn btn-print" onclick="printSelected()" id="btnPrint" disabled>
+      🖨️ 選択して印刷
+    </button>
+    <button class="btn btn-secondary" onclick="clearSelection()" style="font-size:12px">選択解除</button>
+    <span class="count" id="countLabel">0件選択 / 0件表示</span>
+  </div>
+
+  <div class="table-wrap">
+    <div id="tableContainer">
+      <div class="loading">読み込み中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+  PRINT AREA (hidden on screen, shown when printing)
+============================================================ -->
+<div id="printArea"></div>
+
+<!-- Status bar -->
+<div id="statusBar"></div>
+
+<script>
+// ============================================================
+// Supabase
+// ============================================================
+const SUPABASE_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ============================================================
+// State
+// ============================================================
+let allRecords = [];
+let selectedIds = new Set();
+
+// ============================================================
+// Utils
+// ============================================================
+function showStatus(type, msg) {
+  const el = document.getElementById('statusBar');
+  el.className = type;
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+function fmtDate(d) {
+  if (!d) return '−';
+  return new Date(d).toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' });
+}
+
+function fmtNum(n) {
+  if (n == null || n === '') return '−';
+  return Number(n).toLocaleString();
+}
+
+function resetFilters() {
+  document.getElementById('dateFrom').value = '';
+  document.getElementById('dateTo').value = '';
+  document.getElementById('speciesFilter').value = '';
+  document.getElementById('keywordFilter').value = '';
+  loadData();
+}
+
+// ============================================================
+// Load data
+// ============================================================
+async function loadData() {
+  document.getElementById('tableContainer').innerHTML = '<div class="loading">読み込み中...</div>';
+  selectedIds.clear();
+  updateToolbar();
+
+  let q = db.from('individuals').select('*').order('capture_date', { ascending: false });
+
+  const dateFrom = document.getElementById('dateFrom').value;
+  const dateTo   = document.getElementById('dateTo').value;
+  const species  = document.getElementById('speciesFilter').value;
+  const keyword  = document.getElementById('keywordFilter').value.trim();
+
+  if (dateFrom) q = q.gte('capture_date', dateFrom);
+  if (dateTo)   q = q.lte('capture_date', dateTo);
+  if (species)  q = q.eq('species', species);
+  if (keyword)  q = q.or(`label_id.ilike.%${keyword}%,hunter_name.ilike.%${keyword}%,origin.ilike.%${keyword}%`);
+
+  const { data, error } = await q.limit(200);
+  if (error) {
+    showStatus('error', '❌ 取得失敗: ' + error.message);
+    document.getElementById('tableContainer').innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div>データ取得に失敗しました</div>';
+    return;
+  }
+
+  allRecords = data || [];
+  renderTable();
+  showStatus('info', `✅ ${allRecords.length}件取得`);
+}
+
+// ============================================================
+// Render table
+// ============================================================
+function renderTable() {
+  if (allRecords.length === 0) {
+    document.getElementById('tableContainer').innerHTML =
+      '<div class="empty"><div class="empty-icon">📋</div>該当データがありません</div>';
+    updateToolbar();
+    return;
+  }
+
+  const rows = allRecords.map(r => {
+    const sel = selectedIds.has(r.id);
+    const badgeClass = r.species === 'イノシシ' ? 'badge-boar' :
+                       r.species === 'シカ' ? 'badge-deer' : 'badge-other';
+    return `<tr class="${sel ? 'selected' : ''}" onclick="toggleRow('${r.id}',this)">
+      <td onclick="event.stopPropagation()">
+        <input type="checkbox" ${sel ? 'checked' : ''} onchange="toggleSelect('${r.id}',this)" id="cb_${r.id}">
+      </td>
+      <td>${r.serial_number ?? '−'}</td>
+      <td><code style="font-size:11px;color:var(--accent)">${r.label_id || '−'}</code></td>
+      <td>${fmtDate(r.capture_date)}</td>
+      <td><span class="badge ${badgeClass}">${r.species || '−'}</span></td>
+      <td>${r.origin || '−'}</td>
+      <td>${r.capture_city || '−'}</td>
+      <td>${r.weight_total != null ? r.weight_total + ' kg' : '−'}</td>
+      <td>${r.hunter_name || '−'}</td>
+      <td>${r.quality || '−'}</td>
+      <td style="color:var(--text2);font-size:11px">${r.recorder || '−'}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('tableContainer').innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th style="width:30px"></th>
+          <th>No.</th>
+          <th>個体ID</th>
+          <th>捕獲日</th>
+          <th>種別</th>
+          <th>産地</th>
+          <th>市町村</th>
+          <th>重量</th>
+          <th>猟師名</th>
+          <th>品質</th>
+          <th>記録者</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  updateToolbar();
+}
+
+// ============================================================
+// Selection
+// ============================================================
+function toggleSelect(id, cb) {
+  if (cb.checked) selectedIds.add(id);
+  else selectedIds.delete(id);
+  // Update row highlight
+  const tr = cb.closest('tr');
+  if (tr) tr.classList.toggle('selected', cb.checked);
+  updateToolbar();
+}
+
+function toggleRow(id, tr) {
+  const cb = document.getElementById('cb_' + id);
+  if (!cb) return;
+  cb.checked = !cb.checked;
+  if (cb.checked) selectedIds.add(id);
+  else selectedIds.delete(id);
+  tr.classList.toggle('selected', cb.checked);
+  updateToolbar();
+}
+
+function toggleSelectAll(masterCb) {
+  allRecords.forEach(r => {
+    const cb = document.getElementById('cb_' + r.id);
+    if (cb) {
+      cb.checked = masterCb.checked;
+      const tr = cb.closest('tr');
+      if (tr) tr.classList.toggle('selected', masterCb.checked);
+    }
+    if (masterCb.checked) selectedIds.add(r.id);
+    else selectedIds.delete(r.id);
+  });
+  updateToolbar();
+}
+
+function clearSelection() {
+  selectedIds.clear();
+  allRecords.forEach(r => {
+    const cb = document.getElementById('cb_' + r.id);
+    if (cb) { cb.checked = false; const tr = cb.closest('tr'); if(tr) tr.classList.remove('selected'); }
+  });
+  document.getElementById('selectAll').checked = false;
+  updateToolbar();
+}
+
+function updateToolbar() {
+  document.getElementById('countLabel').textContent =
+    `${selectedIds.size}件選択 / ${allRecords.length}件表示`;
+  document.getElementById('btnPrint').disabled = selectedIds.size === 0;
+}
+
+// ============================================================
+// Print
+// ============================================================
+function printSelected() {
+  const records = allRecords.filter(r => selectedIds.has(r.id));
+  if (records.length === 0) return;
+
+  // Sort by capture_date
+  records.sort((a, b) => (a.capture_date || '').localeCompare(b.capture_date || ''));
+
+  const printArea = document.getElementById('printArea');
+  printArea.innerHTML = records.map((r, i) => buildRecordBlock(r, i + 1)).join('');
+
+  window.print();
+}
+
+function chk(val, trueLabel) {
+  const checked = val ? '■' : '□';
+  const empty   = val ? '□' : '■';
+  return trueLabel
+    ? `<span style="font-family:monospace">${val?'■':'□'}</span>${trueLabel}`
+    : (val ? '■あり' : '□なし');
+}
+
+function buildRecordBlock(r, n) {
+  const captureDate = fmtDate(r.capture_date);
+  const species     = r.species || '';
+  const origin      = [r.origin, r.capture_city].filter(Boolean).join(' ');
+  const weight      = r.weight_total != null ? r.weight_total + ' kg' : '';
+  const hunter      = r.hunter_name || '';
+  const method      = r.capture_method || '';
+  const finishing   = r.finishing_method || '';
+  const gutting     = r.gutting || '無';
+  const cooling     = r.cooling_method || '';
+  const quality     = r.quality || '';
+  const anomalies   = r.capture_anomalies || '異常なし';
+  const organAnom   = r.organ_anomalies || '異常なし';
+  const hasFetus    = r.has_fetus ? 'あり' : 'なし';
+  const weather     = r.weather || '';
+  const notes       = r.memo || '';
+  const recorder    = r.recorder || '';
+  const receiveTime = r.receive_time || '';
+  const processTime = r.process_time || '';
+
+  return `<div class="record-block">
+    <div class="block-header">
+      <span class="block-title">館山ジビエセンター　捕獲票兼放射能検査台帳</span>
+      <span class="block-id">${r.label_id || ''}</span>
+      <span class="block-no">No. ${r.serial_number ?? n}</span>
+    </div>
+
+    <!-- 捕獲情報 -->
+    <table class="block-table">
+      <tr>
+        <td class="lbl">捕獲日</td>
+        <td class="val">${captureDate}</td>
+        <td class="lbl">捕獲時刻</td>
+        <td class="val">${r.capture_time || ''}</td>
+        <td class="lbl">天候</td>
+        <td class="val">${weather}</td>
+      </tr>
+      <tr>
+        <td class="lbl">種別</td>
+        <td class="val">${species}</td>
+        <td class="lbl">推定年齢</td>
+        <td class="val">${r.age_estimate != null ? r.age_estimate + '歳' : ''}</td>
+        <td class="lbl">重量</td>
+        <td class="val">${weight}</td>
+      </tr>
+      <tr>
+        <td class="lbl">捕獲地</td>
+        <td colspan="5" class="val wide">${origin}</td>
+      </tr>
+      <tr>
+        <td class="lbl">猟師名</td>
+        <td colspan="2" class="val">${hunter}</td>
+        <td class="lbl">捕獲方法</td>
+        <td colspan="2" class="val">${method}</td>
+      </tr>
+      <tr>
+        <td class="lbl">止め刺し</td>
+        <td colspan="2" class="val">${finishing}</td>
+        <td class="lbl">内臓摘出</td>
+        <td class="val">${gutting}</td>
+        <td class="val">${r.bleed_time ? '放血: ' + r.bleed_time : ''}</td>
+      </tr>
+      <tr>
+        <td class="lbl">冷却方法</td>
+        <td colspan="2" class="val">${cooling}</td>
+        <td class="lbl">搬入時刻</td>
+        <td colspan="2" class="val">${receiveTime}</td>
+      </tr>
+      <tr>
+        <td class="lbl">捕獲時異常</td>
+        <td colspan="2" class="val">${anomalies}</td>
+        <td class="lbl">臓器異常</td>
+        <td colspan="2" class="val">${organAnom}</td>
+      </tr>
+      <tr>
+        <td class="lbl">胎児</td>
+        <td class="val">${hasFetus}</td>
+        <td class="lbl">品質</td>
+        <td class="val">${quality}</td>
+        <td class="lbl">記録者</td>
+        <td class="val">${recorder}</td>
+      </tr>
+    </table>
+
+    <!-- 放射能検査欄 -->
+    <div class="block-section">▼ 放射能検査記録</div>
+    <table class="block-table">
+      <tr>
+        <td class="lbl">検査日</td>
+        <td class="val" style="width:28mm">&nbsp;</td>
+        <td class="lbl">検体番号</td>
+        <td class="val" style="width:28mm">&nbsp;</td>
+        <td class="lbl">検査機関</td>
+        <td class="val wide">&nbsp;</td>
+      </tr>
+      <tr>
+        <td class="lbl">Cs-134</td>
+        <td class="val">　　　Bq/kg</td>
+        <td class="lbl">Cs-137</td>
+        <td class="val">　　　Bq/kg</td>
+        <td class="lbl">合計</td>
+        <td class="val">　　　Bq/kg</td>
+      </tr>
+      <tr>
+        <td class="lbl">判定</td>
+        <td colspan="2" class="val">
+          <span class="check-box"></span>合格　　<span class="check-box"></span>不合格
+        </td>
+        <td class="lbl">備考</td>
+        <td colspan="2" class="val">${notes || '　'}</td>
+      </tr>
+    </table>
+  </div>`;
+}
+
+// ============================================================
+// Init
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+  // Set default date range: last 30 days
+  const today = new Date();
+  const from  = new Date(today);
+  from.setDate(from.getDate() - 30);
+  document.getElementById('dateTo').value   = today.toISOString().split('T')[0];
+  document.getElementById('dateFrom').value = from.toISOString().split('T')[0];
+  loadData();
+});
+</script>
+</body>
+</html>
