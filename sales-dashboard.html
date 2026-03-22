@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>館山ジビエセンター － 売上分析</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Barlow+Condensed:wght@400;600;700&display=swap');
+:root {
+  --bg:       #0f1117;
+  --surface:  #1a1e2a;
+  --surface2: #222736;
+  --border:   #2e3447;
+  --accent:   #e8a44a;
+  --accent2:  #c06a2a;
+  --green:    #4caf7d;
+  --red:      #e05555;
+  --blue:     #5a8cd8;
+  --yellow:   #f0c040;
+  --purple:   #9b7fd4;
+  --text:     #e8eaf0;
+  --text2:    #8b90a8;
+  --radius:   10px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-size: 14px; min-height: 100vh; }
+
+/* HEADER */
+.header {
+  background: var(--surface);
+  border-bottom: 2px solid var(--accent);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+}
+.header-left { display: flex; align-items: center; gap: 16px; }
+.header-title { font-family: 'Barlow Condensed', sans-serif; font-size: 20px; font-weight: 700; color: var(--accent); letter-spacing: 0.05em; }
+.header-sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.nav-links { display: flex; gap: 8px; }
+.nav-link { background: var(--surface2); border: 1px solid var(--border); color: var(--text2); padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 12px; transition: all .2s; }
+.nav-link:hover { color: var(--accent); border-color: var(--accent); }
+
+/* FILTERS */
+.filter-bar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 20px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.filter-group { display: flex; align-items: center; gap: 6px; }
+.filter-label { font-size: 12px; color: var(--text2); white-space: nowrap; }
+select, input[type="number"] {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+}
+select:focus, input:focus { outline: none; border-color: var(--accent); }
+.btn { padding: 7px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-family: inherit; font-weight: 500; transition: all .2s; }
+.btn-accent { background: var(--accent); color: #000; }
+.btn-accent:hover { background: var(--accent2); }
+.btn-secondary { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+.btn-secondary:hover { color: var(--text); border-color: var(--text2); }
+
+/* MAIN */
+.main { padding: 20px; max-width: 1400px; margin: 0 auto; }
+
+/* KPI CARDS */
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  position: relative;
+  overflow: hidden;
+}
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--kpi-color, var(--accent));
+}
+.kpi-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+.kpi-value { font-family: 'Barlow Condensed', sans-serif; font-size: 28px; font-weight: 700; color: var(--text); }
+.kpi-sub { font-size: 11px; color: var(--text2); margin-top: 4px; }
+.kpi-delta { font-size: 12px; margin-top: 6px; }
+.kpi-delta.up    { color: var(--green); }
+.kpi-delta.down { color: var(--red); }
+
+/* CHART GRID */
+.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+.chart-full { grid-column: 1 / -1; }
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.chart-title { font-size: 14px; font-weight: 500; color: var(--text); }
+.chart-subtitle { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.chart-wrap { position: relative; height: 260px; }
+.chart-wrap-tall { position: relative; height: 320px; }
+
+/* TABLE */
+.table-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+.table-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+table-title { font-size: 14px; font-weight: 500; }
+table { width: 100%; border-collapse: collapse; }
+th { padding: 10px 14px; text-align: left; font-size: 11px; color: var(--text2); font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); background: var(--surface2); }
+td { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--surface2); }
+.td-num { text-align: right; font-variant-numeric: tabular-nums; font-family: 'Barlow Condensed', sans-serif; font-size: 14px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+.badge-boar { background: rgba(224,85,85,.2); color: #e08080; }
+.badge-deer { background: rgba(90,140,216,.2); color: #8ab0e8; }
+.badge-other { background: rgba(139,144,168,.2); color: var(--text2); }
+
+/* STATUS */
+.status-bar { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 10px 16px; margin-bottom: 20px; font-size: 13px; display: none; }
+.status-bar.info    { border-color: var(--blue);  color: var(--blue); }
+.status-bar.error   { border-color: var(--red);   color: var(--red); }
+.status-bar.loading { border-color: var(--accent); color: var(--accent); display: block; }
+
+/* LOADING SKELETON */
+.skeleton { background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* SEGMENT TABS */
+.seg-tabs { display: flex; gap: 4px; }
+.seg-tab { background: var(--surface2); border: 1px solid var(--border); color: var(--text2); padding: 4px 10px; border-radius: 5px; cursor: pointer; font-size: 12px; transition: all .15s; }
+.seg-tab.active { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
+
+/* BAR RANK */
+.bar-rank { display: flex; align-items: center; gap: 8px; }
+.bar-fill { height: 6px; border-radius: 3px; background: var(--accent); transition: width .4s; }
+
+@media (max-width: 900px) {
+  .kpi-row { grid-template-columns: repeat(2,1fr); }
+  .charts-grid { grid-template-columns: 1fr; }
+  .chart-full { grid-column: 1; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div>
+      <div class="header-title">🦌 TATEYAMA GIBIER</div>
+      <div class="header-sub">売上分析ダッシュボード</div>
+    </div>
+  </div>
+  <div class="nav-links">
+    <a href="index.html"        class="nav-link">📦 在庫登録</a>
+    <a href="capture-form.html" class="nav-link">🎯 捕獲登録</a>
+    <a href="order-admin.html"  class="nav-link">📋 受発注管理</a>
+    <a href="capture-report.html" class="nav-link">🖨 捕獲票</a>
+  </div>
+</div>
+
+<!-- FILTER BAR -->
+<div class="filter-bar">
+  <div class="filter-group">
+    <span class="filter-label">期間</span>
+    <select id="periodMode" onchange="onPeriodModeChange()">
+      <option value="month12">直近12ヶ月</option>
+      <option value="fy">年度別</option>
+      <option value="custom">カスタム</option>
+    </select>
+  </div>
+  <div class="filter-group" id="fyGroup" style="display:none">
+    <span class="filter-label">年度</span>
+    <select id="fySelect"></select>
+  </div>
+  <div class="filter-group" id="customGroup" style="display:none">
+    <span class="filter-label">開始</span>
+    <input type="month" id="fromMonth" style="width:140px">
+    <span class="filter-label">〜</span>
+    <input type="month" id="toMonth"   style="width:140px">
+  </div>
+  <div class="filter-group">
+    <span class="filter-label">種別</span>
+    <select id="speciesFilter">
+      <option value="">全種</option>
+      <option value="イノシシ">イノシシ</option>
+      <option value="シカ">シカ</option>
+    </select>
+  </div>
+  <button class="btn btn-accent" onclick="loadAll()">🔍 集計</button>
+  <span style="margin-left:auto; font-size:11px; color:var(--text2)" id="lastUpdated"></span>
+</div>
+
+<div class="main">
+  <div id="statusBar" class="status-bar loading">📊 データ読み込み中...</div>
+
+  <!-- KPI CARDS -->
+  <div class="kpi-row">
+    <div class="kpi-card" style="--kpi-color:var(--accent)">
+      <div class="kpi-label">総売上</div>
+      <div class="kpi-value" id="kpiRevenue">—</div>
+      <div class="kpi-sub" id="kpiRevenueSub"></div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:var(--green)">
+      <div class="kpi-label">受注件数</div>
+      <div class="kpi-value" id="kpiOrders">—</div>
+      <div class="kpi-sub" id="kpiOrdersSub"></div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:var(--blue)">
+      <div class="kpi-label">顧客数</div>
+      <div class="kpi-value" id="kpiCustomers">—</div>
+      <div class="kpi-sub" id="kpiCustomersSub"></div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:var(--purple)">
+      <div class="kpi-label">平均受注単価</div>
+      <div class="kpi-value" id="kpiAvg">—</div>
+      <div class="kpi-sub" id="kpiAvgSub"></div>
+    </div>
+  </div>
+
+  <!-- MONTHLY + SPECIES CHARTS -->
+  <div class="charts-grid">
+    <div class="chart-card chart-full">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">📅 月次売上推移</div>
+          <div class="chart-subtitle">月ごとの売上金額・受注件数</div>
+        </div>
+        <div class="seg-tabs" id="monthlyTabs">
+          <div class="seg-tab active" onclick="setMonthlyMode('amount',this)">金額</div>
+          <div class="seg-tab" onclick="setMonthlyMode('count',this)">件数</div>
+        </div>
+      </div>
+      <div class="chart-wrap-tall"><canvas id="monthlyChart"></canvas></div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">🐗 種別売上</div>
+          <div class="chart-subtitle">種別ごとの売上シェア</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="speciesChart"></canvas></div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">🥩 部位別売上（上位10）</div>
+          <div class="chart-subtitle">部位ごとの売上金額</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="partChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- CUSTOMER TABLE -->
+  <div class="table-card">
+    <div class="table-header">
+      <div class="chart-title">👥 顧客別売上ランキング</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:40px">順位</th>
+          <th>顧客名</th>
+          <th class="td-num">売上金額</th>
+          <th class="td-num">受注件数</th>
+          <th class="td-num">平均単価</th>
+          <th style="min-width:120px">シェア</th>
+        </tr>
+      </thead>
+      <tbody id="customerTableBody">
+        <tr><td colspan="6" style="text-align:center;color:var(--text2);padding:20px">読み込み中...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- MONTHLY TABLE -->
+  <div class="table-card">
+    <div class="table-header">
+      <div class="chart-title">📆 月次詳細</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>年月</th>
+          <th class="td-num">売上金額</th>
+          <th class="td-num">受注件数</th>
+          <th class="td-num">平均単価</th>
+          <th class="td-num">イノシシ</th>
+          <th class="td-num">シカ</th>
+        </tr>
+      </thead>
+      <tbody id="monthlyTableBody">
+        <tr><td colspan="6" style="text-align:center;color:var(--text2);padding:20px">読み込み中...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Chart.js CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+
+// =============================================
+// State
+// =============================================
+let allOrders     = [];
+let allOrderItems = [];
+let allCustomers  = [];
+let monthlyMode   = 'amount';
+let charts        = {};
+
+// =============================================
+// Helpers
+// =============================================
+async function sb(table, query='') {
+  const res = await fetch(`${SB_URL}/rest/v1/${table}${query}`, {
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const text = await res.text();
+  return text ? JSON.parse(text) : [];
+}
+
+function fmt(n) {
+  return n == null ? '—' : '¥' + Math.round(n).toLocaleString();
+}
+function fmtN(n) {
+  return n == null ? '—' : Math.round(n).toLocaleString();
+}
+
+function showStatus(type, msg) {
+  const el = document.getElementById('statusBar');
+  el.className = 'status-bar ' + type;
+  el.textContent = msg;
+  el.style.display = 'block';
+  if (type !== 'loading') setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+// =============================================
+// Period calculation
+// =============================================
+function getPeriodRange() {
+  const mode = document.getElementById('periodMode').value;
+  if (mode === 'month12') {
+    const to   = new Date();
+    const from = new Date(to.getFullYear(), to.getMonth() - 11, 1);
+    return {
+      fromDate: from.toISOString().split('T')[0],
+      toDate:   to.toISOString().split('T')[0]
+    };
+  }
+  if (mode === 'fy') {
+    const fy = parseInt(document.getElementById('fySelect').value);
+    return {
+      fromDate: `${fy}-04-01`,
+      toDate:   `${fy+1}-03-31`
+    };
+  }
+  // custom
+  const fm = document.getElementById('fromMonth').value;
+  const tm = document.getElementById('toMonth').value;
+  return {
+    fromDate: fm ? fm + '-01' : '2020-01-01',
+    toDate:   tm ? tm + '-31' : new Date().toISOString().split('T')[0]
+  };
+}
+
+function onPeriodModeChange() {
+  const mode = document.getElementById('periodMode').value;
+  document.getElementById('fyGroup').style.display     = mode === 'fy'     ? '' : 'none';
+  document.getElementById('customGroup').style.display = mode === 'custom' ? '' : 'none';
+}
+
+function initFyOptions() {
+  const sel = document.getElementById('fySelect');
+  const curYear = new Date().getFullYear();
+  const curMonth = new Date().getMonth() + 1;
+  const curFy = curMonth >= 4 ? curYear : curYear - 1;
+  sel.innerHTML = '';
+  for (let fy = curFy; fy >= curFy - 5; fy--) {
+    sel.innerHTML += `<option value="${fy}">${fy}年度 (${fy}/4〜${fy+1}/3)</option>`;
+  }
+}
+
+// =============================================
+// Load & aggregate
+// =============================================
+async function loadAll() {
+  showStatus('loading', '📊 データ集計中...');
+  try {
+    const { fromDate, toDate } = getPeriodRange();
+    const species = document.getElementById('speciesFilter').value;
+
+    let ordersQ = `?select=*&order_date=gte.${fromDate}&order_date=lte.${toDate}&order=order_date.asc&limit=2000`;
+    if (species) ordersQ += `&species=eq.${encodeURIComponent(species)}`;
+
+    [allOrders, allOrderItems, allCustomers] = await Promise.all([
+      sb('orders', `?select=*&order_date=gte.${fromDate}&order_date=lte.${toDate}&order=order_date.asc&limit=2000`),
+      sb('order_items', `?select=*&limit=5000`),
+      sb('customers', `?select=*&limit=500`),
+    ]);
+
+    // Filter out cancelled orders
+    const validOrders = allOrders.filter(o => o.status !== 'キャンセル');
+
+    // Join customer name onto orders
+    const custMap = {};
+    allCustomers.forEach(c => { custMap[c.id] = c; });
+
+    const ordersWithCust = validOrders.map(o => ({
+      ...o,
+      customer_name: custMap[o.customer_id]?.name || '不明',
+    }));
+
+    // Filter order items to only valid orders
+    const validOrderIds = new Set(validOrders.map(o => o.id));
+    const items = allOrderItems.filter(i => validOrderIds.has(i.order_id));
+
+    // Also filter by species if selected
+    const filteredItems = species
+      ? items.filter(i => i.species === species)
+      : items;
+
+    renderKPIs(ordersWithCust, filteredItems);
+    renderMonthlyChart(ordersWithCust);
+    renderSpeciesChart(filteredItems);
+    renderPartChart(filteredItems);
+    renderCustomerTable(ordersWithCust, filteredItems);
+    renderMonthlyTable(ordersWithCust, filteredItems);
+
+    document.getElementById('lastUpdated').textContent =
+      '更新: ' + new Date().toLocaleTimeString('ja-JP');
+    showStatus('info', `✅ ${validOrders.length}件の注文を集計しました`);
+  } catch (e) {
+    showStatus('error', '❌ 読み込みエラー: ' + e.message);
+    console.error(e);
+  }
+}
+
+// =============================================
+// KPI
+// =============================================
+function renderKPIs(orders, items) {
+  const totalRevenue = orders.reduce((s, o) => s + (o.total_amount || 0), 0);
+  const totalOrders  = orders.length;
+  const uniqueCusts  = new Set(orders.map(o => o.customer_id)).size;
+  const avgOrder     = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+  document.getElementById('kpiRevenue').textContent   = fmt(totalRevenue);
+  document.getElementById('kpiRevenueSub').textContent = `明細合計 ${fmtN(items.reduce((s,i)=>s+(i.amount||0),0))} 円`;
+  document.getElementById('kpiOrders').textContent    = fmtN(totalOrders) + ' 件';
+  document.getElementById('kpiOrdersSub').textContent = '発送済: ' + orders.filter(o=>o.status==='発送済').length + '件';
+  document.getElementById('kpiCustomers').textContent = fmtN(uniqueCusts) + ' 社';
+  document.getElementById('kpiCustomersSub').textContent = '全顧客: ' + allCustomers.length + ' 社';
+  document.getElementById('kpiAvg').textContent       = fmt(avgOrder);
+  document.getElementById('kpiAvgSub').textContent    = '明細 ' + fmtN(items.length) + ' 行';
+}
+
+// =============================================
+// Monthly Chart
+// =============================================
+function getMonthlyData(orders) {
+  const map = {};
+  orders.forEach(o => {
+    const d = o.order_date || '';
+    const key = d.substring(0, 7); // YYYY-MM
+    if (!key) return;
+    if (!map[key]) map[key] = { amount: 0, count: 0 };
+    map[key].amount += (o.total_amount || 0);
+    map[key].count  += 1;
+  });
+  const keys = Object.keys(map).sort();
+  return { keys, amounts: keys.map(k => map[k].amount), counts: keys.map(k => map[k].count) };
+}
+
+function setMonthlyMode(mode, el) {
+  monthlyMode = mode;
+  document.querySelectorAll('#monthlyTabs .seg-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  updateMonthlyChart();
+}
+
+function updateMonthlyChart() {
+  const c = charts.monthly;
+  if (!c) return;
+  const data = c._rawData;
+  if (monthlyMode === 'amount') {
+    c.data.datasets[0].data = data.amounts;
+    c.data.datasets[0].label = '売上金額 (¥)';
+  } else {
+    c.data.datasets[0].data = data.counts;
+    c.data.datasets[0].label = '受注件数';
+  }
+  c.update();
+}
+
+function renderMonthlyChart(orders) {
+  const ctx = document.getElementById('monthlyChart');
+  if (charts.monthly) charts.monthly.destroy();
+
+  const data = getMonthlyData(orders);
+  const labels = data.keys.map(k => {
+    const [y, m] = k.split('-');
+    return `${y}/${m}`;
+  });
+
+  charts.monthly = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: '売上金額 (¥)',
+        data: data.amounts,
+        backgroundColor: 'rgba(232,164,74,0.7)',
+        borderColor: 'rgba(232,164,74,1)',
+        borderWidth: 1,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => monthlyMode === 'amount'
+              ? '¥' + ctx.raw.toLocaleString()
+              : ctx.raw + ' 件'
+          }
+        }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(46,52,71,.5)' }, ticks: { color: '#8b90a8', font: { size: 11 } } },
+        y: {
+          grid: { color: 'rgba(46,52,71,.5)' },
+          ticks: {
+            color: '#8b90a8',
+            font: { size: 11 },
+            callback: v => monthlyMode === 'amount' ? '¥' + (v/1000).toFixed(0) + 'k' : v
+          }
+        }
+      }
+    }
+  });
+  charts.monthly._rawData = data;
+}
+
+// =============================================
+// Species Chart
+// =============================================
+function renderSpeciesChart(items) {
+  const ctx = document.getElementById('speciesChart');
+  if (charts.species) charts.species.destroy();
+
+  const map = {};
+  items.forEach(i => {
+    const s = i.species || 'その他';
+    map[s] = (map[s] || 0) + (i.amount || 0);
+  });
+  const labels = Object.keys(map);
+  const values = labels.map(l => map[l]);
+  const colors = labels.map(l =>
+    l === 'イノシシ' ? 'rgba(224,85,85,.8)' :
+    l === 'シカ'     ? 'rgba(90,140,216,.8)' :
+                       'rgba(139,144,168,.8)'
+  );
+
+  charts.species = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{ data: values, backgroundColor: colors, borderColor: '#1a1e2a', borderWidth: 2 }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: '#8b90a8', font: { size: 12 }, padding: 16 }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+              const pct = total > 0 ? ((ctx.raw/total)*100).toFixed(1) : 0;
+              return `${ctx.label}: ¥${ctx.raw.toLocaleString()} (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+// =============================================
+// Part Chart
+// =============================================
+function renderPartChart(items) {
+  const ctx = document.getElementById('partChart');
+  if (charts.part) charts.part.destroy();
+
+  const map = {};
+  items.forEach(i => {
+    const key = (i.species ? i.species + ' ' : '') + (i.part_name || 'その他');
+    map[key] = (map[key] || 0) + (i.amount || 0);
+  });
+  const sorted = Object.entries(map).sort((a,b) => b[1]-a[1]).slice(0, 10);
+  const labels = sorted.map(e => e[0]);
+  const values = sorted.map(e => e[1]);
+
+  charts.part = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: '売上金額',
+        data: values,
+        backgroundColor: values.map((_, i) =>
+          `hsla(${200 + i * 15}, 65%, 60%, 0.75)`
+        ),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => '¥' + ctx.raw.toLocaleString() } }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(46,52,71,.5)' },
+          ticks: { color: '#8b90a8', font: { size: 11 }, callback: v => '¥' + (v/1000).toFixed(0) + 'k' }
+        },
+        y: { grid: { display: false }, ticks: { color: '#e8eaf0', font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+// =============================================
+// Customer Table
+// =============================================
+function renderCustomerTable(orders, items) {
+  // Group order total by customer
+  const custOrder = {};
+  orders.forEach(o => {
+    const name = o.customer_name;
+    if (!custOrder[name]) custOrder[name] = { amount: 0, count: 0, custId: o.customer_id };
+    custOrder[name].amount += (o.total_amount || 0);
+    custOrder[name].count  += 1;
+  });
+
+  const totalRevenue = Object.values(custOrder).reduce((s, c) => s + c.amount, 0);
+  const sorted = Object.entries(custOrder).sort((a,b) => b[1].amount - a[1].amount);
+
+  const tbody = document.getElementById('customerTableBody');
+  if (sorted.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text2);padding:20px">データなし</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = sorted.map(([name, d], i) => {
+    const avg  = d.count > 0 ? d.amount / d.count : 0;
+    const pct  = totalRevenue > 0 ? (d.amount / totalRevenue * 100).toFixed(1) : 0;
+    const barW = totalRevenue > 0 ? Math.round(d.amount / totalRevenue * 100) : 0;
+    return `<tr>
+      <td style="color:var(--text2);font-size:12px">${i+1}</td>
+      <td>${name}</td>
+      <td class="td-num">${fmt(d.amount)}</td>
+      <td class="td-num">${d.count} 件</td>
+      <td class="td-num">${fmt(avg)}</td>
+      <td>
+        <div class="bar-rank">
+          <div class="bar-fill" style="width:${barW}%"></div>
+          <span style="font-size:11px;color:var(--text2)">${pct}%</span>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// =============================================
+// Monthly Table
+// =============================================
+function renderMonthlyTable(orders, items) {
+  // Group by month
+  const map = {};
+  orders.forEach(o => {
+    const key = (o.order_date || '').substring(0, 7);
+    if (!key) return;
+    if (!map[key]) map[key] = { amount: 0, count: 0 };
+    map[key].amount += (o.total_amount || 0);
+    map[key].count  += 1;
+  });
+
+  // Items by month (via order_date join)
+  const orderDateMap = {};
+  orders.forEach(o => { orderDateMap[o.id] = (o.order_date || '').substring(0,7); });
+  const itemsByMonth = {};
+  items.forEach(i => {
+    const key = orderDateMap[i.order_id];
+    if (!key) return;
+    if (!itemsByMonth[key]) itemsByMonth[key] = { boar: 0, deer: 0 };
+    if (i.species === 'イノシシ') itemsByMonth[key].boar += (i.amount || 0);
+    if (i.species === 'シカ')     itemsByMonth[key].deer += (i.amount || 0);
+  });
+
+  const keys = Object.keys(map).sort().reverse();
+  const tbody = document.getElementById('monthlyTableBody');
+  if (keys.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text2);padding:20px">データなし</td></tr>';
+    return;
+  }
+  tbody.innerHTML = keys.map(k => {
+    const d = map[k];
+    const im = itemsByMonth[k] || { boar: 0, deer: 0 };
+    const [y, m] = k.split('-');
+    const avg = d.count > 0 ? d.amount / d.count : 0;
+    return `<tr>
+      <td>${y}年${parseInt(m)}月</td>
+      <td class="td-num" style="color:var(--accent)">${fmt(d.amount)}</td>
+      <td class="td-num">${d.count} 件</td>
+      <td class="td-num">${fmt(avg)}</td>
+      <td class="td-num" style="color:#e08080">${im.boar ? fmt(im.boar) : '—'}</td>
+      <td class="td-num" style="color:#8ab0e8">${im.deer ? fmt(im.deer) : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// =============================================
+// Init
+// =============================================
+document.addEventListener('DOMContentLoaded', () => {
+  initFyOptions();
+
+  // Default custom range: last 6 months
+  const today = new Date();
+  const from  = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+  document.getElementById('toMonth').value   = today.toISOString().substring(0, 7);
+  document.getElementById('fromMonth').value = from.toISOString().substring(0, 7);
+
+  // Chart.js global defaults
+  Chart.defaults.color = '#8b90a8';
+  Chart.defaults.font.family = "'Noto Sans JP', sans-serif";
+
+  loadAll();
+});
+</script>
+</body>
+</html>
