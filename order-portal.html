@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>館山ジビエ お注文</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦌</text></svg>">
+<title>館山ジビエセンター | ご注文</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{font-family:-apple-system,'Hiragino Kaku Gothic ProN',sans-serif;background:#f5f0eb;color:#333;min-height:100vh}
@@ -128,14 +129,13 @@ body{font-family:-apple-system,'Hiragino Kaku Gothic ProN',sans-serif;background
   <div style="background:#2d5a1b;padding:40px 24px 32px;text-align:center">
     <div style="font-size:56px;margin-bottom:12px">🦌</div>
     <div style="font-size:22px;font-weight:700;color:#fff">館山ジビエセンター</div>
-    <div style="font-size:13px;color:rgba(255,255,255,.75);margin-top:4px">お客様用 お注文ポータル</div>
+    <div style="font-size:13px;color:rgba(255,255,255,.75);margin-top:4px">お客様用 ご注文ポータル</div>
   </div>
   <div class="login-wrap" style="padding-top:28px">
     <div class="field"><label>お名前</label><input type="text" id="loginName" placeholder="例：山田太郎" autocomplete="name" inputmode="text"></div>
     <div class="field"><label>パスワード</label><input type="password" id="loginPw" placeholder="パスワード" autocomplete="current-password"></div>
     <div class="err" id="loginErr"></div>
     <button class="btn-primary" onclick="doLogin()">ログイン</button>
-    <p style="font-size:12px;color:#aaa;margin-top:16px;text-align:center">パスワードは電話番号の下4桁です</p>
   </div>
 </div>
 
@@ -288,19 +288,9 @@ async function doLogin(){
   if(!pw){document.getElementById('loginErr').textContent='パスワードを入力してください';return;}
   loading(true);
   try{
-    const data=await sb('GET','customers',null,'?name=ilike.*'+encodeURIComponent(name)+'*&select=*');
-    if(!data||!data.length){document.getElementById('loginErr').textContent='お名前が見つかりませんでした';loading(false);return;}
-    // Check password (last 4 digits of phone)
-    var cust=null;
-    for(var c of data){
-      var phone=String(c.phone||'').replace(/[^0-9]/g,'');
-      if(phone.slice(-4)===pw||(c.password&&c.password===pw)){cust=c;break;}
-    }
-    if(!cust){
-      // Try exact match with first result if only 1
-      if(data.length===1&&!pw){cust=data[0];}
-      else{document.getElementById('loginErr').textContent='パスワードが正しくありません';loading(false);return;}
-    }
+    const data=await sb('GET','customers',null,'?name=ilike.*'+encodeURIComponent(name)+'*&portal_password=eq.'+encodeURIComponent(pw)+'&is_active=eq.true&select=*');
+    if(!data||!data.length){document.getElementById('loginErr').textContent='お名前またはパスワードが違います';loading(false);return;}
+    var cust=data[0];
     currentCust=cust;
     localStorage.setItem('tgc_cust_id',cust.id);
     await loadHome();
@@ -322,7 +312,7 @@ async function loadHome(){
       var o=orders[0];
       var items=await sb('GET','order_items',null,'?order_id=eq.'+o.id+'&select=*');
       var tags=document.getElementById('lastOrderItems');
-      tags.innerHTML=(items||[]).slice(0,4).map(i=>'<span class="reorder-item-tag">'+i.product_name+'</span>').join('');
+      tags.innerHTML=(items||[]).slice(0,4).map(i=>'<span class="reorder-item-tag">'+i.part_name+'</span>').join('');
       var d=new Date(o.created_at);
       document.getElementById('lastOrderDate').textContent='前回注文日: '+d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日';
       window._lastOrder={order:o,items:items||[]};
@@ -336,7 +326,7 @@ async function doReorder(){
   if(!window._lastOrder)return;
   cart=window._lastOrder.items.map(i=>({
     id:i.product_id||i.id,
-    name:i.product_name||i.name,
+    name:i.part_name||i.name,
     price:i.unit_price||i.price||0,
     qty:i.quantity||1,
     unit:i.unit||'kg'
@@ -380,7 +370,7 @@ function renderProducts(list){
     var ci=cart.find(c=>c.id===p.id);
     var qty=ci?ci.qty:0;
     return '<div class="prod-item" id="pi-'+p.id+'">'+
-      '<div class="prod-info"><div class="prod-name">'+p.species+' '+p.part+'</div>'+
+      '<div class="prod-info"><div class="prod-name">'+p.species+' '+p.part_name+'</div>'+
       '<div class="prod-price">'+fmtPrice(p.unit_price)+'/'+p.unit+'</div></div>'+
       '<div class="prod-ctrl">'+
       '<button class="qty-btn" onclick="changeQty(''+p.id+'',-1)">-</button>'+
@@ -394,7 +384,7 @@ function changeQty(id,delta){
   var prod=products.find(p=>p.id===id);
   if(!prod)return;
   var ci=cart.find(c=>c.id===id);
-  if(!ci&&delta>0){ci={id:prod.id,name:prod.species+' '+prod.part,price:prod.unit_price||0,qty:0,unit:prod.unit||'kg'};cart.push(ci);}
+  if(!ci&&delta>0){ci={id:prod.id,name:prod.species+' '+prod.part_name,price:prod.price_standard||0,qty:0,unit:'kg'};cart.push(ci);}
   if(ci){
     ci.qty=Math.max(0,ci.qty+delta);
     if(ci.qty===0)cart=cart.filter(c=>c.id!==id);
@@ -462,12 +452,12 @@ async function submitOrder(){
     var delivTime=document.getElementById('delivTime').value;
     var memo=document.getElementById('orderMemo').value;
     var total=cart.reduce((s,c)=>s+c.price*c.qty,0);
-    var order=await sb('POST','orders',{
+    var oCode='ORD-'+Date.now();
+    var order=await sb('POST','orders',{order_code:oCode,
       customer_id:currentCust.id,
-      status:'受付済',
+      status:'受付',
       delivery_date:delivDate||null,
-      delivery_time:delivTime||null,
-      memo:memo||null,
+      notes:memo||null,
       total_amount:total
     });
     var orderId=(order&&order[0])?order[0].id:null;
@@ -475,12 +465,11 @@ async function submitOrder(){
       for(var c of cart){
         await sb('POST','order_items',{
           order_id:orderId,
-          product_id:c.id,
-          product_name:c.name,
-          quantity:c.qty,
-          unit:c.unit,
+          part_name:c.name,
+          species:c.name.split(' ')[0]||'',
+          weight:c.qty,
           unit_price:c.price,
-          subtotal:c.price*c.qty
+          amount:c.price*c.qty
         });
       }
     }
@@ -510,7 +499,7 @@ async function goHistory(){
       window._histOrders.push(items||[]);idx++;
       rows.push('<div class="history-item">'+
         '<div class="hist-top"><span class="hist-date">'+dateStr+'</span><span class="hist-status '+statusCls+'">'+(o.status||'受付済')+'</span></div>'+
-        '<div class="hist-items">'+(items||[]).slice(0,4).map(i=>'<span class="hist-tag">'+i.product_name+'</span>').join('')+'</div>'+
+        '<div class="hist-items">'+(items||[]).slice(0,4).map(i=>'<span class="hist-tag">'+i.part_name+'</span>').join('')+'</div>'+
         '<div class="hist-total">合計 '+fmtPrice(o.total_amount)+'</div>'+
         '<button class="hist-reorder-btn" onclick="reorderFromHistory('+idx)+')">&#x1F501; この注文を繰り返す</button>'+
         '</div>');
@@ -522,7 +511,7 @@ async function goHistory(){
 
 function reorderFromHistory(n){
   var items=window._histOrders[parseInt(n)]||[];
-  cart=items.map(function(i){return {id:i.product_id||i.id,name:i.product_name||i.name,price:i.unit_price||i.price||0,qty:i.quantity||1,unit:i.unit||'kg'};});
+  cart=items.map(function(i){return {id:i.product_id||i.id,name:i.part_name||i.name,price:i.unit_price||i.price||0,qty:i.quantity||1,unit:i.unit||'kg'};});
   goCart();
 }));
   goCart();
