@@ -595,6 +595,7 @@ async function openShipModal(orderId) {
   if (!confirm) return;
 
   await updateStatus(orderId, '発送済');
+  sendShippingEmail(orderId); // 発送メール（非同期）
   exportSingleB2W(orderId);
 }
 
@@ -1025,6 +1026,43 @@ function openManualOrder() {
   manualCart = {};
   openModal('manualModal');
 }
+
+// ============================================
+// 発送時メール自動送信
+// ============================================
+async function sendShippingEmail(orderId) {
+  try {
+    const order = allOrders.find(o => o.id === orderId);
+    if (!order) return;
+    const customer = allCustomers.find(c => c.id === order.customer_id);
+    if (!customer || !customer.email) {
+      console.warn('[メール] 顧客メールアドレスなし');
+      return;
+    }
+    const items = await sb('GET', 'order_items', null, `?order_id=eq.${orderId}&select=*`);
+    const itemsSummary = Array.isArray(items)
+      ? items.map(i => `  ・${i.species || ''} ${i.part_name || ''} ${i.weight ? i.weight + 'kg' : ''} ¥${(i.amount || 0).toLocaleString()}`).join('\n')
+      : '';
+    fetch(`${SB_URL}/functions/v1/send-shipping-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SB_KEY}` },
+      body: JSON.stringify({
+        to_email:      customer.email,
+        to_name:       customer.name,
+        order_code:    order.order_code,
+        delivery_date: order.delivery_date,
+        total_amount:  order.total_amount,
+        items_summary: itemsSummary,
+      }),
+    })
+    .then(r => r.json())
+    .then(j => console.info('[メール]発送メール:', j.status === 'skipped' ? 'APIキー未設定' : '送信完了 → ' + customer.email))
+    .catch(e => console.warn('[メール]エラー:', e));
+  } catch (e) {
+    console.warn('[メール] sendShippingEmail エラー:', e);
+  }
+}
+
 </script>
 </body>
 </html>
