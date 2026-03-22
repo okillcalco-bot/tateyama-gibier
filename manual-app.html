@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ジビエマニュアル">
+<meta name="theme-color" content="#1C3A1C">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgcng9IjIwIiBmaWxsPSIjMUMzQTFDIi8+PHRleHQgeT0iLjllbSIgZm9udC1zaXplPSI7MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgeD0iNTAiPvCfmKU8L3RleHQ+PC9zdmc+">
+<title>館山ジビエセンター マニュアル</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --green:  #1C3A1C;
+    --green2: #2E5C2E;
+    --amber:  #D4921E;
+    --blue:   #1A3550;
+    --blue2:  #2171C1;
+    --bg:     #F5F5F0;
+    --white:  #ffffff;
+    --gray:   #F0F0EA;
+    --border: #DDDDCC;
+    --text:   #1A1A1A;
+    --text2:  #555544;
+  }
+
+  html, body {
+    height: 100%; width: 100%;
+    font-family: -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 17px;
+    line-height: 1.6;
+  }
+
+  /* ── SCREENS ───────────────────────────── */
+  .screen {
+    display: none;
+    position: fixed; inset: 0;
+    flex-direction: column;
+    background: var(--bg);
+    overflow: hidden;
+  }
+  .screen.active { display: flex; }
+
+  /* ── HEADER ────────────────────────────── */
+  .app-header {
+    padding: env(safe-area-inset-top) 16px 0;
+    padding-top: max(env(safe-area-inset-top), 44px);
+    background: var(--green);
+    color: white;
+    flex-shrink: 0;
+  }
+  .app-header.blue { background: var(--blue); }
+  .header-inner {
+    display: flex; align-items: center; gap: 10px;
+    padding-bottom: 14px;
+  }
+  .back-btn {
+    background: rgba(255,255,255,0.2);
+    border: none; color: white;
+    padding: 6px 14px; border-radius: 20px;
+    font-size: 15px; cursor: pointer;
+    flex-shrink: 0;
+  }
+  .header-title { font-size: 20px; font-weight: 700; flex: 1; }
+  .header-sub   { font-size: 12px; opacity: .7; padding-bottom: 12px; }
+
+  /* ── TAB BAR ───────────────────────────── */
+  .tab-bar {
+    display: flex;
+    background: var(--green2);
+    flex-shrink: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tab-bar::-webkit-scrollbar { display: none; }
+  .tab-bar.blue { background: var(--blue2); }
+  .tab-btn {
+    flex: 1; min-width: 80px;
+    padding: 10px 6px 8px;
+    background: transparent; border: none;
+    color: rgba(255,255,255,0.6);
+    font-size: 13px; font-family: inherit;
+    cursor: pointer; white-space: nowrap;
+    border-bottom: 3px solid transparent;
+    transition: all .15s;
+  }
+  .tab-btn.active {
+    color: white;
+    border-bottom-color: var(--amber);
+  }
+
+  /* ── CONTENT ───────────────────────────── */
+  .content {
+    flex: 1; overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 0 env(safe-area-inset-bottom);
+  }
+  .tab-panel { display: none; padding: 16px 14px 80px; }
+  .tab-panel.active { display: block; }
+
+  /* ── URL BOX ────────────────────────────── */
+  .url-box {
+    background: white;
+    border: 1.5px solid var(--amber);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+    font-size: 13px;
+  }
+  .url-label { color: var(--text2); font-size: 12px; margin-bottom: 2px; }
+  .url-link   { color: #1A5C1A; word-break: break-all; font-size: 13px; }
+
+  /* ── STEP CARD ──────────────────────────── */
+  .step-card {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    margin-bottom: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+  .step-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .step-num {
+    width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--green); color: var(--amber);
+    font-size: 17px; font-weight: 700; flex-shrink: 0;
+  }
+  .step-num.blue { background: var(--blue); }
+  .step-title {
+    font-size: 16px; font-weight: 700;
+    color: var(--text); line-height: 1.4;
+  }
+  .step-body {
+    padding: 10px 14px 12px;
+  }
+  .step-line {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 3px 0;
+    font-size: 15px; line-height: 1.5;
+    color: var(--text);
+  }
+  .step-line.sub  { color: var(--text2); }
+  .step-line.warn { color: #C0392B; font-weight: 600; }
+  .step-line .icon { flex-shrink: 0; margin-top: 2px; }
+
+  /* ── INFO BOX ───────────────────────────── */
+  .info-box {
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    font-size: 15px; line-height: 1.6;
+  }
+  .info-box.tip  { background: #EBF3FF; border-left: 4px solid var(--blue2); }
+  .info-box.warn { background: #FFF5E0; border-left: 4px solid var(--amber); }
+  .info-box.ok   { background: #EBF7EE; border-left: 4px solid #27AE60; }
+  .info-label { font-weight: 700; margin-bottom: 4px; }
+
+  /* ── HOME SCREEN ────────────────────────── */
+  #home .content { padding-top: 0; }
+  .home-hero {
+    background: var(--green);
+    color: white;
+    padding: max(env(safe-area-inset-top), 50px) 20px 30px;
+    text-align: center;
+  }
+  .home-emoji { font-size: 52px; }
+  .home-title { font-size: 22px; font-weight: 700; margin: 8px 0 4px; }
+  .home-sub   { font-size: 14px; opacity: .8; }
+  .home-cards { padding: 20px 16px 30px; display: flex; flex-direction: column; gap: 14px; }
+  .home-card {
+    display: flex; align-items: center; gap: 16px;
+    background: white;
+    border-radius: 16px;
+    padding: 20px 18px;
+    border: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,.1);
+    cursor: pointer; width: 100%;
+    text-align: left;
+    font-family: inherit;
+    transition: transform .1s, box-shadow .1s;
+  }
+  .home-card:active { transform: scale(.98); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .home-card .card-icon {
+    width: 56px; height: 56px; border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; flex-shrink: 0;
+  }
+  .home-card .card-icon.green { background: #EBF5EB; }
+  .home-card .card-icon.blue  { background: #EBF3FF; }
+  .home-card .card-text h2 { font-size: 18px; font-weight: 700; margin-bottom: 3px; color: var(--text); }
+  .home-card .card-text p  { font-size: 13px; color: var(--text2); line-height: 1.4; }
+  .home-card .card-arrow { margin-left: auto; color: var(--border); font-size: 20px; }
+
+  /* ── TABLE ──────────────────────────────── */
+  .mtable {
+    width: 100%; border-collapse: collapse;
+    background: white; border-radius: 10px;
+    overflow: hidden; margin-bottom: 12px;
+    font-size: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .mtable th {
+    background: var(--blue); color: white;
+    padding: 9px 10px; text-align: left; font-size: 13px;
+  }
+  .mtable td {
+    padding: 9px 10px; border-bottom: 1px solid var(--border);
+    vertical-align: top; line-height: 1.5;
+  }
+  .mtable tr:last-child td { border-bottom: none; }
+  .mtable tr:nth-child(even) td { background: var(--gray); }
+  .url-cell { color: #1A5C1A; word-break: break-all; font-size: 12px; }
+
+  /* ── SECTION HEADER ──────────────────────── */
+  .sec-head {
+    font-size: 14px; font-weight: 700;
+    color: var(--blue); text-transform: uppercase;
+    letter-spacing: .05em;
+    padding: 4px 0 8px;
+    border-bottom: 2px solid var(--blue2);
+    margin-bottom: 12px;
+  }
+  .sec-head.green { color: var(--green); border-bottom-color: var(--green2); }
+
+  .page-intro {
+    font-size: 15px; color: var(--text2);
+    margin-bottom: 16px; line-height: 1.6;
+    background: white; padding: 12px 14px;
+    border-radius: 10px; border: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     HOME SCREEN
+══════════════════════════════════════ -->
+<div id="home" class="screen active">
+  <div class="content">
+    <div class="home-hero">
+      <div class="home-emoji">🌿</div>
+      <div class="home-title">館山ジビエセンター</div>
+      <div class="home-sub">操作マニュアル</div>
+    </div>
+    <div class="home-cards">
+      <button class="home-card" onclick="showScreen('staff')">
+        <div class="card-icon green">📋</div>
+        <div class="card-text">
+          <h2>現場スタッフ用</h2>
+          <p>捕獲票登録・在庫管理・注文管理</p>
+        </div>
+        <div class="card-arrow">›</div>
+      </button>
+      <button class="home-card" onclick="showScreen('admin')">
+        <div class="card-icon blue">⚙️</div>
+        <div class="card-text">
+          <h2>管理者・PC設定用</h2>
+          <p>セットアップ・Supabase・b-PAC・トラブル対処</p>
+        </div>
+        <div class="card-arrow">›</div>
+      </button>
+    </div>
+    <div style="text-align:center; padding: 0 20px 40px; color: var(--text2); font-size: 13px;">
+      このページをホーム画面に追加すると<br>アプリとして使えます
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     STAFF SCREEN
+══════════════════════════════════════ -->
+<div id="staff" class="screen">
+  <div class="app-header">
+    <div class="header-inner">
+      <button class="back-btn" onclick="showScreen('home')">‹ ホーム</button>
+      <span class="header-title">現場スタッフ用マニュアル</span>
+    </div>
+  </div>
+  <div class="tab-bar" id="staffTabs">
+    <button class="tab-btn active" onclick="showTab('staff',0)">捕獲票登録</button>
+    <button class="tab-btn" onclick="showTab('staff',1)">在庫管理</button>
+    <button class="tab-btn" onclick="showTab('staff',2)">注文管理・発送</button>
+  </div>
+  <div class="content">
+
+    <!-- TAB 0: 捕獲票登録 -->
+    <div class="tab-panel active" id="staff-0">
+      <div class="url-box">
+        <div class="url-label">アクセス先URL</div>
+        <a class="url-link" href="https://okillcalco-bot.github.io/tateyama-gibier/capture-form.html">
+          https://okillcalco-bot.github.io/tateyama-gibier/capture-form.html
+        </a>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num">1</div>
+          <div class="step-title">画面を開いて「新規登録」をクリック</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line sub"><span class="icon">▶</span> 上のURLをブラウザに入力して開く</div>
+          <div class="step-line sub"><span class="icon">▶</span> 右上の「＋ 新規登録」ボタンをクリック</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num">2</div>
+          <div class="step-title">捕獲情報を入力する</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line"><span class="icon">📅</span> <strong>捕獲日</strong>　カレンダーから選択</div>
+          <div class="step-line"><span class="icon">🐗</span> <strong>種別</strong>　イノシシ or シカ</div>
+          <div class="step-line"><span class="icon">📍</span> <strong>捕獲場所</strong>　市区町村まで入力</div>
+          <div class="step-line"><span class="icon">👤</span> <strong>担当者名</strong>　自分の名前を入力</div>
+          <div class="step-line sub" style="margin-top:6px"><span class="icon">＋</span> 体重・性別・メモは任意項目</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num">3</div>
+          <div class="step-title">「登録」ボタンをクリック</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line sub"><span class="icon">▶</span> 「登録しました」と表示されれば完了</div>
+          <div class="step-line warn"><span class="icon">!</span> 赤いエラーが出た場合は入力漏れを確認</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num">4</div>
+          <div class="step-title">ラベルを印刷する</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line sub"><span class="icon">▶</span> 一覧で印刷したい行にチェックを入れる</div>
+          <div class="step-line sub"><span class="icon">▶</span> 「ラベル印刷」ボタンをクリック</div>
+          <div class="step-line warn"><span class="icon">!</span> プリンターの電源が入っているか確認</div>
+        </div>
+      </div>
+
+      <div class="info-box tip">
+        <div class="info-label">💡 ヒント</div>
+        登録済みデータは種別・日付・担当者名で絞り込み検索できます。
+      </div>
+    </div>
+
+    <!-- TAB 1: 在庫管理 -->
+    <div class="tab-panel" id="staff-1">
+      <div class="url-box">
+        <div class="url-label">アクセス先URL</div>
+        <a class="url-link" href="https://okillcalco-bot.github.io/tateyama-gibier/index.html">
+          https://okillcalco-bot.github.io/tateyama-gibier/index.html
+        </a>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num">1</div>
+          <div class="step-title">トップページを開く</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line sub"><span class="icon">▶</span> 上のURLを開く</div>
+          <div class="step-line sub"><span class="icon">▶</span> 在庫一覧が自動で読み込まれます</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num">2</div>
+          <div class="step-title">在庫を検索・絞り込む</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line"><span class="icon">🐗</span> 種別：イノシシ / シカを選択</div>
+          <div class="step-line"><span class="icon">🥩</span> 部位：ロース・バラ・モモなど選択</div>
+          <div class="step-line"><span class="icon">📦</span> ステータス：未出荷 / 出荷済みを選択</div>
+          <div class="step-line sub"><span class="icon">▶</span> 「検索」をクリックで一覧更新</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num">3</div>
+          <div class="step-title">在庫ラベルを印刷する</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line sub"><span class="icon">▶</span> 印刷したい在庫にチェックを入れる</div>
+          <div class="step-line sub"><span class="icon">▶</span> 「在庫ラベル印刷」をクリック</div>
+          <div class="step-line warn"><span class="icon">!</span> 印刷されない場合 → Chromeを再起動</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num">4</div>
+          <div class="step-title">ステータスを変更する</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line sub"><span class="icon">▶</span> 行の右端「・・・」→「ステータス変更」</div>
+          <div class="step-line sub"><span class="icon">▶</span> 「未出荷」「出荷済み」「廃棄」から選択</div>
+        </div>
+      </div>
+
+      <div class="info-box warn">
+        <div class="info-label">⚠ 注意</div>
+        インターネット（Wi-Fi）接続が必要です。
+        読み込めない場合はWi-Fiをご確認ください。
+      </div>
+    </div>
+
+    <!-- TAB 2: 注文管理 -->
+    <div class="tab-panel" id="staff-2">
+      <div class="url-box">
+        <div class="url-label">アクセス先URL</div>
+        <a class="url-link" href="https://okillcalco-bot.github.io/tateyama-gibier/order-admin.html">
+          https://okillcalco-bot.github.io/tateyama-gibier/order-admin.html
+        </a>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num">1</div>
+          <div class="step-title">注文管理ページゑ開く</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line sub"><span class="icon">▶</span> 受注番号・顧客名・金額・ステータスが表示されます</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num">2</div>
+          <div class="step-title">注文の内容を確認する</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line sub"><span class="icon">▶</span> 行をタップ → 右側に注文詳細が表示</div>
+          <div class="step-line sub"><span class="icon">▶</span> 部位・種別・重量・金額が確認できます</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num">3</div>
+          <div class="step-title">発送したら「発送済み」に更新する</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line sub"><span class="icon">▶</span> 対象行の「発送」ボタンをタップ</div>
+          <div class="step-line sub"><span class="icon">▶</span> 確認ダイアログ → 「OK」をタップ</div>
+          <div class="step-line sub"><span class="icon">✉</span> お客様へ発送通知メールが自動送信されます</div>
+          <div class="step-line warn"><span class="icon">!</span> メールは自動送信なので手動連絡は不要</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num">4</div>
+          <div class="step-title">ステータスで絞り込む</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line sub"><span class="icon">▶</span> 「ステータス絞り込み」→ 受注中 / 発送済 / キャンセルを選択</div>
+          <div class="step-line sub"><span class="icon">▶</span> 「検索」をクリックで一覧更新</div>
+        </div>
+      </div>
+
+      <div class="info-box tip">
+        <div class="info-label">💡 メール自動送信について</div>
+        発送通知メールはお客様へ自動で送信されます。
+        送信失敗時は管理者のPCに通知が届きます。
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /staff -->
+
+<!-- ══════════════════════════════════════
+     ADMIN SCREEN
+══════════════════════════════════════ -->
+<div id="admin" class="screen">
+  <div class="app-header blue">
+    <div class="header-inner">
+      <button class="back-btn" onclick="showScreen('home')">‹ ホーム</button>
+      <span class="header-title">管理者・PC設定マニュアル</span>
+    </div>
+  </div>
+  <div class="tab-bar blue" id="adminTabs">
+    <button class="tab-btn active" onclick="showTab('admin',0)">セットアップ</button>
+    <button class="tab-btn" onclick="showTab('admin',1)">Supabase</button>
+    <button class="tab-btn" onclick="showTab('admin',2)">b-PAC</button>
+    <button class="tab-btn" onclick="showTab('admin',3)">トラブル</button>
+  </div>
+  <div class="content">
+
+    <!-- TAB 0: セットアップ -->
+    <div class="tab-panel active" id="admin-0">
+      <div class="sec-head">URL一覧</div>
+      <table class="mtable">
+        <tr><th>ページ名</th><th>URL</th></tr>
+        <tr><td>捕獲票登録</td><td class="url-cell"><a href="https://okillcalco-bot.github.io/tateyama-gibier/capture-form.html" style="color:#1A5C1A">capture-form.html</a></td></tr>
+        <tr><td>在庫管理</td><td class="url-cell"><a href="https://okillcalco-bot.github.io/tateyama-gibier/index.html" style="color:#1A5C1A">index.html</a></td></tr>
+        <tr><td>注文管理</td><td class="url-cell"><a href="https://okillcalco-bot.github.io/tateyama-gibier/order-admin.html" style="color:#1A5C1A">order-admin.html</a></td></tr>
+        <tr><td>売上ダッシュボード</td><td class="url-cell"><a href="https://okillcalco-bot.github.io/tateyama-gibier/sales-dashboard.html" style="color:#1A5C1A">sales-dashboard.html</a></td></tr>
+      </table>
+
+      <div class="sec-head" style="margin-top:18px">iPadの場合：ホーム画面に追加</div>
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num blue">1</div>
+          <div class="step-title">SafariでURLを開く</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line sub"><span class="icon">▶</span> 上の表のURLを入力してアクセス</div>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num blue">2</div>
+          <div class="step-title">共有ボタン（□↑）をタップ</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line sub"><span class="icon">▶</span> 「ホーム画面に追加」をタップ</div>
+          <div class="step-line sub"><span class="icon">▶</span> 名前を「捕獲票登録」などに変更して「追加」</div>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num blue">3</div>
+          <div class="step-title">4ページ分、同じ手順で追加</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line sub"><span class="icon">▶</span> 4つのURLをそれぞれホーム画面に追加すると便利です</div>
+        </div>
+      </div>
+
+      <div class="sec-head" style="margin-top:18px">PCの場合：Chromeでブックマーク</div>
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num blue">1</div>
+          <div class="step-title">ChromeでURLを開く</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line sub"><span class="icon">▶</span> アドレスバー右端の「★」をクリック → 保存</div>
+          <div class="step-line sub"><span class="icon">▶</span> 4ページ分、同じ手順でブックマーク登録</div>
+        </div>
+      </div>
+
+      <div class="info-box ok">
+        <div class="info-label">端末ごとの対応状況</div>
+        iPad・スマホ：Safari / Chrome どちらでも動作<br>
+        ラベル印刷（b-PAC）：Windows PCのみ対応
+      </div>
+    </div>
+
+    <!-- TAB 1: Supabase -->
+    <div class="tab-panel" id="admin-1">
+      <div class="url-box">
+        <div class="url-label">Supabase 管理画面</div>
+        <a class="url-link" href="https://supabase.com/dashboard">https://supabase.com/dashboard</a>
+      </div>
+
+      <div class="sec-head green">テーブル一覧</div>
+      <table class="mtable">
+        <tr><th>テーブル名</th><th>保存データ</th></tr>
+        <tr><td>capture_records</td><td>捕獲票データ</td></tr>
+        <tr><td>inventory</td><td>在庫管理データ</td></tr>
+        <tr><td>orders</td><td>注文・受注データ</td></tr>
+        <tr><td>order_items</td><td>注文明細</td></tr>
+        <tr><td>customers</td><td>顧客情報</td></tr>
+      </table>
+
+      <div class="sec-head green" style="margin-top:18px">バックアップ（月1回）</div>
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num blue">1</div>
+          <div class="step-title">管理画面 → 「Table Editor」を開く</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line sub"><span class="icon">▶</span> バックアップしたいテーブルを選択</div>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num blue">2</div>
+          <div class="step-title">右上「Export」→「Download CSV」</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line sub"><span class="icon">▶</span> ダウンロードしたCSVを「backup_YYYYMM」フォルダに保存</div>
+        </div>
+      </div>
+
+      <div class="sec-head green" style="margin-top:18px">接続設定の変更方法</div>
+      <div class="url-box">
+        <div class="url-label">GitHub リポジトリ</div>
+        <a class="url-link" href="https://github.com/okillcalco-bot/tateyama-gibier">https://github.com/okillcalco-bot/tateyama-gibier</a>
+      </div>
+      <div class="page-intro">
+        各HTMLファイルの先頭にAPIキーが記述されています。
+        変更が必要な場合はGitHubのファイルを直接編集してください。
+      </div>
+
+      <div class="info-box warn">
+        <div class="info-label">⚠ バックアップについて</div>
+        無料プランでは自動バックアップはありません。
+        月1回、手動でCSVエクスポートして保存してください。
+      </div>
+    </div>
+
+    <!-- TAB 2: b-PAC -->
+    <div class="tab-panel" id="admin-2">
+      <div class="info-box tip">
+        <div class="info-label">対応端末</div>
+        b-PACはWindows PCのみ対応です。iPad・スマホからはラベル印刷できません。
+      </div>
+
+      <div class="sec-head green">インストール手順</div>
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num blue">1</div>
+          <div class="step-title">ダウンロードページを開く</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line sub"><span class="icon">▶</span> Chromeで開く：</div>
+          <div style="margin-top:4px"><a href="https://www.brother.co.jp/product/dev/bpac/download/" style="color:#1A5C1A; font-size:14px; word-break:break-all;">https://www.brother.co.jp/product/dev/bpac/download/</a></div>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num blue">2</div>
+          <div class="step-title">Windows版をダウンロード・インストール</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line sub"><span class="icon">▶</span> 「b-PAC クライアントコンポーネント」最新版</div>
+          <div class="step-line sub"><span class="icon">▶</span> .exeをダブルクリック → 「次へ」「同意する」で進む</div>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num blue">3</div>
+          <div class="step-title">Chromeをすべて閉じて再起動</div>
+        </div>
+        <div class="step-body">
+          <div class="step-line sub"><span class="icon">▶</span> これでラベル印刷が使えるようになります</div>
+        </div>
+      </div>
+
+      <div class="sec-head green" style="margin-top:18px">プリンター接続確認</div>
+      <table class="mtable">
+        <tr><th>確認項目</th><th>確認方法</th></tr>
+        <tr><td>電源</td><td>電源ランプが点灯しているか</td></tr>
+        <tr><td>USB接続</td><td>PCとプリンターをUSBで接続</td></tr>
+        <tr><td>ドライバー</td><td>「デバイスとプリンター」に表示されるか</td></tr>
+        <tr><td>テスト印刷</td><td>プリンター設定から「テストページ印刷」</td></tr>
+      </table>
+
+      <div class="info-box warn">
+        <div class="info-label">⚠ 印刷トラブル時</div>
+        ①電源・USB確認　②Chrome再起動　③b-PAC再インストール
+      </div>
+    </div>
+
+    <!-- TAB 3: トラブル -->
+    <div class="tab-panel" id="admin-3">
+      <div class="sec-head">症状別 対処一覧</div>
+      <table class="mtable">
+        <tr><th>症状</th><th>対処方法</th></tr>
+        <tr><td>データが読み込めない</td><td>Wi-Fi確認 → リロード（F5）</td></tr>
+        <tr><td>ラベルが印刷されない</td><td>Chrome再起動 → b-PAC確認</td></tr>
+        <tr><td>登録ボタンが反応しない</td><td>赤い必須項目の入力漏れを確認</td></tr>
+        <tr><td>メールが届かない</td><td>顧客メールアドレスを確認</td></tr>
+        <tr><td>ページが開けない（iPad）</td><td>URL確認 → Wi-Fi確認 → Safariタブを閉じて再度開く</td></tr>
+        <tr><td>ページが開けない（PC）</td><td>Chrome再起動 → キャッシュクリア（下記）</td></tr>
+      </table>
+
+      <div class="sec-head" style="margin-top:18px">Chromeキャッシュのクリア（PC）</div>
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num blue">1</div>
+          <div class="step-title">Ctrl + Shift + Delete を押す</div>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num blue">2</div>
+          <div class="step-title">期間「全期間」→キャッシュにチェック →「データを削除」</div>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-header">
+          <div class="step-num blue">3</div>
+          <div class="step-title">Chromeを再起動する</div>
+        </div>
+      </div>
+
+      <div class="sec-head" style="margin-top:18px">ファイル更新方法</div>
+      <div class="url-box">
+        <div class="url-label">GitHub</div>
+        <a class="url-link" href="https://github.com/okillcalco-bot/tateyama-gibier">https://github.com/okillcalco-bot/tateyama-gibier</a>
+      </div>
+      <div class="page-intro">
+        ファイル名クリック → 鉛筆アイコン → 編集 → 「Commit changes」で保存。数分後にサイトへ反映されます。
+      </div>
+
+      <div class="info-box ok">
+        <div class="info-label">困ったときは</div>
+        解決しない場合はシステム管理者（開発担当）にご連絡ください。
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /admin -->
+
+<script>
+// ── Screen navigation ──────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0,0);
+}
+
+// ── Tab switching ──────────────────────────
+function showTab(screen, idx) {
+  const tabBar = document.getElementById(screen + 'Tabs');
+  tabBar.querySelectorAll('.tab-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', i === idx);
+  });
+  const content = document.getElementById(screen).querySelector('.content');
+  content.querySelectorAll('.tab-panel').forEach((panel, i) => {
+    panel.classList.toggle('active', i === idx);
+  });
+  content.scrollTo(0, 0);
+}
+
+// ── PWA: Service Worker ────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
