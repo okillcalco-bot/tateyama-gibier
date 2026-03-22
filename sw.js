@@ -1,14 +1,9 @@
-// Service Worker for 館山ジビエセンター マニュアルアプリ
-const CACHE = 'gibier-manual-v1';
-const ASSETS = [
-  'manual-app.html',
-  'manifest.json'
-];
+// Service Worker for 館山ジビエセンター アプリ
+const CACHE = 'gibier-v2';
+const STATIC_ASSETS = ['manual-app.html','manifest.json'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(ASSETS))
-  );
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(STATIC_ASSETS)));
   self.skipWaiting();
 });
 
@@ -22,15 +17,19 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
-  e.respondWith(
-    caches.match(e.request).then(cached => {
-      if (cached) return cached;
-      return fetch(e.request).then(res => {
-        const clone = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, clone));
+  var url = e.request.url;
+  if (url.includes('.html') || url.endsWith('/')) {
+    e.respondWith(
+      fetch(e.request)
+        .then(res => { caches.open(CACHE).then(c => c.put(e.request, res.clone())); return res; })
+        .catch(() => caches.match(e.request))
+    );
+  } else {
+    e.respondWith(
+      caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
+        caches.open(CACHE).then(c => c.put(e.request, res.clone()));
         return res;
-      }).catch(() => cached);
-    })
-  );
+      }))
+    );
+  }
 });
