@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>é¤¨å±±ã¸ãã¨ã»ã³ã¿ã¼ï½å¨åº«ç»é²</title>
+<title>館山ジビエセンター｜在庫登録</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -32,7 +32,7 @@
     overflow-x: hidden;
   }
 
-  /* ãããã¼ */
+  /* ヘッダー */
   .header {
     background: var(--surface);
     border-bottom: 2px solid var(--accent);
@@ -56,11 +56,11 @@
   }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
-  /* ã¡ã¤ã³ã¬ã¤ã¢ã¦ã */
+  /* メインレイアウト */
   .main { display: grid; grid-template-columns: 1fr 1fr; gap: 0; height: calc(100vh - 60px); }
   @media (max-width: 768px) { .main { grid-template-columns: 1fr; height: auto; } }
 
-  /* å·¦ããã«ï¼ç¾å¨ã®ç¶æ */
+  /* 左パネル：現在の状態 */
   .panel-left {
     background: var(--surface);
     border-right: 1px solid var(--border);
@@ -91,7 +91,7 @@
     display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
   }
 
-  /* ã¢ã¼ãããã¸ */
+  /* モードバッジ */
   .mode-badge {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 6px 14px; border-radius: 100px;
@@ -101,7 +101,7 @@
   .mode-badge.normal { border-color: var(--green); color: var(--green); }
   .mode-badge.process { border-color: var(--yellow); color: var(--yellow); }
 
-  /* å¥åã¨ãªã¢ */
+  /* 入力エリア */
   .input-area {
     background: var(--surface2);
     border: 2px solid var(--border);
@@ -120,7 +120,7 @@
   }
   .input-area input::placeholder { color: var(--border); font-size: 16px; }
 
-  /* ã¹ãã¼ã¿ã¹è¡¨ç¤º */
+  /* ステータス表示 */
   .status-box {
     border-radius: 12px; padding: 14px 16px;
     font-size: 15px; font-weight: 700;
@@ -132,7 +132,7 @@
   .status-box.error   { background: rgba(239,68,68,0.15);  border: 1px solid var(--red);   color: var(--red); }
   .status-box.warning { background: rgba(245,158,11,0.15); border: 1px solid var(--yellow); color: var(--yellow); }
 
-  /* å³ããã«ï¼ãã¿ã³ */
+  /* 右パネル：ボタン */
   .panel-right {
     padding: 20px;
     display: flex; flex-direction: column; gap: 12px;
@@ -145,7 +145,7 @@
     padding-bottom: 8px; border-bottom: 1px solid var(--border);
   }
 
-  /* ã¿ãããã¿ã³ */
+  /* タッチボタン */
   .btn {
     width: 100%; padding: 18px 20px;
     border: none; border-radius: 12px; cursor: pointer;
@@ -190,7 +190,7 @@
   .btn-lg { padding: 22px 20px; font-size: 18px; }
   .btn-icon { font-size: 20px; }
 
-  /* åä½é¸æã¢ã¼ãã« */
+  /* 個体選択モーダル */
   .modal-overlay {
     display: none; position: fixed; inset: 0;
     background: rgba(0,0,0,0.7); z-index: 200;
@@ -236,7 +236,7 @@
   .individual-item .item-id { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--accent); }
   .individual-item .item-info { font-size: 13px; color: var(--text2); margin-top: 4px; }
 
-  /* é¨ä½é¸æã°ãªãã */
+  /* 部位選択グリッド */
   .part-grid {
     display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
   }
@@ -252,7 +252,7 @@
   .part-btn .part-name { font-size: 14px; font-weight: 700; }
   .part-btn .part-price { font-size: 11px; color: var(--text2); margin-top: 4px; }
 
-  /* å¨åº«ã­ã° */
+  /* 在庫ログ */
   .log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .log-table th {
     text-align: left; padding: 8px 12px;
@@ -275,7 +275,7 @@
   .badge-red { background: rgba(239,68,68,0.2); color: var(--red); }
   .badge-blue { background: rgba(59,130,246,0.2); color: var(--blue); }
 
-  /* ããã¿ã */
+  /* ナビタブ */
   .nav-tabs {
     display: flex; gap: 4px;
     background: var(--surface2); border-radius: 10px; padding: 4px;
@@ -291,11 +291,11 @@
     background: var(--accent); color: white;
   }
 
-  /* ãã¼ã¸ */
+  /* ページ */
   .page { display: none; }
   .page.active { display: flex; flex-direction: column; height: calc(100vh - 60px); }
 
-  /* ã¹ã¯ã­ã¼ã«ãã¼ */
+  /* スクロールバー */
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
@@ -304,7 +304,7 @@
   .text-small { font-size: 12px; color: var(--text2); }
   .mt-8 { margin-top: 8px; }
 
-  /* æå½èé¸æ */
+  /* 担当者選択 */
   .operator-chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .chip {
     padding: 8px 16px; border-radius: 100px; cursor: pointer;
@@ -317,233 +317,233 @@
 <body>
 
 <header class="header">
-  <div class="header-title">é¤¨å±±<span>ã¸ãã¨</span>ã»ã³ã¿ã¼</div>
+  <div class="header-title">館山<span>ジビエ</span>センター</div>
   <div class="header-status">
     <div class="status-dot"></div>
-    <span id="headerOperator">æå½èæªè¨­å®</span>
+    <span id="headerOperator">担当者未設定</span>
     <span id="headerTime"></span>
   </div>
 </header>
 
-<!-- ãã -->
+<!-- ナビ -->
 <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:8px 16px;">
   <div class="nav-tabs">
-    <button class="nav-tab active" onclick="showPage('register')">ð¦ å¨åº«ç»é²</button>
-    <button class="nav-tab" onclick="showPage('inventory')">ð å¨åº«ä¸è¦§</button>
-    <button class="nav-tab" onclick="showPage('settings')">âï¸ è¨­å®</button>
+    <button class="nav-tab active" onclick="showPage('register')">📦 在庫登録</button>
+    <button class="nav-tab" onclick="showPage('inventory')">📋 在庫一覧</button>
+    <button class="nav-tab" onclick="showPage('settings')">⚙️ 設定</button>
   </div>
 </div>
 
-<!-- ãã¼ã¸: å¨åº«ç»é² -->
+<!-- ページ: 在庫登録 -->
 <div class="page active" id="page-register">
   <div class="main">
-    <!-- å·¦ããã« -->
+    <!-- 左パネル -->
     <div class="panel-left">
 
-      <!-- ã¢ã¼ã -->
+      <!-- モード -->
       <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div class="mode-badge normal" id="modeBadge">â éå¸¸ã¢ã¼ã</div>
+        <div class="mode-badge normal" id="modeBadge">● 通常モード</div>
         <div class="text-small" id="currentTime2"></div>
       </div>
 
-      <!-- åä½æå ± -->
+      <!-- 個体情報 -->
       <div class="info-card">
-        <div class="info-card-label">ç¾å¨ã®åä½</div>
-        <div class="info-card-value accent" id="dispIndividual">æªè¨­å®</div>
-        <div class="text-small mt-8" id="dispOriginSpecies">ç£å°ã»ç£ç¨®ãè¨­å®ãã¦ãã ãã</div>
+        <div class="info-card-label">現在の個体</div>
+        <div class="info-card-value accent" id="dispIndividual">未設定</div>
+        <div class="text-small mt-8" id="dispOriginSpecies">産地・獣種を設定してください</div>
       </div>
 
       <div class="info-row">
         <div class="info-card">
-          <div class="info-card-label">ç£å°</div>
+          <div class="info-card-label">産地</div>
           <div class="info-card-value blue" id="dispOrigin" style="font-size:18px;">---</div>
         </div>
         <div class="info-card">
-          <div class="info-card-label">ç£ç¨®</div>
+          <div class="info-card-label">獣種</div>
           <div class="info-card-value green" id="dispSpecies" style="font-size:18px;">---</div>
         </div>
       </div>
 
-      <!-- é¨ä½æå ± -->
+      <!-- 部位情報 -->
       <div class="info-card">
-        <div class="info-card-label">ç¾å¨ã®é¨ä½</div>
-        <div class="info-card-value" id="dispPart" style="color:var(--accent2);">æªè¨­å®</div>
-        <div class="text-small mt-8" id="dispPrice">åä¾¡: ---</div>
+        <div class="info-card-label">現在の部位</div>
+        <div class="info-card-value" id="dispPart" style="color:var(--accent2);">未設定</div>
+        <div class="text-small mt-8" id="dispPrice">単価: ---</div>
       </div>
 
-      <!-- å¥åã¨ãªã¢ï¼ã¹ã­ã£ãã»ã¯ããï¼ -->
+      <!-- 入力エリア（スキャナ・はかり） -->
       <div class="input-area">
-        <label>ð¡ ã¹ã­ã£ã³ / è¨éå¥åï¼Enterã§ç¢ºå®ï¼</label>
-        <input type="text" id="scanInput" placeholder="ãã¼ã³ã¼ãã¹ã­ã£ã³ã¾ãã¯ééå¥å..."
+        <label>📡 スキャン / 計量入力（Enterで確定）</label>
+        <input type="text" id="scanInput" placeholder="バーコードスキャンまたは重量入力..."
                autocomplete="off" autocorrect="off" spellcheck="false">
       </div>
 
-      <!-- ã¹ãã¼ã¿ã¹ -->
+      <!-- ステータス -->
       <div class="status-box waiting" id="statusBox">
-        <span id="statusIcon">â³</span>
-        <span id="statusText">ã¹ã­ã£ã³ã¾ãã¯ééãå¥åãã¦ãã ãã</span>
+        <span id="statusIcon">⏳</span>
+        <span id="statusText">スキャンまたは重量を入力してください</span>
       </div>
 
     </div>
 
-    <!-- å³ããã« -->
+    <!-- 右パネル -->
     <div class="panel-right">
-      <div class="section-title">æä½</div>
+      <div class="section-title">操作</div>
 
       <button class="btn btn-primary btn-lg" onclick="openIndividualModal()">
-        <span class="btn-icon">ð</span> åä½åæ¿
+        <span class="btn-icon">🔄</span> 個体切替
       </button>
 
       <button class="btn btn-blue" onclick="openPartModal()">
-        <span class="btn-icon">ð¥©</span> é¨ä½é¸æ
+        <span class="btn-icon">🥩</span> 部位選択
       </button>
 
       <div class="divider"></div>
-      <div class="section-title">ã¢ã¼ãåæ¿</div>
+      <div class="section-title">モード切替</div>
 
       <button class="btn btn-yellow" id="processModeBtn" onclick="toggleProcessMode()">
-        <span class="btn-icon">âï¸</span> å å·¥ã¢ã¼ã OFF
+        <span class="btn-icon">⚙️</span> 加工モード OFF
       </button>
 
       <div class="divider"></div>
-      <div class="section-title">æåæä½</div>
+      <div class="section-title">手動操作</div>
 
       <button class="btn btn-secondary" onclick="manualWeight()">
-        <span class="btn-icon">âï¸</span> ééãæåå¥å
+        <span class="btn-icon">✏️</span> 重量を手動入力
       </button>
 
       <button class="btn btn-secondary" onclick="openOperatorModal()">
-        <span class="btn-icon">ð¤</span> æå½èå¤æ´
+        <span class="btn-icon">👤</span> 担当者変更
       </button>
 
       <div class="divider"></div>
-      <div class="section-title">ç´è¿ã®ç»é²</div>
+      <div class="section-title">直近の登録</div>
 
-      <div id="recentLog" style="font-size:13px;color:var(--text2);">èª­ã¿è¾¼ã¿ä¸­...</div>
+      <div id="recentLog" style="font-size:13px;color:var(--text2);">読み込み中...</div>
     </div>
   </div>
 </div>
 
-<!-- ãã¼ã¸: å¨åº«ä¸è¦§ -->
+<!-- ページ: 在庫一覧 -->
 <div class="page" id="page-inventory">
   <div style="padding:20px;flex:1;overflow-y:auto;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-      <h2 style="font-size:18px;font-weight:900;">å¨åº«ä¸è¦§</h2>
-      <button class="btn btn-secondary" style="width:auto;padding:10px 16px;font-size:14px;" onclick="loadInventory()">ð æ´æ°</button>
+      <h2 style="font-size:18px;font-weight:900;">在庫一覧</h2>
+      <button class="btn btn-secondary" style="width:auto;padding:10px 16px;font-size:14px;" onclick="loadInventory()">🔄 更新</button>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
       <select id="filterStatus" onchange="loadInventory()" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;">
-        <option value="">å¨ã¹ãã¼ã¿ã¹</option>
-        <option value="å¨åº«">å¨åº«</option>
-        <option value="å¼å½æ¸">å¼å½æ¸</option>
-        <option value="åºè·æ¸">åºè·æ¸</option>
-        <option value="å å·¥æ¸">å å·¥æ¸</option>
+        <option value="">全ステータス</option>
+        <option value="在庫">在庫</option>
+        <option value="引当済">引当済</option>
+        <option value="出荷済">出荷済</option>
+        <option value="加工済">加工済</option>
       </select>
       <select id="filterSpecies" onchange="loadInventory()" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;">
-        <option value="">å¨ç£ç¨®</option>
-        <option value="ã¤ãã·ã·">ã¤ãã·ã·</option>
-        <option value="ã·ã«">ã·ã«</option>
-        <option value="ä¸­åç£">ä¸­åç£</option>
+        <option value="">全獣種</option>
+        <option value="イノシシ">イノシシ</option>
+        <option value="シカ">シカ</option>
+        <option value="中型獣">中型獣</option>
       </select>
     </div>
     <div style="overflow-x:auto;">
       <table class="log-table">
         <thead>
           <tr>
-            <th>åä½ID</th>
-            <th>ç£ç¨®</th>
-            <th>é¨ä½</th>
-            <th>éé</th>
-            <th>åä¾¡</th>
-            <th>éé¡</th>
-            <th>æå½</th>
-            <th>ã¹ãã¼ã¿ã¹</th>
-            <th>ç»é²æ¥æ</th>
+            <th>個体ID</th>
+            <th>獣種</th>
+            <th>部位</th>
+            <th>重量</th>
+            <th>単価</th>
+            <th>金額</th>
+            <th>担当</th>
+            <th>ステータス</th>
+            <th>登録日時</th>
           </tr>
         </thead>
         <tbody id="inventoryBody">
-          <tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text2);">èª­ã¿è¾¼ã¿ä¸­...</td></tr>
+          <tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text2);">読み込み中...</td></tr>
         </tbody>
       </table>
     </div>
   </div>
 </div>
 
-<!-- ãã¼ã¸: è¨­å® -->
+<!-- ページ: 設定 -->
 <div class="page" id="page-settings">
   <div style="padding:20px;max-width:500px;">
-    <h2 style="font-size:18px;font-weight:900;margin-bottom:20px;">è¨­å®</h2>
+    <h2 style="font-size:18px;font-weight:900;margin-bottom:20px;">設定</h2>
 
     <div class="info-card" style="margin-bottom:16px;">
-      <div class="info-card-label">æå½èè¨­å®</div>
+      <div class="info-card-label">担当者設定</div>
       <div class="operator-chips mt-8" id="operatorChips"></div>
       <div style="margin-top:12px;display:flex;gap:8px;">
-        <input type="text" id="newOperatorInput" placeholder="æå½èåãè¿½å ..."
+        <input type="text" id="newOperatorInput" placeholder="担当者名を追加..."
                style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;outline:none;">
-        <button class="btn btn-primary" style="width:auto;padding:10px 16px;font-size:14px;" onclick="addOperator()">è¿½å </button>
+        <button class="btn btn-primary" style="width:auto;padding:10px 16px;font-size:14px;" onclick="addOperator()">追加</button>
       </div>
     </div>
 
     <div class="info-card">
-      <div class="info-card-label">æ¥ç¶æå ±</div>
+      <div class="info-card-label">接続情報</div>
       <div class="text-small mt-8">Supabase: clpdyrehdgzgiidbfucj.supabase.co</div>
-      <div class="text-small" style="margin-top:4px;">ãã­ã¸ã§ã¯ã: tateyama-gibier</div>
+      <div class="text-small" style="margin-top:4px;">プロジェクト: tateyama-gibier</div>
     </div>
   </div>
 </div>
 
-<!-- ã¢ã¼ãã«: åä½é¸æ -->
+<!-- モーダル: 個体選択 -->
 <div class="modal-overlay" id="individualModal">
   <div class="modal">
     <div class="modal-header">
-      <h2>åä½ãé¸æ</h2>
-      <button onclick="closeModal('individualModal')" style="background:none;border:none;color:var(--text2);font-size:24px;cursor:pointer;">Ã</button>
+      <h2>個体を選択</h2>
+      <button onclick="closeModal('individualModal')" style="background:none;border:none;color:var(--text2);font-size:24px;cursor:pointer;">×</button>
     </div>
     <div class="modal-body">
-      <input class="search-input" type="text" placeholder="ð åä½IDãç£å°ã§çµãè¾¼ã¿..." id="individualSearch" oninput="filterIndividuals()">
-      <div class="individual-list" id="individualList">èª­ã¿è¾¼ã¿ä¸­...</div>
+      <input class="search-input" type="text" placeholder="🔍 個体IDや産地で絞り込み..." id="individualSearch" oninput="filterIndividuals()">
+      <div class="individual-list" id="individualList">読み込み中...</div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('individualModal')">ã­ã£ã³ã»ã«</button>
+      <button class="btn btn-secondary" onclick="closeModal('individualModal')">キャンセル</button>
     </div>
   </div>
 </div>
 
-<!-- ã¢ã¼ãã«: é¨ä½é¸æ -->
+<!-- モーダル: 部位選択 -->
 <div class="modal-overlay" id="partModal">
   <div class="modal">
     <div class="modal-header">
-      <h2>é¨ä½ãé¸æ</h2>
-      <button onclick="closeModal('partModal')" style="background:none;border:none;color:var(--text2);font-size:24px;cursor:pointer;">Ã</button>
+      <h2>部位を選択</h2>
+      <button onclick="closeModal('partModal')" style="background:none;border:none;color:var(--text2);font-size:24px;cursor:pointer;">×</button>
     </div>
     <div class="modal-body">
       <div class="part-grid" id="partGrid"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('partModal')">ã­ã£ã³ã»ã«</button>
+      <button class="btn btn-secondary" onclick="closeModal('partModal')">キャンセル</button>
     </div>
   </div>
 </div>
 
-<!-- ã¢ã¼ãã«: æå½è -->
+<!-- モーダル: 担当者 -->
 <div class="modal-overlay" id="operatorModal">
   <div class="modal">
     <div class="modal-header">
-      <h2>æå½èãé¸æ</h2>
-      <button onclick="closeModal('operatorModal')" style="background:none;border:none;color:var(--text2);font-size:24px;cursor:pointer;">Ã</button>
+      <h2>担当者を選択</h2>
+      <button onclick="closeModal('operatorModal')" style="background:none;border:none;color:var(--text2);font-size:24px;cursor:pointer;">×</button>
     </div>
     <div class="modal-body">
       <div class="operator-chips" id="operatorChipsModal"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('operatorModal')">ã­ã£ã³ã»ã«</button>
+      <button class="btn btn-secondary" onclick="closeModal('operatorModal')">キャンセル</button>
     </div>
   </div>
 </div>
 
 <script>
 // =============================================
-// Supabase åæå
+// Supabase 初期化
 // =============================================
 const SUPABASE_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
@@ -551,7 +551,7 @@ const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ============================================
-// b-PAC 在庫ラベル印刷
+// b-PAC (����p7
 // ============================================
 const BPAC_INV = {
   storageKey: 'bpac_template_path'
@@ -571,7 +571,7 @@ async function printInventoryLabel(identCode, weight) {
     if (!ret) return;
     const today = new Date().toLocaleDateString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit'});
     const setObj = (name, val) => { try { const o = doc.GetObject(name); if(o) o.Text = String(val??''); } catch(e){} };
-    setObj('ObjLabelType', '在庫');
+    setObj('ObjLabelType', '(�');
     setObj('ObjId',        state.individualId);
     setObj('ObjBarcode',   identCode);
     setObj('ObjSpecies',   state.species);
@@ -585,12 +585,12 @@ async function printInventoryLabel(identCode, weight) {
     await doc.EndPrint();
     doc.Close();
   } catch(e) {
-    console.warn('[b-PAC] 在庫ラベル印刷エラー:', e);
+    console.warn('[b-PAC] (����p7���:', e);
   }
 }
 
 // =============================================
-// ã°ã­ã¼ãã«ç¶æ
+// グローバル状態
 // =============================================
 let state = {
   individualId: '',
@@ -606,22 +606,22 @@ let state = {
 
 let allIndividuals = [];
 let allParts = [];
-let operators = JSON.parse(localStorage.getItem('gibier_operators') || '["å±±ç°","é´æ¨","ä½è¤"]');
+let operators = JSON.parse(localStorage.getItem('gibier_operators') || '["山田","鈴木","佐藤"]');
 
 // =============================================
-// åæå
+// 初期化
 // =============================================
 window.addEventListener('DOMContentLoaded', async () => {
   updateClock();
   setInterval(updateClock, 1000);
 
-  // ã¹ã­ã£ã³å¥å
+  // スキャン入力
   const scanInput = document.getElementById('scanInput');
   scanInput.addEventListener('keydown', e => {
     if (e.key === 'Enter') handleScanInput(scanInput.value.trim());
   });
 
-  // ãã©ã¼ã«ã¹ç¶­æ
+  // フォーカス維持
   document.addEventListener('click', e => {
     if (!e.target.closest('.modal-overlay') &&
         !e.target.closest('button') &&
@@ -645,78 +645,78 @@ function updateClock() {
 }
 
 // =============================================
-// ã¹ã­ã£ã³å¥åå¦çï¼ã¡ã¤ã³ã­ã¸ãã¯ï¼
+// スキャン入力処理（メインロジック）
 // =============================================
 async function handleScanInput(val) {
   document.getElementById('scanInput').value = '';
   if (!val) return;
 
-  // ãã¿ã¼ã³1: ID-xxx â åä½å¤æ´
+  // パターン1: ID-xxx → 個体変更
   if (val.startsWith('ID-')) {
     const newId = val.slice(3);
     const found = allIndividuals.find(i => i.label_id === newId);
     if (found) {
       selectIndividual(found);
-      showStatus('success', `â åä½å¤æ´: ${newId}`);
+      showStatus('success', `✅ 個体変更: ${newId}`);
     } else {
-      showStatus('error', `â åä½æªç»é²: ${newId}`);
+      showStatus('error', `❌ 個体未登録: ${newId}`);
     }
     return;
   }
 
-  // ãã¿ã¼ã³2: é¨ä½ãã¼ã³ã¼ãï¼æ°å­3æ¡ï¼
+  // パターン2: 部位バーコード（数字3桁）
   if (/^\d{3}$/.test(val)) {
     const part = allParts.find(p => p.barcode_num === val);
     if (part) {
       selectPart(part);
-      showStatus('success', `â é¨ä½å¤æ´: ${part.part_name}`);
+      showStatus('success', `✅ 部位変更: ${part.part_name}`);
     } else {
-      showStatus('error', `â é¨ä½çªå·æªç»é²: ${val}`);
+      showStatus('error', `❌ 部位番号未登録: ${val}`);
     }
     return;
   }
 
-  // ãã¿ã¼ã³3: å å·¥ã¢ã¼ãã§æ¢å­è­å¥ã³ã¼ãã¹ã­ã£ã³
+  // パターン3: 加工モードで既存識別コードスキャン
   if (state.processMode && val.includes('-') && isNaN(val)) {
     state.parentCode = val;
-    showStatus('warning', `âï¸ è¦ªã³ã¼ãè¨­å®: ${val}`);
+    showStatus('warning', `⚙️ 親コード設定: ${val}`);
     updateDisplay();
     return;
   }
 
-  // ãã¿ã¼ã³4: æ°å¤ â ééã¨ãã¦è¨é²
+  // パターン4: 数値 → 重量として記録
   if (!isNaN(val) && val !== '') {
     const weight = parseFloat(val);
     if (weight <= 0 || weight > 99999) {
-      showStatus('error', 'â ééãç¯å²å¤ã§ã');
+      showStatus('error', '❌ 重量が範囲外です');
       return;
     }
     await recordInventory(weight);
     return;
   }
 
-  showStatus('error', `â ä¸æãªå¥å: ${val}`);
+  showStatus('error', `❓ 不明な入力: ${val}`);
 }
 
 // =============================================
-// å¨åº«ç»é²
+// 在庫登録
 // =============================================
 async function recordInventory(weight) {
   if (!state.individualId) {
-    showStatus('error', 'â åä½IDãæªè¨­å®ã§ã');
+    showStatus('error', '❌ 個体IDが未設定です');
     return;
   }
   if (!state.partName) {
-    showStatus('error', 'â é¨ä½ãæªè¨­å®ã§ã');
+    showStatus('error', '❌ 部位が未設定です');
     return;
   }
   if (!state.operator) {
-    showStatus('error', 'â æå½èãè¨­å®ãã¦ãã ãã');
+    showStatus('error', '❌ 担当者を設定してください');
     openOperatorModal();
     return;
   }
 
-  showStatus('waiting', 'â³ ç»é²ä¸­...');
+  showStatus('waiting', '⏳ 登録中...');
 
   const identCode = `${state.individualId}-${state.partName}-${weight}g-${Date.now()}`;
   const amount = Math.round(weight / 1000 * state.unitPrice);
@@ -727,22 +727,22 @@ async function recordInventory(weight) {
     barcode_num: state.barcodeNum,
     weight: weight,
     ident_code: identCode,
-    status: 'å¨åº«',
+    status: '在庫',
     operator: state.operator,
-    grade: 'ä¸',
+    grade: '上',
     unit_price: state.unitPrice
   };
 
   const { error } = await db.from('inventory').insert(record);
 
   if (error) {
-    showStatus('error', `â ç»é²å¤±æ: ${error.message}`);
+    showStatus('error', `❌ 登録失敗: ${error.message}`);
     return;
   }
 
-  // å å·¥ã¢ã¼ãï¼è¦ªãå å·¥æ¸ã«æ´æ°
+  // 加工モード：親を加工済に更新
   if (state.processMode && state.parentCode) {
-    await db.from('inventory').update({ status: 'å å·¥æ¸' }).eq('ident_code', state.parentCode);
+    await db.from('inventory').update({ status: '加工済' }).eq('ident_code', state.parentCode);
     await db.from('processing_log').insert({
       parent_ident_code: state.parentCode,
       child_ident_code: identCode,
@@ -751,14 +751,14 @@ async function recordInventory(weight) {
     });
   }
 
-  showStatus('success', `â ç»é²å®äº: ${state.partName} ${weight}gï¼Â¥${amount.toLocaleString()}ï¼`);
-  // b-PAC 在庫ラベル印刷
+  showStatus('success', `✅ 登録完了: ${state.partName} ${weight}g（¥${amount.toLocaleString()}）`);
+  // b-PAC (����p7
   await printInventoryLabel(identCode, weight);
   await loadRecentLog();
 }
 
 // =============================================
-// ãã¼ã¿èª­ã¿è¾¼ã¿
+// データ読み込み
 // =============================================
 async function loadIndividuals() {
   const { data } = await db.from('individuals').select('*').order('created_at', { ascending: false });
@@ -766,7 +766,7 @@ async function loadIndividuals() {
 }
 
 async function loadParts() {
-  const species = state.species || 'ã¤ãã·ã·';
+  const species = state.species || 'イノシシ';
   const { data } = await db.from('price_master').select('*').eq('species', species).order('barcode_num');
   allParts = data || [];
 }
@@ -775,14 +775,14 @@ async function loadRecentLog() {
   const { data } = await db.from('inventory').select('*').order('created_at', { ascending: false }).limit(5);
   const el = document.getElementById('recentLog');
   if (!data || data.length === 0) {
-    el.innerHTML = '<div style="color:var(--text2);text-align:center;padding:10px;">ã¾ã ç»é²ãããã¾ãã</div>';
+    el.innerHTML = '<div style="color:var(--text2);text-align:center;padding:10px;">まだ登録がありません</div>';
     return;
   }
   el.innerHTML = data.map(r => `
     <div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
       <div>
         <div style="font-weight:700;font-size:13px;">${r.individual_id} / ${r.part_name}</div>
-        <div style="font-size:11px;color:var(--text2);">${r.weight}g Â· ${r.operator}</div>
+        <div style="font-size:11px;color:var(--text2);">${r.weight}g · ${r.operator}</div>
       </div>
       <span class="badge badge-green">${r.status}</span>
     </div>
@@ -799,18 +799,18 @@ async function loadInventory() {
   const { data } = await query;
   let rows = data || [];
 
-  // ç£ç¨®ãã£ã«ã¿ã¼ï¼åä½å°å¸³ã¨çµåã¯å¾ã§å®è£ãä»ã¯ident_codeã«å«ã¾ããå ´åã®ã¿ï¼
+  // 獣種フィルター（個体台帳と結合は後で実装、今はident_codeに含まれる場合のみ）
   const tbody = document.getElementById('inventoryBody');
   if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text2);">ãã¼ã¿ãªã</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text2);">データなし</td></tr>';
     return;
   }
 
   tbody.innerHTML = rows.map(r => {
     const amount = r.weight && r.unit_price ? Math.round(r.weight / 1000 * r.unit_price) : 0;
-    const statusBadge = r.status === 'å¨åº«' ? 'badge-green' :
-                        r.status === 'å¼å½æ¸' ? 'badge-yellow' :
-                        r.status === 'åºè·æ¸' ? 'badge-blue' : 'badge-red';
+    const statusBadge = r.status === '在庫' ? 'badge-green' :
+                        r.status === '引当済' ? 'badge-yellow' :
+                        r.status === '出荷済' ? 'badge-blue' : 'badge-red';
     const date = new Date(r.created_at).toLocaleString('ja-JP', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
     return `
       <tr>
@@ -818,8 +818,8 @@ async function loadInventory() {
         <td>${r.species || '-'}</td>
         <td style="font-weight:700;">${r.part_name}</td>
         <td style="font-family:var(--mono);">${r.weight}g</td>
-        <td style="font-family:var(--mono);">${r.unit_price ? r.unit_price.toLocaleString()+'å/kg' : '-'}</td>
-        <td style="font-family:var(--mono);">${amount ? 'Â¥'+amount.toLocaleString() : '-'}</td>
+        <td style="font-family:var(--mono);">${r.unit_price ? r.unit_price.toLocaleString()+'円/kg' : '-'}</td>
+        <td style="font-family:var(--mono);">${amount ? '¥'+amount.toLocaleString() : '-'}</td>
         <td>${r.operator || '-'}</td>
         <td><span class="badge ${statusBadge}">${r.status}</span></td>
         <td style="font-size:12px;color:var(--text2);">${date}</td>
@@ -829,7 +829,7 @@ async function loadInventory() {
 }
 
 // =============================================
-// é¸æå¦ç
+// 選択処理
 // =============================================
 function selectIndividual(ind) {
   state.individualId = ind.label_id;
@@ -849,28 +849,28 @@ function selectPart(part) {
 }
 
 // =============================================
-// è¡¨ç¤ºæ´æ°
+// 表示更新
 // =============================================
 function updateDisplay() {
-  document.getElementById('dispIndividual').textContent = state.individualId || 'æªè¨­å®';
+  document.getElementById('dispIndividual').textContent = state.individualId || '未設定';
   document.getElementById('dispOrigin').textContent = state.origin || '---';
   document.getElementById('dispSpecies').textContent = state.species || '---';
   document.getElementById('dispOriginSpecies').textContent =
-    state.origin && state.species ? `${state.origin} / ${state.species}` : 'ç£å°ã»ç£ç¨®ãè¨­å®ãã¦ãã ãã';
-  document.getElementById('dispPart').textContent = state.partName || 'æªè¨­å®';
-  document.getElementById('dispPrice').textContent = state.unitPrice ? `åä¾¡: ${state.unitPrice.toLocaleString()}å/kg` : 'åä¾¡: ---';
-  document.getElementById('headerOperator').textContent = state.operator || 'æå½èæªè¨­å®';
+    state.origin && state.species ? `${state.origin} / ${state.species}` : '産地・獣種を設定してください';
+  document.getElementById('dispPart').textContent = state.partName || '未設定';
+  document.getElementById('dispPrice').textContent = state.unitPrice ? `単価: ${state.unitPrice.toLocaleString()}円/kg` : '単価: ---';
+  document.getElementById('headerOperator').textContent = state.operator || '担当者未設定';
 
   const badge = document.getElementById('modeBadge');
   const btn = document.getElementById('processModeBtn');
   if (state.processMode) {
     badge.className = 'mode-badge process';
-    badge.textContent = 'âï¸ å å·¥ã¢ã¼ã ON';
-    btn.textContent = 'âï¸ å å·¥ã¢ã¼ã ONï¼ã¿ããã§è§£é¤ï¼';
+    badge.textContent = '⚙️ 加工モード ON';
+    btn.textContent = '⚙️ 加工モード ON（タップで解除）';
   } else {
     badge.className = 'mode-badge normal';
-    badge.textContent = 'â éå¸¸ã¢ã¼ã';
-    btn.textContent = 'âï¸ å å·¥ã¢ã¼ã OFF';
+    badge.textContent = '● 通常モード';
+    btn.textContent = '⚙️ 加工モード OFF';
   }
 }
 
@@ -881,7 +881,7 @@ function showStatus(type, msg) {
 }
 
 // =============================================
-// ã¢ã¼ãã«æä½
+// モーダル操作
 // =============================================
 function openIndividualModal() {
   loadIndividuals().then(() => {
@@ -894,14 +894,14 @@ function openIndividualModal() {
 function renderIndividualList(list) {
   const el = document.getElementById('individualList');
   if (list.length === 0) {
-    el.innerHTML = '<div style="text-align:center;color:var(--text2);padding:20px;">åä½ãããã¾ãã<br><small>åä½å°å¸³ã«ç»é²ãã¦ãã ãã</small></div>';
+    el.innerHTML = '<div style="text-align:center;color:var(--text2);padding:20px;">個体がありません<br><small>個体台帳に登録してください</small></div>';
     return;
   }
   el.innerHTML = list.map(ind => `
     <div class="individual-item ${state.individualId === ind.label_id ? 'selected' : ''}"
          onclick="selectIndividual(${JSON.stringify(ind).replace(/"/g, '&quot;')})">
       <div class="item-id">${ind.label_id}</div>
-      <div class="item-info">${ind.origin || 'ç£å°ä¸æ'} / ${ind.species || 'ç£ç¨®ä¸æ'}</div>
+      <div class="item-info">${ind.origin || '産地不明'} / ${ind.species || '獣種不明'}</div>
     </div>
   `).join('');
 }
@@ -919,13 +919,13 @@ function filterIndividuals() {
 function openPartModal() {
   const el = document.getElementById('partGrid');
   if (allParts.length === 0) {
-    el.innerHTML = '<div style="color:var(--text2);">é¨ä½ãã¼ã¿ãªã</div>';
+    el.innerHTML = '<div style="color:var(--text2);">部位データなし</div>';
   } else {
     el.innerHTML = allParts.map(p => `
       <div class="part-btn ${state.partName === p.part_name ? 'selected' : ''}"
            onclick="selectPart(${JSON.stringify(p).replace(/"/g, '&quot;')})">
         <div class="part-name">${p.part_name}</div>
-        <div class="part-price">${p.price_standard ? p.price_standard.toLocaleString()+'å/kg' : ''}</div>
+        <div class="part-price">${p.price_standard ? p.price_standard.toLocaleString()+'円/kg' : ''}</div>
       </div>
     `).join('');
   }
@@ -943,7 +943,7 @@ function closeModal(id) {
 }
 
 // =============================================
-// æå½è
+// 担当者
 // =============================================
 function renderOperatorChips() {
   const el = document.getElementById('operatorChips');
@@ -978,7 +978,7 @@ function addOperator() {
 }
 
 // =============================================
-// ãã®ä»
+// その他
 // =============================================
 function toggleProcessMode() {
   state.processMode = !state.processMode;
@@ -988,7 +988,7 @@ function toggleProcessMode() {
 }
 
 function manualWeight() {
-  const w = prompt('ééãå¥åãã¦ãã ãã (g):');
+  const w = prompt('重量を入力してください (g):');
   if (w && !isNaN(w)) recordInventory(parseFloat(w));
 }
 
