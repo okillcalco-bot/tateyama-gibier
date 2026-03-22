@@ -140,6 +140,7 @@ select option { background: var(--surface); }
   <div class="tab active" onclick="showTab('form')">📋 捕獲票入力</div>
   <div class="tab" onclick="showTab('print')">🖨️ 印刷・ラベル</div>
   <div class="tab" onclick="showTab('history')">📊 搬入一覧</div>
+  <div class="tab admin-only" onclick="showTab('hunters');loadHunters()">👤 捕獲者台帳</div>
 </div>
 
 <!-- ===================== FORM TAB ===================== -->
@@ -165,7 +166,11 @@ select option { background: var(--surface); }
               <div class="toggle-group">
                 <div class="toggle-btn selected" onclick="selectToggle(this,'species','イノシシ')">🐗 イノシシ</div>
                 <div class="toggle-btn" onclick="selectToggle(this,'species','シカ')">🦌 シカ</div>
-                <div class="toggle-btn" onclick="selectToggle(this,'species','その他')">その他</div>
+                <div class="toggle-btn" onclick="selectToggle(this,'species','キョン')">🦌 キョン</div>
+                <div class="toggle-btn" onclick="selectToggle(this,'species','アライグマ')">🦝 アライグマ</div>
+                <div class="toggle-btn" onclick="selectToggle(this,'species','ハクビシン')">🐾 ハクビシン</div>
+                <div class="toggle-btn" onclick="selectToggle(this,'species','タヌキ')">🦡 タヌキ</div>
+                <div class="toggle-btn" onclick="selectToggle(this,'species','ウサギ')">🐇 ウサギ</div>
               </div>
               <input type="hidden" id="species" value="イノシシ">
             </div>
@@ -229,7 +234,8 @@ select option { background: var(--surface); }
           </div>
           <div class="field">
             <label>捕獲者氏名 <span class="req">*</span></label>
-            <input type="text" id="hunter" placeholder="例：沖浩志">
+            <input type="text" id="hunter" placeholder="例：山田太郎" list="hunterList" autocomplete="off">
+            <datalist id="hunterList"></datalist>
           </div>
           <div class="field">
             <label>捕獲方法</label>
@@ -395,10 +401,18 @@ select option { background: var(--surface); }
           <div class="field">
             <label>胎児の有無</label>
             <div class="toggle-group">
-              <div class="toggle-btn selected" onclick="selectToggle(this,'fetus','無')">無</div>
-              <div class="toggle-btn" onclick="selectToggle(this,'fetus','有')">有</div>
+              <div class="toggle-btn selected" onclick="selectToggle(this,'fetus','無');document.getElementById('fetusCountArea').style.display='none'">無</div>
+              <div class="toggle-btn" onclick="selectToggle(this,'fetus','有');document.getElementById('fetusCountArea').style.display='block'">有</div>
             </div>
             <input type="hidden" id="fetus" value="無">
+            <div id="fetusCountArea" style="display:none;margin-top:10px;padding:10px;background:#fef9f0;border-radius:8px;border:1px solid #f0c060">
+              <div style="margin-bottom:8px;font-size:13px;font-weight:600;color:#664400">胎児情報</div>
+              <div style="display:flex;gap:12px;flex-wrap:wrap">
+                <div><label style="font-size:12px;display:block;margin-bottom:3px">総頭数 <span style="color:red">*</span></label><input type="number" id="fetusCount" min="1" max="20" style="width:80px;padding:6px;border:1px solid #ccc;border-radius:6px" placeholder="頭"></div>
+                <div><label style="font-size:12px;display:block;margin-bottom:3px">うちオス（任意）</label><input type="number" id="fetusMale" min="0" max="20" style="width:80px;padding:6px;border:1px solid #ccc;border-radius:6px" placeholder="頭"></div>
+                <div><label style="font-size:12px;display:block;margin-bottom:3px">うちメス（任意）</label><input type="number" id="fetusFemale" min="0" max="20" style="width:80px;padding:6px;border:1px solid #ccc;border-radius:6px" placeholder="頭"></div>
+              </div>
+            </div>
           </div>
           <div class="field">
             <label>その他メモ</label>
@@ -663,6 +677,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   document.getElementById('captureDate').value = new Date().toISOString().split('T')[0];
   await generateIds();
   selectCity('館山市');
+  loadHunters();
   buildCheckList('captureAnomalyList', CAPTURE_ANOMALIES);
   buildCheckList('organAnomalyList', ORGAN_ANOMALIES);
   loadHistory();
@@ -682,7 +697,7 @@ async function generateIds() {
       const m = allData[0].individual_id.match(/(\d+)$/);
       if (m) nextNum = parseInt(m[1]) + 1;
     }
-    currentIndividualId = 'TGC-07-T' + String(nextNum).padStart(3,'0');
+    currentIndividualId = buildIndivId(document.getElementById('species').value, document.getElementById('captureCity').value, nextNum);
     document.getElementById('displaySerial').textContent = '通し番号: ' + String(currentSerial).padStart(3,'0');
     document.getElementById('displayIndividual').textContent = '個体番号: ' + currentIndividualId;
   } catch(e) {
@@ -840,6 +855,9 @@ async function submitForm() {
     capture_anomalies: captureAnomalies.length ? captureAnomalies.join('|') : null,
     organ_anomalies: organAnomalies.length ? organAnomalies.join('|') : null,
     has_fetus: document.getElementById('fetus').value === '有',
+    fetus_count: document.getElementById('fetus').value==='有'?(parseInt(document.getElementById('fetusCount').value)||null):null,
+    fetus_male: document.getElementById('fetus').value==='有'?(parseInt(document.getElementById('fetusMale').value)||null):null,
+    fetus_female: document.getElementById('fetus').value==='有'?(parseInt(document.getElementById('fetusFemale').value)||null):null,
     processing_type: document.getElementById('processingType').value,
     memo: document.getElementById('memo').value || null,
     status: '搬入済',
@@ -1021,6 +1039,89 @@ function printRecord(r) {
   updateLabelPreview(r);
   showTab('print');
 }
+
+
+// ===== 個体番号生成 =====
+function buildIndivId(species, city, num) {
+  var yr = '07';
+  var pfx;
+  if (species === 'イノシシ') {
+    pfx = city === '南房総市' ? 'M' : 'T';
+  } else {
+    var map = {'シカ':'シ','キョン':'キ','アライグマ':'ア','ハクビシン':'ハ','タヌキ':'タ','ウサギ':'ウ'};
+    pfx = map[species] || 'X';
+  }
+  return 'TGC-' + yr + '-' + pfx + String(num).padStart(3,'0');
+}
+
+// ===== 大字データ + updateCaptureLocation 上書き =====
+var AREA_DATA = {
+  '館山市': ['北条','那古','船形','館山','正木','安東','八幡','長須賀','大神宮','新井','岡田','神戸','竹原','仁我浦','長尾','九重','豊房','西長田','東長田','洲宮','沼','花房','神余','巴川','高畑','林','出野尾','富崎','波左間','上真倉','下真倉','稲','佐野'],
+  '南房総市': ['枇杷倉','豊岡','青木','岩糸','原岡','多田良','佐久間','久保','犬掘','市部','絹','三芳','滝口','府中','竹内','指塚','白浜','根本','乙浜','千倉','瀬戸','南無谷','大川','豊田','丸山','海老敷','猪之田','和田','平群','江見','関東']
+};
+function updateCaptureLocation() {
+  var city = document.getElementById('captureCity').value;
+  var sel = document.getElementById('captureArea');
+  var areas = AREA_DATA[city] || [];
+  sel.innerHTML = '<option value="">— 大字を選択 —</option>' +
+    areas.map(function(a){return '<option value="'+a+'">'+a+'</option>';}).join('');
+  sel.onchange = function() {
+    document.getElementById('captureLocation').value = sel.value ? (city + sel.value) : city;
+  };
+  document.getElementById('captureLocation').value = city;
+}
+
+// ===== 捕獲者台帳管理 =====
+function loadHunters() {
+  var hunters = JSON.parse(localStorage.getItem('tgc_hunters') || '[]');
+  var dl = document.getElementById('hunterList');
+  if (dl) dl.innerHTML = hunters.map(function(h){return '<option value="'+h.name+'">';}).join('');
+  var list = document.getElementById('hunterList2');
+  if (!list) return;
+  if (!hunters.length) { list.innerHTML = '<p style="color:#888;padding:20px;text-align:center">登録された捕獲者はいません</p>'; return; }
+  list.innerHTML = hunters.map(function(h,i){
+    return '<div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:12px 14px;margin-bottom:8px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+      +'<div><strong style="font-size:15px">'+h.name+'</strong>'
+      +(h.address?'<br><span style="font-size:13px;color:#555">📍 '+h.address+'</span>':'')
+      +(h.phone?'<br><span style="font-size:13px;color:#555">📞 '+h.phone+'</span>':'')
+      +(h.bankName?'<br><span style="font-size:12px;color:#888">🏦 '+h.bankName+(h.bankBranch?' '+h.bankBranch:'')+(h.bankType?' ('+h.bankType+')':'')+(h.bankNum?' 口座:'+h.bankNum:'')+(h.bankHolder?' 名義:'+h.bankHolder:'')+'</span>':'')
+      +'</div><button onclick="deleteHunter('+i+')" style="background:none;border:1px solid #ddd;border-radius:4px;padding:3px 8px;cursor:pointer;color:#c00;font-size:12px;flex-shrink:0;margin-left:8px">削除</button>'
+      +'</div></div>';
+  }).join('');
+}
+function toggleHunterForm() {
+  var el = document.getElementById('hunterFormArea');
+  if (el) el.style.display = el.style.display==='none' ? 'block' : 'none';
+}
+function saveHunter() {
+  var name = (document.getElementById('hName').value||'').trim();
+  if (!name) { alert('氏名を入力してください'); return; }
+  var hunters = JSON.parse(localStorage.getItem('tgc_hunters') || '[]');
+  hunters.push({
+    name:name,
+    address:(document.getElementById('hAddress').value||'').trim(),
+    phone:(document.getElementById('hPhone').value||'').trim(),
+    bankName:(document.getElementById('hBankName').value||'').trim(),
+    bankBranch:(document.getElementById('hBankBranch').value||'').trim(),
+    bankType:document.getElementById('hBankType').value||'普通',
+    bankNum:(document.getElementById('hBankNum').value||'').trim(),
+    bankHolder:(document.getElementById('hBankHolder').value||'').trim()
+  });
+  localStorage.setItem('tgc_hunters', JSON.stringify(hunters));
+  ['hName','hAddress','hPhone','hBankName','hBankBranch','hBankNum','hBankHolder'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.value='';
+  });
+  toggleHunterForm();
+  loadHunters();
+}
+function deleteHunter(i) {
+  if (!confirm('この捕獲者を削除しますか？')) return;
+  var hunters = JSON.parse(localStorage.getItem('tgc_hunters') || '[]');
+  hunters.splice(i,1);
+  localStorage.setItem('tgc_hunters', JSON.stringify(hunters));
+  loadHunters();
+}
 </script>
 
 <style>
@@ -1031,5 +1132,33 @@ function printRecord(r) {
   .no-print { display: none !important; }
 }
 </style>
+<!-- ===================== HUNTER REGISTRY TAB ===================== -->
+<div class="panel" id="tab-hunters">
+  <div class="main">
+    <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px">⚠ <strong>管理者専用</strong> — 捕獲者台帳の閲覧・編集は管理者のみ行ってください</div>
+    <button class="btn btn-primary" onclick="toggleHunterForm()" style="margin-bottom:14px">＋ 新規登録</button>
+    <div id="hunterFormArea" style="display:none;background:#f9f9f9;border:1px solid #ddd;border-radius:8px;padding:14px;margin-bottom:14px">
+      <h3 style="margin-bottom:12px;font-size:15px;font-weight:700">捕獲者情報入力</h3>
+      <div style="display:grid;gap:8px">
+        <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:3px">氏名 <span style="color:red">*</span></label><input type="text" id="hName" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px"></div>
+        <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:3px">住所</label><input type="text" id="hAddress" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px"></div>
+        <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:3px">電話番号</label><input type="tel" id="hPhone" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px"></div>
+        <div style="border-top:1px solid #ddd;padding-top:10px;margin-top:4px"><strong style="font-size:13px">振込先口座情報</strong></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label style="font-size:12px;display:block;margin-bottom:3px">金融機関名</label><input type="text" id="hBankName" style="width:100%;padding:7px;border:1px solid #ccc;border-radius:6px"></div>
+          <div><label style="font-size:12px;display:block;margin-bottom:3px">支店名</label><input type="text" id="hBankBranch" style="width:100%;padding:7px;border:1px solid #ccc;border-radius:6px"></div>
+          <div><label style="font-size:12px;display:block;margin-bottom:3px">口座種別</label><select id="hBankType" style="width:100%;padding:7px;border:1px solid #ccc;border-radius:6px"><option>普通</option><option>当座</option></select></div>
+          <div><label style="font-size:12px;display:block;margin-bottom:3px">口座番号</label><input type="text" id="hBankNum" style="width:100%;padding:7px;border:1px solid #ccc;border-radius:6px"></div>
+        </div>
+        <div><label style="font-size:12px;display:block;margin-bottom:3px">口座名義（カナ）</label><input type="text" id="hBankHolder" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px"></div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="btn btn-primary" onclick="saveHunter()">保存</button>
+        <button class="btn" onclick="toggleHunterForm()">キャンセル</button>
+      </div>
+    </div>
+    <div id="hunterList2"></div>
+  </div>
+</div>
 </body>
 </html>
