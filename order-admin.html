@@ -854,17 +854,20 @@ function renderCustomers() {
   const el = document.getElementById('customersList');
   if (!custs.length) { el.innerHTML = '<div class="empty">顧客がいません</div>'; return; }
 
-  el.innerHTML = `<table class="order-table">
-    <thead><tr><th>顧客名</th><th>住所</th><th>電話番号</th><th>価格ランク</th><th>パスワード</th><th>操作</th></tr></thead>
+  el.innerHTML = `<div id="custToolbar" style="margin-bottom:8px;padding:8px 12px;background:#fff3cd;border-radius:6px;border:1px solid #ffc107;display:flex;align-items:center;gap:12px"><span id="custSelCount" style="font-size:13px;font-weight:600">0件選択中</span><button style="background:#dc3545;color:#fff;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;font-size:13px" onclick="deleteSelectedCustomers()">選択を削除</button></div>
+<table class="order-table">
+    <thead><tr><th style="width:36px;text-align:center"><input type="checkbox" id="custSelectAll" onchange="toggleCustAll(this)"></th><th>顧客名</th><th>住所</th><th>電話番号</th><th>価格ランク</th><th>パスワード</th><th>操作</th></tr></thead>
     <tbody>
     ${custs.map(c => `
-    <tr>
+    <tr data-id="${c.id}">
+      <td style="text-align:center"><input type="checkbox" class="cust-chk" onchange="updateCustToolbar()" value="${c.id}"></td>
       <td style="font-weight:600">${c.name||'—'}</td>
-      <td style="font-size:12px">〒${c.postal_code||'—'} ${c.address||'—'}</td>
+      <td style="font-size:12px">〒${fmtPostal(c.postal_code)} ${c.address||'—'}</td>
       <td style="font-size:12px">${c.phone||'—'}</td>
       <td><span class="badge badge-確認済">${c.price_rank||'standard'}</span></td>
       <td style="font-family:monospace;font-size:12px">${c.portal_password||'—'}</td>
-      <td><button class="btn btn-secondary" onclick="editCustomer('${c.id}')">編集</button></td>
+      <td><button class="btn btn-secondary" onclick="editCustomer('${c.id}')">編集</button>
+      <button onclick="deleteCustomer('${c.id}','${c.name||''}')" style="margin-left:6px;background:#dc3545;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:13px">削除</button></td>
     </tr>`).join('')}
     </tbody>
   </table>`;
@@ -1063,6 +1066,54 @@ async function sendShippingEmail(orderId) {
   }
 }
 
+
+// ===== 顧客管理 ヘルパー =====
+function fmtPostal(p) {
+  if (!p) return '—';
+  var s = String(p).replace(/[^0-9]/g, '');
+  return s.length === 7 ? s.slice(0,3) + '-' + s.slice(3) : (s || '—');
+}
+
+function toggleCustAll(chk) {
+  document.querySelectorAll('.cust-chk').forEach(function(c){ c.checked = chk.checked; });
+  updateCustToolbar();
+}
+
+function updateCustToolbar() {
+  var checked = document.querySelectorAll('.cust-chk:checked').length;
+  var toolbar = document.getElementById('custToolbar');
+  var cnt = document.getElementById('custSelCount');
+  if (toolbar) toolbar.style.display = checked > 0 ? 'flex' : 'none';
+  if (cnt) cnt.textContent = checked + '件選択中';
+  var sa = document.getElementById('custSelectAll');
+  var total = document.querySelectorAll('.cust-chk').length;
+  if (sa) sa.indeterminate = checked > 0 && checked < total;
+  if (sa) sa.checked = total > 0 && checked === total;
+}
+
+async function deleteCustomer(id, name) {
+  if (!confirm((name||'この顧客') + ' を削除しますか？\n※ この操作は取り消せません。')) return;
+  try {
+    await sb('DELETE', 'customers', null, '?id=eq.' + id);
+    loadCustomers();
+  } catch(e) {
+    alert('削除に失敗しました: ' + e.message);
+  }
+}
+
+async function deleteSelectedCustomers() {
+  var ids = Array.from(document.querySelectorAll('.cust-chk:checked')).map(function(c){ return c.value; });
+  if (!ids.length) return;
+  if (!confirm(ids.length + '件の顧客を削除しますか？\n※ この操作は取り消せません。')) return;
+  try {
+    for (var id of ids) {
+      await sb('DELETE', 'customers', null, '?id=eq.' + id);
+    }
+    loadCustomers();
+  } catch(e) {
+    alert('削除に失敗しました: ' + e.message);
+  }
+}
 </script>
 </body>
 </html>
