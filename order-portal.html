@@ -2,533 +2,433 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦌</text></svg>">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>館山ジビエセンター | ご注文</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='28'%3E🦌%3C/text%3E%3C/svg%3E">
 <style>
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{font-family:-apple-system,'Hiragino Kaku Gothic ProN',sans-serif;background:#f5f0eb;color:#333;min-height:100vh}
-.screen{display:none;min-height:100vh;flex-direction:column}
-.screen.active{display:flex}
-/* Header */
-.hdr{background:#2d5a1b;color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100}
-.hdr-logo{font-size:22px}
-.hdr-title{font-size:16px;font-weight:700;line-height:1.2}
-.hdr-sub{font-size:11px;opacity:.8}
-.hdr-back{background:none;border:none;color:#fff;font-size:20px;padding:4px 8px;cursor:pointer;margin-right:4px}
-/* Login */
-.login-wrap{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:32px 24px}
-.login-logo{font-size:60px;margin-bottom:16px}
-.login-brand{font-size:20px;font-weight:700;color:#2d5a1b;margin-bottom:4px;text-align:center}
-.login-sub{font-size:13px;color:#777;margin-bottom:32px;text-align:center}
-.field{width:100%;margin-bottom:16px}
-.field label{display:block;font-size:13px;color:#555;margin-bottom:6px;font-weight:600}
-.field input{width:100%;padding:14px 16px;border:2px solid #ddd;border-radius:12px;font-size:16px;background:#fff;outline:none;transition:.2s}
-.field input:focus{border-color:#2d5a1b}
-.err{color:#e53;font-size:13px;margin-bottom:12px;text-align:center;min-height:18px}
-.btn-primary{width:100%;padding:16px;background:#2d5a1b;color:#fff;border:none;border-radius:14px;font-size:17px;font-weight:700;cursor:pointer;transition:.15s;letter-spacing:.5px}
-.btn-primary:active{background:#1e3d12;transform:scale(.98)}
-.btn-primary:disabled{background:#aaa;cursor:default}
-/* Welcome / home */
-.welcome-wrap{flex:1;padding:20px 16px;display:flex;flex-direction:column;gap:14px}
-.welcome-name{font-size:18px;font-weight:700;color:#2d5a1b}
-.welcome-greeting{font-size:14px;color:#666;margin-bottom:4px}
-.reorder-card{background:#fff8ec;border:2px solid #f5a623;border-radius:16px;padding:18px;cursor:pointer;transition:.15s}
-.reorder-card:active{transform:scale(.98)}
-.reorder-card-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-.reorder-icon{font-size:28px}
-.reorder-label{font-size:16px;font-weight:700;color:#c07000}
-.reorder-hint{font-size:12px;color:#888}
-.reorder-items{display:flex;flex-wrap:wrap;gap:6px}
-.reorder-item-tag{background:#fff;border:1px solid #f5a623;border-radius:20px;padding:5px 12px;font-size:13px;color:#555}
-.reorder-date{font-size:11px;color:#aaa;margin-top:8px}
-.divider{text-align:center;font-size:12px;color:#aaa;position:relative}
-.divider::before,.divider::after{content:'';position:absolute;top:50%;width:calc(50% - 20px);height:1px;background:#ddd}
-.divider::before{left:0}.divider::after{right:0}
-.new-order-card{background:#fff;border:2px solid #2d5a1b;border-radius:16px;padding:18px;cursor:pointer;transition:.15s;display:flex;align-items:center;gap:14px}
-.new-order-card:active{transform:scale(.98)}
-.new-order-icon{font-size:28px}
-.new-order-label{font-size:16px;font-weight:700;color:#2d5a1b}
-.new-order-sub{font-size:12px;color:#888}
-.history-card{background:#fff;border:2px solid #ddd;border-radius:16px;padding:18px;cursor:pointer;display:flex;align-items:center;gap:14px}
-.history-card:active{background:#f5f5f5}
-/* Products */
-.species-tabs{display:flex;overflow-x:auto;gap:8px;padding:12px 16px;background:#fff;border-bottom:1px solid #eee;-webkit-overflow-scrolling:touch}
-.species-tabs::-webkit-scrollbar{display:none}
-.sp-tab{flex-shrink:0;padding:8px 16px;border-radius:20px;border:2px solid #ddd;background:#fff;font-size:14px;cursor:pointer;transition:.15s;white-space:nowrap}
-.sp-tab.active{background:#2d5a1b;border-color:#2d5a1b;color:#fff;font-weight:700}
-.product-list{flex:1;overflow-y:auto;padding:12px 16px;padding-bottom:100px}
-.prod-item{background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
-.prod-info{flex:1}
-.prod-name{font-size:15px;font-weight:600;color:#333}
-.prod-price{font-size:13px;color:#888;margin-top:2px}
-.prod-ctrl{display:flex;align-items:center;gap:8px}
-.qty-btn{width:34px;height:34px;border-radius:50%;border:2px solid #2d5a1b;background:#fff;color:#2d5a1b;font-size:18px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.1s}
-.qty-btn:active{background:#2d5a1b;color:#fff}
-.qty-num{width:30px;text-align:center;font-size:16px;font-weight:700;color:#333}
-/* Cart float */
-.cart-bar{position:fixed;bottom:0;left:0;right:0;padding:12px 16px;background:#fff;border-top:1px solid #eee;display:none}
-.cart-bar.show{display:block}
-.cart-btn{width:100%;padding:16px;background:#2d5a1b;color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:space-between}
-.cart-btn-left{display:flex;align-items:center;gap:8px}
-.cart-count-badge{background:#f5a623;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
-/* Cart review */
-.cart-wrap{flex:1;overflow-y:auto;padding:16px;padding-bottom:100px}
-.cart-item-row{background:#fff;border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:10px}
-.cart-item-info{flex:1}
-.cart-item-name{font-size:15px;font-weight:600}
-.cart-item-sub{font-size:13px;color:#888;margin-top:2px}
-.cart-item-price{font-size:15px;font-weight:700;color:#2d5a1b}
-.cart-item-del{background:none;border:none;font-size:20px;color:#ccc;cursor:pointer;padding:4px}
-.total-row{background:#fff;border-radius:12px;padding:16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
-.total-label{font-size:15px;font-weight:600}
-.total-price{font-size:22px;font-weight:700;color:#2d5a1b}
-.delivery-section{background:#fff;border-radius:12px;padding:16px;margin-bottom:16px}
-.delivery-section h3{font-size:14px;font-weight:700;color:#555;margin-bottom:12px}
-.input-row{margin-bottom:12px}
-.input-row label{display:block;font-size:13px;color:#666;margin-bottom:4px}
-.input-row input,.input-row textarea,.input-row select{width:100%;padding:12px 14px;border:2px solid #eee;border-radius:10px;font-size:15px;background:#f9f9f9;outline:none}
-.input-row input:focus,.input-row textarea:focus,.input-row select:focus{border-color:#2d5a1b;background:#fff}
-.input-row textarea{resize:vertical;min-height:70px}
-.bottom-btn-wrap{position:fixed;bottom:0;left:0;right:0;padding:12px 16px;background:#fff;border-top:1px solid #eee}
-/* History */
-.history-list{flex:1;overflow-y:auto;padding:16px;padding-bottom:32px}
-.history-item{background:#fff;border-radius:14px;padding:16px;margin-bottom:12px;cursor:pointer;transition:.1s;box-shadow:0 1px 4px rgba(0,0,0,.06)}
-.history-item:active{background:#f9f9f9}
-.hist-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.hist-date{font-size:14px;font-weight:700;color:#333}
-.hist-status{font-size:12px;padding:4px 10px;border-radius:10px;font-weight:600}
-.hist-status.delivered{background:#e8f5e9;color:#2d5a1b}
-.hist-status.pending{background:#fff8ec;color:#c07000}
-.hist-status.confirmed{background:#e3f2fd;color:#1565c0}
-.hist-items{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
-.hist-tag{background:#f5f5f5;border-radius:10px;padding:3px 10px;font-size:12px;color:#555}
-.hist-total{font-size:14px;color:#666}
-.hist-reorder-btn{width:100%;padding:12px;background:#fff8ec;border:2px solid #f5a623;border-radius:10px;color:#c07000;font-size:14px;font-weight:700;cursor:pointer;margin-top:10px}
-.hist-reorder-btn:active{background:#f5a623;color:#fff}
-/* Success */
-.success-wrap{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:32px 24px;text-align:center}
-.success-icon{font-size:72px;margin-bottom:20px;animation:pop .4s ease}
-@keyframes pop{0%{transform:scale(0)}80%{transform:scale(1.1)}100%{transform:scale(1)}}
-.success-title{font-size:22px;font-weight:700;color:#2d5a1b;margin-bottom:8px}
-.success-sub{font-size:14px;color:#777;line-height:1.6;margin-bottom:32px}
-/* Loading */
-.loading{display:none;position:fixed;inset:0;background:rgba(255,255,255,.7);justify-content:center;align-items:center;z-index:200}
-.loading.show{display:flex}
-.spinner{width:40px;height:40px;border:4px solid #eee;border-top-color:#2d5a1b;border-radius:50%;animation:spin .8s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.empty{text-align:center;padding:40px 16px;color:#aaa;font-size:14px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Hiragino Sans','Noto Sans JP',sans-serif;background:#f5f0eb;color:#333;min-height:100vh}
+.screen{display:none;padding:16px;max-width:480px;margin:0 auto;min-height:100vh}
+.screen.active{display:block}
+h1{font-size:1.3rem;font-weight:700;color:#5a3e28;margin-bottom:16px;text-align:center}
+h2{font-size:1.1rem;font-weight:700;color:#5a3e28;margin-bottom:12px}
+.card{background:#fff;border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.btn{display:block;width:100%;padding:14px;border:none;border-radius:10px;font-size:1rem;font-weight:700;cursor:pointer;text-align:center;margin-bottom:8px;transition:opacity .15s}
+.btn:active{opacity:.75}
+.btn-primary{background:#8b5e3c;color:#fff}
+.btn-secondary{background:#e8ddd3;color:#5a3e28}
+.btn-sm{padding:8px 14px;font-size:.85rem;width:auto;display:inline-block;margin-bottom:0}
+input[type=text],input[type=password]{width:100%;padding:12px;border:1.5px solid #d4c4b0;border-radius:8px;font-size:1rem;margin-bottom:10px;outline:none}
+input:focus{border-color:#8b5e3c}
+label{display:block;font-size:.85rem;color:#666;margin-bottom:4px;font-weight:600}
+.logo{text-align:center;font-size:2.5rem;margin:24px 0 8px}
+.subtitle{text-align:center;color:#8b5e3c;font-weight:700;margin-bottom:24px;font-size:.95rem}
+.tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;padding-bottom:4px}
+.tab{padding:8px 16px;border-radius:20px;border:1.5px solid #d4c4b0;background:#fff;font-size:.85rem;cursor:pointer;white-space:nowrap;font-weight:600}
+.tab.active{background:#8b5e3c;color:#fff;border-color:#8b5e3c}
+.product-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #f0e8df}
+.product-item:last-child{border-bottom:none}
+.product-name{font-weight:600;font-size:.95rem}
+.product-price{color:#8b5e3c;font-weight:700;font-size:.9rem}
+.qty-ctrl{display:flex;align-items:center;gap:8px}
+.qty-btn{width:30px;height:30px;border-radius:50%;border:1.5px solid #8b5e3c;background:#fff;color:#8b5e3c;font-size:1.1rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1}
+.qty-num{min-width:20px;text-align:center;font-weight:700}
+.cart-item{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0e8df}
+.cart-item:last-child{border-bottom:none}
+.total-row{display:flex;justify-content:space-between;padding:12px 0;font-weight:700;font-size:1.05rem}
+.badge{background:#e85c3a;color:#fff;border-radius:10px;padding:2px 8px;font-size:.75rem;margin-left:6px;font-weight:700}
+.history-item{border-bottom:1px solid #f0e8df;padding:10px 0}
+.history-item:last-child{border-bottom:none}
+.history-date{font-size:.8rem;color:#888;margin-bottom:4px}
+.history-summary{font-size:.9rem;margin-bottom:6px}
+.status-badge{display:inline-block;padding:2px 8px;border-radius:8px;font-size:.75rem;font-weight:700;background:#e8ddd3;color:#5a3e28;margin-bottom:6px}
+.loading-overlay{display:none;position:fixed;inset:0;background:rgba(255,255,255,.7);z-index:99;align-items:center;justify-content:center;font-size:1.1rem;color:#8b5e3c;font-weight:700}
+.loading-overlay.show{display:flex}
+.top-bar{display:flex;align-items:center;margin-bottom:16px;gap:8px}
+.top-bar h2{margin-bottom:0;flex:1}
+.back-btn{background:none;border:none;font-size:1.4rem;cursor:pointer;padding:0;color:#8b5e3c}
+.empty-msg{text-align:center;color:#aaa;padding:24px 0;font-size:.95rem}
+.success-icon{text-align:center;font-size:4rem;margin:24px 0 12px}
+.notes-area{width:100%;padding:10px;border:1.5px solid #d4c4b0;border-radius:8px;font-size:.95rem;min-height:70px;resize:vertical;margin-bottom:10px;font-family:inherit}
+.notes-area:focus{outline:none;border-color:#8b5e3c}
+.user-greeting{font-size:.85rem;color:#888;text-align:right;margin-bottom:8px}
 </style>
 </head>
 <body>
+<div class="loading-overlay" id="ld">読み込み中…</div>
 
-<div class="loading" id="loading"><div class="spinner"></div></div>
-
-<!-- LOGIN -->
-<div class="screen active" id="scrLogin">
-  <div style="background:#2d5a1b;padding:40px 24px 32px;text-align:center">
-    <div style="font-size:56px;margin-bottom:12px">🦌</div>
-    <div style="font-size:22px;font-weight:700;color:#fff">館山ジビエセンター</div>
-    <div style="font-size:13px;color:rgba(255,255,255,.75);margin-top:4px">お客様用 ご注文ポータル</div>
-  </div>
-  <div class="login-wrap" style="padding-top:28px">
-    <div class="field"><label>お名前</label><input type="text" id="loginName" placeholder="例：山田太郎" autocomplete="name" inputmode="text"></div>
-    <div class="field"><label>パスワード</label><input type="password" id="loginPw" placeholder="パスワード" autocomplete="current-password"></div>
-    <div class="err" id="loginErr"></div>
-    <button class="btn-primary" onclick="doLogin()">ログイン</button>
-  </div>
-</div>
-
-<!-- HOME -->
-<div class="screen" id="scrHome">
-  <div class="hdr">
-    <div class="hdr-logo">🦌</div>
-    <div><div class="hdr-title">館山ジビエセンター</div><div class="hdr-sub">お客様用ポータル</div></div>
-    <div style="margin-left:auto"><button onclick="doLogout()" style="background:none;border:1px solid rgba(255,255,255,.5);color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer">ログアウト</button></div>
-  </div>
-  <div class="welcome-wrap">
-    <div class="welcome-greeting" id="homeGreeting">お常まいありがとうございます</div>
-    <div class="welcome-name" id="homeName"></div>
-
-    <!-- Reorder button (shown when history exists) -->
-    <div id="reorderCard" style="display:none" onclick="doReorder()">
-      <div class="reorder-card">
-        <div class="reorder-card-top">
-          <div class="reorder-icon">🔁</div>
-          <div>
-            <div class="reorder-label">前回と同じ注文をする</div>
-            <div class="reorder-hint">ワンタップで前回の内容をカートに追加</div>
-          </div>
-        </div>
-        <div class="reorder-items" id="lastOrderItems"></div>
-        <div class="reorder-date" id="lastOrderDate"></div>
-      </div>
-    </div>
-
-    <div class="divider">または</div>
-
-    <div class="new-order-card" onclick="goNewOrder()">
-      <div class="new-order-icon">🛒</div>
-      <div>
-        <div class="new-order-label">新しく注文する</div>
-        <div class="new-order-sub">商品一覧から選ぶ</div>
-      </div>
-      <div style="margin-left:auto;font-size:20px;color:#ccc">›</div>
-    </div>
-
-    <div class="history-card" onclick="goHistory()">
-      <div style="font-size:28px">📋</div>
-      <div>
-        <div style="font-size:16px;font-weight:700;color:#333">注文履歴</div>
-        <div style="font-size:12px;color:#888">過去の注文を確認</div>
-      </div>
-      <div style="margin-left:auto;font-size:20px;color:#ccc">›</div>
-    </div>
+<!-- s0: ログイン -->
+<div class="screen active" id="s0">
+  <div class="logo">🦌</div>
+  <h1>館山ジビエセンター</h1>
+  <div class="subtitle">お客様専用 ご注文ポータル</div>
+  <div class="card">
+    <label>お名前</label>
+    <input type="text" id="iName" placeholder="例：山田 太郎">
+    <label>パスワード</label>
+    <input type="password" id="iPass" placeholder="パスワード">
+    <div id="loginErr" style="color:#c0392b;font-size:.85rem;margin-bottom:8px;display:none"></div>
+    <button class="btn btn-primary" onclick="doLogin()">ログイン</button>
   </div>
 </div>
 
-<!-- PRODUCT SELECTION -->
-<div class="screen" id="scrProducts">
-  <div class="hdr">
-    <button class="hdr-back" onclick="showScreen('scrHome')">‹</button>
-    <div><div class="hdr-title">商品を選ぶ</div></div>
-    <div style="margin-left:auto;font-size:13px;color:rgba(255,255,255,.8)" id="prodCartCount"></div>
-  </div>
-  <div class="species-tabs" id="speciesTabs"></div>
-  <div class="product-list" id="productList"></div>
-  <div class="cart-bar" id="cartBar">
-    <button class="cart-btn" onclick="goCart()">
-      <div class="cart-btn-left"><span class="cart-count-badge" id="cartBadge">0</span><span>カートを確認</span></div>
-      <span id="cartTotal">¥0</span>
-    </button>
-  </div>
+<!-- s1: ホーム -->
+<div class="screen" id="s1">
+  <div class="user-greeting" id="greet"></div>
+  <div class="logo" style="font-size:2rem;margin:8px 0">🦌</div>
+  <h1>館山ジビエセンター</h1>
+  <div id="lastOrderCard"></div>
+  <button class="btn btn-primary" onclick="goProducts()">🛒 新しく注文する</button>
+  <button class="btn btn-secondary" onclick="goHistory()">📋 注文履歴</button>
+  <button class="btn btn-secondary" style="margin-top:8px" onclick="doLogout()">ログアウト</button>
 </div>
 
-<!-- CART -->
-<div class="screen" id="scrCart">
-  <div class="hdr">
-    <button class="hdr-back" onclick="showScreen('scrProducts')">‹</button>
-    <div><div class="hdr-title">注文内容の確認</div></div>
+<!-- s2: 商品選択 -->
+<div class="screen" id="s2">
+  <div class="top-bar">
+    <button class="back-btn" onclick="showS(1)">←</button>
+    <h2>商品を選ぶ</h2>
+    <span id="cartBadge"></span>
   </div>
-  <div class="cart-wrap">
-    <div id="cartItems"></div>
-    <div class="total-row"><span class="total-label">合計金額</span><span class="total-price" id="cartTotalAmt">¥0</span></div>
-    <div class="delivery-section">
-      <h3>お届け先・配送情報</h3>
-      <div class="input-row"><label>配送希望日</label><input type="date" id="delivDate" min=""></div>
-      <div class="input-row"><label>時間帯</label>
-        <select id="delivTime">
-          <option value="">指定なし</option>
-          <option>9:00～12:00</option><option>12:00～14:00</option>
-          <option>14:00～16:00</option><option>16:00～18:00</option>
-          <option>18:00～20:00</option>
-        </select>
-      </div>
-      <div class="input-row"><label>備考メモ</label><textarea id="orderMemo" placeholder="例：切り分け方、包装の希望など"></textarea></div>
-    </div>
-    <div class="delivery-section" id="addrSection">
-      <h3>配送先</h3>
-      <div id="addrDisplay" style="font-size:14px;color:#555;line-height:1.6"></div>
-    </div>
-  </div>
-  <div class="bottom-btn-wrap">
-    <button class="btn-primary" id="submitBtn" onclick="submitOrder()">注文を確定する</button>
-  </div>
+  <div class="tabs" id="speciesTabs"></div>
+  <div class="card" id="productList"></div>
+  <button class="btn btn-primary" onclick="goCart()" style="margin-top:8px" id="toCartBtn">カートを確認する</button>
 </div>
 
-<!-- SUCCESS -->
-<div class="screen" id="scrSuccess">
-  <div class="hdr"><div class="hdr-logo">🦌</div><div><div class="hdr-title">注文完了</div></div></div>
-  <div class="success-wrap">
-    <div class="success-icon">✅</div>
-    <div class="success-title">ご注文ありがとうございます！</div>
-    <div class="success-sub">注文を受け付けました。<br>確認後、担当よりご連絡いたします。</div>
-    <button class="btn-primary" onclick="showScreen('scrHome');loadHome()">ホームに戻る</button>
+<!-- s3: カート -->
+<div class="screen" id="s3">
+  <div class="top-bar">
+    <button class="back-btn" onclick="showS(2)">←</button>
+    <h2>ご注文内容の確認</h2>
   </div>
+  <div class="card" id="cartDetail"></div>
+  <div class="card">
+    <label>備考（任意）</label>
+    <textarea class="notes-area" id="notesTxt" placeholder="配送希望日・その他ご要望など"></textarea>
+  </div>
+  <button class="btn btn-primary" onclick="doSubmit()">注文を確定する</button>
+  <button class="btn btn-secondary" onclick="showS(2)">商品に戻る</button>
 </div>
 
-<!-- HISTORY -->
-<div class="screen" id="scrHistory">
-  <div class="hdr">
-    <button class="hdr-back" onclick="showScreen('scrHome')">‹</button>
-    <div><div class="hdr-title">注文履歴</div></div>
+<!-- s4: 注文完了 -->
+<div class="screen" id="s4">
+  <div class="success-icon">✅</div>
+  <h1>ご注文ありがとうございます！</h1>
+  <div class="card" id="successDetail"></div>
+  <button class="btn btn-primary" onclick="backHome()">トップに戻る</button>
+</div>
+
+<!-- s5: 注文履歴 -->
+<div class="screen" id="s5">
+  <div class="top-bar">
+    <button class="back-btn" onclick="showS(1)">←</button>
+    <h2>注文履歴</h2>
   </div>
-  <div class="history-list" id="historyList"></div>
+  <div id="historyList"></div>
 </div>
 
 <script>
-const SB_URL="https://clpdyrehdgzgiidbfucj.supabase.co";
-const SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck";
+var SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
+var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+var _cust = null;
+var _cart = {};
+var _products = [];
+var _histOrders = [];
 
-async function sb(method,table,body,query=''){
-  const res=await fetch(SB_URL+'/rest/v1/'+table+(query||''),{
-    method,
-    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':method==='GET'?'return=representation':'return=representation'},
-    body:body?JSON.stringify(body):undefined
+function load(on) {
+  document.getElementById('ld').className = on ? 'loading-overlay show' : 'loading-overlay';
+}
+
+function showS(n) {
+  document.querySelectorAll('.screen').forEach(function(s) { s.className = 'screen'; });
+  document.getElementById('s' + n).className = 'screen active';
+}
+
+function sb(method, table, body, query) {
+  var url = SB_URL + '/rest/v1/' + table + (query ? '?' + query : '');
+  var opts = {
+    method: method,
+    headers: {
+      'apikey': SB_KEY,
+      'Authorization': 'Bearer ' + SB_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': method === 'POST' ? 'return=representation' : 'return=minimal'
+    }
+  };
+  if (body) { opts.body = JSON.stringify(body); }
+  return fetch(url, opts).then(function(r) {
+    if (!r.ok) { return r.text().then(function(t) { throw new Error(t); }); }
+    var ct = r.headers.get('content-type') || '';
+    if (ct.indexOf('json') >= 0) { return r.json(); }
+    return r.text();
   });
-  if(!res.ok){const t=await res.text();throw new Error(t);}
-  return res.json().catch(()=>[]);
 }
 
-let currentCust=null, cart=[], products=[], currentSpecies='';
-
-function showScreen(id){
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  window.scrollTo(0,0);
-}
-function loading(on){document.getElementById('loading').classList.toggle('show',on);}
-function fmtPrice(n){return '¥'+Number(n||0).toLocaleString();}
-
-// LOGIN
-async function doLogin(){
-  var name=document.getElementById('loginName').value.trim();
-  var pw=document.getElementById('loginPw').value.trim();
-  if(!name){document.getElementById('loginErr').textContent='お名前を入力してください';return;}
-  if(!pw){document.getElementById('loginErr').textContent='パスワードを入力してください';return;}
-  loading(true);
-  try{
-    const data=await sb('GET','customers',null,'?name=ilike.*'+encodeURIComponent(name)+'*&portal_password=eq.'+encodeURIComponent(pw)+'&is_active=eq.true&select=*');
-    if(!data||!data.length){document.getElementById('loginErr').textContent='お名前またはパスワードが違います';loading(false);return;}
-    var cust=data[0];
-    currentCust=cust;
-    localStorage.setItem('tgc_cust_id',cust.id);
-    await loadHome();
-    showScreen('scrHome');
-  }catch(e){document.getElementById('loginErr').textContent='エラーが発生しました';console.error(e);}
-  loading(false);
+function doLogin() {
+  var name = document.getElementById('iName').value.trim();
+  var pass = document.getElementById('iPass').value.trim();
+  var errEl = document.getElementById('loginErr');
+  errEl.style.display = 'none';
+  if (!name || !pass) { errEl.textContent = '名前とパスワードを入力してください'; errEl.style.display = 'block'; return; }
+  load(true);
+  var q = 'name=eq.' + encodeURIComponent(name) + '&portal_password=eq.' + encodeURIComponent(pass) + '&is_active=eq.true&select=*';
+  sb('GET', 'customers', null, q).then(function(rows) {
+    load(false);
+    if (!rows || rows.length === 0) {
+      errEl.textContent = '名前またはパスワードが正しくありません';
+      errEl.style.display = 'block';
+      return;
+    }
+    _cust = rows[0];
+    loadHome();
+  }).catch(function(e) {
+    load(false);
+    errEl.textContent = 'エラー: ' + e.message;
+    errEl.style.display = 'block';
+  });
 }
 
-function doLogout(){currentCust=null;cart=[];localStorage.removeItem('tgc_cust_id');showScreen('scrLogin');}
-
-// HOME
-async function loadHome(){
-  document.getElementById('homeName').textContent=(currentCust.name||'')+' 様';
-  // Load last order
-  try{
-    var orders=await sb('GET','orders',null,'?customer_id=eq.'+currentCust.id+'&order_by=created_at.desc&limit=1&select=*');
-    var card=document.getElementById('reorderCard');
-    if(orders&&orders.length){
-      var o=orders[0];
-      var items=await sb('GET','order_items',null,'?order_id=eq.'+o.id+'&select=*');
-      var tags=document.getElementById('lastOrderItems');
-      tags.innerHTML=(items||[]).slice(0,4).map(i=>'<span class="reorder-item-tag">'+i.part_name+'</span>').join('');
-      var d=new Date(o.created_at);
-      document.getElementById('lastOrderDate').textContent='前回注文日: '+d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日';
-      window._lastOrder={order:o,items:items||[]};
-      card.style.display='block';
-    }else{card.style.display='none';}
-  }catch(e){document.getElementById('reorderCard').style.display='none';}
+function doLogout() {
+  _cust = null;
+  _cart = {};
+  _products = [];
+  document.getElementById('iName').value = '';
+  document.getElementById('iPass').value = '';
+  showS(0);
 }
 
-// REORDER
-async function doReorder(){
-  if(!window._lastOrder)return;
-  cart=window._lastOrder.items.map(i=>({
-    id:i.product_id||i.id,
-    name:i.part_name||i.name,
-    price:i.unit_price||i.price||0,
-    qty:i.quantity||1,
-    unit:i.unit||'kg'
-  }));
-  showScreen('scrCart');
-  renderCart();
-}
-
-// NEW ORDER
-async function goNewOrder(){
-  loading(true);
-  try{
-    var data=await sb('GET','price_master',null,'?select=*&order=species.asc,part.asc');
-    products=data||[];
-    buildSpeciesTabs();
-    renderProducts(products);
-    updateCartBar();
-    showScreen('scrProducts');
-  }catch(e){alert('商品の読み込みに失敗しました');}
-  loading(false);
-}
-
-function buildSpeciesTabs(){
-  var sps=Array.from({length:0}).concat(products.map(p=>p.species).filter((s,i,a)=>a.indexOf(s)===i&&s));
-  var tabs=document.getElementById('speciesTabs');
-  tabs.innerHTML='<button class="sp-tab active" onclick="filterSpecies('',this)">すべて</button>'+
-    sps.map(s=>'<button class="sp-tab" onclick="filterSpecies(''+s+'',this)">'+s+'</button>').join('');
-}
-
-function filterSpecies(sp,btn){
-  currentSpecies=sp;
-  document.querySelectorAll('.sp-tab').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  renderProducts(sp?products.filter(p=>p.species===sp):products);
-}
-
-function renderProducts(list){
-  var el=document.getElementById('productList');
-  if(!list.length){el.innerHTML='<div class="empty">商品がありません</div>';return;}
-  el.innerHTML=list.map(p=>{
-    var ci=cart.find(c=>c.id===p.id);
-    var qty=ci?ci.qty:0;
-    return '<div class="prod-item" id="pi-'+p.id+'">'+
-      '<div class="prod-info"><div class="prod-name">'+p.species+' '+p.part_name+'</div>'+
-      '<div class="prod-price">'+fmtPrice(p.unit_price)+'/'+p.unit+'</div></div>'+
-      '<div class="prod-ctrl">'+
-      '<button class="qty-btn" onclick="changeQty(''+p.id+'',-1)">-</button>'+
-      '<span class="qty-num" id="qn-'+p.id+'">'+qty+'</span>'+
-      '<button class="qty-btn" onclick="changeQty(''+p.id+'',1)">+</button>'+
-      '</div></div>';
-  }).join('');
-}
-
-function changeQty(id,delta){
-  var prod=products.find(p=>p.id===id);
-  if(!prod)return;
-  var ci=cart.find(c=>c.id===id);
-  if(!ci&&delta>0){ci={id:prod.id,name:prod.species+' '+prod.part_name,price:prod.price_standard||0,qty:0,unit:'kg'};cart.push(ci);}
-  if(ci){
-    ci.qty=Math.max(0,ci.qty+delta);
-    if(ci.qty===0)cart=cart.filter(c=>c.id!==id);
-    var el=document.getElementById('qn-'+id);
-    if(el)el.textContent=ci.qty;
-  }
-  updateCartBar();
-}
-
-function updateCartBar(){
-  var total=cart.reduce((s,c)=>s+c.price*c.qty,0);
-  var count=cart.reduce((s,c)=>s+c.qty,0);
-  var bar=document.getElementById('cartBar');
-  bar.classList.toggle('show',cart.length>0);
-  document.getElementById('cartBadge').textContent=cart.length;
-  document.getElementById('cartTotal').textContent=fmtPrice(total);
-  document.getElementById('prodCartCount').textContent=cart.length?cart.length+'点選択中':'';
-}
-
-// CART
-function goCart(){
-  renderCart();
-  // Set min date to tomorrow
-  var d=new Date();d.setDate(d.getDate()+1);
-  document.getElementById('delivDate').min=d.toISOString().slice(0,10);
-  document.getElementById('delivDate').value='';
-  // Show address
-  if(currentCust){
-    var a='';
-    if(currentCust.postal_code)a+='〒'+currentCust.postal_code+' ';
-    a+=(currentCust.address||'');
-    document.getElementById('addrDisplay').textContent=a||'住所未登録';
-  }
-  showScreen('scrCart');
-}
-
-function renderCart(){
-  var items=document.getElementById('cartItems');
-  if(!cart.length){items.innerHTML='<div class="empty">カートは空です</div>';document.getElementById('cartTotalAmt').textContent=fmtPrice(0);return;}
-  items.innerHTML=cart.map(c=>'<div class="cart-item-row">'+
-    '<div class="cart-item-info">'+
-    '<div class="cart-item-name">'+c.name+'</div>'+
-    '<div class="cart-item-sub">'+c.qty+c.unit+' × '+fmtPrice(c.price)+'</div>'+
-    '</div>'+
-    '<div class="cart-item-price">'+fmtPrice(c.price*c.qty)+'</div>'+
-    '<button class="cart-item-del" onclick="removeCartItem(''+c.id+'')">&#x2715;</button>'+
-    '</div>').join('');
-  var total=cart.reduce((s,c)=>s+c.price*c.qty,0);
-  document.getElementById('cartTotalAmt').textContent=fmtPrice(total);
-}
-
-function removeCartItem(id){
-  cart=cart.filter(c=>c.id!==id);
-  renderCart();
-  updateCartBar();
-}
-
-async function submitOrder(){
-  if(!cart.length){alert('商品を選んでください');return;}
-  var btn=document.getElementById('submitBtn');
-  btn.disabled=true;
-  loading(true);
-  try{
-    var delivDate=document.getElementById('delivDate').value;
-    var delivTime=document.getElementById('delivTime').value;
-    var memo=document.getElementById('orderMemo').value;
-    var total=cart.reduce((s,c)=>s+c.price*c.qty,0);
-    var oCode='ORD-'+Date.now();
-    var order=await sb('POST','orders',{order_code:oCode,
-      customer_id:currentCust.id,
-      status:'受付',
-      delivery_date:delivDate||null,
-      notes:memo||null,
-      total_amount:total
+function loadHome() {
+  showS(1);
+  document.getElementById('greet').textContent = 'ようこそ、' + _cust.name + ' 様';
+  var q = 'customer_id=eq.' + _cust.id + '&order=order_date.desc&limit=1&select=*';
+  sb('GET', 'orders', null, q).then(function(orders) {
+    var card = document.getElementById('lastOrderCard');
+    if (!orders || orders.length === 0) {
+      card.innerHTML = '<div class="card"><div class="empty-msg">まだ注文履歴がありません</div></div>';
+      return;
+    }
+    var o = orders[0];
+    var q2 = 'order_id=eq.' + o.id + '&select=*';
+    sb('GET', 'order_items', null, q2).then(function(items) {
+      var summary = (items || []).map(function(i) { return i.part_name + ' ' + i.weight + 'kg'; }).join('、');
+      card.innerHTML = '<div class="card"><div class="history-date">前回の注文：' + o.order_date + '</div><div class="history-summary">' + (summary || '－') + '</div><button class="btn btn-secondary btn-sm" onclick="doReorder(' + JSON.stringify(items || []) + ')">同じ内容で注文</button></div>';
     });
-    var orderId=(order&&order[0])?order[0].id:null;
-    if(orderId){
-      for(var c of cart){
-        await sb('POST','order_items',{
-          order_id:orderId,
-          part_name:c.name,
-          species:c.name.split(' ')[0]||'',
-          weight:c.qty,
-          unit_price:c.price,
-          amount:c.price*c.qty
-        });
-      }
-    }
-    cart=[];
-    showScreen('scrSuccess');
-  }catch(e){alert('注文の送信に失敗しました。もう一度お試しください。
-'+e.message);}
-  btn.disabled=false;
-  loading(false);
+  }).catch(function() {
+    document.getElementById('lastOrderCard').innerHTML = '';
+  });
 }
 
-// HISTORY
-async function goHistory(){
-  loading(true);
-  showScreen('scrHistory');
-  try{
-    var orders=await sb('GET','orders',null,'?customer_id=eq.'+currentCust.id+'&order_by=created_at.desc&limit=20&select=*');
-    var list=document.getElementById('historyList');
-    if(!orders||!orders.length){list.innerHTML='<div class="empty">注文履歴がありません</div>';loading(false);return;}
-    var rows=[];
-    window._histOrders=[];var idx=0;
-    for(var o of orders){
-      var items=await sb('GET','order_items',null,'?order_id=eq.'+o.id+'&select=*');
-      var d=new Date(o.created_at);
-      var dateStr=d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日';
-      var statusCls=o.status==='配送済'?'delivered':(o.status==='確認済'?'confirmed':'pending');
-      window._histOrders.push(items||[]);idx++;
-      rows.push('<div class="history-item">'+
-        '<div class="hist-top"><span class="hist-date">'+dateStr+'</span><span class="hist-status '+statusCls+'">'+(o.status||'受付済')+'</span></div>'+
-        '<div class="hist-items">'+(items||[]).slice(0,4).map(i=>'<span class="hist-tag">'+i.part_name+'</span>').join('')+'</div>'+
-        '<div class="hist-total">合計 '+fmtPrice(o.total_amount)+'</div>'+
-        '<button class="hist-reorder-btn" onclick="reorderFromHistory('+idx)+')">&#x1F501; この注文を繰り返す</button>'+
-        '</div>');
-    }
-    list.innerHTML=rows.join('');
-  }catch(e){document.getElementById('historyList').innerHTML='<div class="empty">読み込みエラー</div>';}
-  loading(false);
-}
-
-function reorderFromHistory(n){
-  var items=window._histOrders[parseInt(n)]||[];
-  cart=items.map(function(i){return {id:i.product_id||i.id,name:i.part_name||i.name,price:i.unit_price||i.price||0,qty:i.quantity||1,unit:i.unit||'kg'};});
-  goCart();
-}));
+function doReorder(items) {
+  _cart = {};
+  (items || []).forEach(function(i) {
+    var key = i.species + '|' + i.part_name;
+    _cart[key] = { species: i.species, part_name: i.part_name, weight: i.weight, unit_price: i.unit_price };
+  });
   goCart();
 }
 
-// Auto login if session saved
-(async function init(){
-  var sid=localStorage.getItem('tgc_cust_id');
-  if(sid){
-    loading(true);
-    try{
-      var data=await sb('GET','customers',null,'?id=eq.'+sid+'&select=*');
-      if(data&&data[0]){currentCust=data[0];await loadHome();showScreen('scrHome');}
-    }catch(e){}
-    loading(false);
+function goProducts() {
+  _cart = {};
+  load(true);
+  sb('GET', 'price_master', null, 'select=species,part_name,grade,price_standard,price_premium,price_wholesale&order=species,part_name').then(function(rows) {
+    load(false);
+    _products = rows || [];
+    var rank = (_cust && _cust.price_rank) ? _cust.price_rank : 'standard';
+    var speciesSet = [];
+    _products.forEach(function(p) { if (speciesSet.indexOf(p.species) < 0) { speciesSet.push(p.species); } });
+    var tabsEl = document.getElementById('speciesTabs');
+    tabsEl.innerHTML = '';
+    speciesSet.forEach(function(sp, i) {
+      var t = document.createElement('div');
+      t.className = 'tab' + (i === 0 ? ' active' : '');
+      t.textContent = sp;
+      t.onclick = (function(s, el) { return function() {
+        document.querySelectorAll('.tab').forEach(function(x) { x.className = 'tab'; });
+        el.className = 'tab active';
+        renderProducts(s, rank);
+      }; })(sp, t);
+      tabsEl.appendChild(t);
+    });
+    if (speciesSet.length > 0) { renderProducts(speciesSet[0], rank); }
+    showS(2);
+    updateCartBadge();
+  }).catch(function(e) {
+    load(false);
+    alert('商品情報の取得に失敗する: ' + e.message);
+  });
+}
+
+function getPrice(p, rank) {
+  if (rank === 'premium') { return p.price_premium || p.price_standard; }
+  if (rank === 'wholesale') { return p.price_wholesale || p.price_standard; }
+  return p.price_standard;
+}
+
+function renderProducts(species, rank) {
+  var list = document.getElementById('productList');
+  var filtered = _products.filter(function(p) { return p.species === species; });
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="empty-msg">商品がありません</div>';
+    return;
   }
-})();
+  list.innerHTML = '';
+  filtered.forEach(function(p) {
+    var key = p.species + '|' + p.part_name;
+    var price = getPrice(p, rank);
+    var qty = (_cart[key] && _cart[key].weight) ? _cart[key].weight : 0;
+    var div = document.createElement('div');
+    div.className = 'product-item';
+    div.id = 'pi_' + key.replace(/[^a-zA-Z0-9]/g, '_');
+    div.innerHTML = '<div><div class="product-name">' + p.part_name + '</div><div class="product-price">¥' + price.toLocaleString() + ' / kg</div></div>' +
+      '<div class="qty-ctrl">' +
+      '<button class="qty-btn" onclick="chgQty(\'' + key + '\',-1)">－</button>' +
+      '<span class="qty-num" id="q_' + key.replace(/[^a-zA-Z0-9]/g, '_') + '">' + qty + '</span>' +
+      '<button class="qty-btn" onclick="chgQty(\'' + key + '\',1)">＋</button>' +
+      '</div>';
+    div.setAttribute('data-key', key);
+    div.setAttribute('data-species', p.species);
+    div.setAttribute('data-part', p.part_name);
+    div.setAttribute('data-price', price);
+    list.appendChild(div);
+  });
+}
+
+function chgQty(key, delta) {
+  var cur = (_cart[key] && _cart[key].weight) ? _cart[key].weight : 0;
+  var next = Math.max(0, cur + delta);
+  var el = document.getElementById('pi_' + key.replace(/[^a-zA-Z0-9]/g, '_'));
+  if (el) {
+    var sp = el.getAttribute('data-species');
+    var pt = el.getAttribute('data-part');
+    var pr = parseInt(el.getAttribute('data-price'));
+    if (next > 0) {
+      _cart[key] = { species: sp, part_name: pt, weight: next, unit_price: pr };
+    } else {
+      delete _cart[key];
+    }
+  }
+  var qEl = document.getElementById('q_' + key.replace(/[^a-zA-Z0-9]/g, '_'));
+  if (qEl) { qEl.textContent = next; }
+  updateCartBadge();
+}
+
+function updateCartBadge() {
+  var total = 0;
+  Object.keys(_cart).forEach(function(k) { total += (_cart[k].weight || 0); });
+  var badge = document.getElementById('cartBadge');
+  badge.innerHTML = total > 0 ? '<span class="badge">' + total + 'kg</span>' : '';
+  document.getElementById('toCartBtn').style.opacity = total > 0 ? '1' : '0.5';
+}
+
+function goCart() {
+  var keys = Object.keys(_cart);
+  if (keys.length === 0) { alert('商品を選んでください'); return; }
+  var html = '';
+  var total = 0;
+  keys.forEach(function(k) {
+    var item = _cart[k];
+    var sub = item.weight * item.unit_price;
+    total += sub;
+    html += '<div class="cart-item"><div><div class="product-name">' + item.species + ' ' + item.part_name + '</div>' +
+      '<div style="font-size:.85rem;color:#888">' + item.weight + 'kg × ¥' + item.unit_price.toLocaleString() + '</div></div>' +
+      '<div style="font-weight:700">¥' + sub.toLocaleString() + '</div></div>';
+  });
+  html += '<div class="total-row"><span>合計</span><span style="color:#8b5e3c">¥' + total.toLocaleString() + '</span></div>';
+  document.getElementById('cartDetail').innerHTML = html;
+  document.getElementById('notesTxt').value = '';
+  showS(3);
+}
+
+function doSubmit() {
+  var keys = Object.keys(_cart);
+  if (keys.length === 0) { alert('カートが空です'); return; }
+  var total = 0;
+  keys.forEach(function(k) { total += _cart[k].weight * _cart[k].unit_price; });
+  var notes = document.getElementById('notesTxt').value.trim();
+  var oCode = 'ORD-' + Date.now();
+  var today = new Date().toISOString().slice(0, 10);
+  load(true);
+  sb('POST', 'orders', {
+    order_code: oCode,
+    customer_id: _cust.id,
+    order_date: today,
+    status: '受付',
+    total_amount: total,
+    notes: notes || null
+  }, null).then(function(res) {
+    var order = Array.isArray(res) ? res[0] : res;
+    var orderId = order.id;
+    var items = keys.map(function(k) {
+      var it = _cart[k];
+      return { order_id: orderId, species: it.species, part_name: it.part_name, weight: it.weight, unit_price: it.unit_price, amount: it.weight * it.unit_price };
+    });
+    return sb('POST', 'order_items', items, null);
+  }).then(function() {
+    load(false);
+    _cart = {};
+    var total2 = 0;
+    keys.forEach(function(k) { var it = _cart[k] || {}; total2 += (it.weight || 0) * (it.unit_price || 0); });
+    document.getElementById('successDetail').innerHTML = '<div class="total-row"><span>注文番号</span><span>' + oCode + '</span></div>';
+    showS(4);
+  }).catch(function(e) {
+    load(false);
+    alert('注文の送信に失敗しました: ' + e.message);
+  });
+}
+
+function backHome() {
+  loadHome();
+}
+
+function goHistory() {
+  load(true);
+  var q = 'customer_id=eq.' + _cust.id + '&order=order_date.desc&select=*';
+  sb('GET', 'orders', null, q).then(function(orders) {
+    if (!orders || orders.length === 0) {
+      load(false);
+      document.getElementById('historyList').innerHTML = '<div class="card"><div class="empty-msg">注文履歴がありません</div></div>';
+      showS(5);
+      return;
+    }
+    var fetches = orders.map(function(o) {
+      return sb('GET', 'order_items', null, 'order_id=eq.' + o.id + '&select=*');
+    });
+    Promise.all(fetches).then(function(allItems) {
+      load(false);
+      _histOrders = [];
+      var html = '';
+      orders.forEach(function(o, i) {
+        var items = allItems[i] || [];
+        _histOrders.push(items);
+        var summary = items.map(function(it) { return it.part_name + ' ' + it.weight + 'kg'; }).join('、');
+        var total = items.reduce(function(acc, it) { return acc + (it.amount || 0); }, 0);
+        html += '<div class="card history-item">' +
+          '<div class="history-date">' + o.order_date + '</div>' +
+          '<div class="status-badge">' + o.status + '</div>' +
+          '<div class="history-summary">' + (summary || '－') + '</div>' +
+          '<div style="font-weight:700;color:#8b5e3c;margin-bottom:6px">¥' + total.toLocaleString() + '</div>' +
+          '<button class="btn btn-secondary btn-sm" onclick="reorderFromHistory(' + i + ')">同じ内容で注文</button>' +
+          '</div>';
+      });
+      document.getElementById('historyList').innerHTML = html;
+      showS(5);
+    });
+  }).catch(function(e) {
+    load(false);
+    alert('履歴の取得に失敗しました: ' + e.message);
+  });
+}
+
+function reorderFromHistory(idx) {
+  var items = _histOrders[idx] || [];
+  if (items.length === 0) { alert('注文内容がありません'); return; }
+  _cart = {};
+  items.forEach(function(i) {
+    var key = i.species + '|' + i.part_name;
+    _cart[key] = { species: i.species, part_name: i.part_name, weight: i.weight, unit_price: i.unit_price };
+  });
+  goCart();
+}
 </script>
 </body>
 </html>
