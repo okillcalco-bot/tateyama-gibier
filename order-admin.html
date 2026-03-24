@@ -438,6 +438,10 @@ let allProducts = [];
 let currentFilter = 'all';
 let manualCart = {};
 let selectedDocOrders = new Set();
+function getCustName(o) {
+  var c = allCustomers.find(function(x){return x.id===o.customer_id;});
+  return (c && c.name) ? c.name : (o.customer_name || '—');
+}
 
 // INIT
 document.addEventListener('DOMContentLoaded', loadAll);
@@ -462,7 +466,7 @@ async function loadAll() {
 
 function updateStats() {
   const count = s => allOrders.filter(o => o.status === s).length;
-  document.getElementById('s-pending').textContent = count('受注');
+  document.getElementById('s-pending').textContent = allOrders.filter(function(o){return o.status==='受注'||o.status==='受付';}).length;
   document.getElementById('s-confirmed').textContent = count('確認済');
   document.getElementById('s-shipping').textContent = count('発送済');
   document.getElementById('s-done').textContent = count('納品完了');
@@ -479,8 +483,8 @@ function setFilter(val, el) {
 function renderOrders() {
   const q = document.getElementById('searchInput').value.toLowerCase();
   let orders = allOrders.filter(o => {
-    if (currentFilter !== 'all' && o.status !== currentFilter) return false;
-    if (q && !`${o.order_code} ${o.customer_name}`.toLowerCase().includes(q)) return false;
+    if (currentFilter !== 'all' && o.status !== currentFilter && !(currentFilter === '受注' && o.status === '受付')) return false;
+    if (q && !(`${o.order_code} ` + getCustName(o)).toLowerCase().includes(q)) return false;
     return true;
   });
 
@@ -498,7 +502,7 @@ function renderOrders() {
     ${orders.map(o => `
       <tr>
         <td><div class="order-code">${o.order_code}</div><div style="font-size:10px;color:var(--text2)">${o.created_at?.split('T')[0]}</div></td>
-        <td><div class="customer-cell">${o.customer_name || '—'}</div><div class="customer-sub">${o.memo||''}</div></td>
+        <td><div class="customer-cell">${getCustName(o)}</div><div class="customer-sub">${o.notes||''}</div></td>
         <td class="date-cell">${o.delivery_date || '—'}</td>
         <td class="amount-cell">¥${(o.total_amount||0).toLocaleString()}</td>
         <td><span class="badge badge-${o.status}">${o.status}</span></td>
@@ -525,7 +529,7 @@ function renderShipping() {
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
       <div>
         <div class="order-code">${o.order_code}</div>
-        <div style="font-size:14px;font-weight:600;margin-top:4px">${o.customer_name}</div>
+        <div style="font-size:14px;font-weight:600;margin-top:4px">${getCustName(o)}</div>
         <div style="font-size:11px;color:var(--text2);margin-top:2px">
           希望：${o.delivery_date} | 〒${o.delivery_postal||'—'} ${o.delivery_address||'—'}
         </div>
@@ -554,12 +558,12 @@ async function openOrderDetail(orderId) {
       <span class="order-code">${order.order_code}</span>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px">
-      <div><div style="color:var(--text2);font-size:11px;margin-bottom:3px">顧客名</div>${order.customer_name}</div>
+      <div><div style="color:var(--text2);font-size:11px;margin-bottom:3px">顧客名</div>${getCustName(order)}</div>
       <div><div style="color:var(--text2);font-size:11px;margin-bottom:3px">注文日</div>${order.created_at?.split('T')[0]}</div>
       <div><div style="color:var(--text2);font-size:11px;margin-bottom:3px">納品希望日</div>${order.delivery_date||'—'}</div>
       <div><div style="color:var(--text2);font-size:11px;margin-bottom:3px">金額（税抜）</div><span style="color:var(--accent);font-family:'Barlow Condensed',sans-serif;font-size:18px">¥${(order.total_amount||0).toLocaleString()}</span></div>
       <div style="grid-column:1/-1"><div style="color:var(--text2);font-size:11px;margin-bottom:3px">お届け先</div>〒${order.delivery_postal||'—'} ${order.delivery_address||'—'}</div>
-      ${order.memo ? `<div style="grid-column:1/-1"><div style="color:var(--text2);font-size:11px;margin-bottom:3px">備考</div>${order.memo}</div>` : ''}
+      ${order.notes ? `<div style="grid-column:1/-1"><div style="color:var(--text2);font-size:11px;margin-bottom:3px">備考</div>${order.notes}</div>` : ''}
     </div>
   </div>
   <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden">
@@ -567,8 +571,8 @@ async function openOrderDetail(orderId) {
     ${items.length ? items.map(i => `
     <div style="display:flex;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px">
       <span>${i.species} ${i.part_name}</span>
-      <span style="color:var(--text2)">${i.weight_kg}kg × ¥${(i.unit_price||0).toLocaleString()}</span>
-      <span style="color:var(--accent);font-family:'Barlow Condensed',sans-serif">¥${(i.subtotal||0).toLocaleString()}</span>
+      <span style="color:var(--text2)">${i.weight}kg × ¥${(i.unit_price||0).toLocaleString()}</span>
+      <span style="color:var(--accent);font-family:'Barlow Condensed',sans-serif">¥${(i.amount||0).toLocaleString()}</span>
     </div>`).join('') : '<div style="padding:14px;color:var(--text2)">明細なし</div>'}
   </div>`;
 
@@ -700,7 +704,7 @@ function downloadCSV(content, filename) {
 // ===== DOCUMENTS =====
 function populateDocFilters() {
   const sel = document.getElementById('docCustomerFilter');
-  const unique = [...new Set(allOrders.map(o => o.customer_name).filter(Boolean))].sort();
+  const unique = [...new Set(allOrders.map(o => getCustName(o)).filter(function(n){return n && n!=='—';}))].sort();
   sel.innerHTML = '<option value="">— すべての顧客 —</option>' +
     unique.map(n => `<option value="${n}">${n}</option>`).join('');
 }
@@ -710,7 +714,7 @@ async function filterDocOrders() {
   const period = document.getElementById('docPeriodFilter').value;
   let orders = allOrders.filter(o => o.status !== 'キャンセル');
 
-  if (cust) orders = orders.filter(o => o.customer_name === cust);
+  if (cust) orders = orders.filter(o => getCustName(o) === cust);
 
   const now = new Date();
   if (period === 'thismonth') {
@@ -737,7 +741,7 @@ async function filterDocOrders() {
     <input type="checkbox" id="doc-${o.id}" onchange="toggleDocOrder('${o.id}')"
       style="width:16px;height:16px;accent-color:var(--accent)">
     <label for="doc-${o.id}" style="flex:1;cursor:pointer">
-      <div style="font-size:13px;font-weight:600">${o.customer_name}</div>
+      <div style="font-size:13px;font-weight:600">${getCustName(o)}</div>
       <div style="font-size:11px;color:var(--text2)">${o.order_code} | ${o.created_at?.split('T')[0]} | ¥${(o.total_amount||0).toLocaleString()}</div>
     </label>
     <span class="badge badge-${o.status}">${o.status}</span>
@@ -786,16 +790,16 @@ async function generateDocForOrder(type, orderId, orders=null, items=null) {
   const titles = { estimate:'見積書', delivery:'納品書', invoice:'請求書', receipt:'領収書' };
   const docNo = `TGC-${Date.now().toString(36).toUpperCase().slice(-6)}`;
   const today = new Date().toLocaleDateString('ja-JP', {year:'numeric',month:'long',day:'numeric'});
-  const custName = orders[0].customer_name;
+  const custName = getCustName(orders[0]);
   const total = orders.reduce((s, o) => s + (o.total_amount||0), 0);
   const tax = Math.floor(total * 0.1);
 
   const itemRows = (items||[]).map(i => `
   <tr>
     <td>${i.order?.order_code||''} ${i.species||''} ${i.part_name||''}</td>
-    <td style="text-align:center">${i.weight_kg||0}kg</td>
+    <td style="text-align:center">${i.weight||0}kg</td>
     <td>¥${(i.unit_price||0).toLocaleString()}/kg</td>
-    <td>¥${(i.subtotal||0).toLocaleString()}</td>
+    <td>¥${(i.amount||0).toLocaleString()}</td>
   </tr>`).join('');
 
   const html = `
@@ -932,12 +936,11 @@ async function submitManualOrder() {
       customer_id: cust.id,
       customer_name: cust.name,
       delivery_date: delivDate,
-      delivery_time_zone: document.getElementById('manualDeliveryTime').value,
       delivery_postal: cust.postal_code,
       delivery_address: cust.address,
       delivery_name: cust.name,
       delivery_phone: cust.phone,
-      memo: `${document.getElementById('manualChannel').value}受注 ${document.getElementById('manualMemo').value}`,
+      notes: `${document.getElementById('manualChannel').value}受注 ${document.getElementById('manualMemo').value}`,
       status: '受注',
       total_amount: total,
       price_rank: cust.price_rank || 'standard'
@@ -949,9 +952,9 @@ async function submitManualOrder() {
         product_id: item.product.id,
         species: item.product.species,
         part_name: item.product.part_name,
-        weight_kg: item.weight_kg,
+        weight: item.weight_kg,
         unit_price: item.unit_price,
-        subtotal: item.subtotal
+        amount: item.subtotal
       });
     }
     alert(`注文 ${orderCode} を登録しました`);
