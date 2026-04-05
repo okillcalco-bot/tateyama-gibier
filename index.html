@@ -1872,18 +1872,6 @@ function pmNumDel() {
   document.getElementById('pmWeightDisplay').textContent = pmNumBuf || '0.000';
 }
 
-// pmStartMeasure でテンキー入力値も使えるようにオーバーライド
-const _origStartMeasure = pmStartMeasure;
-function pmStartMeasure() {
-  if (pmNumpadOpen && pmNumBuf) {
-    const w = parseFloat(pmNumBuf);
-    if (isNaN(w) || w < 0.050) { toast('重量が小さすぎます（0.050kg未満）','error'); return; }
-    pmNumBuf = '';
-    pmOnWeightReceived(w);
-    return;
-  }
-  _origStartMeasure();
-}
 
 // ── Web Serial API (AD-8541-PC USB CDC) ──
 let serialPort = null;
@@ -1979,6 +1967,14 @@ function scaleHandleLine(line) {
 
 // ── 計量ボタン ──
 function pmStartMeasure() {
+  // テンキー入力がある場合はその値を使う
+  if (pmNumpadOpen && pmNumBuf) {
+    const w = parseFloat(pmNumBuf);
+    if (isNaN(w) || w < 0.050) { toast('重量が小さすぎます（0.050kg未満）','error'); return; }
+    pmNumBuf = '';
+    pmOnWeightReceived(w);
+    return;
+  }
   if (!pmSelectedPart) { toast('部位を選択してください','error'); return; }
   pmWaitingForScale = true;
   pmScaleBuffer = '';
