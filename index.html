@@ -519,10 +519,12 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="pm-weight-section">
           <div class="pm-weight-selected">選択: <strong id="pmSelectedPartName">未選択</strong></div>
           <div class="pm-weight-display"><span id="pmWeightDisplay">0.000</span> <span class="pm-weight-unit">kg</span></div>
-          <button class="pm-measure-btn" id="pmMeasureBtn" onclick="pmStartMeasure()" disabled>計量・登録・印刷</button>
-          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+          <button class="pm-measure-btn" id="pmMeasureBtn" onclick="pmStartMeasure()" disabled>登録</button>
+          <button class="pm-measure-btn" id="pmPrintBtn" onclick="pmPrintOnly()" disabled style="margin-top:6px;background:linear-gradient(135deg,#4a7ab8,#5a8cd8);font-size:15px;">🖨 ラベル印刷</button>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;">
             <div class="pm-weight-hint" style="margin-top:0;">はかりに肉を載せてからボタンを押す</div>
             <button class="pm-numpad-toggle" id="pmNumpadToggle" onclick="pmToggleNumpad()">🔢 手動入力</button>
+            <button class="pm-numpad-toggle" id="btScaleBtn" onclick="btScaleConnect()" style="color:var(--blue);">📶 BT計量器</button>
           </div>
           <div class="pm-numpad" id="pmNumpad">
             <div class="pm-numpad-grid">
@@ -1759,7 +1761,6 @@ async function pmSelectIndividual(labelId) {
     main.style.display = 'flex';
 
     document.getElementById('pmCurrentInd').textContent = pmIndividual.label_id + ' (' + (pmIndividual.species||'') + ' ' + (pmIndividual.weight_total||'?') + 'kg)';
-    document.getElementById('pmCurrentOp').textContent = pmCurrentOperator ? '担当: ' + pmCurrentOperator : '';
     pmRenderHeaderOps();
 
     pmRenderParts();
@@ -1877,6 +1878,106 @@ function pmNumDel() {
 }
 
 
+// ── ラベル印刷のみ（登録なし） ──
+let pmLastPrintInfo = null; // 最後に登録したラベル情報を保持
+
+async function pmPrintOnly() {
+  if (!pmLastPrintInfo) {
+    toast('先に登録してください','error');
+    return;
+  }
+  const { weight_kg, lotCode, identCode, fullPartName, labelWeight } = pmLastPrintInfo;
+  await pmPrintLabel(weight_kg, lotCode, identCode, fullPartName, labelWeight);
+  toast('再印刷しました');
+}
+
+// ── Bluetooth計量器 (SJ-15KAWAP-BT) Web Bluetooth API ──
+let btScaleDevice = null;
+
+async function btScaleConnect() {
+  const btn = document.getElementById('btScaleBtn');
+
+  // 接続中なら切断
+  if (btScaleDevice && btScaleDevice.gatt.connected) {
+    btScaleDevice.gatt.disconnect();
+    btScaleDevice = null;
+    btn.textContent = '📶 BT計量器';
+    btn.style.color = 'var(--blue)';
+    return;
+  }
+
+  if (!('bluetooth' in navigator)) {
+    toast('このブラウザはWeb Bluetooth非対応です。ChromeかEdgeを使用してください。','error');
+    return;
+  }
+
+  try {
+    // SJ-15KAWAP-BTのBLEサービス (A&D汎用: weight scale service UUID)
+    btScaleDevice = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: [
+        '0000181d-0000-1000-8000-00805f9b34fb', // Weight Scale Service
+        '0000fff0-0000-1000-8000-00805f9b34fb', // 汎用カスタム
+        '0000ffe0-0000-1000-8000-00805f9b34fb', // 汎用シリアル
+      ]
+    });
+
+    const server = await btScaleDevice.gatt.connect();
+    btn.textContent = '📶 BT接続中';
+    btn.style.color = 'var(--green)';
+    toast('BT計量器接続しました');
+
+    // Weight Scale Service (標準BLE)
+    try {
+      const svc = await server.getPrimaryService('0000181d-0000-1000-8000-00805f9b34fb');
+      const char = await svc.getCharacteristic('0000181d-0000-1000-8000-00805f9b34fb');
+      await char.startNotifications();
+      char.addEventListener('characteristicvaluechanged', (e) => {
+        const data = new DataView(e.target.value.buffer);
+        // BLE Weight Scale: flags(1) + weight(2, unit 0.005kg)
+        const flags = data.getUint8(0);
+        const raw = data.getUint16(1, true);
+        const weight = raw * 0.005;
+        if (weight >= 0.050) {
+          document.getElementById('pmWeightDisplay').textContent = weight.toFixed(3);
+          if (pmWaitingForScale && pmSelectedPart) pmOnWeightReceived(weight);
+        }
+      });
+    } catch(_) {
+      // カスタムサービス経由でテキスト受信にフォールバック
+      toast('標準BLEサービス未対応 — カスタムサービスを試行中','info');
+      try {
+        const svc2 = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
+        const char2 = await svc2.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
+        await char2.startNotifications();
+        let btBuf = '';
+        char2.addEventListener('characteristicvaluechanged', (e) => {
+          btBuf += new TextDecoder().decode(e.target.value);
+          const nl = btBuf.indexOf('\n');
+          if (nl >= 0) {
+            scaleHandleLine(btBuf.slice(0, nl).trim());
+            btBuf = btBuf.slice(nl + 1);
+          }
+        });
+      } catch(e2) {
+        toast('BT計量器のサービスを検出できませんでした: ' + e2.message,'error');
+      }
+    }
+
+    btScaleDevice.addEventListener('gattserverdisconnected', () => {
+      btn.textContent = '📶 BT計量器';
+      btn.style.color = 'var(--blue)';
+      btScaleDevice = null;
+    });
+
+  } catch(err) {
+    if (err.name !== 'NotFoundError') toast('BT接続エラー: ' + err.message,'error');
+    btn.textContent = '📶 BT計量器';
+    btn.style.color = 'var(--blue)';
+    btScaleDevice = null;
+  }
+}
+
 // ── Web Serial API (AD-8541-PC USB CDC) ──
 let serialPort = null;
 let serialReader = null;
@@ -1982,26 +2083,22 @@ function pmStartMeasure() {
   if (!pmSelectedPart) { toast('部位を選択してください','error'); return; }
   pmWaitingForScale = true;
   pmScaleBuffer = '';
-  document.getElementById('pmMeasureBtn').textContent = '⏳ はかりの入力を待機中...';
+  document.getElementById('pmMeasureBtn').textContent = '⏳ 待機中...';
   document.getElementById('pmMeasureBtn').disabled = true;
   refocusScaleInput();
 
-  // Also allow manual input after 5 seconds timeout hint
   setTimeout(() => {
     if (pmWaitingForScale) {
-      document.getElementById('pmMeasureBtn').textContent = '計量・登録・印刷';
+      document.getElementById('pmMeasureBtn').textContent = '登録';
       document.getElementById('pmMeasureBtn').disabled = false;
-      // Check if weight was entered manually
-      const manualWeight = parseFloat(document.getElementById('pmWeightDisplay').textContent);
-      if (manualWeight >= 0.050) {
-        // Allow clicking the button to register with displayed weight
-        document.getElementById('pmMeasureBtn').onclick = () => {
-          pmOnWeightReceived(manualWeight);
-          document.getElementById('pmMeasureBtn').onclick = pmStartMeasure;
-        };
-      }
+      document.getElementById('pmMeasureBtn').onclick = () => {
+        const w = parseFloat(document.getElementById('pmWeightDisplay').textContent);
+        if (w >= 0.050) { pmOnWeightReceived(w); }
+        else { toast('重量を入力してください','error'); }
+        document.getElementById('pmMeasureBtn').onclick = pmStartMeasure;
+      };
     }
-  }, 8000);
+  }, 5000);
 }
 
 // ── 重量受信後の全自動処理 ──
@@ -2074,6 +2171,7 @@ async function pmOnWeightReceived(weight_kg) {
     // 5. ラベル印刷（小売モード時は部位ごとのプリセット重量で印刷）
     const basePart = pmSelectedPart.part_name;
     const labelWeight = (pmRetail && PM_RETAIL_WEIGHTS[basePart]) ? PM_RETAIL_WEIGHTS[basePart] : weight_kg;
+    pmLastPrintInfo = { weight_kg, lotCode, identCode, fullPartName, labelWeight };
     await pmPrintLabel(weight_kg, lotCode, identCode, fullPartName, labelWeight);
 
     // 6. UI更新
@@ -2082,15 +2180,16 @@ async function pmOnWeightReceived(weight_kg) {
     toast(`${fullPartName} ${weight_kg.toFixed(3)}kg 登録完了`);
 
     // 7. リセット
-    document.getElementById('pmMeasureBtn').textContent = '計量・登録・印刷';
+    document.getElementById('pmMeasureBtn').textContent = '登録';
     document.getElementById('pmMeasureBtn').disabled = false;
     document.getElementById('pmMeasureBtn').onclick = pmStartMeasure;
+    document.getElementById('pmPrintBtn').disabled = false;
     pmResetWeight();
     refocusScaleInput();
 
   } catch(err) {
     toast('登録エラー: ' + err.message, 'error');
-    document.getElementById('pmMeasureBtn').textContent = '計量・登録・印刷';
+    document.getElementById('pmMeasureBtn').textContent = '登録';
     document.getElementById('pmMeasureBtn').disabled = false;
     document.getElementById('pmMeasureBtn').onclick = pmStartMeasure;
     refocusScaleInput();
