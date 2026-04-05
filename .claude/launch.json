@@ -1,0 +1,33 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "捕獲票入力 (capture-form)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", ".", "-p", "8080", "--no-clipboard"],
+      "port": 8080,
+      "url": "http://localhost:8080/capture-form.html"
+    },
+    {
+      "name": "在庫・精肉管理 (index)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", ".", "-p", "8080", "--no-clipboard"],
+      "port": 8080,
+      "url": "http://localhost:8080/index.html"
+    },
+    {
+      "name": "注文ポータル・顧客用 (order-portal)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", ".", "-p", "8080", "--no-clipboard"],
+      "port": 8080,
+      "url": "http://localhost:8080/order-portal.html"
+    },
+    {
+      "name": "受発注管理・スタッフ用 (order-admin)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", ".", "-p", "8080", "--no-clipboard"],
+      "port": 8080,
+      "url": "http://localhost:8080/order-admin.html"
+    }
+  ]
+}
