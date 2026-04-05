@@ -190,6 +190,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 /* ===== Processing Mode (精肉モード) ===== */
 .pm-overlay{display:none;position:fixed;inset:0;z-index:500;background:var(--bg);overflow:hidden;}
 .pm-overlay.active{display:flex;flex-direction:column;}
+@media (orientation:portrait),(max-width:700px){
+  .pm-body{grid-template-columns:1fr!important;overflow-y:auto!important;}
+  .pm-left,.pm-right{overflow-y:visible!important;min-height:unset!important;}
+}
 
 /* Header */
 .pm-header{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--surface);border-bottom:2px solid var(--gold2);flex-shrink:0;flex-wrap:wrap;}
@@ -473,6 +477,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
       <div class="pm-header-ops" id="pmHeaderOps"></div>
       <div class="pm-header-right">
+        <button id="scaleConnBtn" onclick="scaleConnect()" style="font-size:11px;padding:3px 8px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;white-space:nowrap;">⚖️ はかり未接続</button>
         <span id="bpacStatus" style="font-size:11px;padding:3px 8px;border-radius:10px;border:1px solid var(--border);white-space:nowrap;color:var(--text2);">確認中...</span>
         <button class="pm-close" onclick="closeProcessingMode()">✕ 閉じる</button>
       </div>
@@ -1703,9 +1708,7 @@ async function pmSelectIndividual(labelId) {
     const inds = await sb('GET', 'individuals', null, `?label_id=eq.${encodeURIComponent(labelId)}&select=*`);
     if (!inds.length) { toast('個体が見つかりません','error'); return; }
     pmIndividual = inds[0];
-
-    // Load price master
-    pmPriceMaster = await sb('GET', 'price_master', null, `?select=*&barcode_num=not.is.null&grade=eq.上&species=eq.${encodeURIComponent(pmIndividual.species)}&order=barcode_num.asc`);
+    pmPriceMaster = []; // PM_PARTSを使うため不要
 
     // Load already completed parts for this individual
     const existing = await sb('GET', 'inventory', null, `?individual_id=eq.${encodeURIComponent(labelId)}&select=part_name,weight,weight_kg,lot_code,ident_code`);
@@ -1799,6 +1802,92 @@ function refocusScaleInput() {
   setTimeout(() => {
     document.getElementById('scaleInput').focus();
   }, 100);
+}
+
+// ── Web Serial API (AD-8541-PC USB CDC) ──
+let serialPort = null;
+let serialReader = null;
+let serialActive = false;
+
+async function scaleConnect() {
+  const btn = document.getElementById('scaleConnBtn');
+
+  // 接続中なら切断
+  if (serialActive) {
+    serialActive = false;
+    try { serialReader && await serialReader.cancel(); } catch(_) {}
+    try { serialPort && await serialPort.close(); } catch(_) {}
+    serialPort = null; serialReader = null;
+    btn.textContent = '⚖️ はかり未接続';
+    btn.style.color = 'var(--text2)';
+    btn.style.borderColor = 'var(--border)';
+    return;
+  }
+
+  if (!('serial' in navigator)) {
+    toast('このブラウザはWeb Serial非対応です。Chrome/Edgeを使用してください。', 'error');
+    return;
+  }
+
+  try {
+    // ポート選択ダイアログ
+    serialPort = await navigator.serial.requestPort();
+    // AD-8541-PC デフォルト: 2400baud 8N1
+    await serialPort.open({ baudRate: 2400, dataBits: 8, stopBits: 1, parity: 'none' });
+
+    serialActive = true;
+    btn.textContent = '⚖️ はかり接続中';
+    btn.style.color = 'var(--green)';
+    btn.style.borderColor = 'var(--green)';
+    toast('はかり接続しました', 'success');
+
+    // 受信ループ
+    const decoder = new TextDecoderStream();
+    serialPort.readable.pipeTo(decoder.writable);
+    serialReader = decoder.readable.getReader();
+
+    let lineBuf = '';
+    while (serialActive) {
+      const { value, done } = await serialReader.read();
+      if (done) break;
+      lineBuf += value;
+      // A&D出力: "ST,+ 01.234 kg\r\n" or "US,+ 01.234 kg\r\n"
+      let nl;
+      while ((nl = lineBuf.indexOf('\n')) !== -1) {
+        const line = lineBuf.slice(0, nl).trim();
+        lineBuf = lineBuf.slice(nl + 1);
+        scaleHandleLine(line);
+      }
+    }
+  } catch(err) {
+    serialActive = false;
+    serialPort = null; serialReader = null;
+    btn.textContent = '⚖️ はかり未接続';
+    btn.style.color = 'var(--text2)';
+    btn.style.borderColor = 'var(--border)';
+    if (err.name !== 'NotFoundError') {
+      toast('はかり接続エラー: ' + err.message, 'error');
+    }
+  }
+}
+
+function scaleHandleLine(line) {
+  // A&D format: "ST,+000.000 kg" / "ST,-000.000 kg" / "US,..."
+  // Only use stable readings (ST)
+  if (!line.startsWith('ST,')) return;
+  // Extract numeric value: ST,+ 01.234 kg → 1.234
+  const numMatch = line.match(/ST,[+\-]\s*([\d.]+)/);
+  if (!numMatch) return;
+  const weight = parseFloat(numMatch[1]);
+  if (isNaN(weight) || weight < 0.050) return;
+
+  // 表示更新
+  document.getElementById('pmWeightDisplay').textContent = weight.toFixed(3);
+
+  // 計量待機中なら自動処理
+  if (pmWaitingForScale) {
+    pmOnWeightReceived(weight);
+  }
 }
 
 // ── 計量ボタン ──
