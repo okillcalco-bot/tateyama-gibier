@@ -264,6 +264,17 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .pm-measure-btn:disabled{opacity:.4;cursor:not-allowed;box-shadow:none;}
 .pm-weight-hint{font-size:11px;color:var(--text3);margin-top:6px;}
 
+/* Numpad */
+.pm-numpad{display:none;margin-top:8px;}
+.pm-numpad.open{display:block;}
+.pm-numpad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.pm-numpad-key{height:52px;font-size:20px;font-weight:700;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);cursor:pointer;transition:all .1s;user-select:none;-webkit-tap-highlight-color:transparent;font-family:inherit;}
+.pm-numpad-key:active{background:var(--border2);transform:scale(.95);}
+.pm-numpad-key.key-del{color:var(--red);font-size:18px;}
+.pm-numpad-key.key-dot{color:var(--gold);}
+.pm-numpad-toggle{font-size:11px;padding:3px 10px;border-radius:10px;border:1px solid var(--border);background:none;color:var(--text2);cursor:pointer;margin-top:6px;font-family:inherit;}
+.pm-numpad-toggle.active{border-color:var(--gold2);color:var(--gold);}
+
 /* Completed List */
 .pm-completed-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;flex:1;min-height:0;overflow-y:auto;}
 .pm-completed-grid{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
@@ -506,7 +517,26 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <div class="pm-weight-selected">選択: <strong id="pmSelectedPartName">未選択</strong></div>
           <div class="pm-weight-display"><span id="pmWeightDisplay">0.000</span> <span class="pm-weight-unit">kg</span></div>
           <button class="pm-measure-btn" id="pmMeasureBtn" onclick="pmStartMeasure()" disabled>計量・登録・印刷</button>
-          <div class="pm-weight-hint">はかりに肉を載せてからボタンを押す（HID自動入力対応）</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+            <div class="pm-weight-hint" style="margin-top:0;">はかりに肉を載せてからボタンを押す</div>
+            <button class="pm-numpad-toggle" id="pmNumpadToggle" onclick="pmToggleNumpad()">🔢 手動入力</button>
+          </div>
+          <div class="pm-numpad" id="pmNumpad">
+            <div class="pm-numpad-grid">
+              <button class="pm-numpad-key" onclick="pmNumKey('7')">7</button>
+              <button class="pm-numpad-key" onclick="pmNumKey('8')">8</button>
+              <button class="pm-numpad-key" onclick="pmNumKey('9')">9</button>
+              <button class="pm-numpad-key" onclick="pmNumKey('4')">4</button>
+              <button class="pm-numpad-key" onclick="pmNumKey('5')">5</button>
+              <button class="pm-numpad-key" onclick="pmNumKey('6')">6</button>
+              <button class="pm-numpad-key" onclick="pmNumKey('1')">1</button>
+              <button class="pm-numpad-key" onclick="pmNumKey('2')">2</button>
+              <button class="pm-numpad-key" onclick="pmNumKey('3')">3</button>
+              <button class="pm-numpad-key key-dot" onclick="pmNumKey('.')">.</button>
+              <button class="pm-numpad-key" onclick="pmNumKey('0')">0</button>
+              <button class="pm-numpad-key key-del" onclick="pmNumDel()">⌫</button>
+            </div>
+          </div>
         </div>
         <div class="pm-completed-section">
           <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -1802,6 +1832,57 @@ function refocusScaleInput() {
   setTimeout(() => {
     document.getElementById('scaleInput').focus();
   }, 100);
+}
+
+// ── テンキー（手動入力） ──
+let pmNumpadOpen = false;
+let pmNumBuf = '';
+
+function pmToggleNumpad() {
+  pmNumpadOpen = !pmNumpadOpen;
+  document.getElementById('pmNumpad').classList.toggle('open', pmNumpadOpen);
+  const btn = document.getElementById('pmNumpadToggle');
+  btn.classList.toggle('active', pmNumpadOpen);
+  if (!pmNumpadOpen) {
+    pmNumBuf = '';
+    refocusScaleInput();
+  }
+}
+
+function pmNumKey(k) {
+  // ドットは1つまで
+  if (k === '.' && pmNumBuf.includes('.')) return;
+  // 整数部は最大3桁
+  const parts = (pmNumBuf + k).split('.');
+  if (parts[0].length > 3) return;
+  // 小数部は最大3桁
+  if (parts[1] && parts[1].length > 3) return;
+  pmNumBuf += k;
+  document.getElementById('pmWeightDisplay').textContent = pmNumBuf || '0';
+  // 部位が選択済みで計量ボタンが押せる状態なら有効化
+  const w = parseFloat(pmNumBuf);
+  const measureBtn = document.getElementById('pmMeasureBtn');
+  if (!isNaN(w) && w >= 0.050 && pmSelectedPart && !measureBtn.disabled) {
+    // すでに有効なのでそのまま
+  }
+}
+
+function pmNumDel() {
+  pmNumBuf = pmNumBuf.slice(0, -1);
+  document.getElementById('pmWeightDisplay').textContent = pmNumBuf || '0.000';
+}
+
+// pmStartMeasure でテンキー入力値も使えるようにオーバーライド
+const _origStartMeasure = pmStartMeasure;
+function pmStartMeasure() {
+  if (pmNumpadOpen && pmNumBuf) {
+    const w = parseFloat(pmNumBuf);
+    if (isNaN(w) || w < 0.050) { toast('重量が小さすぎます（0.050kg未満）','error'); return; }
+    pmNumBuf = '';
+    pmOnWeightReceived(w);
+    return;
+  }
+  _origStartMeasure();
 }
 
 // ── Web Serial API (AD-8541-PC USB CDC) ──
