@@ -2,1163 +2,1328 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>館山ジビエセンター 捕獲票入力</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>館山ジビエセンター - 捕獲票入力</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Barlow+Condensed:wght@400;600;700&display=swap');
 :root {
-  --bg: #0f1117; --surface: #1a1e2a; --surface2: #222736; --border: #2e3447;
-  --accent: #e8a44a; --accent2: #c06a2a; --green: #4caf7d; --red: #e05555;
-  --yellow: #f0c040; --text: #e8eaf0; --text2: #8b90a8; --radius: 10px;
+  --bg: #0d0f0a; --surface: #141710; --surface2: #1c1f16;
+  --border: #2a2e22; --border2: #363b2a;
+  --gold: #c8a45a; --gold2: #a07e38; --gold-light: #e8c878;
+  --text: #e8e4d8; --text2: #8a8670; --text3: #5a5848;
+  --red: #c85050; --green: #6a9e5a; --blue: #5a8cd8;
+  --radius: 8px;
 }
-* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-body { background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-size: 15px; min-height: 100vh; }
-.header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
-.header-title { font-family: 'Barlow Condensed', sans-serif; font-size: 20px; font-weight: 700; color: var(--accent); letter-spacing: 1px; }
-.header-sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
-.header-ids { text-align: right; }
-.id-badge { background: var(--accent); color: #111; font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 13px; padding: 3px 10px; border-radius: 4px; display: inline-block; margin-bottom: 3px; }
-.tabs { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); overflow-x: auto; -webkit-overflow-scrolling: touch; }
-.tab { flex: none; padding: 12px 18px; font-size: 13px; font-weight: 500; color: var(--text2); cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; transition: all 0.2s; }
-.tab.active { color: var(--accent); border-bottom-color: var(--accent); background: rgba(232,164,74,0.06); }
-.main { padding: 16px; max-width: 720px; margin: 0 auto; }
-.section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 14px; overflow: hidden; }
-.section-header { background: var(--surface2); padding: 10px 16px; font-size: 12px; font-weight: 700; color: var(--accent); letter-spacing: 1.5px; text-transform: uppercase; border-bottom: 1px solid var(--border); }
-.section-body { padding: 14px 16px; }
-.field { margin-bottom: 14px; }
-.field:last-child { margin-bottom: 0; }
-.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
-label { display: block; font-size: 11px; font-weight: 700; color: var(--text2); letter-spacing: 0.8px; margin-bottom: 6px; text-transform: uppercase; }
-label .req { color: var(--accent); margin-left: 2px; }
-input[type="text"], input[type="number"], input[type="time"], input[type="date"], select, textarea {
-  width: 100%; background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px;
-  color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-size: 15px; padding: 11px 14px;
-  outline: none; transition: border-color 0.2s; -webkit-appearance: none; appearance: none;
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: 'Noto Sans JP', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overscroll-behavior: none;
 }
-input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(232,164,74,0.12); }
-textarea { resize: vertical; min-height: 70px; }
-select option { background: var(--surface); }
+input, select, textarea, button { font-family: inherit; font-size: 1rem; }
+
+/* Header */
+.header {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.header-title {
+  font-size: 1.1rem; font-weight: 700; color: var(--gold);
+  display: flex; align-items: center; gap: 8px;
+}
+.header-badge {
+  background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: 20px; padding: 4px 14px;
+  font-size: 0.85rem; color: var(--text2);
+}
+.header-badge strong { color: var(--gold-light); font-weight: 700; }
+.offline-badge {
+  background: var(--red); color: #fff; border-radius: 12px;
+  padding: 2px 10px; font-size: 0.75rem; display: none;
+}
+.offline-badge.show { display: inline-block; }
+
+/* Tabs */
+.tabs {
+  display: flex; background: var(--surface);
+  border-bottom: 2px solid var(--border);
+}
+.tab {
+  flex: 1; padding: 14px; text-align: center;
+  font-weight: 500; font-size: 1rem;
+  color: var(--text3); cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s;
+  -webkit-user-select: none; user-select: none;
+}
+.tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+/* Tab panels */
+.tab-panel { display: none; padding: 16px; padding-bottom: 100px; }
+.tab-panel.active { display: block; }
+
+/* Sections */
+.section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.section-head {
+  padding: 14px 16px;
+  font-weight: 700; font-size: 0.95rem;
+  color: var(--gold);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+.section-body { padding: 16px; }
+
+/* Form rows */
+.form-row { margin-bottom: 16px; }
+.form-row:last-child { margin-bottom: 0; }
+.form-label {
+  display: block; margin-bottom: 6px;
+  font-size: 0.85rem; color: var(--text2); font-weight: 500;
+}
+
+/* Toggle buttons */
 .toggle-group { display: flex; gap: 8px; flex-wrap: wrap; }
-.toggle-btn { padding: 9px 16px; border: 1.5px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text2); font-family: 'Noto Sans JP', sans-serif; font-size: 14px; cursor: pointer; transition: all 0.15s; user-select: none; }
-.toggle-btn.selected { background: var(--accent); border-color: var(--accent); color: #111; font-weight: 700; }
-.toggle-btn.selected-alt { background: var(--surface2); border-color: var(--accent); color: var(--accent); font-weight: 700; }
-.check-list { display: flex; flex-direction: column; gap: 8px; }
-.check-item { display: flex; align-items: flex-start; gap: 12px; padding: 10px 12px; background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; cursor: pointer; transition: border-color 0.15s; }
-.check-item.checked { border-color: var(--red); background: rgba(224,85,85,0.06); }
-.check-item input[type="checkbox"] { width: 20px; height: 20px; min-width: 20px; border: 2px solid var(--border); border-radius: 4px; background: var(--bg); cursor: pointer; padding: 0; accent-color: var(--red); }
-.check-label { font-size: 13px; line-height: 1.5; padding-top: 1px; }
-.alert { padding: 12px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; margin-bottom: 14px; display: none; align-items: center; gap: 10px; }
-.alert.show { display: flex; }
-.alert-warn { background: rgba(240,192,64,0.12); border: 1.5px solid var(--yellow); color: var(--yellow); }
-.alert-danger { background: rgba(224,85,85,0.12); border: 1.5px solid var(--red); color: var(--red); }
-.alert-ok { background: rgba(76,175,125,0.12); border: 1.5px solid var(--green); color: var(--green); }
-.alert-icon { font-size: 18px; }
-.time-status { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; font-size: 13px; }
-.time-elapsed { font-family: 'Barlow Condensed', sans-serif; font-size: 24px; font-weight: 700; color: var(--text); }
-.time-elapsed.warn { color: var(--yellow); }
-.time-elapsed.over { color: var(--red); }
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 13px 22px; border-radius: 8px; font-family: 'Noto Sans JP', sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; border: none; transition: all 0.15s; user-select: none; }
-.btn-primary { background: var(--accent); color: #111; width: 100%; }
-.btn-primary:hover { background: #f0b555; }
-.btn-secondary { background: var(--surface2); color: var(--text); border: 1.5px solid var(--border); }
-.btn-danger { background: rgba(224,85,85,0.15); color: var(--red); border: 1.5px solid var(--red); }
-.btn-green { background: var(--green); color: #fff; }
-.btn-blue { background: rgba(90,140,216,0.15); color: #5a8cd8; border: 1px solid #5a8cd8; }
-.btn-row { display: flex; gap: 10px; margin-top: 16px; }
-.btn-row .btn { flex: 1; }
-.processing-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.proc-card { padding: 18px; background: var(--bg); border: 2px solid var(--border); border-radius: var(--radius); cursor: pointer; text-align: center; transition: all 0.2s; }
-.proc-card.selected { border-color: var(--accent); background: rgba(232,164,74,0.08); }
-.proc-card-icon { font-size: 28px; margin-bottom: 8px; }
-.proc-card-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
-.proc-card-desc { font-size: 11px; color: var(--text2); line-height: 1.5; }
-.label-preview { background: #fff; color: #111; border-radius: 8px; padding: 14px; font-family: 'Noto Sans JP', sans-serif; margin-bottom: 12px; border: 2px solid var(--border); }
-.label-preview-title { font-size: 10px; font-weight: 700; text-align: center; border-bottom: 1px solid #ccc; padding-bottom: 6px; margin-bottom: 8px; color: #333; }
-.label-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
-.label-big { font-size: 20px; font-weight: 900; text-align: center; margin: 6px 0; letter-spacing: 2px; }
-.label-barcode { text-align: center; font-family: monospace; font-size: 9px; letter-spacing: 4px; color: #555; margin-top: 4px; }
-.print-list-item { display: flex; align-items: center; padding: 12px 14px; background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; margin-bottom: 8px; gap: 12px; }
-.print-list-num { font-family: 'Barlow Condensed', sans-serif; font-size: 28px; font-weight: 700; color: var(--accent); min-width: 50px; }
-.print-list-info { flex: 1; }
-.print-list-id { font-size: 12px; color: var(--text2); }
-.print-list-name { font-size: 15px; font-weight: 700; }
-.panel { display: none; }
-.panel.active { display: block; }
-.success-screen { text-align: center; padding: 40px 20px; display: none; }
-.success-screen.show { display: block; }
-.success-icon { font-size: 60px; margin-bottom: 16px; }
-.success-title { font-size: 24px; font-weight: 700; margin-bottom: 8px; color: var(--green); }
-.success-ids { font-family: 'Barlow Condensed', sans-serif; font-size: 18px; margin-bottom: 24px; color: var(--text2); }
-/* b-PAC status badge */
-.bpac-badge { font-size: 10px; padding: 2px 8px; border-radius: 4px; display: inline-block; margin-top: 3px; }
-.bpac-badge-ok { background: rgba(76,175,125,0.2); border: 1px solid var(--green); color: var(--green); }
-.bpac-badge-ng { background: rgba(224,85,85,0.15); border: 1px solid var(--red); color: var(--red); }
-.bpac-badge-wait { background: rgba(240,192,64,0.2); border: 1px solid var(--yellow); color: var(--yellow); }
-@media print {
-  body { background: #fff; color: #000; font-family: 'Noto Sans JP', sans-serif; }
-  .no-print { display: none !important; }
-  .print-page { page-break-after: always; width: 210mm; padding: 10mm; }
-  .print-table-wrap { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border: 1px solid #000; }
-  .print-col { border-right: 1px solid #000; padding: 4mm; }
-  .print-col:last-child { border-right: none; }
-  .print-row { display: flex; border-bottom: 1px dotted #ccc; padding: 2mm 0; font-size: 8pt; }
-  .print-row-label { width: 30mm; font-weight: bold; color: #555; flex-shrink: 0; }
-  .print-row-value { flex: 1; }
-  .print-header { font-size: 10pt; font-weight: bold; text-align: center; border-bottom: 1px solid #000; padding-bottom: 2mm; margin-bottom: 3mm; }
-  .print-id { font-size: 9pt; font-weight: bold; color: #333; text-align: center; margin-bottom: 2mm; }
-  .print-anomaly-section { margin-top: 2mm; }
-  .print-anomaly-title { font-size: 7pt; font-weight: bold; border-top: 1px solid #ccc; padding-top: 1mm; }
-  .print-anomaly-item { font-size: 7pt; padding: 0.5mm 0; }
+.toggle-btn {
+  flex: 1; min-width: 80px; min-height: 48px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface2); border: 2px solid var(--border2);
+  border-radius: var(--radius); color: var(--text2);
+  font-size: 1rem; font-weight: 500; cursor: pointer;
+  transition: all 0.15s; padding: 8px 12px;
+  -webkit-user-select: none; user-select: none;
 }
-.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; display: none; align-items: center; justify-content: center; padding: 20px; }
-.modal-bg.show { display: flex; }
-.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; width: 100%; max-width: 440px; max-height: 80vh; overflow-y: auto; }
-.modal-title { font-size: 17px; font-weight: 700; margin-bottom: 16px; }
-/* b-PAC settings inline */
-.bpac-settings { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-top: 12px; }
-.bpac-obj-table { font-size: 11px; color: var(--text2); line-height: 1.9; }
-.bpac-obj-table code { color: var(--text); font-family: monospace; background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
+.toggle-btn.active {
+  background: rgba(200,164,90,0.15);
+  border-color: var(--gold);
+  color: var(--gold-light);
+}
+.toggle-btn:active { transform: scale(0.97); }
+
+/* Inputs */
+.input, .select-wrap select, textarea {
+  width: 100%; padding: 12px 14px;
+  background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: var(--radius); color: var(--text);
+  font-size: 1rem; outline: none; transition: border-color 0.2s;
+}
+.input:focus, .select-wrap select:focus, textarea:focus {
+  border-color: var(--gold2);
+}
+.input::placeholder, textarea::placeholder { color: var(--text3); }
+.select-wrap { position: relative; }
+.select-wrap select {
+  appearance: none; -webkit-appearance: none;
+  padding-right: 36px; cursor: pointer;
+}
+.select-wrap::after {
+  content: ''; position: absolute; right: 14px; top: 50%;
+  transform: translateY(-50%);
+  border: 5px solid transparent; border-top-color: var(--text2);
+  pointer-events: none;
+}
+textarea { min-height: 80px; resize: vertical; }
+
+/* Checkboxes */
+.check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.check-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; min-height: 48px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius); cursor: pointer;
+  -webkit-user-select: none; user-select: none;
+  transition: all 0.15s;
+}
+.check-item.checked {
+  border-color: var(--red); background: rgba(200,80,80,0.1);
+}
+.check-box {
+  width: 22px; height: 22px; flex-shrink: 0;
+  border: 2px solid var(--border2); border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.check-item.checked .check-box {
+  background: var(--red); border-color: var(--red);
+}
+.check-item.checked .check-box::after {
+  content: ''; width: 6px; height: 10px;
+  border: 2px solid #fff; border-top: none; border-left: none;
+  transform: rotate(45deg) translateY(-1px);
+}
+.check-text { font-size: 0.85rem; line-height: 1.3; }
+
+/* Alerts */
+.alert {
+  padding: 12px 16px; border-radius: var(--radius);
+  font-size: 0.9rem; font-weight: 500;
+  display: none; margin-top: 12px;
+}
+.alert.show { display: block; }
+.alert-warn {
+  background: rgba(200,164,90,0.15); border: 1px solid var(--gold2);
+  color: var(--gold-light);
+}
+.alert-danger {
+  background: rgba(200,80,80,0.15); border: 1px solid var(--red);
+  color: #e88;
+}
+
+/* Submit */
+.submit-btn {
+  width: 100%; padding: 18px; margin-top: 16px;
+  background: linear-gradient(135deg, var(--gold), var(--gold2));
+  color: #111; font-size: 1.2rem; font-weight: 700;
+  border: none; border-radius: var(--radius);
+  cursor: pointer; transition: all 0.2s;
+  min-height: 60px;
+}
+.submit-btn:active { transform: scale(0.98); opacity: 0.9; }
+.submit-btn:disabled {
+  opacity: 0.4; cursor: not-allowed; transform: none;
+}
+
+/* Cards (list tab) */
+.card-list { display: flex; flex-direction: column; gap: 10px; }
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px;
+  display: flex; align-items: center; gap: 14px;
+  cursor: pointer; transition: border-color 0.2s;
+}
+.card:active { border-color: var(--gold2); }
+.card-emoji { font-size: 2rem; }
+.card-info { flex: 1; }
+.card-label { font-weight: 700; font-size: 0.95rem; color: var(--gold-light); }
+.card-detail { font-size: 0.8rem; color: var(--text2); margin-top: 2px; }
+.card-meta { text-align: right; }
+.card-weight { font-size: 1.1rem; font-weight: 700; }
+.card-quality {
+  display: inline-block; padding: 2px 10px; border-radius: 10px;
+  font-size: 0.75rem; font-weight: 700; margin-top: 4px;
+}
+.q-good { background: rgba(106,158,90,0.2); color: var(--green); }
+.q-ok { background: rgba(200,164,90,0.15); color: var(--gold); }
+.q-bad { background: rgba(200,80,80,0.15); color: var(--red); }
+
+/* Filter bar */
+.filter-bar {
+  display: flex; gap: 8px; margin-bottom: 14px; align-items: center;
+}
+.filter-bar .input { flex: 1; }
+.filter-chip {
+  min-height: 44px; padding: 8px 16px;
+  background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: 20px; color: var(--text2);
+  cursor: pointer; white-space: nowrap;
+  font-size: 0.85rem; -webkit-user-select: none; user-select: none;
+  transition: all 0.15s;
+}
+.filter-chip.active {
+  border-color: var(--gold); color: var(--gold-light);
+  background: rgba(200,164,90,0.1);
+}
+
+/* Modal */
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7); z-index: 200;
+  align-items: center; justify-content: center; padding: 16px;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; width: 100%; max-width: 600px;
+  max-height: 90vh; overflow-y: auto;
+}
+.modal-head {
+  padding: 16px; border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.modal-head h3 { font-size: 1rem; color: var(--gold); }
+.modal-close {
+  width: 40px; height: 40px; background: var(--surface2);
+  border: 1px solid var(--border2); border-radius: 50%;
+  color: var(--text2); font-size: 1.2rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-body { padding: 16px; }
+.detail-row {
+  display: flex; justify-content: space-between;
+  padding: 8px 0; border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.detail-row .dl { color: var(--text2); }
+.detail-row .dv { font-weight: 500; }
+
+/* Print labels */
+.print-labels { display: flex; flex-direction: column; gap: 16px; }
+.label-card {
+  background: #fff; color: #000; border-radius: 6px;
+  padding: 14px; font-size: 0.85rem;
+}
+.label-card h4 {
+  font-size: 0.75rem; text-transform: uppercase;
+  border-bottom: 2px solid #000; padding-bottom: 4px;
+  margin-bottom: 8px; letter-spacing: 1px;
+}
+.label-row { display: flex; justify-content: space-between; margin: 3px 0; }
+.label-row .lk { font-weight: 400; color: #555; }
+.label-row .lv { font-weight: 700; }
+.label-code { font-size: 1.3rem; font-weight: 700; text-align: center; margin: 6px 0; letter-spacing: 2px; }
+.print-btn {
+  width: 100%; padding: 14px; margin-top: 8px;
+  background: var(--blue); color: #fff; border: none;
+  border-radius: var(--radius); font-size: 1rem; font-weight: 700;
+  cursor: pointer; min-height: 50px;
+}
+.new-btn {
+  width: 100%; padding: 14px; margin-top: 8px;
+  background: var(--surface2); color: var(--text);
+  border: 1px solid var(--border2); border-radius: var(--radius);
+  font-size: 1rem; font-weight: 500; cursor: pointer; min-height: 50px;
+}
+
+/* Elapsed time display */
+.elapsed { font-size: 0.85rem; margin-top: 6px; font-weight: 500; }
+.elapsed.ok { color: var(--green); }
+.elapsed.warn { color: var(--gold); }
+.elapsed.danger { color: var(--red); }
+
+/* Print styles */
+@media print {
+  body { background: #fff !important; color: #000 !important; }
+  .header, .tabs, .tab-panel, .modal-head, .print-btn,
+  .new-btn, .modal-close { display: none !important; }
+  .modal-overlay { position: static !important; background: none !important; display: block !important; }
+  .modal { max-height: none; border: none; background: #fff; }
+  .modal-body { padding: 0; }
+  .print-labels { gap: 24px; }
+  .label-card {
+    border: 2px solid #000; page-break-inside: avoid;
+    margin-bottom: 10mm;
+  }
+}
+
+/* Animations */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.section { animation: fadeIn 0.3s ease; }
 </style>
 </head>
 <body>
 
-<!-- HEADER -->
-<div class="header no-print">
-  <div>
-    <div class="header-title">🦌 TATEYAMA GIBIER</div>
-    <div class="header-sub">捕獲票・搬入記録システム</div>
+<div class="header">
+  <div class="header-title">
+    <span>館山ジビエセンター</span>
   </div>
-  <div class="header-ids">
-    <div class="id-badge" id="displaySerial">通し番号: ---</div><br>
-    <div style="font-size:11px;color:var(--text2)" id="displayIndividual">個体番号: ---</div>
-    <div><span id="bpacHeaderBadge" class="bpac-badge bpac-badge-wait">🖨️ b-PAC確認中</span></div>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <span class="offline-badge" id="offlineBadge">オフライン</span>
+    <span class="offline-badge" id="pendingBadge" style="background:var(--gold2)"></span>
+    <div class="header-badge">今日の搬入: <strong id="todayCount">-</strong>頭</div>
   </div>
 </div>
 
-<!-- TABS -->
-<div class="tabs no-print">
-  <div class="tab active" onclick="showTab('form')">📋 捕獲票入力</div>
-  <div class="tab" onclick="showTab('print')">🖨️ 印刷・ラベル</div>
-  <div class="tab" onclick="showTab('history')">📊 搬入一覧</div>
-  <div class="tab admin-only" onclick="showTab('hunters');loadHunters()">👤 捕獲者台帳</div>
+<div class="tabs">
+  <div class="tab active" data-tab="form">&#x1F4DD; 捕獲票入力</div>
+  <div class="tab" data-tab="list">&#x1F4CB; 搬入一覧</div>
 </div>
 
-<!-- ===================== FORM TAB ===================== -->
-<div class="panel active" id="tab-form">
-  <div class="main">
-    <div id="successScreen" class="success-screen">
-      <div class="success-icon">✅</div>
-      <div class="success-title">登録完了</div>
-      <div class="success-ids" id="successIds"></div>
-      <div style="display:flex;gap:10px;flex-direction:column">
-        <button class="btn btn-green" onclick="goToPrint()">🖨️ 印刷・ラベル発行へ</button>
-        <button class="btn btn-secondary" onclick="resetForm()">➕ 次の個体を登録</button>
+<!-- FORM TAB -->
+<div class="tab-panel active" id="panel-form">
+
+  <!-- 基本情報 -->
+  <div class="section">
+    <div class="section-head">基本情報</div>
+    <div class="section-body">
+      <div class="form-row">
+        <label class="form-label">種別</label>
+        <div class="toggle-group" data-field="species" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="toggle-btn" data-val="イノシシ" style="text-align:center;">&#x1F417; イノシシ</div>
+          <div class="toggle-btn" data-val="シカ" style="text-align:center;">&#x1F98C; シカ</div>
+          <div class="toggle-btn" data-val="アライグマ" style="text-align:center;">アライグマ</div>
+          <div class="toggle-btn" data-val="ハクビシン" style="text-align:center;">ハクビシン</div>
+          <div class="toggle-btn" data-val="キョン" style="text-align:center;">キョン</div>
+          <div class="toggle-btn" data-val="タヌキ" style="text-align:center;">タヌキ</div>
+          <div class="toggle-btn" data-val="ノウサギ" style="text-align:center;grid-column:span 2;">ノウサギ</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>個体番号</span>
+          <button type="button" onclick="openSerialSettings()" style="background:none;border:1px solid var(--gold2);color:var(--gold2);border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;">⚙ 開始番号設定</button>
+        </label>
+        <div style="display:flex;gap:8px;align-items:flex-end;">
+          <div style="flex:0 0 90px;">
+            <div style="font-size:11px;color:var(--text2);margin-bottom:3px;">通し番号</div>
+            <input type="number" class="input" id="indSerial" min="1" step="1" inputmode="numeric" placeholder="001" style="text-align:center;" oninput="syncLabelId()">
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:11px;color:var(--text2);margin-bottom:3px;">個体管理番号</div>
+            <input type="text" class="input" id="indLabelId" placeholder="種別・市町村を選択" readonly style="background:var(--bg2);color:var(--gold);">
+          </div>
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">性別</label>
+        <div class="toggle-group" data-field="sex">
+          <div class="toggle-btn" data-val="オス">オス</div>
+          <div class="toggle-btn" data-val="メス">メス</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">体重 (kg)</label>
+        <input type="number" class="input" id="weight" placeholder="0.0" step="0.1" min="0" inputmode="decimal">
+      </div>
+      <div class="form-row">
+        <label class="form-label">推定年齢 (歳)</label>
+        <input type="number" class="input" id="age" placeholder="0" step="1" min="0" inputmode="numeric">
       </div>
     </div>
-    <div id="formBody">
-      <!-- 基本情報 -->
-      <div class="section">
-        <div class="section-header">📌 基本情報</div>
-        <div class="section-body">
-          <div class="field-row">
-            <div class="field">
-              <label>種類 <span class="req">*</span></label>
-              <div class="toggle-group">
-                <div class="toggle-btn selected" onclick="selectToggle(this,'species','イノシシ')">🐗 イノシシ</div>
-                <div class="toggle-btn" onclick="selectToggle(this,'species','シカ')">🦌 シカ</div>
-                <div class="toggle-btn" onclick="selectToggle(this,'species','キョン')">🦌 キョン</div>
-                <div class="toggle-btn" onclick="selectToggle(this,'species','アライグマ')">🦝 アライグマ</div>
-                <div class="toggle-btn" onclick="selectToggle(this,'species','ハクビシン')">🐾 ハクビシン</div>
-                <div class="toggle-btn" onclick="selectToggle(this,'species','タヌキ')">🦡 タヌキ</div>
-                <div class="toggle-btn" onclick="selectToggle(this,'species','ウサギ')">🐇 ウサギ</div>
-              </div>
-              <input type="hidden" id="species" value="イノシシ">
-            </div>
-            <div class="field">
-              <label>性別 <span class="req">*</span></label>
-              <div class="toggle-group">
-                <div class="toggle-btn" onclick="selectToggle(this,'gender','オス')">♂ オス</div>
-                <div class="toggle-btn" onclick="selectToggle(this,'gender','メス')">♀ メス</div>
-              </div>
-              <input type="hidden" id="gender" value="">
-            </div>
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label>推定年齢</label>
-              <input type="number" id="age" placeholder="歳" min="0" max="20">
-            </div>
-            <div class="field">
-              <label>体重 (kg) <span class="req">*</span></label>
-              <input type="number" id="weight" placeholder="0.0" step="0.1" min="0">
-            </div>
-          </div>
+  </div>
+
+  <!-- 捕獲情報 -->
+  <div class="section">
+    <div class="section-head">捕獲情報</div>
+    <div class="section-body">
+      <div class="form-row" style="display:flex;gap:10px;">
+        <div style="flex:1;">
+          <label class="form-label">捕獲日</label>
+          <input type="date" class="input" id="captureDate">
+        </div>
+        <div style="flex:1;">
+          <label class="form-label">捕獲時刻</label>
+          <input type="time" class="input" id="captureTime">
         </div>
       </div>
-
-      <!-- 捕獲情報 -->
-      <div class="section">
-        <div class="section-header">🗺️ 捕獲情報</div>
-        <div class="section-body">
-          <div class="field-row">
-            <div class="field">
-              <label>捕獲日 <span class="req">*</span></label>
-              <input type="date" id="captureDate">
-            </div>
-            <div class="field">
-              <label>捕獲時刻 <span class="req">*</span></label>
-              <input type="time" id="captureTime">
-            </div>
-          </div>
-          <div class="field">
-            <label>天候</label>
-            <div class="toggle-group">
-              <div class="toggle-btn" onclick="selectToggle(this,'weather','晴れ')">☀️ 晴れ</div>
-              <div class="toggle-btn" onclick="selectToggle(this,'weather','曇り')">⛅ 曇り</div>
-              <div class="toggle-btn" onclick="selectToggle(this,'weather','雨')">🌧️ 雨</div>
-              <div class="toggle-btn" onclick="selectToggle(this,'weather','その他')">その他</div>
-            </div>
-            <input type="hidden" id="weather" value="">
-          </div>
-          <div class="field">
-            <label>捕獲場所 <span class="req">*</span></label>
-            <div style="display:flex;gap:8px;margin-bottom:8px">
-              <div class="toggle-btn selected-alt" id="cityBtn-tateyama" onclick="selectCity('館山市')">館山市</div>
-              <div class="toggle-btn" id="cityBtn-minamiboso" onclick="selectCity('南房総市')">南房総市</div>
-            </div>
-            <input type="hidden" id="captureCity" value="館山市">
-            <select id="captureArea" onchange="updateCaptureLocation()">
-              <option value="">— 大字を選択 —</option>
-            </select>
-            <input type="hidden" id="captureLocation" value="">
-          </div>
-          <div class="field">
-            <label>捕獲者氏名 <span class="req">*</span></label>
-            <input type="text" id="hunter" placeholder="例：山田太郎" list="hunterList" autocomplete="off">
-            <datalist id="hunterList"></datalist>
-          </div>
-          <div class="field">
-            <label>捕獲方法</label>
-            <div class="toggle-group">
-              <div class="toggle-btn" onclick="selectToggle(this,'captureMethod','銃')">🔫 銃</div>
-              <div class="toggle-btn" onclick="selectToggle(this,'captureMethod','はこわな')">📦 はこわな</div>
-              <div class="toggle-btn" onclick="selectToggle(this,'captureMethod','くくりわな')">🔗 くくりわな</div>
-              <div class="toggle-btn" onclick="selectToggle(this,'captureMethod','その他')">その他</div>
-            </div>
-            <input type="hidden" id="captureMethod" value="">
-          </div>
+      <div class="form-row">
+        <label class="form-label">天気</label>
+        <div class="toggle-group" data-field="weather">
+          <div class="toggle-btn" data-val="晴">&#x2600;&#xFE0F; 晴</div>
+          <div class="toggle-btn" data-val="曇">&#x2601;&#xFE0F; 曇</div>
+          <div class="toggle-btn" data-val="雨">&#x1F327;&#xFE0F; 雨</div>
+          <div class="toggle-btn" data-val="雪">&#x2744;&#xFE0F; 雪</div>
         </div>
       </div>
-
-      <!-- 止めさし・放血 -->
-      <div class="section">
-        <div class="section-header">🩸 止めさし・放血</div>
-        <div class="section-body">
-          <div class="field">
-            <label>止めさし</label>
-            <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-              <div class="toggle-btn" onclick="selectToggle(this,'finishingMethod','有_銃')">有（銃）</div>
-              <div class="toggle-btn" onclick="selectToggle(this,'finishingMethod','有_ナイフ')">有（ナイフ）</div>
-              <div class="toggle-btn" onclick="selectToggle(this,'finishingMethod','無')">無</div>
-            </div>
-            <input type="hidden" id="finishingMethod" value="">
-          </div>
-          <div class="field">
-            <label>被弾・止めさし部位</label>
-            <div class="toggle-group">
-              <div class="toggle-btn" onclick="selectToggle(this,'hitLocation','頭部')">頭部</div>
-              <div class="toggle-btn" onclick="selectToggle(this,'hitLocation','頸部')">頸部</div>
-              <div class="toggle-btn" onclick="selectToggle(this,'hitLocation','胸部(心臓)')">胸部(心臓)</div>
-              <div class="toggle-btn" onclick="selectToggle(this,'hitLocation','腹部')">腹部</div>
-              <div class="toggle-btn" onclick="selectToggle(this,'hitLocation','その他')">その他</div>
-            </div>
-            <input type="hidden" id="hitLocation" value="">
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label>放血時刻</label>
-              <input type="time" id="bleedTime" oninput="calcTimeGap()">
-            </div>
-            <div class="field">
-              <label>内臓摘出</label>
-              <div class="toggle-group" style="margin-top:8px">
-                <div class="toggle-btn" onclick="selectToggle(this,'gutting','有')">有</div>
-                <div class="toggle-btn selected" onclick="selectToggle(this,'gutting','無')">無</div>
-              </div>
-              <input type="hidden" id="gutting" value="無">
-            </div>
-          </div>
+      <div class="form-row">
+        <label class="form-label">捕獲市町村</label>
+        <div class="toggle-group" data-field="capture_city">
+          <div class="toggle-btn" data-val="館山市">館山市</div>
+          <div class="toggle-btn" data-val="南房総市">南房総市</div>
         </div>
       </div>
-
-      <!-- 搬入情報 -->
-      <div class="section">
-        <div class="section-header">🚚 搬入情報</div>
-        <div class="section-body">
-          <div class="field-row">
-            <div class="field">
-              <label>冷却方法</label>
-              <input type="text" id="cooling" placeholder="例：クーラーボックス">
-            </div>
-            <div class="field">
-              <label>運搬開始時刻</label>
-              <input type="time" id="transportStart" oninput="calcTimeGap()">
-            </div>
-          </div>
-          <div class="field">
-            <label>受入時刻 <span class="req">*</span></label>
-            <input type="time" id="receiveTime" oninput="calcTimeGap()">
-          </div>
-          <div id="timeAlert" class="alert"></div>
-          <div id="timeStatus" class="time-status" style="display:none">
-            <div>
-              <div style="font-size:10px;color:var(--text2)">放血→搬入</div>
-              <div class="time-elapsed" id="timeElapsed">-</div>
-            </div>
-            <div style="font-size:20px" id="timeIcon">⏱️</div>
-            <div style="font-size:12px" id="timeMsg"></div>
-          </div>
-          <div class="field" style="margin-top:14px">
-            <label>処理日時</label>
-            <input type="time" id="processTime">
-          </div>
-          <div class="field-row" style="margin-top:14px">
-            <div class="field">
-              <label>品質・鮮度</label>
-              <div class="toggle-group">
-                <div class="toggle-btn selected" onclick="selectToggle(this,'quality','良')">良</div>
-                <div class="toggle-btn" onclick="selectToggle(this,'quality','不良')">不良</div>
-              </div>
-              <input type="hidden" id="quality" value="良">
-            </div>
-            <div class="field">
-              <label>記録者</label>
-              <input type="text" id="recorder" value="沖" placeholder="例：沖">
-            </div>
-          </div>
+      <div class="form-row" id="oldTownRow" style="display:none">
+        <label class="form-label">旧町村</label>
+        <div class="select-wrap">
+          <select id="captureOldTown" class="input">
+            <option value="">-- 旧町村を選択 --</option>
+          </select>
         </div>
       </div>
-
-      <!-- 捕獲時の異常確認 -->
-      <div class="section">
-        <div class="section-header">⚠️ 捕獲時の異常確認</div>
-        <div class="section-body">
-          <div style="font-size:12px;color:var(--text2);margin-bottom:12px">
-            ※一つでも該当する場合は食用としないこと。通常は未チェックのままでOK。
-          </div>
-          <div id="anomalyAlert" class="alert alert-danger"></div>
-          <div class="check-list" id="captureAnomalyList"></div>
+      <div class="form-row">
+        <label class="form-label">捕獲地区 (大字)</label>
+        <div class="select-wrap">
+          <select id="captureArea" class="input">
+            <option value="">-- 市町村を選択 --</option>
+          </select>
         </div>
       </div>
-
-      <!-- 捕獲者の健康状態 -->
-      <div class="section">
-        <div class="section-header">👤 捕獲者の健康状態</div>
-        <div class="section-body">
-          <div class="field">
-            <label>健康状態</label>
-            <div class="toggle-group">
-              <div class="toggle-btn selected" onclick="toggleHunterHealth(false)">✅ 異常なし</div>
-              <div class="toggle-btn" onclick="toggleHunterHealth(true)">⚠️ 異常あり</div>
-            </div>
-            <input type="hidden" id="hunterHealthOk" value="true">
-          </div>
-          <div id="hunterHealthDetail" style="display:none;margin-top:10px">
-            <div class="check-list">
-              <label class="check-item" onclick="this.classList.toggle('checked')">
-                <input type="checkbox" name="hunterHealth" value="発熱">
-                <span class="check-label">発熱</span>
-              </label>
-              <label class="check-item" onclick="this.classList.toggle('checked')">
-                <input type="checkbox" name="hunterHealth" value="下痢">
-                <span class="check-label">下痢</span>
-              </label>
-              <label class="check-item" onclick="this.classList.toggle('checked')">
-                <input type="checkbox" name="hunterHealth" value="嘔吐">
-                <span class="check-label">嘔吐</span>
-              </label>
-              <label class="check-item" onclick="this.classList.toggle('checked')">
-                <input type="checkbox" name="hunterHealth" value="風邪症状">
-                <span class="check-label">風邪症状</span>
-              </label>
-            </div>
-          </div>
+      <div class="form-row">
+        <label class="form-label">捕獲者名</label>
+        <input type="text" class="input" id="hunterName" placeholder="氏名">
+      </div>
+      <div class="form-row">
+        <label class="form-label">捕獲方法</label>
+        <div class="toggle-group" data-field="capture_method">
+          <div class="toggle-btn" data-val="わな">わな</div>
+          <div class="toggle-btn" data-val="銃猟">銃猟</div>
+          <div class="toggle-btn" data-val="その他">その他</div>
         </div>
       </div>
-
-      <!-- 内臓異常 -->
-      <div class="section" id="organSection" style="display:none">
-        <div class="section-header">🫀 内臓摘出後の異常確認</div>
-        <div class="section-body">
-          <div class="check-list" id="organAnomalyList"></div>
+      <div class="form-row">
+        <label class="form-label">止めさし方法</label>
+        <div class="toggle-group" data-field="finishing_method">
+          <div class="toggle-btn" data-val="電気">電気</div>
+          <div class="toggle-btn" data-val="銃">銃</div>
+          <div class="toggle-btn" data-val="ナイフ">ナイフ</div>
+          <div class="toggle-btn" data-val="その他">その他</div>
         </div>
       </div>
-
-      <!-- 備考 -->
-      <div class="section">
-        <div class="section-header">📝 備考・メモ</div>
-        <div class="section-body">
-          <div class="field">
-            <label>胎児の有無</label>
-            <div class="toggle-group">
-              <div class="toggle-btn selected" onclick="selectToggle(this,'fetus','無');document.getElementById('fetusCountArea').style.display='none'">無</div>
-              <div class="toggle-btn" onclick="selectToggle(this,'fetus','有');document.getElementById('fetusCountArea').style.display='block'">有</div>
-            </div>
-            <input type="hidden" id="fetus" value="無">
-            <div id="fetusCountArea" style="display:none;margin-top:10px;padding:10px;background:#fef9f0;border-radius:8px;border:1px solid #f0c060">
-              <div style="margin-bottom:8px;font-size:13px;font-weight:600;color:#664400">胎児情報</div>
-              <div style="display:flex;gap:12px;flex-wrap:wrap">
-                <div><label style="font-size:12px;display:block;margin-bottom:3px">総頭数 <span style="color:red">*</span></label><input type="number" id="fetusCount" min="1" max="20" style="width:80px;padding:6px;border:1px solid #ccc;border-radius:6px" placeholder="頭"></div>
-                <div><label style="font-size:12px;display:block;margin-bottom:3px">うちオス（任意）</label><input type="number" id="fetusMale" min="0" max="20" style="width:80px;padding:6px;border:1px solid #ccc;border-radius:6px" placeholder="頭"></div>
-                <div><label style="font-size:12px;display:block;margin-bottom:3px">うちメス（任意）</label><input type="number" id="fetusFemale" min="0" max="20" style="width:80px;padding:6px;border:1px solid #ccc;border-radius:6px" placeholder="頭"></div>
-              </div>
-            </div>
-          </div>
-          <div class="field">
-            <label>その他メモ</label>
-            <textarea id="memo" placeholder="廃棄理由、特記事項など..."></textarea>
-          </div>
-        </div>
-      </div>
-
-      <!-- 処理方法 -->
-      <div class="section">
-        <div class="section-header">⚙️ 処理方法</div>
-        <div class="section-body">
-          <div class="processing-selector">
-            <div class="proc-card selected" id="proc-wakari" onclick="selectProc('分割')">
-              <div class="proc-card-icon">✂️</div>
-              <div class="proc-card-title">分割して送る</div>
-              <div class="proc-card-desc">お客様への出荷用<br>部位ごとに分割処理</div>
-            </div>
-            <div class="proc-card" id="proc-seiwari" onclick="selectProc('背割り熟成')">
-              <div class="proc-card-icon">🧊</div>
-              <div class="proc-card-title">背割り熟成</div>
-              <div class="proc-card-desc">センター保管用<br>枝肉で熟成管理</div>
-            </div>
-          </div>
-          <input type="hidden" id="processingType" value="分割">
-        </div>
-      </div>
-
-      <button class="btn btn-primary" onclick="submitForm()" style="margin-bottom:30px">
-        ✅ 登録してラベル発行へ
-      </button>
-    </div><!-- /formBody -->
-  </div><!-- /main -->
-</div><!-- /form tab -->
-
-<!-- ===================== PRINT TAB ===================== -->
-<div class="panel" id="tab-print">
-  <div class="main">
-    <!-- ラベル印刷セクション -->
-    <div class="section">
-      <div class="section-header">🏷️ 個体識別ラベル（3枚）</div>
-      <div class="section-body">
-        <div id="labelPreview">
-          <div style="color:var(--text2);font-size:13px;text-align:center;padding:20px">
-            捕獲票を登録するとラベルプレビューが表示されます
-          </div>
-        </div>
-        <div class="btn-row">
-          <button class="btn btn-primary" onclick="printLabels()">🖨️ ラベル3枚印刷</button>
-          <button class="btn btn-secondary" onclick="showA4Print()">📄 A4台帳印刷</button>
-        </div>
+      <div class="form-row">
+        <label class="form-label">被弾部位</label>
+        <input type="text" class="input" id="hitLocation" placeholder="部位を入力">
       </div>
     </div>
+  </div>
 
-    <!-- b-PAC プリンタ設定 -->
-    <div class="section">
-      <div class="section-header" style="cursor:pointer;user-select:none" onclick="toggleBpacSettings()">
-        🖨️ b-PACプリンタ設定
-        <span id="bpacSettingsToggle" style="float:right;font-size:10px;color:var(--text2)">▼ 展開</span>
-      </div>
-      <div class="section-body" id="bpacSettingsBody">
-        <!-- 接続状態 -->
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-          <span style="font-size:13px;color:var(--text2)">接続状態:</span>
-          <span id="bpacStatusBadge" class="bpac-badge bpac-badge-wait">確認中...</span>
-          <button class="btn btn-secondary" style="padding:6px 14px;font-size:12px;width:auto" onclick="checkBpacAndUpdate()">🔄 再確認</button>
+  <!-- 搬入・処理情報 -->
+  <div class="section">
+    <div class="section-head">搬入・処理情報</div>
+    <div class="section-body">
+      <div class="form-row" style="display:flex;gap:10px;">
+        <div style="flex:1;">
+          <label class="form-label">放血開始</label>
+          <input type="time" class="input time-track" id="bleedTime">
         </div>
-        <!-- テンプレートパス設定 -->
-        <div class="field">
-          <label>テンプレートファイルパス (.lbx)</label>
-          <input type="text" id="bpacTemplatePath" placeholder="例: C:\TGC_Labels\individual_label.lbx" style="font-family:monospace;font-size:13px">
-        </div>
-        <div class="btn-row" style="margin-top:10px">
-          <button class="btn btn-secondary" onclick="saveBpacPath()">💾 パスを保存</button>
-          <button class="btn btn-blue" onclick="testBpacConnect()">🧪 接続テスト</button>
-        </div>
-        <!-- オブジェクト名ガイド -->
-        <div class="bpac-settings" style="margin-top:14px">
-          <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px">
-            ���� P-touch Editor — 必要なオブジェクト名
-          </div>
-          <div class="bpac-obj-table">
-            <code>ObjTitle</code> 館山ジビエセンター（固定テキスト）<br>
-            <code>ObjLabelType</code> 本体管理 / 放射能検査用 / 背割り管理<br>
-            <code>ObjId</code> 個体番号（テキスト）<br>
-            <code>ObjBarcode</code> バーコードオブジェクト（Code128推奨）<br>
-            <code>ObjSpecies</code> 種類・性別<br>
-            <code>ObjLocation</code> 捕獲場所<br>
-            <code>ObjHunter</code> 捕獲者名<br>
-            <code>ObjWeight</code> 体重（kg）<br>
-            <code>ObjDate</code> 捕獲日時<br>
-            <code>ObjProcess</code> 処理方法
-          </div>
-          <div style="margin-top:10px;font-size:11px;color:var(--text2);line-height:1.7">
-            ⚙️ 事前準備: ①Brother b-PAC SDK for Windowsをインストール
-            ②Chrome用 Brother b-PAC ExtensionをChromeウェブストアから追加
-            ③P-touch Editorでテンプレート作成・保存
-          </div>
+        <div style="flex:1;">
+          <label class="form-label">受入時刻</label>
+          <input type="time" class="input time-track" id="receiveTime">
         </div>
       </div>
-    </div>
-
-    <!-- 最近の登録 -->
-    <div class="section">
-      <div class="section-header">📋 最近の登録一覧</div>
-      <div class="section-body" id="recentList">
-        <div style="color:var(--text2);font-size:13px;text-align:center;padding:20px">
-          登録済みデータを読み込んでいます...
+      <div id="elapsedDisplay" class="elapsed" style="display:none;"></div>
+      <div id="elapsedAlert" class="alert alert-danger"></div>
+      <div class="form-row" style="display:flex;gap:10px;margin-top:16px;">
+        <div style="flex:1;">
+          <label class="form-label">搬送開始</label>
+          <input type="time" class="input" id="transportStart">
+        </div>
+        <div style="flex:1;">
+          <label class="form-label">処理時刻</label>
+          <input type="time" class="input" id="processTime">
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">冷却方法</label>
+        <div class="toggle-group" data-field="cooling_method">
+          <div class="toggle-btn" data-val="氷">氷</div>
+          <div class="toggle-btn" data-val="冷蔵庫">冷蔵庫</div>
+          <div class="toggle-btn" data-val="その他">その他</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">内臓摘出</label>
+        <div class="toggle-group" data-field="gutting">
+          <div class="toggle-btn" data-val="あり">あり</div>
+          <div class="toggle-btn" data-val="なし" >なし</div>
         </div>
       </div>
     </div>
   </div>
-</div>
 
-<!-- ===================== HISTORY TAB ===================== -->
-<div class="panel" id="tab-history">
-  <div class="main">
-    <div class="section">
-      <div class="section-header">📊 搬入記録一覧</div>
-      <div class="section-body">
-        <div style="display:flex;gap:8px;margin-bottom:14px">
-          <input type="text" id="searchQuery" placeholder="個体番号・捕獲者で検索..." style="flex:1" oninput="loadHistory()">
-          <button class="btn btn-secondary" style="flex:none;padding:10px 14px" onclick="loadHistory()">🔍</button>
-        </div>
-        <div id="historyList">
-          <div style="color:var(--text2);font-size:13px;text-align:center;padding:20px">読み込み中...</div>
+  <!-- 異常チェック -->
+  <div class="section">
+    <div class="section-head">異常チェック（捕獲時）</div>
+    <div class="section-body">
+      <div class="check-grid" id="captureAnomalies">
+        <div class="check-item" data-idx="0"><div class="check-box"></div><span class="check-text">やせている</span></div>
+        <div class="check-item" data-idx="1"><div class="check-box"></div><span class="check-text">脱毛が見られる</span></div>
+        <div class="check-item" data-idx="2"><div class="check-box"></div><span class="check-text">ただれが見られる</span></div>
+        <div class="check-item" data-idx="3"><div class="check-box"></div><span class="check-text">腫れが見られる</span></div>
+        <div class="check-item" data-idx="4"><div class="check-box"></div><span class="check-text">外傷が見られる</span></div>
+        <div class="check-item" data-idx="5"><div class="check-box"></div><span class="check-text">異常な体液が出ている</span></div>
+        <div class="check-item" data-idx="6"><div class="check-box"></div><span class="check-text">異臭がする</span></div>
+        <div class="check-item" data-idx="7"><div class="check-box"></div><span class="check-text">異常な行動をしていた</span></div>
+        <div class="check-item" data-idx="8"><div class="check-box"></div><span class="check-text">体温異常（高すぎる・低すぎる）</span></div>
+        <div class="check-item" data-idx="9"><div class="check-box"></div><span class="check-text">肉眼で確認できる寄生虫</span></div>
+        <div class="check-item" data-idx="10"><div class="check-box"></div><span class="check-text">その他</span></div>
+      </div>
+      <div id="captureAnomalyAlert" class="alert alert-danger">&#x26A0; 食用不可の可能性があります</div>
+    </div>
+  </div>
+
+  <!-- 捕獲者健康状態 -->
+  <div class="section">
+    <div class="section-head">捕獲者の健康状態</div>
+    <div class="section-body">
+      <div class="form-row">
+        <div class="toggle-group" data-field="hunter_health">
+          <div class="toggle-btn" data-val="良好">良好</div>
+          <div class="toggle-btn" data-val="異常あり">異常あり</div>
         </div>
       </div>
+      <div class="form-row" id="healthIssueRow" style="display:none;margin-top:12px;">
+        <label class="form-label">異常内容</label>
+        <input type="text" class="input" id="healthIssues" placeholder="症状を入力">
+      </div>
+    </div>
+  </div>
+
+  <!-- 内臓情報 (conditional) -->
+  <div class="section" id="organSection" style="display:none;">
+    <div class="section-head">内臓異常チェック</div>
+    <div class="section-body">
+      <div class="check-grid" id="organAnomalies">
+        <div class="check-item" data-idx="0"><div class="check-box"></div><span class="check-text">肝臓の色・形態異常</span></div>
+        <div class="check-item" data-idx="1"><div class="check-box"></div><span class="check-text">肺の色・形態異常</span></div>
+        <div class="check-item" data-idx="2"><div class="check-box"></div><span class="check-text">心臓の色・形態異常</span></div>
+        <div class="check-item" data-idx="3"><div class="check-box"></div><span class="check-text">腎臓の色・形態異常</span></div>
+        <div class="check-item" data-idx="4"><div class="check-box"></div><span class="check-text">脾臓の色・形態異常</span></div>
+        <div class="check-item" data-idx="5"><div class="check-box"></div><span class="check-text">胃腸の異常</span></div>
+        <div class="check-item" data-idx="6"><div class="check-box"></div><span class="check-text">膀胱の異常</span></div>
+        <div class="check-item" data-idx="7"><div class="check-box"></div><span class="check-text">子宮の異常</span></div>
+        <div class="check-item" data-idx="8"><div class="check-box"></div><span class="check-text">寄生虫の確認</span></div>
+        <div class="check-item" data-idx="9"><div class="check-box"></div><span class="check-text">膿瘍</span></div>
+        <div class="check-item" data-idx="10"><div class="check-box"></div><span class="check-text">出血斑</span></div>
+        <div class="check-item" data-idx="11"><div class="check-box"></div><span class="check-text">異臭</span></div>
+        <div class="check-item" data-idx="12"><div class="check-box"></div><span class="check-text">癒着</span></div>
+        <div class="check-item" data-idx="13"><div class="check-box"></div><span class="check-text">その他</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- その他 -->
+  <div class="section">
+    <div class="section-head">その他</div>
+    <div class="section-body">
+      <div class="form-row">
+        <label class="form-label">胎児の有無</label>
+        <div class="toggle-group" data-field="has_fetus">
+          <div class="toggle-btn" data-val="なし">なし</div>
+          <div class="toggle-btn" data-val="あり">あり</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">処理区分</label>
+        <div class="toggle-group" data-field="processing_type">
+          <div class="toggle-btn active" data-val="分割">分割</div>
+          <div class="toggle-btn" data-val="背割り熟成">背割り熟成</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">品質判定</label>
+        <div class="toggle-group" data-field="quality">
+          <div class="toggle-btn active" data-val="良">良</div>
+          <div class="toggle-btn" data-val="可">可</div>
+          <div class="toggle-btn" data-val="食用不可">食用不可</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">記録者名</label>
+        <input type="text" class="input" id="recorder" placeholder="記録者">
+      </div>
+      <div class="form-row">
+        <label class="form-label">メモ</label>
+        <textarea id="memo" placeholder="備考があれば入力"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <button class="submit-btn" id="submitBtn" onclick="handleSubmit()">登録する</button>
+</div>
+
+<!-- LIST TAB -->
+<div class="tab-panel" id="panel-list">
+  <div class="filter-bar">
+    <div class="filter-chip active" data-species="">全て</div>
+    <div class="filter-chip" data-species="イノシシ">&#x1F417; イノシシ</div>
+    <div class="filter-chip" data-species="シカ">&#x1F98C; シカ</div>
+    <div class="filter-chip" data-species="アライグマ">アライグマ</div>
+    <div class="filter-chip" data-species="ハクビシン">ハクビシン</div>
+    <div class="filter-chip" data-species="キョン">キョン</div>
+    <div class="filter-chip" data-species="タヌキ">タヌキ</div>
+    <div class="filter-chip" data-species="ノウサギ">ノウサギ</div>
+  </div>
+  <div class="card-list" id="cardList"></div>
+  <div id="listEmpty" style="text-align:center;padding:40px;color:var(--text3);display:none;">
+    本日の搬入データはありません
+  </div>
+</div>
+
+<!-- Print Modal -->
+<div class="modal-overlay" id="printModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>登録完了 - ラベル印刷</h3>
+      <div class="modal-close" onclick="closePrintModal()">&times;</div>
+    </div>
+    <div class="modal-body">
+      <div class="print-labels" id="printLabels"></div>
+      <button class="print-btn" onclick="window.print()">&#x1F5A8;&#xFE0F; ラベルを印刷</button>
+      <button class="new-btn" onclick="closePrintModal();resetForm();">新規入力に戻る</button>
     </div>
   </div>
 </div>
 
-<!-- A4 PRINT PAGE -->
-<div id="printArea" style="display:none"></div>
+<!-- Detail Modal -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="detailTitle">詳細</h3>
+      <div class="modal-close" onclick="closeDetailModal()">&times;</div>
+    </div>
+    <div class="modal-body" id="detailBody"></div>
+  </div>
+</div>
 
 <script>
-// ===== SUPABASE CONFIG =====
-const SUPABASE_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+/* ── Supabase helper ── */
+const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
 
-async function supabase(method, table, body, query='') {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
+async function sb(method, table, body, query = '') {
+  const res = await fetch(`${SB_URL}/rest/v1/${table}${query}`, {
     method,
     headers: {
-      'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'apikey': SB_KEY,
+      'Authorization': `Bearer ${SB_KEY}`,
       'Content-Type': 'application/json',
-      'Prefer': method === 'POST' ? 'return=representation' : ''
+      'Prefer': method === 'POST' ? 'return=representation' : (method === 'PATCH' ? 'return=representation' : '')
     },
     body: body ? JSON.stringify(body) : undefined
   });
   if (!res.ok) throw new Error(await res.text());
-  return method === 'DELETE' ? null : res.json();
+  const t = await res.text();
+  return t ? JSON.parse(t) : [];
 }
 
-// ===== b-PAC 設定・ヘルパー =====
-const BPAC_CONFIG = {
-  get templateIndividual() {
-    return localStorage.getItem('bpac_tmpl_individual') || 'C:\\TGC_Labels\\individual_label.lbx';
-  },
-  set templateIndividual(v) { localStorage.setItem('bpac_tmpl_individual', v); }
-};
-
-async function isBpacAvailable() {
-  try { return typeof bpac !== 'undefined'; } catch(e) { return false; }
+/* ── Individual numbering ── */
+function getIndividualPrefix(species, city) {
+  if (species === 'イノシシ') return city === '南房総市' ? 'M' : 'T';
+  if (species === 'シカ')     return city === '南房総市' ? 'Mシ' : 'Tシ';
+  if (species === 'アライグマ') return 'ア';
+  if (species === 'ハクビシン') return 'ハ';
+  if (species === 'キョン')    return 'キ';
+  if (species === 'タヌキ')    return 'タ';
+  if (species === 'ノウサギ')  return 'ウ';
+  return null;
 }
 
-function setObjSafe(doc, name, value) {
-  try { const o = doc.GetObject(name); if(o) o.Text = String(value); } catch(e) {}
+// 通し番号キー（イノシシは館山・南房総で共通）
+function getSerialKey(species) {
+  if (species === 'イノシシ') return 'tgc_next_serial_イノシシ';
+  const prefix = getIndividualPrefix(species, state.capture_city);
+  return prefix ? `tgc_next_serial_${prefix}` : null;
 }
 
-function showToast(msg, bg) {
-  bg = bg || 'var(--green)';
-  const t = document.createElement('div');
-  t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:' + bg + ';color:#fff;padding:12px 24px;border-radius:8px;font-weight:700;z-index:9999;font-size:15px;box-shadow:0 4px 20px rgba(0,0,0,0.4);';
-  t.textContent = msg;
-  document.body.appendChild(t);
-  setTimeout(function(){ t.remove(); }, 3000);
+// 個体管理番号キー（イノシシはT/Mで独立カウント）
+function getLabelKey(species, city) {
+  const prefix = getIndividualPrefix(species, city);
+  if (!prefix) return null;
+  if (species === 'イノシシ') return `tgc_next_label_${prefix}`;
+  return `tgc_next_serial_${prefix}`; // 他種は通し番号=管理番号
 }
 
-async function checkBpacAndUpdate() {
-  const available = await isBpacAvailable();
-  const ids = ['bpacHeaderBadge', 'bpacStatusBadge'];
-  ids.forEach(function(id) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.className = 'bpac-badge ' + (available ? 'bpac-badge-ok' : 'bpac-badge-ng');
-    el.textContent = available ? '✅ b-PAC 接続済' : '❌ b-PAC 未接続';
-  });
-  return available;
-}
-
-function saveBpacPath() {
-  const path = document.getElementById('bpacTemplatePath').value.trim();
-  if (!path) { alert('パスを入力してください'); return; }
-  BPAC_CONFIG.templateIndividual = path;
-  showToast('✅ テンプレートパスを保存しました');
-}
-
-async function testBpacConnect() {
-  const available = await checkBpacAndUpdate();
-  if (!available) {
-    alert('b-PACが利用できません。\n\n確認事項:\n① Brother b-PAC SDK for Windows をインストール\n② Chrome用 Brother b-PAC Extension を追加・有効化\n③ ページを再読み込みしてから再試行\n\n※EdgeのExtensionはEdge専用を使用してください。');
+async function refreshIndividualNumber() {
+  const species = state.species;
+  const city = state.capture_city;
+  if (!species) return;
+  if ((species === 'イノシシ' || species === 'シカ') && !city) {
+    document.getElementById('indLabelId').placeholder = '市町村を選択してください';
+    document.getElementById('indSerial').value = '';
     return;
   }
-  const path = BPAC_CONFIG.templateIndividual;
-  const objDoc = bpac.IDocument;
-  try {
-    const opened = await objDoc.Open(path, false);
-    if (opened) {
-      objDoc.Close();
-      showToast('✅ テンプレート接続OK！印刷の準備ができています。');
-    } else {
-      alert('テンプレートを開けませんでした。\nパス: ' + path + '\n\nP-touch Editorでテンプレートを作成し、指定パスに保存してください。');
+  const prefix = getIndividualPrefix(species, city);
+  if (!prefix) return;
+
+  // ── 通し番号を取得 ──
+  let nextSerial;
+  if (species === 'イノシシ') {
+    const lsKey = 'tgc_next_serial_イノシシ';
+    nextSerial = parseInt(localStorage.getItem(lsKey) || '0');
+    if (!nextSerial || nextSerial < 1) {
+      try {
+        const rows = await sb('GET', 'individuals', null,
+          `?species=eq.イノシシ&select=serial_number&order=serial_number.desc&limit=1`);
+        nextSerial = rows.length > 0 ? (rows[0].serial_number || 0) + 1 : 1;
+      } catch(e) { nextSerial = 1; }
     }
-  } catch(err) {
-    alert('テンプレートテストエラー: ' + err.message);
-  }
-}
-
-function toggleBpacSettings() {
-  const body = document.getElementById('bpacSettingsBody');
-  const toggle = document.getElementById('bpacSettingsToggle');
-  if (body.style.display === 'none') {
-    body.style.display = 'block';
-    toggle.textContent = '▼ 閉じる';
   } else {
-    body.style.display = 'none';
-    toggle.textContent = '▶ 展開';
+    const lsKey = `tgc_next_serial_${prefix}`;
+    nextSerial = parseInt(localStorage.getItem(lsKey) || '0');
+    if (!nextSerial || nextSerial < 1) {
+      try {
+        const rows = await sb('GET', 'individuals', null,
+          `?label_id=like.TGC-08-${prefix}*&select=serial_number&order=serial_number.desc&limit=1`);
+        nextSerial = rows.length > 0 ? (rows[0].serial_number || 0) + 1 : 1;
+      } catch(e) { nextSerial = 1; }
+    }
   }
+
+  // ── 個体管理番号を取得 ──
+  let labelNum;
+  if (species === 'イノシシ') {
+    const lsLabelKey = `tgc_next_label_${prefix}`;
+    labelNum = parseInt(localStorage.getItem(lsLabelKey) || '0');
+    if (!labelNum || labelNum < 1) {
+      try {
+        const rows = await sb('GET', 'individuals', null,
+          `?label_id=like.TGC-08-${prefix}*&select=label_id&order=label_id.desc&limit=1`);
+        if (rows.length > 0) {
+          const numStr = rows[0].label_id.replace(`TGC-08-${prefix}`, '');
+          const n = parseInt(numStr);
+          labelNum = isNaN(n) ? 1 : n + 1;
+        } else { labelNum = 1; }
+      } catch(e) { labelNum = 1; }
+    }
+  } else {
+    labelNum = nextSerial;
+  }
+
+  document.getElementById('indSerial').value = nextSerial;
+  document.getElementById('indLabelId').value = `TGC-08-${prefix}${String(labelNum).padStart(3, '0')}`;
+  // 管理番号番を一時保持（保存時に使用）
+  document.getElementById('indLabelId').dataset.labelNum = labelNum;
 }
 
-// ===== AREA DATA =====
+function syncLabelId() {
+  const species = state.species;
+  const city = state.capture_city;
+  if (!species) return;
+  const prefix = getIndividualPrefix(species, city);
+  if (!prefix) return;
+  const serial = parseInt(document.getElementById('indSerial').value) || 1;
+  // イノシシは通し番号と管理番号が独立→通し番号変更では管理番号を変えない
+  if (species === 'イノシシ') return;
+  document.getElementById('indLabelId').value = `TGC-08-${prefix}${String(serial).padStart(3, '0')}`;
+  document.getElementById('indLabelId').dataset.labelNum = serial;
+}
+
+function openSerialSettings() {
+  const ALL_PREFIXES = [
+    {label:'イノシシ 通し番号（共通）', key:'tgc_next_serial_イノシシ', example:'serial_number 共通'},
+    {label:'イノシシ 管理番号（館山市）', key:'tgc_next_label_T', example:'TGC-08-T###'},
+    {label:'イノシシ 管理番号（南房総市）', key:'tgc_next_label_M', example:'TGC-08-M###'},
+    {label:'シカ（館山市）', key:'tgc_next_serial_Tシ', example:'TGC-08-Tシ###'},
+    {label:'シカ（南房総市）', key:'tgc_next_serial_Mシ', example:'TGC-08-Mシ###'},
+    {label:'アライグマ', key:'tgc_next_serial_ア', example:'TGC-08-ア###'},
+    {label:'ハクビシン', key:'tgc_next_serial_ハ', example:'TGC-08-ハ###'},
+    {label:'キョン', key:'tgc_next_serial_キ', example:'TGC-08-キ###'},
+    {label:'タヌキ', key:'tgc_next_serial_タ', example:'TGC-08-タ###'},
+    {label:'ノウサギ', key:'tgc_next_serial_ウ', example:'TGC-08-ウ###'},
+  ];
+  const rows = ALL_PREFIXES.map(p => {
+    const cur = localStorage.getItem(p.key) || '';
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <span style="flex:1;font-size:13px;">${p.label}<br><span style="font-size:11px;color:var(--text2)">${p.example}</span></span>
+      <input type="number" min="1" step="1" value="${cur || ''}" placeholder="自動"
+        style="width:80px;padding:6px;border-radius:6px;border:1px solid var(--gold2);background:var(--bg2);color:var(--text1);text-align:center;"
+        data-lskey="${p.key}">
+    </div>`;
+  }).join('');
+
+  const overlay = document.createElement('div');
+  overlay.id = 'serialSettingsOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9000;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML = `
+    <div style="background:var(--bg2);border:1px solid var(--gold2);border-radius:12px;padding:20px;width:320px;max-height:80vh;overflow-y:auto;">
+      <div style="font-size:16px;font-weight:bold;color:var(--gold);margin-bottom:16px;">開始番号設定</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">空欄にするとDBから自動取得します。</div>
+      ${rows}
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <button onclick="saveSerialSettings()"
+          style="flex:1;padding:10px;border-radius:8px;background:var(--gold);color:#000;border:none;font-weight:bold;cursor:pointer;">保存</button>
+        <button onclick="document.getElementById('serialSettingsOverlay').remove()"
+          style="flex:1;padding:10px;border-radius:8px;background:var(--bg3);color:var(--text1);border:none;cursor:pointer;">閉じる</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function saveSerialSettings() {
+  const overlay = document.getElementById('serialSettingsOverlay');
+  if (!overlay) return;
+  overlay.querySelectorAll('input[data-lskey]').forEach(inp => {
+    const key = inp.dataset.lskey;
+    const val = inp.value.trim();
+    if (val) localStorage.setItem(key, val);
+    else localStorage.removeItem(key);
+  });
+  overlay.remove();
+  refreshIndividualNumber();
+}
+
+/* ── Area data ── */
 const AREAS = {
-  '館山市': ['坂井','茂名','宝貝','西川名','藤原','大神宮','中里','大網','神余','東長田','山本','山萩','宮下','佐野','竹原','古茂口','正木','小原','洲宮','布沼','出野尾','犬石','上真倉','沼','水岡','岡田','大井','南条','那古','北条','安東','市部','八幡','高井','九重','真倉','長須賀','稲','仁我浦','龍岡','笠名','豊房','見物','波左間','浜田','相浜','伊戸','富崎','原岡','船形','館山','北神余','矢田','膨大','上真倉','下真倉','安房田','芝崎'],
-  '南房総市': ['宮下','川谷','増間','石堂原','海老敷','山名','白浜町滝口','白浜町根本','大井','千倉町南朝夷','上滝田','増岡','珠師ヶ谷','丸山','和田','千倉','富浦','富山']
+  '館山市': ['相浜','安布里','安東','飯沼','出野尾','伊戸','稲','犬石','上野原','江田','大網','大井','大賀','大戸','岡田','加賀名','笠名','神余','上真倉','亀ケ原','川名','見物','香','国分','腰越','小沼','小原','古茂口','坂井','坂足','作名','佐野','塩見','下真倉','新宿','洲崎','洲宮','薗','高井','竹原','館山','大神宮','中里','長須賀','那古','南条','西川名','西長田','沼','波左間','畑','浜田','早物','坂田','東長田','広瀬','富士見','藤原','二子','船形','宝貝','北条','北条正木','正木','水岡','水玉','湊','宮城','布沼','布良','茂名','山本','山荻','八幡','竜岡']
+};
+const MINAMIBOSO = {
+  '旧富浦町': ['青木','居倉','大津','多田良','手取','豊岡','南無谷','丹生','原岡','深名','福澤','宮本'],
+  '旧三芳村': ['明石','池之内','海老敷','上滝田','上堀','大学口','川田','下滝田','下堀','千代','中','府中','三坂','御庄','山下','山名','谷向','本織','増間'],
+  '旧富山町': ['荒川','犬掛','井野','川上','久枝','検儀谷','小浦','合戸','市部','高崎','竹内','二部','平塚','平久里下','平久里中','宮谷','吉沢','山田'],
+  '旧丸山町': ['安馬谷','石神','石堂','石堂原','岩糸','大井','小戸','加茂','川谷','久保','沓見','古川','珠師ケ谷','白子','西原','前田','丸本郷','丸山平塚','御子神','峰','宮下'],
+  '旧千倉町': ['宇田','大川','大貫','川合','川口','川戸','北朝夷','久保','忽戸','白子','白間津','瀬戸','千田','平磯','平舘','牧田','南朝夷'],
+  '旧白浜町': ['乙浜','白浜','滝口','根本'],
+  '旧和田町': ['石堂','小川','海発','上三原','黒岩','小向','五十蔵','柴','下三原','白渚','磑森','中三原','沼','仁我浦','布野','真浦','和田','花園','松田']
 };
 
-// ===== ANOMALY ITEMS =====
-const CAPTURE_ANOMALIES = [
-  '足取りがおぼつかないもの','神経症状を呈し、挙動に異常があるもの','顔面その他に異常な形（奇形・腫瘤等）を有するもの',
-  'ダニ類等の外部寄生虫の寄生が著しいもの','脱毛が著しいもの','痩せている度合いが著しいもの',
-  '大きな外傷が見られるもの','皮下に膿を含むできもの（膿瘍）が多くの部位で認められるもの',
-  '口腔・口唇・舌・乳房・ひづめ等に水疱やただれが多く見られるもの',
-  '下痢を呈し尻周辺が著しく汚れているもの','その他、外見上明らかな異常が見られるもの'
-];
-const ORGAN_ANOMALIES = [
-  '【放血後】体温に異常（シカ40℃超、イノシシ42℃超）','【放血後】血液の凝固不全',
-  '【放血後】天然孔から黒いタール状の出血','【心臓】外側に繊維のようなものが付着',
-  '【心臓】色・形・大きさに異常','【肺】結節（膿瘍・腫瘍等）がある','【肺】出血・肺気腫・肺水腫',
-  '【肝臓】結節・のう胞がある','【肝臓】表面に白色管状の結節（寄生虫病変）','【肝臓】色・大きさ・硬さに異常',
-  '【脾臓】結節・出血・形の異常','【腎臓】結節・のう胞・出血','【胃腸】出血・癒着・リンパ節の腫れ',
-  '【枝肉】筋肉にできもの多発・菱形蕁麻疹'
-];
+/* ── State ── */
+const state = {
+  species: '', sex: '', weather: '', capture_city: '', capture_method: '',
+  finishing_method: '', cooling_method: '', gutting: '無',
+  hunter_health: '', has_fetus: 'なし', processing_type: '分割', quality: '良',
+  captureAnomalies: new Set(), organAnomalies: new Set()
+};
+let todayData = [];
+let listFilter = '';
 
-// ===== STATE =====
-let currentSerial = null;
-let currentIndividualId = null;
-let lastRecord = null;
-
-// ===== INIT =====
-document.addEventListener('DOMContentLoaded', async function() {
-  document.getElementById('captureDate').value = new Date().toISOString().split('T')[0];
-  await generateIds();
-  selectCity('館山市');
-  loadHunters();
-  buildCheckList('captureAnomalyList', CAPTURE_ANOMALIES);
-  buildCheckList('organAnomalyList', ORGAN_ANOMALIES);
-  loadHistory();
-  // b-PAC 初期確認
-  checkBpacAndUpdate();
-  document.getElementById('bpacTemplatePath').value = BPAC_CONFIG.templateIndividual;
+/* ── Init ── */
+document.addEventListener('DOMContentLoaded', () => {
+  const now = new Date();
+  document.getElementById('captureDate').value = formatDate(now);
+  document.getElementById('captureTime').value = formatTime(now);
+  setupToggles();
+  setupCheckboxes();
+  setupTabs();
+  setupTimeTracking();
+  setupFilterChips();
+  loadTodayCount();
+  syncPending();
 });
 
-async function generateIds() {
-  try {
-    const data = await supabase('GET', 'individuals', null, '?select=serial_number,individual_id&order=serial_number.desc&limit=1');
-    const lastSerial = data.length ? data[0].serial_number : 0;
-    currentSerial = lastSerial + 1;
-    const allData = await supabase('GET', 'individuals', null, '?select=individual_id&order=created_at.desc&limit=1');
-    let nextNum = 1;
-    if (allData.length && allData[0].individual_id) {
-      const m = allData[0].individual_id.match(/(\d+)$/);
-      if (m) nextNum = parseInt(m[1]) + 1;
-    }
-    currentIndividualId = buildIndivId(document.getElementById('species').value, document.getElementById('captureCity').value, nextNum);
-    document.getElementById('displaySerial').textContent = '通し番号: ' + String(currentSerial).padStart(3,'0');
-    document.getElementById('displayIndividual').textContent = '個体番号: ' + currentIndividualId;
-  } catch(e) {
-    currentSerial = 1;
-    currentIndividualId = 'TGC-07-T001';
-    document.getElementById('displaySerial').textContent = '通し番号: 001';
-    document.getElementById('displayIndividual').textContent = '個体番号: ' + currentIndividualId;
-  }
+function formatDate(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
-
-function buildCheckList(containerId, items) {
-  const el = document.getElementById(containerId);
-  el.innerHTML = items.map(function(item, i) {
-    return '<label class="check-item" id="ci-' + containerId + '-' + i + '" onclick="onCheckItem(this,\'' + containerId + '\')">' +
-      '<input type="checkbox" name="' + containerId + '" value="' + item + '">' +
-      '<span class="check-label">' + item + '</span></label>';
-  }).join('');
+function formatTime(d) {
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
 }
+function today() { return formatDate(new Date()); }
 
-function onCheckItem(el, listId) {
-  el.classList.toggle('checked');
-  if (listId === 'captureAnomalyList') {
-    const anyChecked = document.querySelectorAll('#captureAnomalyList .check-item.checked').length > 0;
-    const alert = document.getElementById('anomalyAlert');
-    if (anyChecked) {
-      alert.className = 'alert alert-danger show';
-      alert.innerHTML = '<span class="alert-icon">🚫</span> <strong>異常が確認されました。食用としないこと。</strong>';
-    } else {
-      alert.className = 'alert';
-    }
-  }
-}
-
-// ===== TOGGLES =====
-function selectToggle(el, fieldId, value) {
-  const parent = el.parentElement;
-  parent.querySelectorAll('.toggle-btn').forEach(function(b){ b.classList.remove('selected'); });
-  el.classList.add('selected');
-  document.getElementById(fieldId).value = value;
-  if (fieldId === 'gutting') {
-    document.getElementById('organSection').style.display = value === '有' ? 'block' : 'none';
-  }
-}
-
-function toggleHunterHealth(hasIssue) {
-  document.getElementById('hunterHealthOk').value = hasIssue ? 'false' : 'true';
-  document.getElementById('hunterHealthDetail').style.display = hasIssue ? 'block' : 'none';
-  document.querySelectorAll('.toggle-btn').forEach(function(btn) {
-    if (btn.textContent.includes('異常なし') || btn.textContent.includes('異常あり')) {
-      if ((hasIssue && btn.textContent.includes('異常あり')) || (!hasIssue && btn.textContent.includes('異常なし'))) {
-        btn.classList.add('selected');
-      } else {
-        btn.classList.remove('selected');
-      }
-    }
+/* ── Tabs ── */
+function setupTabs() {
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+      if (tab.dataset.tab === 'list') loadList();
+    });
   });
 }
 
-// ===== CITY / AREA =====
-function selectCity(city) {
-  document.getElementById('captureCity').value = city;
-  document.getElementById('cityBtn-tateyama').className = city === '館山市' ? 'toggle-btn selected-alt' : 'toggle-btn';
-  document.getElementById('cityBtn-minamiboso').className = city === '南房総市' ? 'toggle-btn selected-alt' : 'toggle-btn';
-  const areas = AREAS[city] || [];
-  const sel = document.getElementById('captureArea');
-  sel.innerHTML = '<option value="">— 大字を選択 —</option>' + areas.map(function(a){ return '<option value="' + a + '">' + a + '</option>'; }).join('');
-  updateCaptureLocation();
+/* ── Toggle groups ── */
+function setupToggles() {
+  document.querySelectorAll('.toggle-group').forEach(group => {
+    const field = group.dataset.field;
+    group.querySelectorAll('.toggle-btn').forEach(btn => {
+      // Set initial active state from state
+      if (btn.classList.contains('active')) {
+        state[field] = btn.dataset.val;
+      }
+      btn.addEventListener('click', () => {
+        group.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state[field] = btn.dataset.val;
+        onToggleChange(field, btn.dataset.val);
+      });
+    });
+  });
 }
 
-function updateCaptureLocation() {
-  const city = document.getElementById('captureCity').value;
-  const area = document.getElementById('captureArea').value;
-  document.getElementById('captureLocation').value = area ? city + area : city;
-}
-
-// ===== PROCESSING =====
-function selectProc(type) {
-  document.getElementById('processingType').value = type;
-  document.getElementById('proc-wakari').className = type === '分割' ? 'proc-card selected' : 'proc-card';
-  document.getElementById('proc-seiwari').className = type === '背割り熟成' ? 'proc-card selected' : 'proc-card';
-}
-
-// ===== TIME CHECK =====
-function calcTimeGap() {
-  const bleed = document.getElementById('bleedTime').value;
-  const receive = document.getElementById('receiveTime').value;
-  if (!bleed || !receive) { document.getElementById('timeStatus').style.display = 'none'; return; }
-  const [Zh, bm] = bleed.split(':').map(Number);
-  const [rh, rm] = receive.split(':').map(Number);
-  const diff = (rh * 60 + rm) - (bh * 60 + bm);
-  if (diff < 0) { document.getElementById('timeStatus').style.display = 'none'; return; }
-  const el = document.getElementById('timeElapsed');
-  const alert = document.getElementById('timeAlert');
-  const icon = document.getElementById('timeIcon');
-  const msg = document.getElementById('timeMsg');
-  document.getElementById('timeStatus').style.display = 'flex';
-  const h = Math.floor(diff / 60), m = diff % 60;
-  el.textContent = h > 0 ? h + '時間' + m + '分' : m + '分';
-  if (diff <= 60) {
-    el.className = 'time-elapsed'; icon.textContent = '✅'; msg.textContent = '1時間以内 — 問題なし'; msg.style.color = 'var(--green)'; alert.className = 'alert';
-  } else if (diff <= 90) {
-    el.className = 'time-elapsed warn'; icon.textContent = '⚠️'; msg.textContent = '1時間超過 — 注意が必要'; msg.style.color = 'var(--yellow)';
-    alert.className = 'alert alert-warn show';
-    alert.innerHTML = '<span class="alert-icon">⚠️</span> 放血から搬入まで1時間を超えています。品質確認を行ってください。';
-  } else {
-    el.className = 'time-elapsed over'; icon.textContent = '🚨'; msg.textContent = h + '時間超過 — 要注意'; msg.style.color = 'var(--red)';
-    alert.className = 'alert alert-danger show';
-    alert.innerHTML = '<span class="alert-icon">🚨</span> 放血から搬入まで<strong>' + h + '時間' + m + '分</strong>経過しています。鮮度・品質の判定が必要です。';
+function onToggleChange(field, val) {
+  if (field === 'capture_city') updateAreaDropdown(val);
+  if (field === 'species' || field === 'capture_city') refreshIndividualNumber();
+  if (field === 'gutting') {
+    document.getElementById('organSection').style.display = val === 'あり' ? 'block' : 'none';
+  }
+  if (field === 'hunter_health') {
+    document.getElementById('healthIssueRow').style.display = val === '異常あり' ? 'block' : 'none';
   }
 }
 
-// ===== SUBMIT =====
-async function submitForm() {
-  const required = [
-    ['species','種類'],['gender','性別'],['weight','体重'],
-    ['captureDate','捕獲日'],['captureTime','捕獲時刻'],
-    ['hunter','捕獲者'],['receiveTime','受入時刻']
-  ];
-  for (const [id, name] of required) {
-    if (!document.getElementById(id).value) {
-      alert('「' + name + '」を入力してください');
-      document.getElementById(id).scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return;
+function updateAreaDropdown(city) {
+  const sel = document.getElementById('captureArea');
+  const oldTownRow = document.getElementById('oldTownRow');
+  const oldTownSel = document.getElementById('captureOldTown');
+  sel.innerHTML = '<option value="">-- 地区を選択 --</option>';
+  if (city === '南房総市') {
+    oldTownRow.style.display = '';
+    oldTownSel.innerHTML = '<option value="">-- 旧町村を選択 --</option>';
+    Object.keys(MINAMIBOSO).forEach(t => {
+      const o = document.createElement('option');
+      o.value = t; o.textContent = t;
+      oldTownSel.appendChild(o);
+    });
+  } else {
+    oldTownRow.style.display = 'none';
+    oldTownSel.innerHTML = '<option value="">-- 旧町村を選択 --</option>';
+    (AREAS[city] || []).forEach(a => {
+      const o = document.createElement('option');
+      o.value = a; o.textContent = a;
+      sel.appendChild(o);
+    });
+  }
+}
+
+document.getElementById('captureOldTown').addEventListener('change', function() {
+  const sel = document.getElementById('captureArea');
+  sel.innerHTML = '<option value="">-- 地区を選択 --</option>';
+  (MINAMIBOSO[this.value] || []).forEach(a => {
+    const o = document.createElement('option');
+    o.value = a; o.textContent = a;
+    sel.appendChild(o);
+  });
+});
+
+/* ── Checkboxes ── */
+function setupCheckboxes() {
+  document.querySelectorAll('#captureAnomalies .check-item').forEach(item => {
+    item.addEventListener('click', () => {
+      item.classList.toggle('checked');
+      const idx = item.dataset.idx;
+      if (item.classList.contains('checked')) state.captureAnomalies.add(idx);
+      else state.captureAnomalies.delete(idx);
+      const alert = document.getElementById('captureAnomalyAlert');
+      alert.classList.toggle('show', state.captureAnomalies.size > 0);
+    });
+  });
+  document.querySelectorAll('#organAnomalies .check-item').forEach(item => {
+    item.addEventListener('click', () => {
+      item.classList.toggle('checked');
+      const idx = item.dataset.idx;
+      if (item.classList.contains('checked')) state.organAnomalies.add(idx);
+      else state.organAnomalies.delete(idx);
+    });
+  });
+}
+
+/* ── Elapsed time tracking ── */
+function setupTimeTracking() {
+  ['bleedTime', 'receiveTime'].forEach(id => {
+    document.getElementById(id).addEventListener('change', calcElapsed);
+  });
+}
+
+function calcElapsed() {
+  const bt = document.getElementById('bleedTime').value;
+  const rt = document.getElementById('receiveTime').value;
+  const disp = document.getElementById('elapsedDisplay');
+  const alert = document.getElementById('elapsedAlert');
+  if (!bt || !rt) { disp.style.display = 'none'; alert.classList.remove('show'); return; }
+  const [bh, bm] = bt.split(':').map(Number);
+  const [rh, rm] = rt.split(':').map(Number);
+  let diff = (rh * 60 + rm) - (bh * 60 + bm);
+  if (diff < 0) diff += 1440;
+  disp.style.display = 'block';
+  disp.textContent = `経過時間: ${Math.floor(diff/60)}時間${diff%60}分`;
+  disp.className = 'elapsed ' + (diff > 90 ? 'danger' : diff > 60 ? 'warn' : 'ok');
+  if (diff > 90) {
+    alert.innerHTML = '&#x1F6A8; 放血から受入まで90分超過 - <strong>食用不可</strong>の可能性があります';
+    alert.classList.add('show');
+  } else if (diff > 60) {
+    alert.className = 'alert alert-warn show';
+    alert.innerHTML = '&#x26A0; 放血から受入まで60分超過 - 品質に注意';
+  } else {
+    alert.classList.remove('show');
+  }
+}
+
+/* ── Filter chips ── */
+function setupFilterChips() {
+  document.querySelectorAll('.filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      listFilter = chip.dataset.species;
+      renderList();
+    });
+  });
+}
+
+/* ── Collect anomaly texts ── */
+function collectAnomalyTexts(containerId, indices) {
+  const items = document.querySelectorAll(`#${containerId} .check-item`);
+  const texts = [];
+  indices.forEach(i => {
+    const item = items[parseInt(i)];
+    if (item) texts.push(item.querySelector('.check-text').textContent);
+  });
+  return texts.join(', ');
+}
+
+/* ── Submit ── */
+async function handleSubmit() {
+  const btn = document.getElementById('submitBtn');
+  if (!state.species) { alert('種別を選択してください'); return; }
+  if (!state.sex) { alert('性別を選択してください'); return; }
+
+  btn.disabled = true;
+  btn.textContent = '登録中...';
+
+  try {
+    // Use individual number fields
+    const labelId = document.getElementById('indLabelId').value;
+    const serial = parseInt(document.getElementById('indSerial').value) || 1;
+    if (!labelId) { alert('個体管理番号が生成されていません。種別と市町村を選択してください。'); btn.disabled=false; btn.textContent='登録する'; return; }
+
+    const record = {
+      label_id: labelId,
+      serial_number: serial,
+      species: state.species,
+      sex: state.sex,
+      weight_total: parseFloat(document.getElementById('weight').value) || null,
+      age_estimate: parseInt(document.getElementById('age').value) || null,
+      capture_date: document.getElementById('captureDate').value,
+      capture_time: document.getElementById('captureTime').value,
+      weather: state.weather,
+      capture_city: state.capture_city,
+      capture_area: document.getElementById('captureArea').value,
+      hunter_name: document.getElementById('hunterName').value,
+      capture_method: state.capture_method,
+      finishing_method: state.finishing_method,
+      hit_location: document.getElementById('hitLocation').value,
+      bleed_time: document.getElementById('bleedTime').value,
+      receive_time: document.getElementById('receiveTime').value,
+      transport_start: document.getElementById('transportStart').value,
+      process_time: document.getElementById('processTime').value,
+      cooling_method: state.cooling_method,
+      gutting: state.gutting === 'あり' ? 'あり' : '無',
+      capture_anomalies: collectAnomalyTexts('captureAnomalies', state.captureAnomalies),
+      hunter_health_ok: state.hunter_health !== '異常あり',
+      hunter_health_issues: state.hunter_health === '異常あり' ? document.getElementById('healthIssues').value : '',
+      organ_anomalies: state.gutting === 'あり' ? collectAnomalyTexts('organAnomalies', state.organAnomalies) : '',
+      has_fetus: state.has_fetus === 'あり',
+      processing_type: state.processing_type,
+      quality: state.quality,
+      recorder: document.getElementById('recorder').value,
+      memo: document.getElementById('memo').value
+    };
+
+    let saved;
+    try {
+      saved = await sb('POST', 'individuals', record);
+      if (Array.isArray(saved)) saved = saved[0];
+    } catch(e) {
+      // Offline - queue
+      queueRecord(record);
+      saved = record;
+    }
+
+    // Advance localStorage counters
+    const _serialKey = getSerialKey(state.species);
+    if (_serialKey) localStorage.setItem(_serialKey, String(serial + 1));
+    if (state.species === 'イノシシ') {
+      // イノシシは管理番号カウンターも別途進める
+      const _prefix = getIndividualPrefix(state.species, state.capture_city);
+      const _labelKey = `tgc_next_label_${_prefix}`;
+      const _labelNum = parseInt(document.getElementById('indLabelId').dataset.labelNum || '1');
+      localStorage.setItem(_labelKey, String(_labelNum + 1));
+    }
+
+    showPrintModal(saved || record);
+    loadTodayCount();
+
+  } catch(e) {
+    alert('エラー: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '登録する';
+  }
+}
+
+/* ── Offline queue ── */
+function queueRecord(record) {
+  const queue = JSON.parse(localStorage.getItem('tgc_queue') || '[]');
+  queue.push(record);
+  localStorage.setItem('tgc_queue', JSON.stringify(queue));
+  updatePendingBadge();
+}
+
+function updatePendingBadge() {
+  const queue = JSON.parse(localStorage.getItem('tgc_queue') || '[]');
+  const badge = document.getElementById('pendingBadge');
+  if (queue.length > 0) {
+    badge.classList.add('show');
+    badge.textContent = `未送信: ${queue.length}件`;
+  } else {
+    badge.classList.remove('show');
+  }
+}
+
+async function syncPending() {
+  updatePendingBadge();
+  const queue = JSON.parse(localStorage.getItem('tgc_queue') || '[]');
+  if (queue.length === 0) return;
+  const remaining = [];
+  for (const record of queue) {
+    try {
+      await sb('POST', 'individuals', record);
+    } catch(e) {
+      remaining.push(record);
     }
   }
-  const captureAnomalies = [...document.querySelectorAll('#captureAnomalyList input:checked')].map(e => e.value);
-  const organAnomalies = [...document.querySelectorAll('#organAnomalyList input:checked')].map(e => e.value);
-  const hunterHealthIssues = [...document.querySelectorAll('input[name="hunterHealth"]:checked')].map(e => e.value);
-  const record = {
-    individual_id: currentIndividualId,
-    serial_number: currentSerial,
-    species: document.getElementById('species').value,
-    gender: document.getElementById('gender').value,
-    age_estimate: document.getElementById('age').value || null,
-    weight: parseFloat(document.getElementById('weight').value),
-    capture_date: document.getElementById('captureDate').value,
-    capture_time: document.getElementById('captureTime').value,
-    capture_location: document.getElementById('captureLocation').value || document.getElementById('captureCity').value,
-    capture_city: document.getElementById('captureCity').value,
-    hunter_name: document.getElementById('hunter').value,
-    capture_method: document.getElementById('captureMethod').value,
-    weather: document.getElementById('weather').value,
-    finishing_method: document.getElementById('finishingMethod').value,
-    hit_location: document.getElementById('hitLocation').value,
-    bleed_time: document.getElementById('bleedTime').value || null,
-    gutting: document.getElementById('gutting').value,
-    cooling_method: document.getElementById('cooling').value,
-    transport_start: document.getElementById('transportStart').value || null,
-    receive_time: document.getElementById('receiveTime').value,
-    process_time: document.getElementById('processTime').value || null,
-    quality: document.getElementById('quality').value,
-    recorder: document.getElementById('recorder').value,
-    hunter_health_ok: document.getElementById('hunterHealthOk').value === 'true',
-    hunter_health_issues: hunterHealthIssues.length ? hunterHealthIssues.join(',') : null,
-    capture_anomalies: captureAnomalies.length ? captureAnomalies.join('|') : null,
-    organ_anomalies: organAnomalies.length ? organAnomalies.join('|') : null,
-    has_fetus: document.getElementById('fetus').value === '有',
-    fetus_count: document.getElementById('fetus').value==='有'?(parseInt(document.getElementById('fetusCount').value)||null):null,
-    fetus_male: document.getElementById('fetus').value==='有'?(parseInt(document.getElementById('fetusMale').value)||null):null,
-    fetus_female: document.getElementById('fetus').value==='有'?(parseInt(document.getElementById('fetusFemale').value)||null):null,
-    processing_type: document.getElementById('processingType').value,
-    memo: document.getElementById('memo').value || null,
-    status: '搬入済',
-    origin: document.getElementById('captureLocation').value || document.getElementById('captureCity').value
-  };
-  const btn = document.querySelector('.btn-primary');
-  btn.textContent = '保存中...';
-  btn.disabled = true;
+  localStorage.setItem('tgc_queue', JSON.stringify(remaining));
+  updatePendingBadge();
+  if (remaining.length < queue.length) loadTodayCount();
+}
+
+window.addEventListener('online', () => {
+  document.getElementById('offlineBadge').classList.remove('show');
+  syncPending();
+});
+window.addEventListener('offline', () => {
+  document.getElementById('offlineBadge').classList.add('show');
+});
+
+/* ── Print modal ── */
+function showPrintModal(record) {
+  const labels = document.getElementById('printLabels');
+  labels.innerHTML = `
+    <div class="label-card">
+      <h4>本体管理ラベル</h4>
+      <div class="label-code">${record.label_id}</div>
+      <div class="label-row"><span class="lk">種別</span><span class="lv">${record.species}</span></div>
+      <div class="label-row"><span class="lk">体重</span><span class="lv">${record.weight_total || '-'} kg</span></div>
+      <div class="label-row"><span class="lk">捕獲日</span><span class="lv">${record.capture_date}</span></div>
+      <div class="label-row"><span class="lk">捕獲者</span><span class="lv">${record.hunter_name || '-'}</span></div>
+      <div class="label-row"><span class="lk">品質</span><span class="lv">${record.quality}</span></div>
+    </div>
+    <div class="label-card">
+      <h4>放射能検査用ラベル</h4>
+      <div class="label-code">${record.label_id}</div>
+      <div class="label-row"><span class="lk">捕獲日</span><span class="lv">${record.capture_date}</span></div>
+      <div class="label-row"><span class="lk">捕獲地</span><span class="lv">${record.capture_city || ''} ${record.capture_area || ''}</span></div>
+      <div class="label-row"><span class="lk">種別</span><span class="lv">${record.species}</span></div>
+    </div>
+    <div class="label-card">
+      <h4>背割り管理ラベル</h4>
+      <div class="label-code">${record.label_id}</div>
+      <div class="label-row"><span class="lk">処理区分</span><span class="lv">${record.processing_type}</span></div>
+      <div class="label-row"><span class="lk">日付</span><span class="lv">${record.capture_date}</span></div>
+      <div class="label-row"><span class="lk">種別</span><span class="lv">${record.species}</span></div>
+    </div>`;
+  document.getElementById('printModal').classList.add('show');
+}
+
+function closePrintModal() {
+  document.getElementById('printModal').classList.remove('show');
+}
+
+/* ── Reset form ── */
+function resetForm() {
+  // Reset toggles
+  document.querySelectorAll('.toggle-group').forEach(group => {
+    const field = group.dataset.field;
+    group.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+    state[field] = '';
+  });
+  // Restore defaults
+  state.gutting = '無'; state.has_fetus = 'なし';
+  state.processing_type = '分割'; state.quality = '良';
+  // Re-activate default buttons
+  document.querySelectorAll('[data-field="processing_type"] [data-val="分割"]').forEach(b => b.classList.add('active'));
+  document.querySelectorAll('[data-field="quality"] [data-val="良"]').forEach(b => b.classList.add('active'));
+
+  // Clear inputs
+  ['weight','age','hunterName','hitLocation','bleedTime','receiveTime',
+   'transportStart','processTime','healthIssues','memo','recorder'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('captureArea').innerHTML = '<option value="">-- 市町村を選択 --</option>';
+  document.getElementById('indSerial').value = '';
+  document.getElementById('indLabelId').value = '';
+  document.getElementById('indLabelId').placeholder = '種別・市町村を選択';
+
+  // Reset date/time to now
+  const now = new Date();
+  document.getElementById('captureDate').value = formatDate(now);
+  document.getElementById('captureTime').value = formatTime(now);
+
+  // Clear checkboxes
+  document.querySelectorAll('.check-item').forEach(c => c.classList.remove('checked'));
+  state.captureAnomalies.clear();
+  state.organAnomalies.clear();
+  document.getElementById('captureAnomalyAlert').classList.remove('show');
+  document.getElementById('elapsedDisplay').style.display = 'none';
+  document.getElementById('elapsedAlert').classList.remove('show');
+  document.getElementById('organSection').style.display = 'none';
+  document.getElementById('healthIssueRow').style.display = 'none';
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ── Today count ── */
+async function loadTodayCount() {
   try {
-    await supabase('POST', 'individuals', record);
-    lastRecord = record;
-    showSuccess();
-    updateLabelPreview(record);
+    const rows = await sb('GET', 'individuals', null, `?capture_date=eq.${today()}&select=id`);
+    document.getElementById('todayCount').textContent = rows.length;
   } catch(e) {
-    const offline = JSON.parse(localStorage.getItem('offline_records') || '[]');
-    offline.push(record);
-    localStorage.setItem('offline_records', JSON.stringify(offline));
-    lastRecord = record;
-    showSuccess(true);
-    updateLabelPreview(record);
-  } finally {
-    btn.textContent = '✅ 登録してラベル発行へ';
-    btn.disabled = false;
+    document.getElementById('todayCount').textContent = '-';
   }
 }
 
-function showSuccess(offline) {
-  document.getElementById('formBody').style.display = 'none';
-  const s = document.getElementById('successScreen');
-  s.className = 'success-screen show';
-  document.getElementById('successIds').textContent =
-    '通し番号: ' + String(currentSerial).padStart(3,'0') + ' / ' + currentIndividualId +
-    (offline ? '\n（オフライン保存 — 次回接続時に同期されます）' : '');
+/* ── List tab ── */
+async function loadList() {
+  try {
+    todayData = await sb('GET', 'individuals', null, `?capture_date=eq.${today()}&order=receive_time.desc`);
+  } catch(e) {
+    todayData = [];
+  }
+  renderList();
 }
 
-function goToPrint() {
-  document.getElementById('formBody').style.display = 'block';
-  document.getElementById('successScreen').className = 'success-screen';
-  showTab('print');
-}
+function renderList() {
+  const container = document.getElementById('cardList');
+  const empty = document.getElementById('listEmpty');
+  const filtered = listFilter ? todayData.filter(r => r.species === listFilter) : todayData;
 
-function resetForm() {
-  document.getElementById('formBody').style.display = 'block';
-  document.getElementById('successScreen').className = 'success-screen';
-  generateIds();
-  document.getElementById('captureDate').value = new Date().toISOString().split('T')[0];
-  ['age','weight','hunter','cooling','memo'].forEach(function(id){ document.getElementById(id).value = ''; });
-  ['bleedTime','transportStart','receiveTime','processTime'].forEach(function(id){ document.getElementById(id).value = ''; });
-  document.getElementById('timeStatus').style.display = 'none';
-  document.getElementById('timeAlert').className = 'alert';
-  document.getElementById('anomalyAlert').className = 'alert';
-  document.querySelectorAll('.check-item').forEach(function(el){ el.classList.remove('checked'); });
-  document.querySelectorAll('input[type="checkbox"]').forEach(function(el){ el.checked = false; });
-  window.scrollTo(0, 0);
-}
-
-// ===== LABEL PREVIEW =====
-function updateLabelPreview(r) {
-  const captureDateTime = r.capture_date + ' ' + r.capture_time;
-  const html = [1,2,3].map(function(i) {
-    const labelName = i === 1 ? '（本体管理）' : i === 2 ? '（放射能検査用）' : '（背割り熡理）';
-    return '<div class="label-preview" style="margin-bottom:10px">' +
-      '<div class="label-preview-title">館山ジビエセンター 個体識別ラベル #' + i + ' ' + labelName + '</div>' +
-      '<div class="label-big">' + r.individual_id + '</div>' +
-      '<div class="label-row"><span>種類</span><strong>' + r.species + ' ' + r.gender + '</strong></div>' +
-      '<div class="label-row"><span>捕獲場所</span><span>' + r.capture_location + '</span></div>' +
-      '<div class="label-row"><span>捕獲者</span><span>' + r.hunter_name + '</span></div>' +
-      '<div class="label-row"><span>体重</span><strong>' + r.weight + ' kg</strong></div>' +
-      '<div class="label-row"><span>捕獲日時</span><span>' + captureDateTime + '</span></div>' +
-      '<div class="label-row"><span>処理方法</span><span>' + r.processing_type + '</span></div>' +
-      '<div class="label-barcode">||| ' + r.individual_id + ' |||</div>' +
-      '</div>';
-  }).join('');
-  document.getElementById('labelPreview').innerHTML = html;
-}
-
-// ===== A4 印刷 =====
-function showA4Print() {
-  if (!lastRecord) { alert('まず捕獲票を登録してください'); return; }
-  window.print();
-}
-
-// ===== b-PAC ラベル印刷（メイン） =====
-async function printLabels() {
-  if (!lastRecord) { alert('まず捕獲票を登録してください'); return; }
-
-  const available = await isBpacAvailable();
-  if (!available) {
-    showToast('⚠️ b-PAC未接続 → ブラウザ印刷に切替', '#b8860b');
-    setTimeout(function(){ window.print(); }, 500);
+  if (filtered.length === 0) {
+    container.innerHTML = '';
+    empty.style.display = 'block';
     return;
   }
+  empty.style.display = 'none';
 
-  const templatePath = BPAC_CONFIG.templateIndividual;
-  const objDoc = bpac.IDocument;
-
-  try {
-    const opened = await objDoc.Open(templatePath, false);
-    if (!opened) {
-      if (confirm('テンプレートを開けませんでした。\nパス: ' + templatePath + '\n\nブラウザ印刷に切り替えますか？')) {
-        window.print();
-      }
-      return;
-    }
-
-    const labelTypes = ['本体管理', '放射能検査用', '背割り管理'];
-    for (const lType of labelTypes) {
-      setObjSafe(objDoc, 'ObjTitle',    '館山ジビエセンター');
-      setObjSafe(objDoc, 'ObjLabelType', lType);
-      setObjSafe(objDoc, 'ObjId',       lastRecord.individual_id);
-      setObjSafe(objDoc, 'ObjBarcode',  lastRecord.individual_id);
-      setObjSafe(objDoc, 'ObjSpecies',  lastRecord.species + ' ' + lastRecord.gender);
-      setObjSafe(objDoc, 'ObjLocation', lastRecord.capture_location || lastRecord.capture_city || '');
-      setObjSafe(objDoc, 'ObjHunter',   lastRecord.hunter_name || '');
-      setObjSafe(objDoc, 'ObjWeight',   lastRecord.weight + 'kg');
-      setObjSafe(objDoc, 'ObjDate',     lastRecord.capture_date + ' ' + lastRecord.capture_time);
-      setObjSafe(objDoc, 'ObjProcess',  lastRecord.processing_type || '');
-      await objDoc.StartPrint('', bpac.PrintOptionConstants.bpoDefault);
-      await objDoc.PrintOut(1, bpac.PrintOptionConstants.bpoDefault);
-      await objDoc.EndPrint();
-    }
-    objDoc.Close();
-    showToast('✅ ラベル3枚印刷完了（b-PAC）');
-  } catch(err) {
-    console.error('b-PAC print error:', err);
-    alert('b-PAC印刷エラー: ' + err.message + '\n\nブラウザ印刷に切り替えます。');
-    window.print();
-  }
-}
-
-// ===== TABS =====
-function showTab(name) {
-  document.querySelectorAll('.panel').forEach(function(p){ p.classList.remove('active'); });
-  document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
-  document.getElementById('tab-' + name).classList.add('active');
-  const tabs = { form: 0, print: 1, history: 2 };
-  document.querySelectorAll('.tab')[tabs[name]].classList.add('active');
-  if (name === 'history') loadHistory();
-}
-
-// ===== HISTORY =====
-async function loadHistory() {
-  const query = document.getElementById('searchQuery') ? document.getElementById('searchQuery').value : '';
-  const el = document.getElementById('historyList');
-  el.innerHTML = '<div style="color:var(--text2);text-align:center;padding:16px">読み込み中...</div>';
-  try {
-    let url = '?select=*&order=created_at.desc&limit=30';
-    if (query) url += '&individual_id=ilike.*' + query + '*';
-    const data = await supabase('GET', 'individuals', null, url);
-    if (!data.length) { el.innerHTML = '<div style="color:var(--text2);text-align:center;padding:16px">データがありません</div>'; return; }
-    el.innerHTML = data.map(function(r) {
-      return '<div class="print-list-item">' +
-        '<div class="print-list-num">' + String(r.serial_number || '?').padStart(3,'0') + '</div>' +
-        '<div class="print-list-info">' +
-          '<div class="print-list-id">' + r.individual_id + ' | ' + r.capture_date + '</div>' +
-          '<div class="print-list-name">' + r.species + ' ' + r.gender + ' ' + r.weight + 'kg — ' + r.capture_location + '</div>' +
-          '<div style="font-size:11px;color:var(--text2)">' + r.hunter_name + ' | ' + (r.processing_type||'-') + '</div>' +
-        '</div>' +
-        '<button class="btn btn-secondary" style="flex:none;padding:8px 12px;font-size:12px" onclick=\'printRecord(' + JSON.stringify(r) + ')\'>🖨️</button>' +
-        '</div>';
-    }).join('');
-    document.getElementById('recentList').innerHTML = data.slice(0,5).map(function(r) {
-      return '<div class="print-list-item">' +
-        '<div class="print-list-num">' + String(r.serial_number || '?').padStart(3,'0') + '</div>' +
-        '<div class="print-list-info">' +
-          '<div class="print-list-id">' + r.individual_id + '</div>' +
-          '<div class="print-list-name">' + r.species + ' ' + r.gender + ' ' + r.weight + 'kg</div>' +
-        '</div>' +
-        '<button class="btn btn-secondary" style="flex:none;padding:8px 12px;font-size:12px" onclick=\'printRecord(' + JSON.stringify(r) + ')\'>🖨️</button>' +
-        '</div>';
-    }).join('');
-  } catch(e) {
-    el.innerHTML = '<div style="color:var(--red);text-align:center;padding:16px">⚠️ 通信エラー。オフラインの可能性があります。</div>';
-  }
-}
-
-function printRecord(r) {
-  lastRecord = r;
-  updateLabelPreview(r);
-  showTab('print');
-}
-
-
-// ===== 個体番号生成 =====
-function buildIndivId(species, city, num) {
-  var yr = '07';
-  var pfx;
-  if (species === 'イノシシ') {
-    pfx = city === '南房総市' ? 'M' : 'T';
-  } else {
-    var map = {'シカ':'シ','キョン':'キ','アライグマ':'ア','ハクビシン':'ハ','タヌキ':'タ','ウサギ':'ウ'};
-    pfx = map[species] || 'X';
-  }
-  return 'TGC-' + yr + '-' + pfx + String(num).padStart(3,'0');
-}
-
-// ===== 大字データ + updateCaptureLocation 上書き =====
-var AREA_DATA = {
-  '館山市': ['北条','那古','船形','館山','正木','安東','八幡','長須賀','大神宮','新井','岡田','神戸','竹原','仁我浦','長尾','九重','豊房','西長田','東長田','洲宮','沼','花房','神余','巴川','高畑','林','出野尾','富崎','波左間','上真倉','下真倉','稲','佐野'],
-  '南房総市': ['枇杷倉','豊岡','青木','岩糸','原岡','多田良','佐久間','久保','犬掘','市部','絹','三芳','滝口','府中','竹内','指塚','白浜','根本','乙浜','千倉','瀬戸','南無谷','大川','豊田','丸山','海老敷','猪之田','和田','平群','江見','関東']
-};
-function updateCaptureLocation() {
-  var city = document.getElementById('captureCity').value;
-  var sel = document.getElementById('captureArea');
-  var areas = AREA_DATA[city] || [];
-  sel.innerHTML = '<option value="">— 大字を選択 —</option>' +
-    areas.map(function(a){return '<option value="'+a+'">'+a+'</option>';}).join('');
-  sel.onchange = function() {
-    document.getElementById('captureLocation').value = sel.value ? (city + sel.value) : city;
-  };
-  document.getElementById('captureLocation').value = city;
-}
-
-// ===== 捕獲者台帳管理 =====
-function loadHunters() {
-  var hunters = JSON.parse(localStorage.getItem('tgc_hunters') || '[]');
-  var dl = document.getElementById('hunterList');
-  if (dl) dl.innerHTML = hunters.map(function(h){return '<option value="'+h.name+'">';}).join('');
-  var list = document.getElementById('hunterList2');
-  if (!list) return;
-  if (!hunters.length) { list.innerHTML = '<p style="color:#888;padding:20px;text-align:center">登録された捕獲者はいません</p>'; return; }
-  list.innerHTML = hunters.map(function(h,i){
-    return '<div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:12px 14px;margin-bottom:8px">'
-      +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
-      +'<div><strong style="font-size:15px">'+h.name+'</strong>'
-      +(h.address?'<br><span style="font-size:13px;color:#555">📍 '+h.address+'</span>':'')
-      +(h.phone?'<br><span style="font-size:13px;color:#555">📞 '+h.phone+'</span>':'')
-      +(h.bankName?'<br><span style="font-size:12px;color:#888">🏦 '+h.bankName+(h.bankBranch?' '+h.bankBranch:'')+(h.bankType?' ('+h.bankType+')':'')+(h.bankNum?' 口座:'+h.bankNum:'')+(h.bankHolder?' 名義:'+h.bankHolder:'')+'</span>':'')
-      +'</div><button onclick="deleteHunter('+i+')" style="background:none;border:1px solid #ddd;border-radius:4px;padding:3px 8px;cursor:pointer;color:#c00;font-size:12px;flex-shrink:0;margin-left:8px">削除</button>'
-      +'</div></div>';
+  container.innerHTML = filtered.map(r => {
+    const emojiMap = {'イノシシ':'&#x1F417;','シカ':'&#x1F98C;','アライグマ':'&#x1F99D;','ハクビシン':'&#x1F43C;','キョン':'&#x1F98C;','タヌキ':'&#x1F99D;','ノウサギ':'&#x1F430;'};
+    const emoji = emojiMap[r.species] || '&#x1F43E;';
+    const qClass = r.quality === '良' ? 'q-good' : r.quality === '可' ? 'q-ok' : 'q-bad';
+    return `<div class="card" onclick='showDetail(${JSON.stringify(r).replace(/'/g, "&#39;")})'>
+      <div class="card-emoji">${emoji}</div>
+      <div class="card-info">
+        <div class="card-label">${r.label_id || '-'}</div>
+        <div class="card-detail">${r.capture_time || ''} / ${r.hunter_name || '-'}</div>
+      </div>
+      <div class="card-meta">
+        <div class="card-weight">${r.weight_total || '-'} kg</div>
+        <div class="card-quality ${qClass}">${r.quality || '-'}</div>
+      </div>
+    </div>`;
   }).join('');
 }
-function toggleHunterForm() {
-  var el = document.getElementById('hunterFormArea');
-  if (el) el.style.display = el.style.display==='none' ? 'block' : 'none';
-}
-function saveHunter() {
-  var name = (document.getElementById('hName').value||'').trim();
-  if (!name) { alert('氏名を入力してください'); return; }
-  var hunters = JSON.parse(localStorage.getItem('tgc_hunters') || '[]');
-  hunters.push({
-    name:name,
-    address:(document.getElementById('hAddress').value||'').trim(),
-    phone:(document.getElementById('hPhone').value||'').trim(),
-    bankName:(document.getElementById('hBankName').value||'').trim(),
-    bankBranch:(document.getElementById('hBankBranch').value||'').trim(),
-    bankType:document.getElementById('hBankType').value||'普通',
-    bankNum:(document.getElementById('hBankNum').value||'').trim(),
-    bankHolder:(document.getElementById('hBankHolder').value||'').trim()
-  });
-  localStorage.setItem('tgc_hunters', JSON.stringify(hunters));
-  ['hName','hAddress','hPhone','hBankName','hBankBranch','hBankNum','hBankHolder'].forEach(function(id){
-    var el=document.getElementById(id); if(el) el.value='';
-  });
-  toggleHunterForm();
-  loadHunters();
-}
-function deleteHunter(i) {
-  if (!confirm('この捕獲者を削除しますか？')) return;
-  var hunters = JSON.parse(localStorage.getItem('tgc_hunters') || '[]');
-  hunters.splice(i,1);
-  localStorage.setItem('tgc_hunters', JSON.stringify(hunters));
-  loadHunters();
-}
-</script>
 
-<style>
-@media print {
-  body * { visibility: hidden; }
-  #tab-print, #tab-print * { visibility: visible; }
-  .label-preview { page-break-inside: avoid; }
-  .no-print { display: none !important; }
+function showDetail(r) {
+  document.getElementById('detailTitle').textContent = r.label_id || '詳細';
+  const fields = [
+    ['種別', r.species], ['性別', r.sex], ['体重', (r.weight_total || '-') + ' kg'],
+    ['推定年齢', (r.age_estimate || '-') + ' 歳'],
+    ['捕獲日', r.capture_date], ['捕獲時刻', r.capture_time],
+    ['天気', r.weather], ['捕獲地', (r.capture_city || '') + ' ' + (r.capture_area || '')],
+    ['捕獲者', r.hunter_name], ['捕獲方法', r.capture_method],
+    ['止めさし', r.finishing_method], ['被弾部位', r.hit_location],
+    ['放血開始', r.bleed_time], ['受入時刻', r.receive_time],
+    ['搬送開始', r.transport_start], ['処理時刻', r.process_time],
+    ['冷却方法', r.cooling_method], ['内臓摘出', r.gutting],
+    ['捕獲時異常', r.capture_anomalies], ['内臓異常', r.organ_anomalies],
+    ['健康状態', r.hunter_health_ok ? '良好' : '異常あり'],
+    ['胎児', r.has_fetus ? 'あり' : 'なし'],
+    ['処理区分', r.processing_type], ['品質', r.quality],
+    ['記録者', r.recorder], ['メモ', r.memo]
+  ];
+  document.getElementById('detailBody').innerHTML = fields
+    .filter(([,v]) => v && v !== 'null')
+    .map(([k,v]) => `<div class="detail-row"><span class="dl">${k}</span><span class="dv">${v}</span></div>`)
+    .join('');
+  document.getElementById('detailModal').classList.add('show');
 }
-</style>
-<!-- ===================== HUNTER REGISTRY TAB ===================== -->
-<div class="panel" id="tab-hunters">
-  <div class="main">
-    <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px">⚠ <strong>管理者専用</strong> — 捕獲者台帳の閲覧・編集は管理者のみ行ってください</div>
-    <button class="btn btn-primary" onclick="toggleHunterForm()" style="margin-bottom:14px">＋ 新規登録</button>
-    <div id="hunterFormArea" style="display:none;background:#f9f9f9;border:1px solid #ddd;border-radius:8px;padding:14px;margin-bottom:14px">
-      <h3 style="margin-bottom:12px;font-size:15px;font-weight:700">捕獲者情報入力</h3>
-      <div style="display:grid;gap:8px">
-        <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:3px">氏名 <span style="color:red">*</span></label><input type="text" id="hName" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px"></div>
-        <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:3px">住所</label><input type="text" id="hAddress" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px"></div>
-        <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:3px">電話番号</label><input type="tel" id="hPhone" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px"></div>
-        <div style="border-top:1px solid #ddd;padding-top:10px;margin-top:4px"><strong style="font-size:13px">振込先口座情報</strong></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div><label style="font-size:12px;display:block;margin-bottom:3px">金融機関名</label><input type="text" id="hBankName" style="width:100%;padding:7px;border:1px solid #ccc;border-radius:6px"></div>
-          <div><label style="font-size:12px;display:block;margin-bottom:3px">支店名</label><input type="text" id="hBankBranch" style="width:100%;padding:7px;border:1px solid #ccc;border-radius:6px"></div>
-          <div><label style="font-size:12px;display:block;margin-bottom:3px">口座種別</label><select id="hBankType" style="width:100%;padding:7px;border:1px solid #ccc;border-radius:6px"><option>普通</option><option>当座</option></select></div>
-          <div><label style="font-size:12px;display:block;margin-bottom:3px">口座番号</label><input type="text" id="hBankNum" style="width:100%;padding:7px;border:1px solid #ccc;border-radius:6px"></div>
-        </div>
-        <div><label style="font-size:12px;display:block;margin-bottom:3px">口座名義（カナ）</label><input type="text" id="hBankHolder" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px"></div>
-      </div>
-      <div style="margin-top:12px;display:flex;gap:8px">
-        <button class="btn btn-primary" onclick="saveHunter()">保存</button>
-        <button class="btn" onclick="toggleHunterForm()">キャンセル</button>
-      </div>
-    </div>
-    <div id="hunterList2"></div>
-  </div>
-</div>
+
+function closeDetailModal() {
+  document.getElementById('detailModal').classList.remove('show');
+}
+
+/* ── Close modals on overlay click ── */
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.classList.remove('show');
+  });
+});
+
+/* ── Bluetooth scale HID support ── */
+// Weight input accepts direct keyboard/HID input from Bluetooth scales
+document.getElementById('weight').addEventListener('focus', function() {
+  this.select();
+});
+</script>
 </body>
 </html>
