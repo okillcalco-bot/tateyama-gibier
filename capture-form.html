@@ -121,6 +121,10 @@ input, select, textarea, button { font-family: inherit; font-size: 1rem; }
   color-scheme: dark;
 }
 input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(0.8); cursor: pointer; }
+.time-wrap { display:flex; gap:6px; align-items:center; }
+.time-wrap .input { flex:1; }
+.now-btn { padding:10px 12px; background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius); color:var(--gold); font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; flex-shrink:0; }
+.now-btn:active { background:var(--border2); }
 .input:focus, .select-wrap select:focus, textarea:focus {
   border-color: var(--gold2);
 }
@@ -406,7 +410,10 @@ textarea { min-height: 80px; resize: vertical; }
         </div>
         <div style="flex:1;">
           <label class="form-label">捕獲時刻</label>
-          <input type="time" class="input" id="captureTime">
+          <div class="time-wrap">
+            <input type="text" inputmode="numeric" class="input" id="captureTime" placeholder="HH:MM" maxlength="5">
+            <button type="button" class="now-btn" onclick="setNow('captureTime')">今</button>
+          </div>
         </div>
       </div>
       <div class="form-row">
@@ -517,11 +524,17 @@ textarea { min-height: 80px; resize: vertical; }
       <div class="form-row" style="display:flex;gap:10px;">
         <div style="flex:1;">
           <label class="form-label">放血開始</label>
-          <input type="time" class="input time-track" id="bleedTime">
+          <div class="time-wrap">
+            <input type="text" inputmode="numeric" class="input time-track" id="bleedTime" placeholder="HH:MM" maxlength="5">
+            <button type="button" class="now-btn" onclick="setNow('bleedTime')">今</button>
+          </div>
         </div>
         <div style="flex:1;">
           <label class="form-label">受入時刻</label>
-          <input type="time" class="input time-track" id="receiveTime">
+          <div class="time-wrap">
+            <input type="text" inputmode="numeric" class="input time-track" id="receiveTime" placeholder="HH:MM" maxlength="5">
+            <button type="button" class="now-btn" onclick="setNow('receiveTime')">今</button>
+          </div>
         </div>
       </div>
       <div id="elapsedDisplay" class="elapsed" style="display:none;"></div>
@@ -529,11 +542,17 @@ textarea { min-height: 80px; resize: vertical; }
       <div class="form-row" style="display:flex;gap:10px;margin-top:16px;">
         <div style="flex:1;">
           <label class="form-label">搬送開始</label>
-          <input type="time" class="input" id="transportStart">
+          <div class="time-wrap">
+            <input type="text" inputmode="numeric" class="input" id="transportStart" placeholder="HH:MM" maxlength="5">
+            <button type="button" class="now-btn" onclick="setNow('transportStart')">今</button>
+          </div>
         </div>
         <div style="flex:1;">
           <label class="form-label">処理時刻</label>
-          <input type="time" class="input" id="processTime">
+          <div class="time-wrap">
+            <input type="text" inputmode="numeric" class="input" id="processTime" placeholder="HH:MM" maxlength="5">
+            <button type="button" class="now-btn" onclick="setNow('processTime')">今</button>
+          </div>
         </div>
       </div>
       <div class="form-row">
@@ -909,6 +928,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupCheckboxes();
   setupTabs();
   setupTimeTracking();
+  setupTimeInputs();
   setupFilterChips();
   loadTodayCount();
   syncPending();
@@ -919,6 +939,27 @@ function formatDate(d) {
 }
 function formatTime(d) {
   return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+function setNow(id) {
+  document.getElementById(id).value = formatTime(new Date());
+  // elapsedの再計算が必要な場合
+  if (id === 'bleedTime' || id === 'receiveTime') calcElapsed();
+}
+// 時刻入力: 数字4桁 or コロン区切り を自動整形
+function setupTimeInputs() {
+  document.querySelectorAll('input[inputmode="numeric"][placeholder="HH:MM"]').forEach(el => {
+    el.addEventListener('input', () => {
+      let v = el.value.replace(/[^0-9]/g, '');
+      if (v.length >= 4) {
+        const h = v.slice(0,2), m = v.slice(2,4);
+        el.value = h + ':' + m;
+      }
+    });
+    el.addEventListener('blur', () => {
+      // 整合チェック: HH:MM 形式でなければクリア
+      if (el.value && !/^\d{2}:\d{2}$/.test(el.value)) el.value = '';
+    });
+  });
 }
 function today() { return formatDate(new Date()); }
 
@@ -1024,7 +1065,7 @@ function setupCheckboxes() {
 /* ── Elapsed time tracking ── */
 function setupTimeTracking() {
   ['bleedTime', 'receiveTime'].forEach(id => {
-    document.getElementById(id).addEventListener('change', calcElapsed);
+    document.getElementById(id).addEventListener('input', calcElapsed);
   });
 }
 
