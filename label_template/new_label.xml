@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pt:document
+  xmlns:pt="http://schemas.brother.info/ptouch/2007/lbx/main"
+  xmlns:style="http://schemas.brother.info/ptouch/2007/lbx/style"
+  xmlns:text="http://schemas.brother.info/ptouch/2007/lbx/text"
+  xmlns:draw="http://schemas.brother.info/ptouch/2007/lbx/draw"
+  xmlns:image="http://schemas.brother.info/ptouch/2007/lbx/image"
+  xmlns:barcode="http://schemas.brother.info/ptouch/2007/lbx/barcode"
+  xmlns:database="http://schemas.brother.info/ptouch/2007/lbx/database"
+  xmlns:table="http://schemas.brother.info/ptouch/2007/lbx/table"
+  xmlns:cable="http://schemas.brother.info/ptouch/2007/lbx/cable"
+  version="1.7" generator="P-touch Editor 5.4.016 Windows">
+<pt:body currentSheet="Sheet1" direction="LTR">
+<style:sheet name="Sheet1">
+<style:paper media="0" width="107.8pt" height="164.4pt"
+  marginLeft="4.3pt" marginTop="8.4pt" marginRight="4.4pt" marginBottom="8.4pt"
+  orientation="portrait" autoLength="false" monochromeDisplay="true"
+  printColorDisplay="false" printColorsID="0"
+  paperColor="#FFFFFF" paperInk="#000000" split="1" format="264"
+  backgroundTheme="0" printerID="14388" printerName="Brother QL-800"/>
+<style:cutLine regularCut="0pt" freeCut=""/>
+<style:backGround x="4.3pt" y="8.4pt" width="99.2pt" height="147.6pt"
+  brushStyle="NULL" brushId="0" userPattern="NONE" userPatternId="0"
+  color="#000000" printColorNumber="1" backColor="#FFFFFF" backPrintColorNumber="0"/>
+<pt:objects>
+
+<!-- 1. Header fixed text -->
+<text:text>
+  <pt:objectStyle x="4.3pt" y="8.4pt" width="99.2pt" height="9pt"
+    backColor="#FFFFFF" backPrintColorNumber="0" ropMode="COPYPEN"
+    angle="0" anchor="TOPLEFT" flip="NONE">
+    <pt:pen style="NULL" widthX="0.5pt" widthY="0.5pt" color="#000000" printColorNumber="1"/>
+    <pt:brush style="NULL" color="#000000" printColorNumber="1" id="0"/>
+    <pt:expanded objectName="Header" ID="0" lock="0"
+      templateMergeTarget="LABELLIST" templateMergeType="NONE"
+      templateMergeID="0" linkStatus="NONE" linkID="0"/>
+  </pt:objectStyle>
+  <text:ptFontInfo>
+    <text:logFont name="Yu Gothic" width="0" italic="false" weight="700" charSet="128" pitchAndFamily="34"/>
+    <text:fontExt effect="NOEFFECT" underline="0" strikeout="0" size="7pt" orgSize="24pt"
+      textColor="#000000" textPrintColorNumber="1"/>
+  </text:ptFontInfo>
+  <text:textControl control="LONGTEXTFIXED" clipFrame="false" aspectNormal="true" shrink="true" autoLF="false" avoidImage="false"/>
+  <text:textAlign horizontalAlignment="CENTER" verticalAlignment="CENTER" inLineAlignment="CENTER"/>
+  <text:textStyle vertical="false" nullBlock="false" charSpace="0" lineSpace="0" orgPoint="0" combinedChars="false"/>
+  <pt:data>館山ジビエセンター</pt:data>
+  <text:stringItem charLen="9"><text:ptFontInfo>
+    <text:logFont name="Yu Gothic" width="0" italic="false" weight="700" charSet="128" pitchAndFamily="34"/>
+    <text:fontExt effect="NOEFFECT" underline="0" strikeout="0" size="7pt" orgSize="24pt"
+      textColor="#000000" textPrintColorNumber="1"/>
+  </text:ptFontInfo></text:stringItem>
+</text:text>
+
+<!-- 2. Line 1 -->
+<draw:poly>
+  <pt:objectStyle x="4.3pt" y="19.4pt" width="99.2pt" height="0.6pt"
+    backColor="#FFFFFF" backPrintColorNumber="0" ropMode="COPYPEN"
+    angle="0" anchor="TOPLEFT" flip="NONE">
+    <pt:pen style="SOLID" widthX="0.5pt" widthY="0.5pt" color="#000000" printColorNumber="1"/>
+    <pt:brush style="NULL" color="#000000" printColorNumber="1" id="0"/>
+    <pt:expanded objectName="Line1" ID="0" lock="0"
+      templateMergeTarget="LABELLIST" templateMergeType="NONE"
+      templateMergeID="0" linkStatus="NONE" linkID="0"/>
+  </pt:objectStyle>
+  <draw:polyStyle closePath="false"/>
+  <draw:polyLinePoints points="4.6pt,19.7pt 103.2pt,19.7pt"/>
+</draw:poly>
+
+<!-- 3. SpeciesPartName: e.g. "イノシシ ロース [並]" -->
+<text:text>
+  <pt:objectStyle x="4.3pt" y="21.4pt" width="99.2pt" height="14pt"
+    backColor="#FFFFFF" backPrintColorNumber="0" ropMode="COPYPEN"
+    angle="0" anchor="TOPLEFT" flip="NONE">
+    <pt:pen style="NULL" widthX="0.5pt" widthY="0.5pt" color="#000000" printColorNumber="1"/>
+    <pt:brush style="NULL" color="#000000" printColorNumber="1" id="0"/>
+    <pt:expanded objectName="SpeciesPartName" ID="0" lock="0"
+      templateMergeTarget="LABELLIST" templateMergeType="NONE"
+      templateMergeID="0" linkStatus="NONE" linkID="0"/>
+  </pt:objectStyle>
+  <text:ptFontInfo>
+    <text:logFont name="Yu Gothic" width="0" italic="false" weight="700" charSet="128" pitchAndFamily="34"/>
+    <text:fontExt effect="NOEFFECT" underline="0" strikeout="0" size="11pt" orgSize="36pt"
+      textColor="#000000" textPrintColorNumber="1"/>
+  </text:ptFontInfo>
+  <text:textControl control="LONGTEXTFIXED" clipFrame="false" aspectNormal="true" shrink="true" autoLF="false" avoidImage="false"/>
+  <text:textAlign horizontalAlignment="LEFT" verticalAlignment="CENTER" inLineAlignment="CENTER"/>
+  <text:textStyle vertical="false" nullBlock="false" charSpace="0" lineSpace="0" orgPoint="0" combinedChars="false"/>
+  <pt:data>部位名</pt:data>
+  <text:stringItem charLen="3"><text:ptFontInfo>
+    <text:logFont name="Yu Gothic" width="0" italic="false" weight="700" charSet="128" pitchAndFamily="34"/>
+    <text:fontExt effect="NOEFFECT" underline="0" strikeout="0" size="11pt" orgSize="36pt"
+      textColor="#000000" textPrintColorNumber="1"/>
+  </text:ptFontInfo></text:stringItem>
+</text:text>
+
+<!-- 4. IndividualID -->
+<text:text>
+  <pt:objectStyle x="4.3pt" y="37.4pt" width="99.2pt" height="9pt"
+    backColor="#FFFFFF" backPrintColorNumber="0" ropMode="COPYPEN"
+    angle="0" anchor="TOPLEFT" flip="NONE">
+    <pt:pen style="NULL" widthX="0.5pt" widthY="0.5pt" color="#000000" printColorNumber="1"/>
+    <pt:brush style="NULL" color="#000000" printColorNumber="1" id="0"/>
+    <pt:expanded objectName="IndividualID" ID="0" lock="0"
+      templateMergeTarget="LABELLIST" templateMergeType="NONE"
+      templateMergeID="0" linkStatus="NONE" linkID="0"/>
+  </pt:objectStyle>
+  <text:ptFontInfo>
+    <text:logFont name="Yu Gothic" width="0" italic="false" weight="400" charSet="128" pitchAndFamily="34"/>
+    <text:fontExt effect="NOEFFECT" underline="0" strikeout="0" size="7.5pt" orgSize="24pt"
+      textColor="#000000" textPrintColorNumber="1"/>
+  </text:ptFontInfo>
+  <text:textControl control="LONGTEXTFIXED" clipFrame="false" aspectNormal="true" shrink="true" autoLF="false" avoidImage="false"/>
+  <text:textAlign horizontalAlignment="LEFT" verticalAlignment="CENTER" inLineAlignment="CENTER"/>
+  <text:textStyle vertical="false" nullBlock="false" charSpace="0" lineSpace="0" orgPoint="0" combinedChars="false"/>
+  <pt:data>個体番号</pt:data>
+  <text:stringItem charLen="4"><text:ptFontInfo>
+    <text:logFont name="Yu Gothic" width="0" italic="false" weight="400" charSet="128" pitchAndFamily="34"/>
+    <text:fontExt effect="NOEFFECT" underline="0" strikeout="0" size="7.5pt" orgSize="24pt"
+      textColor="#000000" textPrintColorNumber="1"/>
+  </text:ptFontInfo></text:stringItem>
+</text:text>
+
+<!-- 5. Weight (large, right-aligned) -->
+<text:text>
+  <pt:objectStyle x="4.3pt" y="48.4pt" width="99.2pt" height="16pt"
+    backColor="#FFFFFF" backPrintColorNumber="0" ropMode="COPYPEN"
+    angle="0" anchor="TOPLEFT" flip="NONE">
+    <pt:pen style="NULL" widthX="0.5pt" widthY="0.5pt" color="#000000" printColorNumber="1"/>
+    <pt:brush style="NULL" color="#000000" printColorNumber="1" id="0"/>
+    <pt:expanded objectName="Weight" ID="0" lock="0"
+      templateMergeTarget="LABELLIST" templateMergeType="NONE"
+      templateMergeID="0" linkStatus="NONE" linkID="0"/>
+  </pt:objectStyle>
+  <text:ptFontInfo>
+    <text:logFont name="Yu Gothic" width="0" italic="false" weight="700" charSet="128" pitchAndFamily="34"/>
+    <text:fontExt effect="NOEFFECT" underline="0" strikeout="0" size="14pt" orgSize="48pt"
+      textColor="#000000" textPrintColorNumber="1"/>
+  </text:ptFontInfo>
+  <text:textControl control="LONGTEXTFIXED" clipFrame="false" aspectNormal="true" shrink="true" autoLF="false" avoidImage="false"/>
+  <text:textAlign horizontalAlignment="RIGHT" verticalAlignment="CENTER" inLineAlignment="CENTER"/>
+  <text:textStyle vertical="false" nullBlock="false" charSpace="0" lineSpace="0" orgPoint="0" combinedChars="false"/>
+  <pt:data>0.000 kg</pt:data>
+  <text:stringItem charLen="8"><text:ptFontInfo>
+    <text:logFont name="Yu Gothic" width="0" italic="false" weight="700" charSet="128" pitchAndFamily="34"/>
+    <text:fontExt effect="NOEFFECT" underline="0" strikeout="0" size="14pt" orgSize="48pt"
+      textColor="#000000" textPrintColorNumber="1"/>
+  </text:ptFontInfo></text:stringItem>
+</text:text>
+
+<!-- 6. ProcessDate -->
+<text:text>
+  <pt:objectStyle x="4.3pt" y="66.4pt" width="99.2pt" height="9pt"
+    backColor="#FFFFFF" backPrintColorNumber="0" ropMode="COPYPEN"
+    angle="0" anchor="TOPLEFT" flip="NONE">
+    <pt:pen style="NULL" widthX="0.5pt" widthY="0.5pt" color="#000000" printColorNumber="1"/>
+    <pt:brush style="NULL" color="#000000" printColorNumber="1" id="0"/>
+    <pt:expanded objectName="ProcessDate" ID="0" lock="0"
+      templateMergeTarget="LABELLIST" templateMergeType="NONE"
+      templateMergeID="0" linkStatus="NONE" linkID="0"/>
+  </pt:objectStyle>
+  <text:ptFontInfo>
+    <text:logFont name="Yu Gothic" width="0" italic="false" weight="400" charSet="128" pitchAndFamily="34"/>
+    <text:fontExt effect="NOEFFECT" underline="0" strikeout="0" size="7.5pt" orgSize="24pt"
+      textColor="#000000" textPrintColorNumber="1"/>
+  </text:ptFontInfo>
+  <text:textControl control="LONGTEXTFIXED" clipFrame="false" aspectNormal="true" shrink="true" autoLF="false" avoidImage="false"/>
+  <text:textAlign horizontalAlignment="LEFT" verticalAlignment="CENTER" inLineAlignment="CENTER"/>
+  <text:textStyle vertical="false" nullBlock="false" charSpace="0" lineSpace="0" orgPoint="0" combinedChars="false"/>
+  <pt:data>加工日: </pt:data>
+  <text:stringItem charLen="4"><text:ptFontInfo>
+    <text:logFont name="Yu Gothic" width="0" italic="false" weight="400" charSet="128" pitchAndFamily="34"/>
+    <text:fontExt effect="NOEFFECT" underline="0" strikeout="0" size="7.5pt" orgSize="24pt"
+      textColor="#000000" textPrintColorNumber="1"/>
+  </text:ptFontInfo></text:stringItem>
+</text:text>
+
+<!-- 7. LotCode -->
+<text:text>
+  <pt:objectStyle x="4.3pt" y="77.4pt" width="99.2pt" height="9pt"
+    backColor="#FFFFFF" backPrintColorNumber="0" ropMode="COPYPEN"
+    angle="0" anchor="TOPLEFT" flip="NONE">
+    <pt:pen style="NULL" widthX="0.5pt" widthY="0.5pt" color="#000000" printColorNumber="1"/>
+    <pt:brush style="NULL" color="#000000" printColorNumber="1" id="0"/>
+    <pt:expanded objectName="LotCode" ID="0" lock="0"
+      templateMergeTarget="LABELLIST" templateMergeType="NONE"
+      templateMergeID="0" linkStatus="NONE" linkID="0"/>
+  </pt:objectStyle>
+  <text:ptFontInfo>
+    <text:logFont name="Yu Gothic" width="0" italic="false" weight="400" charSet="128" pitchAndFamily="34"/>
+    <text:fontExt effect="NOEFFECT" underline="0" strikeout="0" size="7.5pt" orgSize="24pt"
+      textColor="#000000" textPrintColorNumber="1"/>
+  </text:ptFontInfo>
+  <text:textControl control="LONGTEXTFIXED" clipFrame="false" aspectNormal="true" shrink="true" autoLF="false" avoidImage="false"/>
+  <text:textAlign horizontalAlignment="LEFT" verticalAlignment="CENTER" inLineAlignment="CENTER"/>
+  <text:textStyle vertical="false" nullBlock="false" charSpace="0" lineSpace="0" orgPoint="0" combinedChars="false"/>
+  <pt:data>LOT: </pt:data>
+  <text:stringItem charLen="5"><text:ptFontInfo>
+    <text:logFont name="Yu Gothic" width="0" italic="false" weight="400" charSet="128" pitchAndFamily="34"/>
+    <text:fontExt effect="NOEFFECT" underline="0" strikeout="0" size="7.5pt" orgSize="24pt"
+      textColor="#000000" textPrintColorNumber="1"/>
+  </text:ptFontInfo></text:stringItem>
+</text:text>
+
+<!-- 8. Origin (fixed text) -->
+<text:text>
+  <pt:objectStyle x="4.3pt" y="88.4pt" width="99.2pt" height="9pt"
+    backColor="#FFFFFF" backPrintColorNumber="0" ropMode="COPYPEN"
+    angle="0" anchor="TOPLEFT" flip="NONE">
+    <pt:pen style="NULL" widthX="0.5pt" widthY="0.5pt" color="#000000" printColorNumber="1"/>
+    <pt:brush style="NULL" color="#000000" printColorNumber="1" id="0"/>
+    <pt:expanded objectName="Origin" ID="0" lock="0"
+      templateMergeTarget="LABELLIST" templateMergeType="NONE"
+      templateMergeID="0" linkStatus="NONE" linkID="0"/>
+  </pt:objectStyle>
+  <text:ptFontInfo>
+    <text:logFont name="Yu Gothic" width="0" italic="false" weight="400" charSet="128" pitchAndFamily="34"/>
+    <text:fontExt effect="NOEFFECT" underline="0" strikeout="0" size="7.5pt" orgSize="24pt"
+      textColor="#000000" textPrintColorNumber="1"/>
+  </text:ptFontInfo>
+  <text:textControl control="LONGTEXTFIXED" clipFrame="false" aspectNormal="true" shrink="true" autoLF="false" avoidImage="false"/>
+  <text:textAlign horizontalAlignment="LEFT" verticalAlignment="CENTER" inLineAlignment="CENTER"/>
+  <text:textStyle vertical="false" nullBlock="false" charSpace="0" lineSpace="0" orgPoint="0" combinedChars="false"/>
+  <pt:data>産地: 千葉県館山市</pt:data>
+  <text:stringItem charLen="10"><text:ptFontInfo>
+    <text:logFont name="Yu Gothic" width="0" italic="false" weight="400" charSet="128" pitchAndFamily="34"/>
+    <text:fontExt effect="NOEFFECT" underline="0" strikeout="0" size="7.5pt" orgSize="24pt"
+      textColor="#000000" textPrintColorNumber="1"/>
+  </text:ptFontInfo></text:stringItem>
+</text:text>
+
+<!-- 9. Line 2 (before barcode) -->
+<draw:poly>
+  <pt:objectStyle x="4.3pt" y="99.4pt" width="99.2pt" height="0.6pt"
+    backColor="#FFFFFF" backPrintColorNumber="0" ropMode="COPYPEN"
+    angle="0" anchor="TOPLEFT" flip="NONE">
+    <pt:pen style="SOLID" widthX="0.5pt" widthY="0.5pt" color="#000000" printColorNumber="1"/>
+    <pt:brush style="NULL" color="#000000" printColorNumber="1" id="0"/>
+    <pt:expanded objectName="Line2" ID="0" lock="0"
+      templateMergeTarget="LABELLIST" templateMergeType="NONE"
+      templateMergeID="0" linkStatus="NONE" linkID="0"/>
+  </pt:objectStyle>
+  <draw:polyStyle closePath="false"/>
+  <draw:polyLinePoints points="4.6pt,99.7pt 103.2pt,99.7pt"/>
+</draw:poly>
+
+<!-- 10. IdentBarcode: CODE128 barcode for handy scanner -->
+<barcode:barcodeStyle>
+  <pt:objectStyle x="4.3pt" y="101.4pt" width="99.2pt" height="40pt"
+    backColor="#FFFFFF" backPrintColorNumber="0" ropMode="COPYPEN"
+    angle="0" anchor="TOPLEFT" flip="NONE">
+    <pt:pen style="NULL" widthX="0.5pt" widthY="0.5pt" color="#000000" printColorNumber="1"/>
+    <pt:brush style="NULL" color="#000000" printColorNumber="1" id="0"/>
+    <pt:expanded objectName="IdentBarcode" ID="0" lock="0"
+      templateMergeTarget="LABELLIST" templateMergeType="NONE"
+      templateMergeID="0" linkStatus="NONE" linkID="0"/>
+  </pt:objectStyle>
+  <barcode:barcode protocol="CODE128" data="TGC-00-T000-RO"
+    zeroFill="false" barWidth="0.35pt" barRatio="2.5"
+    useCheckDigit="false" notPrintHRI="false" humanReadbleZoom="80"/>
+</barcode:barcodeStyle>
+
+<!-- 11. Line 3 (after barcode) -->
+<draw:poly>
+  <pt:objectStyle x="4.3pt" y="143.4pt" width="99.2pt" height="0.6pt"
+    backColor="#FFFFFF" backPrintColorNumber="0" ropMode="COPYPEN"
+    angle="0" anchor="TOPLEFT" flip="NONE">
+    <pt:pen style="SOLID" widthX="0.5pt" widthY="0.5pt" color="#000000" printColorNumber="1"/>
+    <pt:brush style="NULL" color="#000000" printColorNumber="1" id="0"/>
+    <pt:expanded objectName="Line3" ID="0" lock="0"
+      templateMergeTarget="LABELLIST" templateMergeType="NONE"
+      templateMergeID="0" linkStatus="NONE" linkID="0"/>
+  </pt:objectStyle>
+  <draw:polyStyle closePath="false"/>
+  <draw:polyLinePoints points="4.6pt,143.7pt 103.2pt,143.7pt"/>
+</draw:poly>
+
+<!-- 12. ExpiryDate -->
+<text:text>
+  <pt:objectStyle x="4.3pt" y="145.4pt" width="99.2pt" height="10pt"
+    backColor="#FFFFFF" backPrintColorNumber="0" ropMode="COPYPEN"
+    angle="0" anchor="TOPLEFT" flip="NONE">
+    <pt:pen style="NULL" widthX="0.5pt" widthY="0.5pt" color="#000000" printColorNumber="1"/>
+    <pt:brush style="NULL" color="#000000" printColorNumber="1" id="0"/>
+    <pt:expanded objectName="ExpiryDate" ID="0" lock="0"
+      templateMergeTarget="LABELLIST" templateMergeType="NONE"
+      templateMergeID="0" linkStatus="NONE" linkID="0"/>
+  </pt:objectStyle>
+  <text:ptFontInfo>
+    <text:logFont name="Yu Gothic" width="0" italic="false" weight="700" charSet="128" pitchAndFamily="34"/>
+    <text:fontExt effect="NOEFFECT" underline="0" strikeout="0" size="8.5pt" orgSize="28pt"
+      textColor="#000000" textPrintColorNumber="1"/>
+  </text:ptFontInfo>
+  <text:textControl control="LONGTEXTFIXED" clipFrame="false" aspectNormal="true" shrink="true" autoLF="false" avoidImage="false"/>
+  <text:textAlign horizontalAlignment="LEFT" verticalAlignment="CENTER" inLineAlignment="CENTER"/>
+  <text:textStyle vertical="false" nullBlock="false" charSpace="0" lineSpace="0" orgPoint="0" combinedChars="false"/>
+  <pt:data>消費期限: </pt:data>
+  <text:stringItem charLen="6"><text:ptFontInfo>
+    <text:logFont name="Yu Gothic" width="0" italic="false" weight="700" charSet="128" pitchAndFamily="34"/>
+    <text:fontExt effect="NOEFFECT" underline="0" strikeout="0" size="8.5pt" orgSize="28pt"
+      textColor="#000000" textPrintColorNumber="1"/>
+  </text:ptFontInfo></text:stringItem>
+</text:text>
+
+</pt:objects>
+</style:sheet>
+</pt:body>
+</pt:document>

@@ -294,12 +294,15 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     display: flex; align-items: center; justify-content: center;
   }
   .pm-label {
-    width: 62mm; padding: 3mm; font-family: sans-serif; color: #000; border: 0.5pt solid #000;
+    width: 38mm; min-height: 58mm; padding: 2mm; font-family: 'Yu Gothic', sans-serif; color: #000; border: 0.5pt solid #000; box-sizing: border-box;
   }
-  .pm-label-title { font-size: 14px; font-weight: bold; }
-  .pm-label-weight { font-size: 22px; font-weight: bold; margin: 2mm 0; }
-  .pm-label-meta { font-size: 9px; }
-  .pm-label-lot { font-size: 10px; letter-spacing: 1px; margin-top: 1mm; font-family: monospace; }
+  .pm-label-header { font-size: 7px; font-weight: bold; text-align: center; border-bottom: 0.5pt solid #000; padding-bottom: 0.5mm; margin-bottom: 1mm; }
+  .pm-label-title { font-size: 11px; font-weight: bold; margin-bottom: 0.5mm; }
+  .pm-label-weight { font-size: 14px; font-weight: bold; text-align: right; margin: 1mm 0; }
+  .pm-label-meta { font-size: 7.5px; }
+  .pm-label-lot { font-size: 7.5px; font-family: monospace; }
+  .pm-label-barcode-text { font-size: 7px; font-family: monospace; text-align: center; border-top: 0.5pt solid #000; margin-top: 1mm; padding-top: 0.5mm; letter-spacing: 1px; }
+  .pm-label-expiry { font-size: 8.5px; font-weight: bold; border-top: 0.5pt solid #000; margin-top: 1mm; padding-top: 0.5mm; }
 }
 </style>
 </head>
@@ -1610,7 +1613,8 @@ async function pmShowIndividualDetail() {
 }
 
 // ── ラベルテンプレートパス設定（b-PAC用） ──
-const PM_LABEL_TEMPLATE = 'C:\\TGC\\labels\\inventory_label.lbx';
+// ラベルファイルはこのパスに配置: C:\TGC\labels\TGC_inventory_label.lbx
+const PM_LABEL_TEMPLATE = 'C:\\TGC\\labels\\TGC_inventory_label.lbx';
 
 // ── ロットコード生成 ──
 function generateLotCode(individualCode, partName, seq) {
@@ -2130,41 +2134,54 @@ function pmRenderCompleted() {
 async function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
   if (!partName) partName = pmSelectedPart.part_name;
   if (labelWeight === undefined) labelWeight = weight_kg;
-  const species = pmIndividual.species;
-  const date = new Date().toLocaleDateString('ja-JP');
+  const species = pmIndividual.species || '';
+  const today = new Date();
+  const processDate = today.toLocaleDateString('ja-JP');
+  // 消費期限: 加工日+7日（冷蔵）
+  const expiryDate = new Date(today);
+  expiryDate.setDate(expiryDate.getDate() + 7);
+  const expiryStr = '消費期限: ' + expiryDate.toLocaleDateString('ja-JP');
 
-  // Try b-PAC Extension first
+  // b-PAC SDK (Chrome Extension) でラベル印刷
   try {
-    if (window.bpac) {
-      const labelData = {
-        templatePath: PM_LABEL_TEMPLATE,
-        objects: [
-          { name: 'lot_code', text: lotCode },
-          { name: 'part_name', text: `${species} ${partName}` },
-          { name: 'weight', text: `${labelWeight.toFixed(3)} kg` },
-          { name: 'date', text: date },
-          { name: 'barcode', text: identCode }
-        ]
-      };
-      await window.bpac.print(labelData);
-      return; // b-PAC success
+    if (window.bpac && typeof window.bpac.IDocument !== 'undefined') {
+      const doc = bpac.IDocument;
+      const ret = await doc.Open(PM_LABEL_TEMPLATE);
+      if (ret) {
+        doc.GetObject('SpeciesPartName').Text = species + ' ' + partName;
+        doc.GetObject('IndividualID').Text    = pmIndividual.label_id;
+        doc.GetObject('Weight').Text          = labelWeight.toFixed(3) + ' kg';
+        doc.GetObject('ProcessDate').Text     = '加工日: ' + processDate;
+        doc.GetObject('LotCode').Text         = 'LOT: ' + lotCode;
+        doc.GetObject('ExpiryDate').Text      = expiryStr;
+        doc.GetObject('IdentBarcode').Text    = identCode;
+        await doc.StartPrint('', bpac.PrintOptionConstants.bpoDefault);
+        await doc.PrintOut(1, bpac.PrintOptionConstants.bpoDefault);
+        await doc.EndPrint();
+        doc.Close();
+        return; // b-PAC success
+      }
     }
   } catch(e) {
     console.warn('b-PAC印刷失敗:', e);
   }
 
   // Fallback: ブラウザ印刷
-  pmPrintLabelFallback(lotCode, partName, species, labelWeight, date, identCode);
+  pmPrintLabelFallback(lotCode, partName, species, labelWeight, processDate, identCode, expiryStr);
 }
 
-function pmPrintLabelFallback(lotCode, partName, species, labelWeight, date, identCode) {
+function pmPrintLabelFallback(lotCode, partName, species, labelWeight, date, identCode, expiryStr) {
   const printArea = document.getElementById('pmLabelPrintArea');
   printArea.innerHTML = `
     <div class="pm-label">
+      <div class="pm-label-header">館山ジビエセンター</div>
       <div class="pm-label-title">${species} ${partName}</div>
       <div class="pm-label-weight">${labelWeight.toFixed(3)} kg</div>
-      <div class="pm-label-meta">${date} / ${identCode}</div>
-      <div class="pm-label-lot">${lotCode}</div>
+      <div class="pm-label-meta">個体: ${pmIndividual.label_id}</div>
+      <div class="pm-label-meta">加工日: ${date}</div>
+      <div class="pm-label-lot">LOT: ${lotCode}</div>
+      <div class="pm-label-barcode-text">${identCode}</div>
+      <div class="pm-label-expiry">${expiryStr || ''}</div>
     </div>
   `;
   printArea.style.display = 'flex';

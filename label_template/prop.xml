@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<meta:properties
+  xmlns:meta="http://schemas.brother.info/ptouch/2007/lbx/meta"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:dcterms="http://purl.org/dc/terms/">
+  <meta:appName>P-touch Editor</meta:appName>
+  <dc:title>精肉ラベル</dc:title>
+  <dc:creator>館山ジビエセンター</dc:creator>
+  <dcterms:created>2026-04-05T00:00:00Z</dcterms:created>
+  <dcterms:modified>2026-04-05T00:00:00Z</dcterms:modified>
+  <meta:numPages>1</meta:numPages>
+</meta:properties>
