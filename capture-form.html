@@ -118,7 +118,9 @@ input, select, textarea, button { font-family: inherit; font-size: 1rem; }
   background: var(--surface2); border: 1px solid var(--border2);
   border-radius: var(--radius); color: var(--text);
   font-size: 1rem; outline: none; transition: border-color 0.2s;
+  color-scheme: dark;
 }
+input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(0.8); cursor: pointer; }
 .input:focus, .select-wrap select:focus, textarea:focus {
   border-color: var(--gold2);
 }
@@ -446,7 +448,8 @@ textarea { min-height: 80px; resize: vertical; }
       <div class="form-row">
         <label class="form-label">捕獲方法</label>
         <div class="toggle-group" data-field="capture_method">
-          <div class="toggle-btn" data-val="わな">わな</div>
+          <div class="toggle-btn" data-val="くくり罠">くくり罠</div>
+          <div class="toggle-btn" data-val="箱罠">箱罠</div>
           <div class="toggle-btn" data-val="銃猟">銃猟</div>
           <div class="toggle-btn" data-val="その他">その他</div>
         </div>
