@@ -1711,10 +1711,10 @@ async function pmSelectIndividual(labelId) {
     pmPriceMaster = []; // PM_PARTSを使うため不要
 
     // Load already completed parts for this individual
-    const existing = await sb('GET', 'inventory', null, `?individual_id=eq.${encodeURIComponent(labelId)}&select=part_name,weight,weight_kg,lot_code,ident_code`);
+    const existing = await sb('GET', 'inventory', null, `?individual_id=eq.${encodeURIComponent(labelId)}&select=part_name,weight,lot_code,ident_code`);
     pmCompletedParts = existing.map(e => ({
       part_name: e.part_name,
-      weight_kg: parseFloat(e.weight_kg || e.weight) || 0,
+      weight_kg: parseFloat(e.weight) || 0,
       lot_code: e.lot_code || '',
       ident_code: e.ident_code || ''
     }));
@@ -1872,21 +1872,27 @@ async function scaleConnect() {
 }
 
 function scaleHandleLine(line) {
-  // A&D format: "ST,+000.000 kg" / "ST,-000.000 kg" / "US,..."
-  // Only use stable readings (ST)
+  // A&D format examples:
+  //   "ST,+  1.234 kg"  "ST,+001.234 kg"  "ST,GS,+001.234 kg"
+  // Only use stable readings (ST prefix)
   if (!line.startsWith('ST,')) return;
-  // Extract numeric value: ST,+ 01.234 kg → 1.234
-  const numMatch = line.match(/ST,[+\-]\s*([\d.]+)/);
+  // Extract numeric value — allow anything between ST, and the sign
+  const numMatch = line.match(/ST,.*?([+\-])\s*([\d]+\.[\d]+)/);
   if (!numMatch) return;
-  const weight = parseFloat(numMatch[1]);
+  const weight = parseFloat(numMatch[2]);
   if (isNaN(weight) || weight < 0.050) return;
 
-  // 表示更新
+  // 重量欄を更新（常に）
   document.getElementById('pmWeightDisplay').textContent = weight.toFixed(3);
 
-  // 計量待機中なら自動処理
-  if (pmWaitingForScale) {
-    pmOnWeightReceived(weight);
+  // 部位が選択されていて計量待機中 or 計量ボタンが有効なら自動登録
+  if (pmSelectedPart && document.getElementById('pmOverlay').classList.contains('active')) {
+    if (pmWaitingForScale) {
+      pmOnWeightReceived(weight);
+    } else if (!document.getElementById('pmMeasureBtn').disabled) {
+      // ボタン有効時もスケール安定値で自動実行
+      pmOnWeightReceived(weight);
+    }
   }
 }
 
