@@ -492,8 +492,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div class="pm-header-ops" id="pmHeaderOps"></div>
       <div class="pm-header-right">
         <button id="scaleConnBtn" onclick="scaleConnect()" style="font-size:11px;padding:3px 8px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;white-space:nowrap;">⚖️ はかり未接続</button>
-        <span id="scaleDebug" style="display:none;font-size:10px;color:#e67e22;background:#fff8ee;border:1px solid #f0c070;border-radius:6px;padding:2px 6px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
-        <span id="bpacStatus" style="font-size:11px;padding:3px 8px;border-radius:10px;border:1px solid var(--border);white-space:nowrap;color:var(--text2);">確認中...</span>
+<span id="bpacStatus" style="font-size:11px;padding:3px 8px;border-radius:10px;border:1px solid var(--border);white-space:nowrap;color:var(--text2);">確認中...</span>
         <button class="pm-close" onclick="closeProcessingMode()">✕ 閉じる</button>
       </div>
     </div>
@@ -2142,17 +2141,10 @@ async function scaleConnect() {
       const { value, done } = await serialReader.read();
       if (done) break;
       lineBuf += value;
-      // デバッグ: 生データをリアルタイム表示
-      const dbg = document.getElementById('scaleDebug');
-      if (dbg) {
-        dbg.textContent = '[受信中] ' + JSON.stringify(lineBuf.slice(-80));
-        dbg.style.display = 'block';
-      }
       let nl;
       while ((nl = lineBuf.indexOf('\n')) !== -1) {
         const line = lineBuf.slice(0, nl).trim();
         lineBuf = lineBuf.slice(nl + 1);
-        if (dbg && line) dbg.textContent = '[行] ' + JSON.stringify(line);
         scaleHandleLine(line);
       }
     }
