@@ -520,6 +520,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <div class="pm-weight-selected">選択: <strong id="pmSelectedPartName">未選択</strong></div>
           <div class="pm-weight-display"><span id="pmWeightDisplay">0.000</span> <span class="pm-weight-unit">kg</span></div>
           <div id="pmRetailPresetHint" style="font-size:11px;color:var(--text2);margin-top:4px;min-height:16px;"></div>
+          <div id="scaleDebug" style="display:none;font-size:10px;color:#e67e22;background:#fff8ee;border:1px solid #f0c070;border-radius:6px;padding:4px 8px;margin-top:4px;word-break:break-all;max-width:100%;"></div>
           <button class="pm-measure-btn" id="pmMeasureBtn" onclick="pmStartMeasure()" disabled>登録</button>
           <button class="pm-measure-btn" id="pmPrintBtn" onclick="pmPrintOnly()" disabled style="margin-top:6px;background:linear-gradient(135deg,#4a7ab8,#5a8cd8);font-size:15px;">🖨 ラベル印刷</button>
           <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;">
@@ -2140,11 +2141,17 @@ async function scaleConnect() {
       const { value, done } = await serialReader.read();
       if (done) break;
       lineBuf += value;
-      // A&D出力: "ST,+ 01.234 kg\r\n" or "US,+ 01.234 kg\r\n"
+      // デバッグ: 生データをリアルタイム表示
+      const dbg = document.getElementById('scaleDebug');
+      if (dbg) {
+        dbg.textContent = '[受信中] ' + JSON.stringify(lineBuf.slice(-80));
+        dbg.style.display = 'block';
+      }
       let nl;
       while ((nl = lineBuf.indexOf('\n')) !== -1) {
         const line = lineBuf.slice(0, nl).trim();
         lineBuf = lineBuf.slice(nl + 1);
+        if (dbg && line) dbg.textContent = '[行] ' + JSON.stringify(line);
         scaleHandleLine(line);
       }
     }
