@@ -2161,9 +2161,7 @@ async function scaleConnect() {
     btn.textContent = '⚖️ はかり未接続';
     btn.style.color = 'var(--text2)';
     btn.style.borderColor = 'var(--border)';
-    if (err.name !== 'NotFoundError') {
-      toast('はかり接続エラー: ' + err.message, 'error');
-    }
+    toast('はかり接続エラー: ' + err.name + ' / ' + err.message, 'error');
   }
 }
 
