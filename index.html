@@ -492,6 +492,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div class="pm-header-ops" id="pmHeaderOps"></div>
       <div class="pm-header-right">
         <button id="scaleConnBtn" onclick="scaleConnect()" style="font-size:11px;padding:3px 8px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;white-space:nowrap;">⚖️ はかり未接続</button>
+        <span id="scaleDebug" style="display:none;font-size:10px;color:#e67e22;background:#fff8ee;border:1px solid #f0c070;border-radius:6px;padding:2px 6px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
         <span id="bpacStatus" style="font-size:11px;padding:3px 8px;border-radius:10px;border:1px solid var(--border);white-space:nowrap;color:var(--text2);">確認中...</span>
         <button class="pm-close" onclick="closeProcessingMode()">✕ 閉じる</button>
       </div>
@@ -520,7 +521,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <div class="pm-weight-selected">選択: <strong id="pmSelectedPartName">未選択</strong></div>
           <div class="pm-weight-display"><span id="pmWeightDisplay">0.000</span> <span class="pm-weight-unit">kg</span></div>
           <div id="pmRetailPresetHint" style="font-size:11px;color:var(--text2);margin-top:4px;min-height:16px;"></div>
-          <div id="scaleDebug" style="display:none;font-size:10px;color:#e67e22;background:#fff8ee;border:1px solid #f0c070;border-radius:6px;padding:4px 8px;margin-top:4px;word-break:break-all;max-width:100%;"></div>
+
           <button class="pm-measure-btn" id="pmMeasureBtn" onclick="pmStartMeasure()" disabled>登録</button>
           <button class="pm-measure-btn" id="pmPrintBtn" onclick="pmPrintOnly()" disabled style="margin-top:6px;background:linear-gradient(135deg,#4a7ab8,#5a8cd8);font-size:15px;">🖨 ラベル印刷</button>
           <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;">
