@@ -2394,127 +2394,88 @@ async function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight
 }
 
 function pmPrintLabelFallback(lotCode, partName, species, labelWeight, date, identCode, expiryStr) {
-  const win = window.open('', '_blank', 'width=300,height=500');
-  if (!win) { toast('ポップアップがブロックされました。許可してください', 'error'); return; }
+  // 同一ページ内で印刷（ポップアップブロック回避）
+  const labelHTML = `
+    <div class="tgc-label">
+      <div class="tgc-lbl-header">館山ジビエセンター</div>
+      <div class="tgc-lbl-title">${species}　${partName}</div>
+      <div class="tgc-lbl-weight">${labelWeight.toFixed(3)}<span class="tgc-lbl-unit"> kg</span></div>
+      <div class="tgc-lbl-expiry">${expiryStr}</div>
+      <div class="tgc-lbl-meta">個体: ${pmIndividual.label_id}　加工: ${date}</div>
+      <div class="tgc-lbl-lot">LOT: ${lotCode}</div>
+      <div class="tgc-lbl-bc-wrap"><svg id="tgcBcSvg"></svg></div>
+      <div class="tgc-lbl-bc-text">${identCode}</div>
+    </div>`;
 
-  // CODE128バーコードをSVGで生成
-  function makeBarcodeSVG(text) {
-    // JsBarcodeなしで簡易CODE128描画（バー幅ベース）
-    // 代わりにtext表示 + 後でJsBarcode読み込み後に置換
-    return `<svg id="bcSvg" style="width:100%;height:40px;"></svg>`;
-  }
+  // 印刷用コンテナを作成して body に追加
+  const container = document.createElement('div');
+  container.id = 'tgcPrintContainer';
+  container.innerHTML = labelHTML;
+  document.body.appendChild(container);
 
-  win.document.write(`<!DOCTYPE html>
-<html><head>
-<meta charset="UTF-8">
-<title>ラベル</title>
-<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/barcodes/JsBarcode.CODE128.min.js"><\/script>
-<style>
-  @page {
-    size: 62mm 90mm;
-    margin: 0;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    width: 62mm;
-    height: 90mm;
-    font-family: 'Meiryo', 'Yu Gothic', sans-serif;
-    padding: 3mm 3mm 2mm 3mm;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    overflow: hidden;
-  }
-  .header {
-    font-size: 8pt;
-    text-align: center;
-    border-bottom: 0.5pt solid #000;
-    padding-bottom: 1mm;
-    letter-spacing: 0.5px;
-  }
-  .main-title {
-    font-size: 16pt;
-    font-weight: bold;
-    text-align: center;
-    margin: 1.5mm 0 0.5mm;
-    line-height: 1.1;
-  }
-  .weight {
-    font-size: 20pt;
-    font-weight: bold;
-    text-align: center;
-    margin: 0;
-  }
-  .weight-unit { font-size: 12pt; }
-  .meta-row {
-    display: flex;
-    justify-content: space-between;
-    font-size: 7.5pt;
-    margin-top: 1mm;
-  }
-  .expiry {
-    font-size: 8pt;
-    font-weight: bold;
-    text-align: center;
-    margin-top: 1mm;
-    border: 0.5pt solid #000;
-    padding: 0.5mm 1mm;
-  }
-  .lot {
-    font-size: 7pt;
-    text-align: center;
-    margin-top: 1mm;
-    color: #333;
-  }
-  .barcode-wrap {
-    margin-top: 1.5mm;
-    text-align: center;
-  }
-  .barcode-wrap svg { max-width: 56mm; height: 12mm; }
-  .barcode-text {
-    font-size: 6.5pt;
-    text-align: center;
-    margin-top: 0.5mm;
-    font-family: monospace;
-    letter-spacing: 1px;
-  }
-  .origin { font-size: 7pt; text-align: right; color: #555; }
-</style>
-</head><body>
-  <div>
-    <div class="header">館山ジビエセンター</div>
-    <div class="main-title">${species}　${partName}</div>
-    <div class="weight">${labelWeight.toFixed(3)}<span class="weight-unit"> kg</span></div>
-    <div class="meta-row">
-      <span>個体: ${pmIndividual.label_id}</span>
-      <span class="origin">千葉県館山市</span>
-    </div>
-    <div class="expiry">${expiryStr}</div>
-    <div class="lot">LOT: ${lotCode}　加工日: ${date}</div>
-    <div class="barcode-wrap">
-      <svg id="bcSvg"></svg>
-    </div>
-    <div class="barcode-text">${identCode}</div>
-  </div>
-<script>
-  window.onload = function() {
-    try {
-      JsBarcode('#bcSvg', '${identCode}', {
-        format: 'CODE128',
-        width: 1.5,
-        height: 38,
-        displayValue: false,
-        margin: 2
-      });
-    } catch(e) {
-      document.getElementById('bcSvg').style.display='none';
+  // 印刷用スタイルを動的に注入
+  const style = document.createElement('style');
+  style.id = 'tgcPrintStyle';
+  style.textContent = `
+    @media print {
+      @page { size: 40mm 60mm; margin: 0; }
+      body > *:not(#tgcPrintContainer) { display: none !important; }
+      #tgcPrintContainer {
+        display: block !important;
+        position: fixed; inset: 0;
+        width: 40mm; height: 60mm;
+        background: #fff;
+      }
     }
+    #tgcPrintContainer {
+      display: none;
+      width: 40mm; height: 60mm;
+      font-family: 'Meiryo','Yu Gothic',sans-serif;
+      padding: 2mm 2mm 1.5mm 2mm;
+      box-sizing: border-box;
+      background: #fff;
+    }
+    .tgc-label { display:flex; flex-direction:column; height:100%; }
+    .tgc-lbl-header { font-size:6.5pt; text-align:center; border-bottom:0.5pt solid #000; padding-bottom:0.5mm; }
+    .tgc-lbl-title  { font-size:13pt; font-weight:bold; text-align:center; margin:0.5mm 0; line-height:1.1; }
+    .tgc-lbl-weight { font-size:17pt; font-weight:bold; text-align:center; margin:0; }
+    .tgc-lbl-unit   { font-size:10pt; }
+    .tgc-lbl-expiry { font-size:7pt; font-weight:bold; text-align:center; border:0.5pt solid #000; padding:0.3mm 1mm; margin-top:0.5mm; }
+    .tgc-lbl-meta   { font-size:6pt; margin-top:0.5mm; }
+    .tgc-lbl-lot    { font-size:6pt; color:#333; }
+    .tgc-lbl-bc-wrap{ margin-top:1mm; text-align:center; flex:1; display:flex; align-items:center; justify-content:center; }
+    .tgc-lbl-bc-wrap svg { width:36mm; height:10mm; }
+    .tgc-lbl-bc-text{ font-size:5.5pt; text-align:center; font-family:monospace; letter-spacing:0.5px; }
+  `;
+  document.head.appendChild(style);
+
+  // JsBarcode を動的ロード（未ロードなら）
+  function doBarcodeThenPrint() {
+    try {
+      if (typeof JsBarcode !== 'undefined') {
+        JsBarcode('#tgcBcSvg', identCode, { format:'CODE128', width:1.2, height:28, displayValue:false, margin:1 });
+      }
+    } catch(e) {}
     window.print();
-    window.onafterprint = function() { window.close(); };
-  };
-<\/script>
-</body></html>`);
-  win.document.close();
+    // 印刷後クリーンアップ
+    setTimeout(() => {
+      const c = document.getElementById('tgcPrintContainer');
+      const s = document.getElementById('tgcPrintStyle');
+      if (c) c.remove();
+      if (s) s.remove();
+      refocusScaleInput();
+    }, 800);
+  }
+
+  if (typeof JsBarcode === 'undefined') {
+    const sc = document.createElement('script');
+    sc.src = 'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/barcodes/JsBarcode.CODE128.min.js';
+    sc.onload = doBarcodeThenPrint;
+    sc.onerror = doBarcodeThenPrint; // バーコードなしで印刷
+    document.head.appendChild(sc);
+  } else {
+    doBarcodeThenPrint();
+  }
 }
 
 // ── 全部位完了 ──
