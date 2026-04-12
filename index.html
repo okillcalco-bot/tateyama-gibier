@@ -519,6 +519,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="pm-weight-section">
           <div class="pm-weight-selected">選択: <strong id="pmSelectedPartName">未選択</strong></div>
           <div class="pm-weight-display"><span id="pmWeightDisplay">0.000</span> <span class="pm-weight-unit">kg</span></div>
+          <div id="pmRetailPresetHint" style="font-size:11px;color:var(--text2);margin-top:4px;min-height:16px;"></div>
           <button class="pm-measure-btn" id="pmMeasureBtn" onclick="pmStartMeasure()" disabled>登録</button>
           <button class="pm-measure-btn" id="pmPrintBtn" onclick="pmPrintOnly()" disabled style="margin-top:6px;background:linear-gradient(135deg,#4a7ab8,#5a8cd8);font-size:15px;">🖨 ラベル印刷</button>
           <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;">
@@ -1391,6 +1392,14 @@ const PM_RETAIL_WEIGHTS = {
   'スネ':     0.250,
 };
 
+const RETAIL_PRESETS = {
+  'ロース':   { weight: 0.170 },
+  'バラ':     { weight: 0.200 },
+  '肩ロース': { weight: 0.200 },
+  'モモ':     { weight: 0.220 },
+  'スネ':     { weight: 0.250 }
+};
+const RETAIL_PART_IDS = ['pp-ro', 'pp-ba', 'pp-kr', 'pp-mo', 'pp-sn'];
 const PM_PARTS = [
   { id:'pp-ro',  part_name:'ロース',           barcode_num:'RO' },
   { id:'pp-hi',  part_name:'ヒレ',             barcode_num:'HI' },
@@ -1407,6 +1416,7 @@ const PM_PARTS = [
 
 // セッションメモリ: { '田口': { individual, completedParts, selectedPart, boneIn, grade }, ... }
 let pmSessions = {};
+let pmHeldIndividuals = []; // 一時保管中の個体リスト
 let pmCurrentOperator = '';
 
 let pmIndividual = null;
@@ -1474,7 +1484,11 @@ async function pmSwitchOperator(op) {
 function pmRenderHeaderOps() {
   const c = document.getElementById('pmHeaderOps');
   if (!c) return;
-  c.innerHTML = PM_OPERATORS.map(op => {
+  // Pause button
+  const pauseHtml = pmIndividual
+    ? '<button class="pm-op-btn" style="background:rgba(232,164,74,0.2);border-color:var(--accent);color:var(--accent);margin-right:8px;" onclick="pmPauseIndividual()">⏸ 一時保管</button>'
+    : '';
+  c.innerHTML = pauseHtml + PM_OPERATORS.map(op => {
     const hasSess = !!pmSessions[op];
     const isActive = op === pmCurrentOperator;
     return `<button class="pm-op-btn ${isActive ? 'active' : ''}" onclick="pmSwitchOperator('${op}')">${op}${hasSess && !isActive ? '<span class="session-dot"></span>' : ''}</button>`;
@@ -1507,6 +1521,68 @@ function pmRenderSetupOps() {
   }
 }
 
+function pmPauseIndividual() {
+  if (!pmIndividual) return;
+  pmHeldIndividuals.push({
+    individual: pmIndividual,
+    completedParts: [...pmCompletedParts],
+    selectedPart: pmSelectedPart,
+    boneIn: pmBoneIn,
+    grade: pmGrade,
+    retail: pmRetail,
+    operatorName: pmOperatorName,
+    heldAt: new Date().toLocaleTimeString('ja-JP', {hour:'2-digit',minute:'2-digit'})
+  });
+  pmIndividual = null;
+  pmCompletedParts = [];
+  pmSelectedPart = null;
+  pmRenderParts();
+  pmUpdateSelectedPartDisplay();
+  pmRenderHeldBanner();
+  pmRenderHeaderOps();
+  document.getElementById('pmMain').style.display = 'none';
+  document.getElementById('pmSetup').style.display = '';
+  toast('一時保管しました。別の個体を選択してください', 'success');
+}
+function pmRenderHeldBanner() {
+  let el = document.getElementById('pmHeldBanner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'pmHeldBanner';
+    el.style.cssText = 'background:rgba(232,164,74,0.12);border:1px solid var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:12px;';
+    const setup = document.getElementById('pmSetup');
+    if (setup) setup.insertBefore(el, setup.firstChild);
+  }
+  if (!pmHeldIndividuals.length) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.innerHTML = '<div style="font-size:12px;color:var(--accent);font-weight:700;margin-bottom:8px;">⏸ 一時保管中の個体 (' + pmHeldIndividuals.length + ')—いつでも再開できます</div>' +
+    pmHeldIndividuals.map(function(h,i){
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">' +
+        '<div><span style="font-size:13px;font-weight:700;">' + (h.individual.label_id||h.individual.id||'?') + '</span>' +
+        '<span style="font-size:11px;color:var(--text2);margin-left:8px;">' + h.heldAt + ' 保管 / ' + h.operatorName + '</span></div>' +
+        '<button style="padding:4px 14px;background:var(--accent);color:#111;border:none;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;" onclick="pmResumeHeld(' + i + ')">再開</button></div>';
+    }).join('');
+}
+function pmResumeHeld(index) {
+  const h = pmHeldIndividuals.splice(index, 1)[0];
+  if (!h) return;
+  pmIndividual = h.individual;
+  pmCompletedParts = [...h.completedParts];
+  pmSelectedPart = h.selectedPart;
+  pmBoneIn = h.boneIn;
+  pmGrade = h.grade;
+  pmRetail = h.retail;
+  pmOperatorName = h.operatorName;
+  pmCurrentOperator = pmOperatorName;
+  pmRenderParts();
+  pmUpdateSelectedPartDisplay();
+  pmShowIndividualDetail();
+  pmRenderHeldBanner();
+  pmRenderHeaderOps();
+  document.getElementById('pmSetup').style.display = 'none';
+  document.getElementById('pmMain').style.display = '';
+  toast('再開：' + (h.individual.label_id||h.individual.id||'?'), 'success');
+}
 function pmSetupSelectOp(op) {
   pmCurrentOperator = op;
   pmOperatorName = op;
@@ -1567,6 +1643,9 @@ function pmRenderOptions() {
 
 function pmToggleRetail() {
   pmRetail = !pmRetail;
+  // Clear preset hint when turning off
+  if (!pmRetail) { const h = document.getElementById('pmRetailPresetHint'); if(h) h.textContent=''; }
+  pmRenderParts();
   const btn = document.getElementById('pmRetailBtn');
   btn.textContent = `🏪 小売: ${pmRetail ? 'ON' : 'OFF'}`;
   pmRetail ? btn.classList.add('bone-on') : btn.classList.remove('bone-on');
@@ -1669,6 +1748,7 @@ async function checkBpacStatus() {
 
 // ── 精肉モードを開く ──
 function openProcessingMode() {
+  pmHeldIndividuals = [];
   const overlay = document.getElementById('pmOverlay');
   overlay.classList.add('active');
   document.getElementById('pmSetup').style.display = 'block';
@@ -1776,7 +1856,8 @@ async function pmSelectIndividual(labelId) {
 function pmRenderParts() {
   const grid = document.getElementById('pmPartsGrid');
   const doneParts = pmCompletedParts.map(c => c.part_name);
-  grid.innerHTML = PM_PARTS.map(p => {
+  const partsToShow = pmRetail ? PM_PARTS.filter(p => RETAIL_PART_IDS.includes(p.id)) : PM_PARTS;
+  grid.innerHTML = partsToShow.map(p => {
     const doneCount = doneParts.filter(d => d.includes(p.part_name)).length;
     const isSelected = pmSelectedPart && pmSelectedPart.id === p.id;
     return `<button class="part-btn ${isSelected ? 'active' : ''}" id="pm-part-${p.id}" onclick="pmSelectPart('${p.id}')">
@@ -1792,6 +1873,18 @@ function pmSelectPart(partId) {
   if (!part) return;
   pmSelectedPart = part;
 
+  // Retail preset auto-fill
+  if (pmRetail && RETAIL_PRESETS[part.part_name]) {
+    const preset = RETAIL_PRESETS[part.part_name].weight;
+    pmWeightBuffer = preset.toFixed(3);
+    const wd = document.getElementById('pmWeightDisplay');
+    if (wd) wd.textContent = preset.toFixed(3);
+    const hint = document.getElementById('pmRetailPresetHint');
+    if (hint) hint.textContent = 'プリセット: ' + (preset*1000).toFixed(0) + 'g（計りに乗せると実重が反映されます）';
+  } else {
+    const hint = document.getElementById('pmRetailPresetHint');
+    if (hint) hint.textContent = '';
+  }
   // UI update
   document.querySelectorAll('#pmPartsGrid .part-btn').forEach(b => b.classList.remove('active'));
   const btn = document.getElementById('pm-part-' + partId);
