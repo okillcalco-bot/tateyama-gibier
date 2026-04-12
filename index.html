@@ -2361,10 +2361,10 @@ async function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight
   const species = pmIndividual.species || '';
   const today = new Date();
   const processDate = today.toLocaleDateString('ja-JP');
-  // 消費期限: 加工日+7日（冷蔵）
+  // 消費期限: 精肉日+1年（冷凍）
   const expiryDate = new Date(today);
-  expiryDate.setDate(expiryDate.getDate() + 7);
-  const expiryStr = '消費期限: ' + expiryDate.toLocaleDateString('ja-JP');
+  expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+  const expiryStr = expiryDate.toLocaleDateString('ja-JP');
 
   // b-PAC Chrome Extension でラベル印刷
   // オブジェクト名はテンプレート(TGC_inventory_label.lbx)に合わせる:
@@ -2400,87 +2400,118 @@ async function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight
 }
 
 function pmPrintLabelFallback(lotCode, partName, species, labelWeight, date, identCode, expiryStr) {
-  // 同一ページ内で印刷（ポップアップブロック回避）
-  const labelHTML = `
-    <div class="tgc-label">
-      <div class="tgc-lbl-header">館山ジビエセンター</div>
-      <div class="tgc-lbl-title">${species}　${partName}</div>
-      <div class="tgc-lbl-weight">${labelWeight.toFixed(3)}<span class="tgc-lbl-unit"> kg</span></div>
-      <div class="tgc-lbl-expiry">${expiryStr}</div>
-      <div class="tgc-lbl-meta">個体: ${pmIndividual.label_id}　加工: ${date}</div>
-      <div class="tgc-lbl-lot">LOT: ${lotCode}</div>
-      <div class="tgc-lbl-bc-wrap"><svg id="tgcBcSvg"></svg></div>
-      <div class="tgc-lbl-bc-text">${identCode}</div>
-    </div>`;
+  const speciesName = species.includes('イノシシ') ? 'イノシシ肉' :
+                      species.includes('鹿') ? '鹿肉' : species;
 
-  // 印刷用コンテナを作成して body に追加
-  const container = document.createElement('div');
-  container.id = 'tgcPrintContainer';
-  container.innerHTML = labelHTML;
-  document.body.appendChild(container);
+  function buildLabelHTML(origin) {
+    return `
+      <div class="tgc-label">
+        <div class="tgc-lbl-origin">${origin}　${speciesName}</div>
+        <div class="tgc-lbl-row">個体管理番号　${pmIndividual.label_id}</div>
+        <div class="tgc-lbl-part">${partName}</div>
+        <div class="tgc-lbl-weight">${labelWeight.toFixed(3)}<span class="tgc-lbl-unit"> kg</span></div>
+        <div class="tgc-lbl-expiry">消費期限　${expiryStr}</div>
+        <div class="tgc-lbl-temp">保存温度　-18℃以下</div>
+        <div class="tgc-lbl-bc-wrap"><svg id="tgcBcSvg"></svg></div>
+        <div class="tgc-lbl-bc-text">${identCode}</div>
+        <div class="tgc-lbl-maker">製造　館山ジビエセンター（合同会社アルコ）</div>
+        <div class="tgc-lbl-addr">千葉県館山市西長田1163-5</div>
+      </div>`;
+  }
 
-  // 印刷用スタイルを動的に注入
+  // 印刷用スタイル
   const style = document.createElement('style');
   style.id = 'tgcPrintStyle';
   style.textContent = `
     @media print {
       @page { size: 40mm 60mm; margin: 0; }
       body > *:not(#tgcPrintContainer) { display: none !important; }
-      #tgcPrintContainer {
-        display: block !important;
-        position: fixed; inset: 0;
-        width: 40mm; height: 60mm;
-        background: #fff;
-      }
+      #tgcPrintContainer { display: block !important; position: fixed; inset: 0; width: 40mm; height: 60mm; background: #fff; }
+      #tgcPrintModal { display: none !important; }
     }
     #tgcPrintContainer {
-      display: none;
-      width: 40mm; height: 60mm;
+      display: none; width: 40mm; height: 60mm;
       font-family: 'Meiryo','Yu Gothic',sans-serif;
-      padding: 2mm 2mm 1.5mm 2mm;
-      box-sizing: border-box;
-      background: #fff;
+      padding: 1.5mm 2mm; box-sizing: border-box; background: #fff;
     }
-    .tgc-label { display:flex; flex-direction:column; height:100%; }
-    .tgc-lbl-header { font-size:6.5pt; text-align:center; border-bottom:0.5pt solid #000; padding-bottom:0.5mm; }
-    .tgc-lbl-title  { font-size:13pt; font-weight:bold; text-align:center; margin:0.5mm 0; line-height:1.1; }
-    .tgc-lbl-weight { font-size:17pt; font-weight:bold; text-align:center; margin:0; }
-    .tgc-lbl-unit   { font-size:10pt; }
-    .tgc-lbl-expiry { font-size:7pt; font-weight:bold; text-align:center; border:0.5pt solid #000; padding:0.3mm 1mm; margin-top:0.5mm; }
-    .tgc-lbl-meta   { font-size:6pt; margin-top:0.5mm; }
-    .tgc-lbl-lot    { font-size:6pt; color:#333; }
-    .tgc-lbl-bc-wrap{ margin-top:1mm; text-align:center; flex:1; display:flex; align-items:center; justify-content:center; }
-    .tgc-lbl-bc-wrap svg { width:36mm; height:10mm; }
-    .tgc-lbl-bc-text{ font-size:5.5pt; text-align:center; font-family:monospace; letter-spacing:0.5px; }
+    .tgc-label { display:flex; flex-direction:column; height:100%; gap:0; }
+    .tgc-lbl-origin { font-size:9pt; font-weight:bold; border-bottom:0.5pt solid #000; padding-bottom:0.5mm; margin-bottom:0.5mm; }
+    .tgc-lbl-row    { font-size:5.5pt; color:#333; }
+    .tgc-lbl-part   { font-size:10pt; font-weight:bold; margin:0.5mm 0 0; }
+    .tgc-lbl-weight { font-size:15pt; font-weight:bold; margin:0; line-height:1; }
+    .tgc-lbl-unit   { font-size:9pt; }
+    .tgc-lbl-expiry { font-size:6.5pt; font-weight:bold; margin-top:0.5mm; }
+    .tgc-lbl-temp   { font-size:6pt; color:#333; }
+    .tgc-lbl-bc-wrap{ flex:1; display:flex; align-items:center; justify-content:center; margin:0.5mm 0 0; }
+    .tgc-lbl-bc-wrap svg { width:36mm; height:9mm; }
+    .tgc-lbl-bc-text{ font-size:5pt; text-align:center; font-family:monospace; }
+    .tgc-lbl-maker  { font-size:5pt; color:#444; margin-top:0.3mm; }
+    .tgc-lbl-addr   { font-size:5pt; color:#444; }
   `;
   document.head.appendChild(style);
 
-  // JsBarcode を動的ロード（未ロードなら）
-  function doBarcodeThenPrint() {
-    try {
-      if (typeof JsBarcode !== 'undefined') {
-        JsBarcode('#tgcBcSvg', identCode, { format:'CODE128', width:1.2, height:28, displayValue:false, margin:1 });
-      }
-    } catch(e) {}
-    window.print();
-    // 印刷後クリーンアップ
-    setTimeout(() => {
-      const c = document.getElementById('tgcPrintContainer');
-      const s = document.getElementById('tgcPrintStyle');
-      if (c) c.remove();
-      if (s) s.remove();
-      refocusScaleInput();
-    }, 800);
+  // 印刷コンテナ（非表示）
+  const container = document.createElement('div');
+  container.id = 'tgcPrintContainer';
+  document.body.appendChild(container);
+
+  // プレビューモーダル
+  const modal = document.createElement('div');
+  modal.id = 'tgcPrintModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML = `
+    <div style="background:#f5f5f5;border-radius:14px;padding:20px;width:300px;box-shadow:0 8px 32px rgba(0,0,0,.4);">
+      <div style="font-weight:700;font-size:15px;text-align:center;margin-bottom:12px;">ラベル確認</div>
+      <div style="text-align:center;margin-bottom:12px;">
+        <label style="margin-right:20px;font-size:14px;cursor:pointer;"><input type="radio" name="tgcOrigin" value="館山産" checked> 館山産</label>
+        <label style="font-size:14px;cursor:pointer;"><input type="radio" name="tgcOrigin" value="南房総産"> 南房総産</label>
+      </div>
+      <div style="background:#fff;border:1px solid #ccc;border-radius:6px;width:160px;height:240px;margin:0 auto 14px;overflow:hidden;display:flex;align-items:stretch;" id="tgcPreviewBox"></div>
+      <div style="display:flex;gap:8px;">
+        <button id="tgcCancelBtn" style="flex:1;padding:12px;border:1px solid #ccc;border-radius:8px;background:#fff;font-size:14px;cursor:pointer;">キャンセル</button>
+        <button id="tgcPrintBtn" style="flex:2;padding:12px;border:none;border-radius:8px;background:#2a9d5a;color:#fff;font-size:15px;font-weight:bold;cursor:pointer;">🖨 印刷する</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+
+  function cleanup() {
+    document.getElementById('tgcPrintModal')?.remove();
+    document.getElementById('tgcPrintContainer')?.remove();
+    document.getElementById('tgcPrintStyle')?.remove();
+    refocusScaleInput();
+  }
+
+  function renderPreview(origin) {
+    const html = buildLabelHTML(origin);
+    document.getElementById('tgcPreviewBox').innerHTML = `<div style="transform:scale(0.6);transform-origin:top left;width:167%;height:167%;">${html}</div>`;
+    container.innerHTML = html;
+    // バーコード描画（プレビュー内と印刷用コンテナ内）
+    ['tgcBcSvg', ...Array.from(document.querySelectorAll('#tgcPreviewBox #tgcBcSvg')).map((_,i)=>'tgcBcSvg'+i)].forEach(id => {
+      try { if (typeof JsBarcode !== 'undefined') JsBarcode('#tgcBcSvg', identCode, {format:'CODE128',width:1.1,height:25,displayValue:false,margin:1}); } catch(e){}
+    });
+    try { if (typeof JsBarcode !== 'undefined') JsBarcode('#tgcBcSvg', identCode, {format:'CODE128',width:1.1,height:25,displayValue:false,margin:1}); } catch(e){}
+  }
+
+  function init() {
+    renderPreview('館山産');
+    modal.querySelectorAll('input[name="tgcOrigin"]').forEach(r => {
+      r.addEventListener('change', () => renderPreview(r.value));
+    });
+    document.getElementById('tgcCancelBtn').onclick = cleanup;
+    document.getElementById('tgcPrintBtn').onclick = () => {
+      window.print();
+      setTimeout(cleanup, 500);
+    };
   }
 
   if (typeof JsBarcode === 'undefined') {
     const sc = document.createElement('script');
     sc.src = 'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/barcodes/JsBarcode.CODE128.min.js';
-    sc.onload = doBarcodeThenPrint;
-    sc.onerror = doBarcodeThenPrint; // バーコードなしで印刷
+    sc.onload = init;
+    sc.onerror = init;
     document.head.appendChild(sc);
   } else {
-    doBarcodeThenPrint();
+    init();
   }
 }
 
