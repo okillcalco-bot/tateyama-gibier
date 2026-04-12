@@ -525,7 +525,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;">
             <div class="pm-weight-hint" style="margin-top:0;">はかりに肉を載せてからボタンを押す</div>
             <button class="pm-numpad-toggle" id="pmNumpadToggle" onclick="pmToggleNumpad()">🔢 手動入力</button>
-            <button class="pm-numpad-toggle" id="btScaleBtn" onclick="btScaleConnect()" style="color:var(--blue);">📶 BT計量器</button>
+            <button class="pm-numpad-toggle" onclick="alert('SJ-15KAWAP-BT接続手順:\n①WindowsのBluetooth設定でSJ-15をペアリング\n②COMポートが自動作成される\n③上の「⚖️ はかり未接続」ボタンを押してそのCOMポートを選択')" style="color:var(--blue);">📶 BT計量器?</button>
           </div>
           <div class="pm-numpad" id="pmNumpad">
             <div class="pm-numpad-grid">
@@ -1713,36 +1713,21 @@ function generateLotCode(individualCode, partName, seq) {
 }
 
 // ── b-PAC 接続状態チェック ──
-async function checkBpacStatus() {
+function checkBpacStatus() {
   const el = document.getElementById('bpacStatus');
   if (!el) return;
-  try {
-    if (window.bpac && typeof window.bpac.IsExtensionInstalled === 'function') {
-      const ok = await window.bpac.IsExtensionInstalled();
-      if (ok) {
-        el.textContent = '🖨 b-PAC 接続中';
-        el.style.color = '#6a9e5a';
-        el.style.borderColor = 'rgba(106,158,90,.4)';
-        el.style.background = 'rgba(106,158,90,.1)';
-        return;
-      }
-    }
-    if (window.bpac) {
-      el.textContent = '🖨 b-PAC 検出（未確認）';
-      el.style.color = '#c8a45a';
-      el.style.borderColor = 'rgba(200,164,90,.4)';
-      el.style.background = 'rgba(200,164,90,.1)';
-    } else {
-      el.textContent = '🖨 b-PAC 未接続（印刷はブラウザ）';
-      el.style.color = '#8a8670';
-      el.style.borderColor = 'rgba(138,134,112,.3)';
-      el.style.background = 'transparent';
-    }
-  } catch(e) {
-    el.textContent = '🖨 b-PAC エラー';
-    el.style.color = '#c85050';
-    el.style.borderColor = 'rgba(200,80,80,.3)';
-    el.style.background = 'rgba(200,80,80,.05)';
+  // b-PAC Chrome Extension は window.bpac として注入される
+  if (typeof bpac !== 'undefined' && bpac.IDocument) {
+    el.textContent = '🖨 b-PAC OK';
+    el.style.color = '#6a9e5a';
+    el.style.borderColor = 'rgba(106,158,90,.4)';
+    el.style.background = 'rgba(106,158,90,.1)';
+  } else {
+    el.textContent = '🖨 b-PAC 未検出';
+    el.style.color = '#8a8670';
+    el.style.borderColor = 'rgba(138,134,112,.3)';
+    el.style.background = 'transparent';
+    el.title = 'Chrome拡張 b-PAC Extension をインストールしてください';
   }
 }
 
@@ -2099,8 +2084,8 @@ async function scaleConnect() {
   try {
     // ポート選択ダイアログ
     serialPort = await navigator.serial.requestPort();
-    // AD-8541-PC デフォルト: 2400baud 8N1
-    await serialPort.open({ baudRate: 2400, dataBits: 8, stopBits: 1, parity: 'none' });
+    // AD-8541-PC デフォルト: 9600baud 8N1（機種によっては2400も試す）
+    await serialPort.open({ baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none' });
 
     serialActive = true;
     btn.textContent = '⚖️ はかり接続中';
@@ -2334,28 +2319,33 @@ async function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight
   expiryDate.setDate(expiryDate.getDate() + 7);
   const expiryStr = '消費期限: ' + expiryDate.toLocaleDateString('ja-JP');
 
-  // b-PAC SDK (Chrome Extension) でラベル印刷
-  try {
-    if (window.bpac && typeof window.bpac.IDocument !== 'undefined') {
+  // b-PAC Chrome Extension でラベル印刷
+  // オブジェクト名はテンプレート(TGC_inventory_label.lbx)に合わせる:
+  //   Species, Origin, IndividualID, PartName, Weight, ExpiryDate, LotCode, IdentBarcode
+  if (typeof bpac !== 'undefined' && bpac.IDocument) {
+    try {
       const doc = bpac.IDocument;
       const ret = await doc.Open(PM_LABEL_TEMPLATE);
       if (ret) {
-        doc.GetObject('SpeciesPartName').Text = species + ' ' + partName;
-        doc.GetObject('IndividualID').Text    = pmIndividual.label_id;
-        doc.GetObject('Weight').Text          = labelWeight.toFixed(3) + ' kg';
-        doc.GetObject('ProcessDate').Text     = '加工日: ' + processDate;
-        doc.GetObject('LotCode').Text         = 'LOT: ' + lotCode;
-        doc.GetObject('ExpiryDate').Text      = expiryStr;
-        doc.GetObject('IdentBarcode').Text    = identCode;
-        await doc.StartPrint('', bpac.PrintOptionConstants.bpoDefault);
-        await doc.PrintOut(1, bpac.PrintOptionConstants.bpoDefault);
+        const set = (name, val) => { try { doc.GetObject(name).Text = val; } catch(_) {} };
+        set('Species',      species);
+        set('Origin',       '千葉県館山市');
+        set('IndividualID', pmIndividual.label_id);
+        set('PartName',     partName);
+        set('Weight',       labelWeight.toFixed(3) + ' kg');
+        set('ExpiryDate',   expiryStr);
+        set('LotCode',      'LOT: ' + lotCode);
+        set('IdentBarcode', identCode);
+        await doc.StartPrint('', 0);   // 0 = bpoDefault
+        await doc.PrintOut(1, 0);
         await doc.EndPrint();
         doc.Close();
-        return; // b-PAC success
+        return;
       }
+      doc.Close();
+    } catch(e) {
+      console.warn('b-PAC印刷失敗:', e.message);
     }
-  } catch(e) {
-    console.warn('b-PAC印刷失敗:', e);
   }
 
   // Fallback: ブラウザ印刷
