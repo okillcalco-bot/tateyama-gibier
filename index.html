@@ -2167,12 +2167,27 @@ async function scaleConnect() {
 }
 
 function scaleHandleLine(line) {
-  // A&D format: "ST,+00000.00kg" or "ST,+001.234 kg" etc.
+  // A&D formats:
+  //   "ST,+00000.20kg"  → kg小数
+  //   "ST,+00000200 g"  → グラム整数
+  //   "ST,+001.234 kg"  → kg スペースあり
   if (!line.startsWith('ST,')) return;
-  const numMatch = line.match(/[+\-]([\d]+\.[\d]+)/);
-  if (!numMatch) return;
-  const weight = parseFloat(numMatch[1]);
-  if (isNaN(weight) || weight < 0.050) return;
+
+  let weight = null;
+  const kgMatch = line.match(/[+\-]([\d]+\.[\d]+)\s*kg/i);
+  if (kgMatch) {
+    weight = parseFloat(kgMatch[1]);
+  } else {
+    const gMatch = line.match(/[+\-]([\d]+)\s*g\b/i);
+    if (gMatch) {
+      weight = parseFloat(gMatch[1]) / 1000;
+    } else {
+      const rawMatch = line.match(/[+\-]([\d]+\.[\d]+)/);
+      if (rawMatch) weight = parseFloat(rawMatch[1]);
+    }
+  }
+
+  if (weight === null || isNaN(weight) || weight < 0.050) return;
 
   // 重量欄を更新
   document.getElementById('pmWeightDisplay').textContent = weight.toFixed(3);
