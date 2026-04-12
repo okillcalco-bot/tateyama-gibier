@@ -2121,7 +2121,8 @@ async function scaleConnect() {
       return;
     }
 
-    await serialPort.open({ baudRate, dataBits: 8, stopBits: 1, parity: 'none' });
+    // SJ-15KAWP-BT: 2400baud, 7bit, Even parity, 1stop (RsKey設定に合わせる)
+    await serialPort.open({ baudRate, dataBits: 7, stopBits: 1, parity: 'even' });
 
     serialActive = true;
     btn.textContent = '⚖️ はかり接続中';
