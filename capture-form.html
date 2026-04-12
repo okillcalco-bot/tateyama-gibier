@@ -188,6 +188,8 @@ textarea { min-height: 80px; resize: vertical; }
 }
 
 /* Submit */
+.edit-result-row{padding:10px 12px;margin:4px 0;background:#fff;border:1px solid #dee2e6;border-radius:6px;cursor:pointer;font-size:14px;line-height:1.5;}
+.edit-result-row:hover{background:#e8f4fd;border-color:#0d6efd;}
 .submit-btn {
   width: 100%; padding: 18px; margin-top: 16px;
   background: linear-gradient(135deg, var(--gold), var(--gold2));
@@ -348,6 +350,22 @@ textarea { min-height: 80px; resize: vertical; }
 
 <!-- FORM TAB -->
 <div class="tab-panel active" id="panel-form">
+<div id="editModeBar" style="display:none;background:#fff3cd;border:1.5px solid #ffc107;border-radius:8px;padding:8px 14px;margin:0 0 10px;">
+  <span style="font-size:13px;color:#856404;">&#9998; 修正モード: <strong id="editModeLabel"></strong></span>
+  <button onclick="cancelEditMode()" style="float:right;background:#dc3545;color:#fff;border:none;border-radius:4px;padding:3px 12px;font-size:12px;cursor:pointer;">&#x2715; キャンセル</button>
+  <div style="clear:both"></div>
+</div>
+<div id="editSearchPanel" style="display:none;background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;padding:14px;margin:0 0 12px;">
+  <div style="font-weight:bold;margin-bottom:10px;font-size:14px;">修正する記録を検索</div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
+    <label style="font-size:13px;">捕獲日</label>
+    <input type="date" id="editSearchDate" style="border:1px solid #ccc;border-radius:4px;padding:6px 10px;font-size:14px;">
+    <input type="text" id="editSearchNum" placeholder="個体番号（任意）" style="border:1px solid #ccc;border-radius:4px;padding:6px 10px;font-size:14px;min-width:130px;">
+    <button onclick="searchForEdit()" style="background:#0d6efd;color:#fff;border:none;border-radius:4px;padding:7px 16px;font-size:14px;cursor:pointer;">検索</button>
+    <button onclick="document.getElementById('editSearchPanel').style.display='none'" style="background:#6c757d;color:#fff;border:none;border-radius:4px;padding:7px 12px;font-size:14px;cursor:pointer;">&#x2715;</button>
+  </div>
+  <div id="editSearchResults" style="margin-top:4px;max-height:260px;overflow-y:auto;"></div>
+</div>
 
   <!-- 基本情報 -->
   <div class="section">
@@ -678,6 +696,7 @@ textarea { min-height: 80px; resize: vertical; }
     </div>
   </div>
 
+  <button type="button" onclick="toggleEditSearch()" style="background:#6c757d;color:#fff;border:none;border-radius:8px;padding:12px 18px;font-size:15px;cursor:pointer;margin-right:8px;">&#9998; 既存データを修正</button>
   <button class="submit-btn" id="submitBtn" onclick="handleSubmit()">登録する</button>
 </div>
 
@@ -916,6 +935,7 @@ const MINAMIBOSO = {
   '旧和田町': ['石堂','小川','海発','上三原','黒岩','小向','五十蔵','柴','下三原','白渚','磑森','中三原','沼','仁我浦','布野','真浦','和田','花園','松田']
 };
 
+let editMode = false, editRecordId = null, editRecord = null;
 /* ── State ── */
 const state = {
   species: '', sex: '', weather: '', capture_city: '', capture_method: '',
@@ -1178,6 +1198,88 @@ function collectAnomalyTexts(containerId, indices) {
 }
 
 /* ── Submit ── */
+/* -- Edit Mode Functions -- */
+function toggleEditSearch() {
+  const panel = document.getElementById('editSearchPanel');
+  const hidden = panel.style.display === 'none';
+  panel.style.display = hidden ? '' : 'none';
+  if (hidden) {
+    const d = document.getElementById('editSearchDate');
+    if (d && !d.value) d.value = (new Date()).toISOString().slice(0, 10);
+  }
+}
+async function searchForEdit() {
+  const dateVal = document.getElementById('editSearchDate').value;
+  const numVal = document.getElementById('editSearchNum').value.trim();
+  const resEl = document.getElementById('editSearchResults');
+  resEl.innerHTML = '<div style="padding:8px;color:#666;">検索中…</div>';
+  try {
+    let query = '?order=capture_date.desc,created_at.desc&limit=50';
+    if (dateVal) query += '&capture_date=eq.' + dateVal;
+    if (numVal) query += '&individual_number=ilike.*' + encodeURIComponent(numVal) + '*';
+    const rows = await sb('GET', 'individuals', null, query);
+    window._editRows = Array.isArray(rows) ? rows : [];
+    if (!window._editRows.length) {
+      resEl.innerHTML = '<div style="padding:8px;color:#666;">該当する記録が見つかりませんでした。</div>';
+      return;
+    }
+    resEl.innerHTML = window._editRows.map(function(r, i) {
+      return '<div class="edit-result-row" onclick="loadForEdit(window._editRows[' + i + '])">' +
+        '<strong>' + (r.individual_number || '番号なし') + '</strong>' +
+        ' &nbsp; ' + (r.species || '') + ' ' + (r.sex || '') +
+        '<br><small style="color:#666;">' + (r.capture_date || '') +
+        (r.recorder ? ' / ' + r.recorder : '') + '</small></div>';
+    }).join('');
+  } catch(e) {
+    resEl.innerHTML = '<div style="color:#c00;padding:8px;">エラー: ' + e.message + '</div>';
+  }
+}
+function loadForEdit(rec) {
+  editMode = true; editRecordId = rec.id; editRecord = rec;
+  const sv = function(id, v) { const el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; };
+  sv('captureDate', rec.capture_date);
+  sv('captureTime', rec.capture_time);
+  sv('captureArea', rec.capture_area);
+  sv('hunterName', rec.hunter_name);
+  sv('bleedTime', rec.bleed_time);
+  sv('receiveTime', rec.receive_time);
+  sv('transportStart', rec.transport_start);
+  sv('processTime', rec.process_time);
+  sv('weight', rec.weight_total);
+  sv('age', rec.age_estimate);
+  sv('memo', rec.memo);
+  ['species','sex','weather','capture_city','capture_method',
+   'finishing_method','hit_location','gutting','hunter_health',
+   'has_fetus','processing_type','quality'].forEach(function(field) {
+    const val = rec[field]; if (!val) return;
+    const grp = document.querySelector('[data-field="' + field + '"]'); if (!grp) return;
+    grp.querySelectorAll('.toggle-btn').forEach(function(b) { b.classList.remove('active'); });
+    grp.querySelectorAll('.toggle-btn').forEach(function(b) {
+      if (b.dataset.val === val) { b.classList.add('active'); state[field] = val; }
+    });
+  });
+  if (rec.sex === 'オス') {
+    const fg = document.querySelector('[data-field="has_fetus"]');
+    if (fg) { fg.style.opacity = '0.4'; fg.style.pointerEvents = 'none'; }
+  }
+  const sel = document.getElementById('recorder');
+  if (sel && rec.recorder) sel.value = rec.recorder;
+  checkBleedingToIntakeTime();
+  document.getElementById('submitBtn').textContent = '修正を保存する';
+  const bar = document.getElementById('editModeBar');
+  document.getElementById('editModeLabel').textContent =
+    (rec.individual_number || '個体') + '（' + (rec.capture_date || '') + '）';
+  bar.style.display = '';
+  const ft = document.querySelector('[data-tab="form"]'); if (ft) ft.click();
+  document.getElementById('editSearchPanel').style.display = 'none';
+  window.scrollTo(0, 0);
+}
+function cancelEditMode() {
+  editMode = false; editRecordId = null; editRecord = null;
+  document.getElementById('submitBtn').textContent = '登録する';
+  const bar = document.getElementById('editModeBar'); if (bar) bar.style.display = 'none';
+  resetForm();
+}
 async function handleSubmit() {
   const btn = document.getElementById('submitBtn');
   if (!state.species) { alert('種別を選択してください'); return; }
@@ -1227,7 +1329,9 @@ async function handleSubmit() {
 
     let saved;
     try {
-      saved = await sb('POST', 'individuals', record);
+      saved = await editMode && editRecordId
+        ? await (async function(){ const pb=Object.assign({},record); delete pb.label_id; delete pb.serial_number; const er=await sb('PATCH','individuals',pb,'?id=eq.'+editRecordId); return Array.isArray(er)?er[0]:er; })()
+        : await sb('POST', 'individuals', record);
       if (Array.isArray(saved)) saved = saved[0];
     } catch(e) {
       // Offline - queue
@@ -1235,6 +1339,8 @@ async function handleSubmit() {
       saved = record;
     }
 
+    // Skip counter increment when editing
+    if (editMode) { cancelEditMode(); showPrintModal(record); loadTodayCount(); return; }
     // Advance localStorage counters
     const _serialKey = getSerialKey(state.species);
     if (_serialKey) localStorage.setItem(_serialKey, String(serial + 1));
