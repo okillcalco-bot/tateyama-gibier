@@ -217,6 +217,7 @@ input,select,textarea,button{font-family:inherit;font-size:inherit;color:inherit
   <div class="tabs">
     <button class="tab-btn active" data-tab="order" onclick="switchTab('order')">&#128722; 新規注文</button>
     <button class="tab-btn" data-tab="history" onclick="switchTab('history')">&#128203; 注文履歴</button>
+    <button class="tab-btn" data-tab="settings" onclick="switchTab('settings')">&#9881; 設定</button>
   </div>
 
   <!-- New Order Tab -->
@@ -279,7 +280,32 @@ input,select,textarea,button{font-family:inherit;font-size:inherit;color:inherit
   </div>
 
   <!-- History Tab -->
-  <div class="tab-content" id="tab-history">
+  <div class="tab-content" id="tab-settings" style="display:none">
+
+      <!-- パスワード変更 -->
+      <div class="card">
+        <div class="card-title">&#128274; パスワード変更</div>
+        <div style="margin-bottom:10px;">
+          <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px;">現在のパスワード</label>
+          <input type="password" id="pw-current" class="search-input" placeholder="現在のパスワード" style="width:100%;margin-bottom:8px;">
+          <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px;">新しいパスワード</label>
+          <input type="password" id="pw-new" class="search-input" placeholder="新しいパスワード（6文字以上）" style="width:100%;margin-bottom:8px;">
+          <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px;">新しいパスワード（確認）</label>
+          <input type="password" id="pw-confirm" class="search-input" placeholder="確認再入力" style="width:100%;margin-bottom:12px;">
+          <div id="pw-msg" style="font-size:12px;margin-bottom:8px;"></div>
+          <button onclick="changePassword()" style="width:100%;padding:12px;background:var(--accent);color:#111;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">パスワードを変更する</button>
+        </div>
+      </div>
+
+      <!-- 個別価格表 -->
+      <div class="card">
+        <div class="card-title">&#128205; あなたの価格表</div>
+        <div id="price-table-content" style="font-size:13px;color:var(--text2);">読み込み中...</div>
+      </div>
+
+    </div>
+
+    <div class="tab-content" id="tab-history">
     <div id="history-list"></div>
   </div>
 </div>
@@ -311,6 +337,10 @@ async function sb(method,table,body,query=''){
   return t?JSON.parse(t):[];
 }
 
+/* ── Admin ── */
+const ADMIN_PASSWORD = 'tgc-admin-2024';
+let isAdminSession = false;
+
 /* ── State ── */
 let customer=null;
 let products=[];
@@ -327,6 +357,23 @@ function hideLoading(){document.getElementById('loading').classList.remove('show
 async function doLogin(){
   const name=document.getElementById('login-name').value.trim();
   const pass=document.getElementById('login-pass').value.trim();
+  // 管理者ログイン: アカウント名に "admin:" プレフィックス + ADMIN_PASSWORD
+  if (pass === ADMIN_PASSWORD && name.startsWith('admin:')) {
+    const targetName = name.slice(6).trim();
+    if (!targetName) { document.getElementById('login-error').textContent = '顧客名を admin:顧客名 の形式で入力してください'; return; }
+    showLoading();
+    try {
+      const rows = await sb('GET','customers',null,'?name=eq.'+encodeURIComponent(targetName)+'&select=*');
+      hideLoading();
+      if (!rows||!rows.length){document.getElementById('login-error').textContent='顧客が見つかりません';return;}
+      customer=rows[0]; isAdminSession=true;
+      onLoginSuccess();
+    } catch(e){hideLoading();document.getElementById('login-error').textContent='エラー';}
+    return;
+  }
+  // --- 通常ログイン ---
+  const name=document.getElementById('login-name').value.trim();
+  const pass=document.getElementById('login-pass').value.trim();
   const errEl=document.getElementById('login-error');
   errEl.textContent='';
   if(!name||!pass){errEl.textContent='お客様名とパスワードを入力してください';return}
@@ -337,6 +384,7 @@ async function doLogin(){
     if(!rows.length){errEl.textContent='お客様名またはパスワードが正しくありません';hideLoading();return}
     customer=rows[0];
     await initMain();
+    loadPriceTable();
     document.getElementById('login-screen').style.display='none';
     document.getElementById('main-screen').style.display='block';
   }catch(e){
@@ -349,6 +397,47 @@ async function doLogin(){
 document.getElementById('login-pass').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin()});
 document.getElementById('login-name').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('login-pass').focus()});
 
+async function changePassword(){
+  const cur=document.getElementById('pw-current').value;
+  const nw=document.getElementById('pw-new').value;
+  const conf=document.getElementById('pw-confirm').value;
+  const msg=document.getElementById('pw-msg');
+  if (!cur||!nw||!conf){msg.style.color='#e05555';msg.textContent='すべて入力してください';return;}
+  if (cur!==customer.portal_password){msg.style.color='#e05555';msg.textContent='現在のパスワードが違います';return;}
+  if (nw.length<6){msg.style.color='#e05555';msg.textContent='6文字以上で入力してください';return;}
+  if (nw!==conf){msg.style.color='#e05555';msg.textContent='新パスワードが一致しません';return;}
+  try{
+    await sb('PATCH','customers',{portal_password:nw},'?id=eq.'+customer.id);
+    customer.portal_password=nw;
+    msg.style.color='#4caf7d';msg.textContent='パスワードを変更しました';
+    document.getElementById('pw-current').value='';
+    document.getElementById('pw-new').value='';
+    document.getElementById('pw-confirm').value='';
+  }catch(e){msg.style.color='#e05555';msg.textContent='変更に失敗しました';}
+}
+async function loadPriceTable(){
+  const el=document.getElementById('price-table-content');
+  if(!el||!customer)return;
+  try{
+    // customer_pricesテーブルがあればそこから得る、なければprice_masterのみ
+    let rows=[];
+    try{ rows=await sb('GET','customer_prices',null,'?customer_id=eq.'+customer.id+'&select=part_name,unit_price,species&order=species,part_name'); }catch(e){}
+    if(!rows||!rows.length){
+      rows=await sb('GET','price_master',null,'?grade=eq.'+encodeURIComponent(customer.price_rank||'standard')+'&barcode_num=not.is.null&select=species,part_name,price_standard,price_premium,price_wholesale&order=species,part_name');
+      const rank=customer.price_rank||'standard';
+      rows=rows.map(r=>({species:r.species,part_name:r.part_name,unit_price:r['price_'+rank]||r.price_standard}));
+    }
+    if(!rows.length){el.innerHTML='価格表は未登録です';return;}
+    const bySpecies={};
+    rows.forEach(r=>{if(!bySpecies[r.species])bySpecies[r.species]=[];bySpecies[r.species].push(r);});
+    el.innerHTML=Object.keys(bySpecies).map(sp=>
+      '<div style="margin-bottom:12px;"><div style="font-weight:700;color:var(--accent);font-size:13px;margin-bottom:6px;">'+sp+'</div>'+
+      bySpecies[sp].map(r=>'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);font-size:13px;">'+
+        '<span>'+r.part_name+'</span><span style="color:var(--gold);">¥'+Number(r.unit_price).toLocaleString()+'/kg</span></div>').join('')+
+      '</div>'
+    ).join('');
+  }catch(e){el.textContent='読込みエラー';}
+}
 function doLogout(){
   customer=null;cart=[];lastOrder=null;lastOrderItems=[];products=[];
   document.getElementById('main-screen').style.display='none';
@@ -427,7 +516,7 @@ function renderProducts(){
     const price=getPrice(p);
     return '<div class="product-card">'+
       '<div class="product-name">'+esc(p.part_name)+'</div>'+
-      '<div class="product-price">&yen;'+price.toLocaleString()+' / kg</div>'+
+      ''+// price hidden +
       '<div class="product-row">'+
       '<input type="number" id="qty-'+i+'" min="0.1" step="0.1" value="1.0" inputmode="decimal">'+
       '<span class="unit-label">kg</span>'+
@@ -530,7 +619,7 @@ async function loadHistory(){
       return '<div class="order-card">'+
         '<div class="order-header"><div><span class="order-code">'+esc(o.order_code||'')+'</span> '+badge+'</div><span class="order-date">'+esc(d)+'</span></div>'+
         '<div class="order-items-summary">'+summary+'</div>'+
-        '<div class="order-total">&yen;'+Number(total).toLocaleString()+'</div>'+
+        ''+// total hidden +
         '<button class="order-reorder-btn" onclick="reorderFromHistory(\''+o.id+'\')">&#x1F501; 同じ内容で注文</button>'+
         '</div>';
     }).join('');
