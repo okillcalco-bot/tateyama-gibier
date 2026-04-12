@@ -2175,17 +2175,17 @@ function scaleHandleLine(line) {
   const weight = parseFloat(numMatch[1]);
   if (isNaN(weight) || weight < 0.050) return;
 
-  // 重量欄を更新（常に）
+  // 重量欄を更新
   document.getElementById('pmWeightDisplay').textContent = weight.toFixed(3);
+  // 部位選択済みなら登録ボタンを有効化
+  if (pmSelectedPart) {
+    const mBtn = document.getElementById('pmMeasureBtn');
+    if (mBtn) mBtn.disabled = false;
+  }
 
-  // 部位が選択されていて計量待機中 or 計量ボタンが有効なら自動登録
-  if (pmSelectedPart && document.getElementById('pmOverlay').classList.contains('active')) {
-    if (pmWaitingForScale) {
-      pmOnWeightReceived(weight);
-    } else if (!document.getElementById('pmMeasureBtn').disabled) {
-      // ボタン有効時もスケール安定値で自動実行
-      pmOnWeightReceived(weight);
-    }
+  // 計量待機中（登録ボタンを先に押した場合）のみ自動登録
+  if (pmWaitingForScale && pmSelectedPart) {
+    pmOnWeightReceived(weight);
   }
 }
 
