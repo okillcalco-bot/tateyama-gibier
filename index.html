@@ -2168,14 +2168,11 @@ async function scaleConnect() {
 }
 
 function scaleHandleLine(line) {
-  // A&D format examples:
-  //   "ST,+  1.234 kg"  "ST,+001.234 kg"  "ST,GS,+001.234 kg"
-  // Only use stable readings (ST prefix)
+  // A&D format: "ST,+00000.00kg" or "ST,+001.234 kg" etc.
   if (!line.startsWith('ST,')) return;
-  // Extract numeric value — allow anything between ST, and the sign
-  const numMatch = line.match(/ST,.*?([+\-])\s*([\d]+\.[\d]+)/);
+  const numMatch = line.match(/[+\-]([\d]+\.[\d]+)/);
   if (!numMatch) return;
-  const weight = parseFloat(numMatch[2]);
+  const weight = parseFloat(numMatch[1]);
   if (isNaN(weight) || weight < 0.050) return;
 
   // 重量欄を更新（常に）
