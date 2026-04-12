@@ -2084,8 +2084,44 @@ async function scaleConnect() {
   try {
     // ポート選択ダイアログ
     serialPort = await navigator.serial.requestPort();
-    // AD-8541-PC デフォルト: 9600baud 8N1（機種によっては2400も試す）
-    await serialPort.open({ baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none' });
+
+    // ボーレート選択
+    const baudRate = await new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;';
+      const box = document.createElement('div');
+      box.style.cssText = 'background:#fff;border-radius:12px;padding:24px 28px;min-width:260px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.3);';
+      box.innerHTML = '<div style="font-weight:700;font-size:15px;margin-bottom:6px;">ボーレートを選択</div>' +
+        '<div style="font-size:12px;color:#888;margin-bottom:16px;">不明な場合はまず2400を試してください</div>';
+      const rates = [
+        { val: 2400,  label: '2400 bps', note: 'SJ-15KAWAP-BT（推奨）' },
+        { val: 4800,  label: '4800 bps', note: '' },
+        { val: 9600,  label: '9600 bps', note: 'AD-8541-PC（推奨）' },
+        { val: 19200, label: '19200 bps', note: '' },
+      ];
+      rates.forEach(r => {
+        const b = document.createElement('button');
+        b.style.cssText = 'display:block;width:100%;margin:6px 0;padding:10px;border-radius:8px;border:1px solid #ddd;background:#f5f5f5;font-size:14px;cursor:pointer;text-align:left;';
+        b.innerHTML = '<span style="font-weight:600;">' + r.label + '</span>' + (r.note ? '<span style="font-size:11px;color:#888;margin-left:8px;">' + r.note + '</span>' : '');
+        b.onclick = () => { document.body.removeChild(overlay); resolve(r.val); };
+        box.appendChild(b);
+      });
+      const cancel = document.createElement('button');
+      cancel.textContent = 'キャンセル';
+      cancel.style.cssText = 'margin-top:8px;padding:6px 16px;border:none;background:none;color:#888;font-size:13px;cursor:pointer;';
+      cancel.onclick = () => { document.body.removeChild(overlay); resolve(null); };
+      box.appendChild(cancel);
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+    });
+
+    if (baudRate === null) {
+      try { await serialPort.forget(); } catch(_) {}
+      serialPort = null;
+      return;
+    }
+
+    await serialPort.open({ baudRate, dataBits: 8, stopBits: 1, parity: 'none' });
 
     serialActive = true;
     btn.textContent = '⚖️ はかり接続中';
