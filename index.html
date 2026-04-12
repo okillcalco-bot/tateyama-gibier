@@ -2394,27 +2394,127 @@ async function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight
 }
 
 function pmPrintLabelFallback(lotCode, partName, species, labelWeight, date, identCode, expiryStr) {
-  const printArea = document.getElementById('pmLabelPrintArea');
-  printArea.innerHTML = `
-    <div class="pm-label">
-      <div class="pm-label-header">館山ジビエセンター</div>
-      <div class="pm-label-title">${species} ${partName}</div>
-      <div class="pm-label-weight">${labelWeight.toFixed(3)} kg</div>
-      <div class="pm-label-meta">個体: ${pmIndividual.label_id}</div>
-      <div class="pm-label-meta">加工日: ${date}</div>
-      <div class="pm-label-lot">LOT: ${lotCode}</div>
-      <div class="pm-label-barcode-text">${identCode}</div>
-      <div class="pm-label-expiry">${expiryStr || ''}</div>
+  const win = window.open('', '_blank', 'width=300,height=500');
+  if (!win) { toast('ポップアップがブロックされました。許可してください', 'error'); return; }
+
+  // CODE128バーコードをSVGで生成
+  function makeBarcodeSVG(text) {
+    // JsBarcodeなしで簡易CODE128描画（バー幅ベース）
+    // 代わりにtext表示 + 後でJsBarcode読み込み後に置換
+    return `<svg id="bcSvg" style="width:100%;height:40px;"></svg>`;
+  }
+
+  win.document.write(`<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<title>ラベル</title>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/barcodes/JsBarcode.CODE128.min.js"><\/script>
+<style>
+  @page {
+    size: 62mm 90mm;
+    margin: 0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    width: 62mm;
+    height: 90mm;
+    font-family: 'Meiryo', 'Yu Gothic', sans-serif;
+    padding: 3mm 3mm 2mm 3mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden;
+  }
+  .header {
+    font-size: 8pt;
+    text-align: center;
+    border-bottom: 0.5pt solid #000;
+    padding-bottom: 1mm;
+    letter-spacing: 0.5px;
+  }
+  .main-title {
+    font-size: 16pt;
+    font-weight: bold;
+    text-align: center;
+    margin: 1.5mm 0 0.5mm;
+    line-height: 1.1;
+  }
+  .weight {
+    font-size: 20pt;
+    font-weight: bold;
+    text-align: center;
+    margin: 0;
+  }
+  .weight-unit { font-size: 12pt; }
+  .meta-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 7.5pt;
+    margin-top: 1mm;
+  }
+  .expiry {
+    font-size: 8pt;
+    font-weight: bold;
+    text-align: center;
+    margin-top: 1mm;
+    border: 0.5pt solid #000;
+    padding: 0.5mm 1mm;
+  }
+  .lot {
+    font-size: 7pt;
+    text-align: center;
+    margin-top: 1mm;
+    color: #333;
+  }
+  .barcode-wrap {
+    margin-top: 1.5mm;
+    text-align: center;
+  }
+  .barcode-wrap svg { max-width: 56mm; height: 12mm; }
+  .barcode-text {
+    font-size: 6.5pt;
+    text-align: center;
+    margin-top: 0.5mm;
+    font-family: monospace;
+    letter-spacing: 1px;
+  }
+  .origin { font-size: 7pt; text-align: right; color: #555; }
+</style>
+</head><body>
+  <div>
+    <div class="header">館山ジビエセンター</div>
+    <div class="main-title">${species}　${partName}</div>
+    <div class="weight">${labelWeight.toFixed(3)}<span class="weight-unit"> kg</span></div>
+    <div class="meta-row">
+      <span>個体: ${pmIndividual.label_id}</span>
+      <span class="origin">千葉県館山市</span>
     </div>
-  `;
-  printArea.style.display = 'flex';
-  window.print();
-  // After print dialog closes, hide and refocus
-  setTimeout(() => {
-    printArea.style.display = 'none';
-    printArea.innerHTML = '';
-    refocusScaleInput();
-  }, 500);
+    <div class="expiry">${expiryStr}</div>
+    <div class="lot">LOT: ${lotCode}　加工日: ${date}</div>
+    <div class="barcode-wrap">
+      <svg id="bcSvg"></svg>
+    </div>
+    <div class="barcode-text">${identCode}</div>
+  </div>
+<script>
+  window.onload = function() {
+    try {
+      JsBarcode('#bcSvg', '${identCode}', {
+        format: 'CODE128',
+        width: 1.5,
+        height: 38,
+        displayValue: false,
+        margin: 2
+      });
+    } catch(e) {
+      document.getElementById('bcSvg').style.display='none';
+    }
+    window.print();
+    window.onafterprint = function() { window.close(); };
+  };
+<\/script>
+</body></html>`);
+  win.document.close();
 }
 
 // ── 全部位完了 ──
