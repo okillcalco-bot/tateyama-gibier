@@ -412,6 +412,7 @@ textarea { min-height: 80px; resize: vertical; }
           <label class="form-label">捕獲時刻</label>
           <div class="time-wrap">
             <input type="text" inputmode="numeric" class="input" id="captureTime" placeholder="HH:MM" maxlength="5">
+          <div class="field-note" style="font-size:11px;color:var(--text2);margin-top:4px;">※捕获個体を初めて目視した時間</div>
             <button type="button" class="now-btn" onclick="setNow('captureTime')">今</button>
           </div>
         </div>
@@ -512,7 +513,13 @@ textarea { min-height: 80px; resize: vertical; }
       </div>
       <div class="form-row">
         <label class="form-label">被弾部位</label>
-        <input type="text" class="input" id="hitLocation" placeholder="部位を入力">
+        <div class="toggle-group" data-field="hit_location">
+          <div class="toggle-btn" data-val="頭">頭</div>
+          <div class="toggle-btn" data-val="肩">肩</div>
+          <div class="toggle-btn" data-val="腕">腕</div>
+          <div class="toggle-btn" data-val="その他">その他</div>
+        </div>
+        <div class="field-note" style="font-size:11px;color:var(--text2);margin-top:4px;">※弾はスラッグ弾のみ。胸部・腹部への被弾はNG</div>
       </div>
     </div>
   </div>
@@ -525,14 +532,15 @@ textarea { min-height: 80px; resize: vertical; }
         <div style="flex:1;">
           <label class="form-label">放血開始</label>
           <div class="time-wrap">
-            <input type="text" inputmode="numeric" class="input time-track" id="bleedTime" placeholder="HH:MM" maxlength="5">
+            <input type="text" inputmode="numeric" class="input time-track" id="bleedTime" placeholder="HH:MM" oninput="checkBleedingToIntakeTime()" maxlength="5">
             <button type="button" class="now-btn" onclick="setNow('bleedTime')">今</button>
           </div>
         </div>
         <div style="flex:1;">
           <label class="form-label">受入時刻</label>
           <div class="time-wrap">
-            <input type="text" inputmode="numeric" class="input time-track" id="receiveTime" placeholder="HH:MM" maxlength="5">
+            <input type="text" inputmode="numeric" class="input time-track" id="receiveTime" placeholder="HH:MM" maxlength="5" oninput="checkBleedingToIntakeTime()">
+            <div id="bleedIntakeWarning" style="display:none;color:#e05555;font-size:12px;font-weight:600;margin-top:4px;"></div>
             <button type="button" class="now-btn" onclick="setNow('receiveTime')">今</button>
           </div>
         </div>
@@ -555,16 +563,13 @@ textarea { min-height: 80px; resize: vertical; }
           </div>
         </div>
       </div>
-      <div class="form-row">
-        <label class="form-label">冷却方法</label>
-        <div class="toggle-group" data-field="cooling_method">
+      <!-- cooling_method removed -->
           <div class="toggle-btn" data-val="氷">氷</div>
           <div class="toggle-btn" data-val="冷蔵庫">冷蔵庫</div>
           <div class="toggle-btn" data-val="その他">その他</div>
         </div>
       </div>
-      <div class="form-row">
-        <label class="form-label">内臓摘出</label>
+      <!-- evisceration removed -->
         <div class="toggle-group" data-field="gutting">
           <div class="toggle-btn" data-val="あり">あり</div>
           <div class="toggle-btn" data-val="なし" >なし</div>
@@ -662,7 +667,9 @@ textarea { min-height: 80px; resize: vertical; }
       </div>
       <div class="form-row">
         <label class="form-label">記録者名</label>
-        <input type="text" class="input" id="recorder" placeholder="記録者">
+        <select class="input" id="recorder">
+          <option value="">― 選択してください ―</option>
+        </select>
       </div>
       <div class="form-row">
         <label class="form-label">メモ</label>
@@ -920,7 +927,27 @@ let todayData = [];
 let listFilter = '';
 
 /* ── Init ── */
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  // スタッフリストを読み込む
+  try {
+    const staffRows = await sb('GET', 'staff', null, '?select=name&order=name&is_active=eq.true');
+    const sel = document.getElementById('recorder');
+    if (sel && Array.isArray(staffRows)) {
+      staffRows.forEach(function(s){
+        const o = document.createElement('option');
+        o.value = s.name; o.textContent = s.name;
+        sel.appendChild(o);
+      });
+    }
+  } catch(e) {
+    // スタッフテーブルなければ固定リストを使用
+    const defaultStaff = ['没次郎','岡田','川崎','山田','山村'];
+    const sel = document.getElementById('recorder');
+    if (sel) defaultStaff.forEach(function(n){
+      const o = document.createElement('option');
+      o.value = n; o.textContent = n; sel.appendChild(o);
+    });
+  }
   const now = new Date();
   document.getElementById('captureDate').value = formatDate(now);
   document.getElementById('captureTime').value = formatTime(now);
@@ -986,6 +1013,20 @@ function setupToggles() {
         state[field] = btn.dataset.val;
       }
       btn.addEventListener('click', () => {
+        // 性別オス選択時に胎児を自動で「なし」にしてグレーアウト
+        if (field === 'sex' && btn.dataset.val === 'オス') {
+          const fGroup = document.querySelector('[data-field="has_fetus"]');
+          if (fGroup) {
+            fGroup.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+            const noneBtn = fGroup.querySelector('[data-val="なし"]');
+            if (noneBtn) { noneBtn.classList.add('active'); state['has_fetus'] = 'なし'; }
+            fGroup.style.opacity = '0.4';
+            fGroup.style.pointerEvents = 'none';
+          }
+        } else if (field === 'sex' && btn.dataset.val !== 'オス') {
+          const fGroup = document.querySelector('[data-field="has_fetus"]');
+          if (fGroup) { fGroup.style.opacity = ''; fGroup.style.pointerEvents = ''; }
+        }
         group.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         state[field] = btn.dataset.val;
@@ -1105,6 +1146,26 @@ function setupFilterChips() {
   });
 }
 
+/* ── 放血→受入 1時間チェック ── */
+function checkBleedingToIntakeTime() {
+  function toMins(s) {
+    if (!s) return null;
+    var p = s.split(':');
+    return p.length < 2 ? null : parseInt(p[0]) * 60 + parseInt(p[1]);
+  }
+  var bleed = toMins(document.getElementById('bleedTime') && document.getElementById('bleedTime').value);
+  var intake = toMins(document.getElementById('receiveTime') && document.getElementById('receiveTime').value);
+  var warn = document.getElementById('bleedIntakeWarning');
+  if (!warn) return;
+  if (bleed !== null && intake !== null) {
+    var diff = intake - bleed;
+    if (diff < 0) diff += 24 * 60;
+    warn.style.display = diff > 60 ? '' : 'none';
+    if (diff > 60) warn.textContent = '⚠️ 放血開始から受入まで' + diff + '分（目安で1時間以内）';
+  } else {
+    warn.style.display = 'none';
+  }
+}
 /* ── Collect anomaly texts ── */
 function collectAnomalyTexts(containerId, indices) {
   const items = document.querySelectorAll(`#${containerId} .check-item`);
@@ -1146,7 +1207,7 @@ async function handleSubmit() {
       hunter_name: document.getElementById('hunterName').value,
       capture_method: state.capture_method,
       finishing_method: state.finishing_method,
-      hit_location: document.getElementById('hitLocation').value,
+      hit_location: document.querySelector('[data-field="hit_location"] .toggle-btn.active')?.dataset.val || '',
       bleed_time: document.getElementById('bleedTime').value,
       receive_time: document.getElementById('receiveTime').value,
       transport_start: document.getElementById('transportStart').value,
