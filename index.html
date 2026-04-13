@@ -2247,16 +2247,21 @@ async function pmOnWeightReceived(weight_kg) {
   document.getElementById('pmMeasureBtn').disabled = true;
 
   try {
-    // 2. ロットコード生成（本日の同個体・同部位の連番）
-    const today = new Date().toISOString().split('T')[0];
+    // 2. コード生成（すべて同期）
     const existingToday = pmCompletedParts.filter(c => c.part_name.includes(pmSelectedPart.part_name)).length;
     const seq = existingToday + 1;
     const lotCode = generateLotCode(pmIndividual.label_id, pmSelectedPart.part_name, seq);
     const identCode = pmIndividual.label_id + '-' + pmSelectedPart.barcode_num + (seq > 1 ? '-' + seq : '');
-
-    // 3. 在庫DBに登録
     const baseName = pmSelectedPart.part_name;
     const fullPartName = (pmBoneIn ? '骨付き ' : '') + baseName + (pmGrade !== '並' ? ' [' + pmGrade + ']' : '') + (pmRetail ? ' [小売]' : '');
+    const basePart = pmSelectedPart.part_name;
+    const labelWeight = (pmRetail && PM_RETAIL_WEIGHTS[basePart]) ? PM_RETAIL_WEIGHTS[basePart] : weight_kg;
+    pmLastPrintInfo = { weight_kg, lotCode, identCode, fullPartName, labelWeight };
+
+    // 3. ★印刷を先に実行（awaitの前 = ユーザー操作コンテキスト内）
+    pmPrintLabel(weight_kg, lotCode, identCode, fullPartName, labelWeight);
+
+    // 4. DB保存（印刷後に非同期）
     const record = {
       individual_id: pmIndividual.label_id,
       individual_code: pmIndividual.label_id,
@@ -2273,10 +2278,7 @@ async function pmOnWeightReceived(weight_kg) {
       unit_price: parseInt(pmSelectedPart.price_standard) || 0,
       lot_code: lotCode
     };
-
-    const saved = await sb('POST', 'inventory', record);
-
-    // Also insert processing_log
+    await sb('POST', 'inventory', record);
     await sb('POST', 'processing_log', {
       parent_ident_code: pmIndividual.label_id,
       child_ident_code: identCode,
@@ -2284,7 +2286,7 @@ async function pmOnWeightReceived(weight_kg) {
       operator: pmCurrentOperator
     });
 
-    // 4. 登録済みリストに追加
+    // 5. 登録済みリストに追加
     pmCompletedParts.push({
       part_name: fullPartName,
       weight_kg: weight_kg,
@@ -2293,12 +2295,6 @@ async function pmOnWeightReceived(weight_kg) {
       grade: pmGrade,
       bone_in: pmBoneIn
     });
-
-    // 5. ラベル印刷（DB保存後、同期的に印刷）
-    const basePart = pmSelectedPart.part_name;
-    const labelWeight = (pmRetail && PM_RETAIL_WEIGHTS[basePart]) ? PM_RETAIL_WEIGHTS[basePart] : weight_kg;
-    pmLastPrintInfo = { weight_kg, lotCode, identCode, fullPartName, labelWeight };
-    pmPrintLabel(weight_kg, lotCode, identCode, fullPartName, labelWeight); // awaitしない→ユーザー操作コンテキストを維持
 
     // 6. UI更新
     pmRenderParts();
