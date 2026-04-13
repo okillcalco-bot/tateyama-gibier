@@ -2387,39 +2387,50 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
   expiryDate.setFullYear(expiryDate.getFullYear() + 1);
   const expiryStr   = expiryDate.toLocaleDateString('ja-JP');
 
-  // ── iframe に書き込んで印刷（最も確実な方法）
+  // ── バーコードSVGを親ウィンドウで先に生成 ──
+  let barcodeSVG = '';
+  try {
+    if (typeof JsBarcode !== 'undefined') {
+      const tmpSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      document.body.appendChild(tmpSvg);
+      JsBarcode(tmpSvg, identCode, {format:'CODE128', width:1.4, height:30, displayValue:false, margin:2});
+      barcodeSVG = tmpSvg.outerHTML;
+      tmpSvg.remove();
+    }
+  } catch(e) {}
+
+  // ── iframe に書き込んで印刷 ──
   const iframe = document.createElement('iframe');
-  iframe.style.cssText = 'position:fixed;top:0;left:0;width:40mm;height:60mm;border:none;visibility:hidden;';
+  iframe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;border:none;opacity:0;';
   document.body.appendChild(iframe);
 
   const css = `
-    @page { size: 40mm 60mm; margin: 0; }
+    @page { size: 40mm 60mm portrait; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { width:40mm; height:60mm; font-family:'Meiryo','Yu Gothic',sans-serif;
-           padding:1.5mm 2mm; display:flex; flex-direction:column; }
-    .o  { font-size:9pt; font-weight:bold; border-bottom:.5pt solid #000; padding-bottom:.5mm; }
+           padding:1.5mm 2mm; display:flex; flex-direction:column; overflow:hidden; }
+    .o  { font-size:9pt; font-weight:bold; border-bottom:.5pt solid #000; padding-bottom:.5mm; white-space:nowrap; }
     .id { font-size:5.5pt; color:#333; margin-top:.5mm; }
     .p  { font-size:12pt; font-weight:bold; margin-top:.5mm; }
     .w  { font-size:17pt; font-weight:bold; line-height:1.1; }
     .wu { font-size:10pt; }
     .ex { font-size:7pt; font-weight:bold; margin-top:.5mm; }
     .tmp{ font-size:6pt; color:#333; }
-    .bc { flex:1; display:flex; align-items:center; justify-content:center; }
-    .bc svg { width:36mm; height:10mm; }
+    .bc { flex:1; display:flex; align-items:center; justify-content:center; min-height:0; }
+    .bc svg { width:36mm !important; height:10mm !important; }
     .bct{ font-size:5pt; text-align:center; font-family:monospace; }
     .mk { font-size:5pt; color:#444; margin-top:.3mm; }
     .ad { font-size:5pt; color:#444; }
   `;
 
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-    <style>${css}</style></head><body>
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${css}</style></head><body>
     <div class="o">${origin}　${speciesName}</div>
     <div class="id">個体管理番号　${pmIndividual.label_id}</div>
     <div class="p">${partName}</div>
     <div class="w">${labelWeight.toFixed(3)}<span class="wu"> kg</span></div>
     <div class="ex">消費期限　${expiryStr}</div>
     <div class="tmp">保存温度　-18℃以下</div>
-    <div class="bc"><svg id="bc"></svg></div>
+    <div class="bc">${barcodeSVG || '<svg></svg>'}</div>
     <div class="bct">${identCode}</div>
     <div class="mk">館山ジビエセンター</div>
     <div class="ad">千葉県館山市西長田1163-5</div>
@@ -2428,20 +2439,11 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
   const doc = iframe.contentDocument || iframe.contentWindow.document;
   doc.open(); doc.write(html); doc.close();
 
-  // バーコードをiframe内のSVGに描画
-  try {
-    if (typeof JsBarcode !== 'undefined')
-      JsBarcode(doc.getElementById('bc'), identCode,
-        {format:'CODE128', width:1.2, height:28, displayValue:false, margin:1});
-  } catch(e) {}
-
-  // 印刷（同期）
   iframe.contentWindow.focus();
   iframe.contentWindow.print();
 
-  // 印刷後にiframe削除
   window.addEventListener('afterprint', () => iframe.remove(), {once:true});
-  setTimeout(() => { try { iframe.remove(); } catch(_) {} }, 3000);
+  setTimeout(() => { try { iframe.remove(); } catch(_) {} }, 5000);
 }
 
 // ── 全部位完了 ──
