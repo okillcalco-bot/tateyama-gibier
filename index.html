@@ -2355,82 +2355,79 @@ function pmRenderCompleted() {
 function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
   if (!partName) partName = pmSelectedPart.part_name;
   if (labelWeight === undefined) labelWeight = weight_kg;
-  const species   = pmIndividual.species || '';
-  const origin    = pmIndividual.location || pmIndividual.origin || '館山産';
+  const species     = pmIndividual.species || '';
+  const origin      = pmIndividual.location || pmIndividual.origin || '館山産';
   const speciesName = species.includes('イノシシ') ? 'イノシシ肉' :
-                      species.includes('鹿')      ? '鹿肉'      : species;
+                      species.includes('鹿')       ? '鹿肉'       : species;
   const today = new Date();
-  const processDate = today.toLocaleDateString('ja-JP');
   const expiryDate = new Date(today);
   expiryDate.setFullYear(expiryDate.getFullYear() + 1);
   const expiryStr = expiryDate.toLocaleDateString('ja-JP');
 
-  // 印刷用スタイルを1回だけ注入
+  // ── スタイル（1回だけ）
   if (!document.getElementById('tgcPrintStyle')) {
-    const style = document.createElement('style');
-    style.id = 'tgcPrintStyle';
-    style.textContent = `
+    const s = document.createElement('style');
+    s.id = 'tgcPrintStyle';
+    s.textContent = `
+      @page { size: 40mm 60mm; margin: 0; }
       @media print {
-        @page { size: 40mm 60mm; margin: 0; }
-        body > * { display: none !important; }
-        #tgcPrintContainer { display: block !important; position: fixed; inset: 0; width: 40mm; height: 60mm; background: #fff; }
+        html, body { margin:0; padding:0; }
+        body > *:not(#tgcPC) { visibility: hidden !important; }
+        #tgcPC { visibility: visible !important; position: fixed !important;
+                 top:0; left:0; width:40mm; height:60mm; }
       }
-      #tgcPrintContainer {
-        display: none; position: fixed; inset: 0;
+      #tgcPC {
+        position: fixed; top: 0; left: 0;
         width: 40mm; height: 60mm;
         font-family: 'Meiryo','Yu Gothic',sans-serif;
-        padding: 1.5mm 2mm; box-sizing: border-box; background: #fff; z-index: -1;
+        padding: 1.5mm 2mm; box-sizing: border-box;
+        background: #fff; z-index: 99999;
+        display: none;
       }
-      .tgc-label { display:flex; flex-direction:column; height:100%; }
-      .tgc-lbl-origin { font-size:9pt; font-weight:bold; border-bottom:0.5pt solid #000; padding-bottom:0.5mm; margin-bottom:0.5mm; }
-      .tgc-lbl-row    { font-size:5.5pt; color:#333; }
-      .tgc-lbl-part   { font-size:11pt; font-weight:bold; margin:0.5mm 0 0; }
-      .tgc-lbl-weight { font-size:16pt; font-weight:bold; margin:0; line-height:1.1; }
-      .tgc-lbl-unit   { font-size:9pt; }
-      .tgc-lbl-expiry { font-size:6.5pt; font-weight:bold; margin-top:0.5mm; }
-      .tgc-lbl-temp   { font-size:6pt; color:#333; }
-      .tgc-lbl-bc-wrap{ flex:1; display:flex; align-items:center; justify-content:center; }
-      .tgc-lbl-bc-wrap svg { width:36mm; height:10mm; }
-      .tgc-lbl-bc-text{ font-size:5pt; text-align:center; font-family:monospace; }
-      .tgc-lbl-maker  { font-size:5pt; color:#444; }
-      .tgc-lbl-addr   { font-size:5pt; color:#444; }
+      #tgcPC .lb  { display:flex; flex-direction:column; height:100%; }
+      #tgcPC .o   { font-size:9pt; font-weight:bold; border-bottom:0.5pt solid #000; padding-bottom:0.5mm; }
+      #tgcPC .id  { font-size:5.5pt; color:#333; margin-top:0.5mm; }
+      #tgcPC .p   { font-size:12pt; font-weight:bold; margin-top:0.5mm; }
+      #tgcPC .w   { font-size:17pt; font-weight:bold; line-height:1.1; }
+      #tgcPC .wu  { font-size:10pt; }
+      #tgcPC .ex  { font-size:7pt; font-weight:bold; margin-top:0.5mm; }
+      #tgcPC .tmp { font-size:6pt; color:#333; }
+      #tgcPC .bc  { flex:1; display:flex; align-items:center; justify-content:center; }
+      #tgcPC .bc svg { width:36mm; height:10mm; }
+      #tgcPC .bct { font-size:5pt; text-align:center; font-family:monospace; }
+      #tgcPC .mk  { font-size:5pt; color:#444; margin-top:0.3mm; }
+      #tgcPC .ad  { font-size:5pt; color:#444; }
     `;
-    document.head.appendChild(style);
+    document.head.appendChild(s);
   }
 
-  // 印刷コンテナ（常駐）
-  let container = document.getElementById('tgcPrintContainer');
-  if (!container) {
-    container = document.createElement('div');
-    container.id = 'tgcPrintContainer';
-    document.body.appendChild(container);
-  }
+  // ── コンテナ
+  let c = document.getElementById('tgcPC');
+  if (!c) { c = document.createElement('div'); c.id = 'tgcPC'; document.body.appendChild(c); }
 
-  // ラベルHTML生成
-  container.innerHTML = `
-    <div class="tgc-label">
-      <div class="tgc-lbl-origin">${origin}　${speciesName}</div>
-      <div class="tgc-lbl-row">個体管理番号　${pmIndividual.label_id}</div>
-      <div class="tgc-lbl-part">${partName}</div>
-      <div class="tgc-lbl-weight">${labelWeight.toFixed(3)}<span class="tgc-lbl-unit"> kg</span></div>
-      <div class="tgc-lbl-expiry">消費期限　${expiryStr}</div>
-      <div class="tgc-lbl-temp">保存温度　-18℃以下</div>
-      <div class="tgc-lbl-bc-wrap"><svg id="tgcBcSvg"></svg></div>
-      <div class="tgc-lbl-bc-text">${identCode}</div>
-      <div class="tgc-lbl-maker">館山ジビエセンター</div>
-      <div class="tgc-lbl-addr">千葉県館山市西長田1163-5</div>
-    </div>`;
+  c.innerHTML = `<div class="lb">
+    <div class="o">${origin}　${speciesName}</div>
+    <div class="id">個体管理番号　${pmIndividual.label_id}</div>
+    <div class="p">${partName}</div>
+    <div class="w">${labelWeight.toFixed(3)}<span class="wu"> kg</span></div>
+    <div class="ex">消費期限　${expiryStr}</div>
+    <div class="tmp">保存温度　-18℃以下</div>
+    <div class="bc"><svg id="tgcBcSvg"></svg></div>
+    <div class="bct">${identCode}</div>
+    <div class="mk">館山ジビエセンター</div>
+    <div class="ad">千葉県館山市西長田1163-5</div>
+  </div>`;
 
-  // バーコード描画（同期）
+  // バーコード
   try {
-    const svgEl = container.querySelector('#tgcBcSvg');
-    if (svgEl && typeof JsBarcode !== 'undefined') {
-      JsBarcode(svgEl, identCode, { format:'CODE128', width:1.2, height:28, displayValue:false, margin:1 });
-    }
-  } catch(e) { console.warn('barcode:', e); }
+    if (typeof JsBarcode !== 'undefined')
+      JsBarcode(c.querySelector('svg'), identCode, {format:'CODE128',width:1.2,height:28,displayValue:false,margin:1});
+  } catch(e) {}
 
-  // 印刷（同期 → ユーザー操作コンテキスト内）
+  // 表示してから印刷、その後非表示
+  c.style.display = 'block';
   window.print();
+  c.style.display = 'none';
 }
 
 // ── 全部位完了 ──
