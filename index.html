@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>館山ジビエセンター 在庫管理</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/barcodes/JsBarcode.CODE128.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.min.js"></script>
 <style>
 :root {
   --bg: #0d0f0a; --surface: #141710; --surface2: #1c1f16;
@@ -2406,7 +2406,7 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
     @page { size: 40mm 60mm; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { width:40mm; height:60mm; font-family:'Meiryo','Yu Gothic',sans-serif;
-           padding:1.5mm 2mm; display:flex; flex-direction:column; overflow:hidden; }
+           padding:3mm 2mm 4mm; display:flex; flex-direction:column; overflow:hidden; }
     .o  { font-size:9pt; font-weight:bold; border-bottom:.5pt solid #000; padding-bottom:.5mm; white-space:nowrap; }
     .id { font-size:5.5pt; color:#333; margin-top:.5mm; }
     .p  { font-size:12pt; font-weight:bold; margin-top:.5mm; }
