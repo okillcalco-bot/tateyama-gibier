@@ -219,7 +219,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 /* Options row */
 .pm-options-row{display:flex;flex-direction:column;gap:6px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);}
 .pm-options-row .pm-opts-row1,.pm-options-row .pm-opts-row2{display:flex;gap:6px;align-items:center;}
-.pm-toggle-btn{padding:5px 12px;border-radius:14px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-size:13px;cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit;}
+.pm-toggle-btn{padding:8px 16px;border-radius:14px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-size:15px;cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit;}
 .pm-toggle-btn:hover{border-color:var(--gold2);}
 .pm-toggle-btn.bone-on{background:rgba(90,140,216,.15);color:var(--blue);border-color:rgba(90,140,216,.4);font-weight:600;}
 .pm-grade-btn.grade-active{font-weight:700;}
@@ -245,8 +245,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .pm-setup-ind-card .ind-meta{font-size:12px;color:var(--text2);}
 
 /* Part Buttons */
-.pm-parts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:7px;}
-.part-btn{min-height:58px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:var(--surface2);border:2px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;user-select:none;-webkit-tap-highlight-color:transparent;position:relative;padding:6px 4px;}
+.pm-parts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;}
+.part-btn{min-height:70px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:var(--surface2);border:2px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:16px;font-weight:600;cursor:pointer;transition:all .15s;user-select:none;-webkit-tap-highlight-color:transparent;position:relative;padding:8px 6px;}
 .part-btn:hover{border-color:var(--gold2);background:rgba(200,164,90,.05);}
 .part-btn:active{transform:scale(.97);}
 .part-btn.active{background:var(--gold);color:#1a1a0f;border-color:var(--gold);}
@@ -255,11 +255,11 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 
 /* Weight Area */
 .pm-weight-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;text-align:center;flex-shrink:0;}
-.pm-weight-selected{font-size:13px;color:var(--text2);margin-bottom:4px;}
-.pm-weight-selected strong{color:var(--gold);font-size:15px;}
-.pm-weight-display{font-size:48px;font-weight:700;color:var(--gold-light);font-variant-numeric:tabular-nums;letter-spacing:2px;line-height:1.1;margin:6px 0;}
-.pm-weight-unit{font-size:18px;color:var(--text2);font-weight:400;}
-.pm-measure-btn{display:block;width:100%;padding:14px;font-size:18px;font-weight:700;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#1a1a0f;border:none;border-radius:var(--radius);cursor:pointer;transition:all .2s;margin-top:10px;font-family:inherit;}
+.pm-weight-selected{font-size:15px;color:var(--text2);margin-bottom:4px;}
+.pm-weight-selected strong{color:var(--gold);font-size:17px;}
+.pm-weight-display{font-size:56px;font-weight:700;color:var(--gold-light);font-variant-numeric:tabular-nums;letter-spacing:2px;line-height:1.1;margin:6px 0;}
+.pm-weight-unit{font-size:22px;color:var(--text2);font-weight:400;}
+.pm-measure-btn{display:block;width:100%;padding:18px;font-size:22px;font-weight:700;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#1a1a0f;border:none;border-radius:var(--radius);cursor:pointer;transition:all .2s;margin-top:10px;font-family:inherit;}
 .pm-measure-btn:hover{background:linear-gradient(135deg,var(--gold),var(--gold-light));box-shadow:0 4px 16px rgba(200,164,90,.3);}
 .pm-measure-btn:active{transform:scale(.99);}
 .pm-measure-btn:disabled{opacity:.4;cursor:not-allowed;box-shadow:none;}
@@ -268,10 +268,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 /* Numpad */
 .pm-numpad{display:none;margin-top:8px;}
 .pm-numpad.open{display:block;}
-.pm-numpad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
-.pm-numpad-key{height:52px;font-size:20px;font-weight:700;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);cursor:pointer;transition:all .1s;user-select:none;-webkit-tap-highlight-color:transparent;font-family:inherit;}
+.pm-numpad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;}
+.pm-numpad-key{height:64px;font-size:26px;font-weight:700;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);cursor:pointer;transition:all .1s;user-select:none;-webkit-tap-highlight-color:transparent;font-family:inherit;}
 .pm-numpad-key:active{background:var(--border2);transform:scale(.95);}
-.pm-numpad-key.key-del{color:var(--red);font-size:18px;}
+.pm-numpad-key.key-del{color:var(--red);font-size:22px;}
 .pm-numpad-key.key-dot{color:var(--gold);}
 .pm-numpad-toggle{font-size:11px;padding:3px 10px;border-radius:10px;border:1px solid var(--border);background:none;color:var(--text2);cursor:pointer;margin-top:6px;font-family:inherit;}
 .pm-numpad-toggle.active{border-color:var(--gold2);color:var(--gold);}
@@ -279,10 +279,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 /* Completed List */
 .pm-completed-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;flex:1;min-height:0;overflow-y:auto;}
 .pm-completed-grid{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
-.pm-completed-chip{display:flex;align-items:center;gap:5px;padding:5px 10px;background:var(--surface2);border:1px solid var(--green);border-radius:14px;font-size:12px;}
+.pm-completed-chip{display:flex;align-items:center;gap:5px;padding:7px 12px;background:var(--surface2);border:1px solid var(--green);border-radius:14px;font-size:14px;}
 .pm-completed-chip .chip-name{font-weight:600;color:var(--text);}
 .pm-completed-chip .chip-weight{color:var(--gold);}
-.pm-completed-chip .chip-grade{color:var(--text3);font-size:10px;}
+.pm-completed-chip .chip-grade{color:var(--text3);font-size:12px;}
 .pm-yield-summary{margin-top:8px;padding:7px 10px;background:var(--surface2);border-radius:var(--radius);display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--text2);}
 .pm-yield-summary strong{color:var(--gold);}
 
@@ -2375,37 +2375,72 @@ function pmRenderCompleted() {
   document.getElementById('pmYieldSummary').style.display = 'flex';
 }
 
+// ── CODE128-B バーコードSVG生成（外部ライブラリ不要）──
+function makeCode128SVG(text, barH) {
+  const T=['11011001100','11001101100','11001100110','10010011000','10010001100',
+    '10001001100','10011001000','10011000100','10001100100','11001001000',
+    '11001000100','11000100100','10110011100','10011011100','10011001110',
+    '10111001100','10011101100','10011100110','11001110010','11001011100',
+    '11001001110','11011100100','11001110100','11101101110','11101001100',
+    '11100101100','11100100110','11101100100','11100110100','11100110010',
+    '11011011000','11011000110','11000110110','10100011000','10001011000',
+    '10001000110','10110001000','10001101000','10001100010','11010001000',
+    '11000101000','11000100010','10110111000','10110001110','10001101110',
+    '10111011000','10111000110','10001110110','11101110110','11010001110',
+    '11000101110','11011101000','11011100010','11011101110','11101011000',
+    '11101000110','11100010110','11101101000','11101100010','11100011010',
+    '11101111010','11001000010','11110001010','10100110000','10100001100',
+    '10010110000','10010000110','10000101100','10000100110','10110010000',
+    '10110000100','10011010000','10011000010','10000110100','10000110010',
+    '11000010010','11001010000','11110111010','11000010100','10001111010',
+    '10100111100','10010111100','10010011110','10111100100','10011110100',
+    '10011110010','11110100100','11110010100','11110010010','11011011110',
+    '11011110110','11110110110','10101111000','10100011110','10001011110',
+    '10111101000','10111100010','11110101000','11110100010','10111011110',
+    '10111101110','11101011110','11110101110','11010000100','11010010000',
+    '11010011100'];
+  barH = barH || 38;
+  const START_B = 104;
+  let vals = [START_B], check = START_B;
+  for (let i = 0; i < text.length; i++) {
+    const v = text.charCodeAt(i) - 32;
+    if (v < 0 || v > 94) return '';
+    vals.push(v); check += v * (i + 1);
+  }
+  vals.push(check % 103);
+  const bits = vals.map(v => T[v]).join('') + '1100011101011';
+  const W = bits.length;
+  let rects = '';
+  for (let i = 0; i < W; ) {
+    if (bits[i] === '1') {
+      let j = i + 1;
+      while (j < W && bits[j] === '1') j++;
+      rects += '<rect x="' + i + '" y="0" width="' + (j - i) + '" height="' + barH + '" fill="#000"/>';
+      i = j;
+    } else { i++; }
+  }
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + barH
+    + '" preserveAspectRatio="none" style="display:block;width:36mm;height:10mm;">'
+    + '<rect width="' + W + '" height="' + barH + '" fill="#fff"/>' + rects + '</svg>';
+}
+
 // ── ラベル印刷 ──
 function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
   if (!partName) partName = pmSelectedPart.part_name;
   if (labelWeight === undefined) labelWeight = weight_kg;
   const species     = pmIndividual.species || '';
-  const origin      = pmIndividual.location || pmIndividual.origin || '館山産';
+  // T始まり→館山産、M始まり→南房総産、その他はDBのlocation/origin参照
+  const _lid = (pmIndividual.label_id || '').toUpperCase();
+  const origin = pmIndividual.location || pmIndividual.origin ||
+                 (_lid.startsWith('M') ? '南房総産' : '館山産');
   const speciesName = species.includes('イノシシ') ? 'イノシシ肉' :
                       species.includes('鹿')       ? '鹿肉'       : species;
   const expiryDate  = new Date();
   expiryDate.setFullYear(expiryDate.getFullYear() + 1);
   const expiryStr   = expiryDate.toLocaleDateString('ja-JP');
 
-  // ── バーコード生成：JsBarcodeをiframe内で直接実行（最確実） ──
-  const _bcSafeCode = identCode.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-  let barcodeSection = '';
-  if (_jsbSrc) {
-    // JsBarcodeソースをiframe内インラインで実行→SVGに描画
-    barcodeSection = '<svg id="bc"></svg>'
-      + '<script>' + _jsbSrc
-      + ';try{JsBarcode(\'#bc\',\'' + _bcSafeCode + '\',{format:\'CODE128\',width:2,height:38,displayValue:false,margin:2});}catch(e){}<\/script>';
-  } else {
-    // フォールバック：canvasでdataURL生成
-    try {
-      const canvas = document.createElement('canvas');
-      canvas.width = 400; canvas.height = 120;
-      if (typeof JsBarcode !== 'undefined') {
-        JsBarcode(canvas, identCode, {format:'CODE128',width:2,height:80,displayValue:false,margin:10});
-        barcodeSection = '<img src="' + canvas.toDataURL('image/png') + '" style="width:36mm;height:10mm;display:block;">';
-      }
-    } catch(e) { console.warn('barcode fallback:', e); }
-  }
+  // ── バーコードSVG生成（自前エンコーダー・外部依存なし）──
+  const barcodeSection = makeCode128SVG(identCode);
 
   // ── iframe に書き込んで印刷 ──
   const iframe = document.createElement('iframe');
@@ -2426,7 +2461,6 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
     .tmp{ font-size:6pt; color:#333; }
     .bc { flex:1; display:flex; align-items:center; justify-content:center; min-height:0; }
     .bc svg { display:block; width:36mm !important; height:10mm !important; }
-    .bc img { display:block; width:36mm; height:10mm; object-fit:fill; }
     .bct{ font-size:5pt; text-align:center; font-family:monospace; }
     .mk { font-size:5pt; color:#444; margin-top:.3mm; }
     .ad { font-size:5pt; color:#444; }
@@ -2491,13 +2525,6 @@ document.getElementById('pmOverlay').addEventListener('click', (e) => {
 });
 
 /* ===== Init ===== */
-// JsBarcodeソースをキャッシュ（iframe内インライン実行用）
-let _jsbSrc = null;
-fetch('https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.min.js')
-  .then(r => r.text())
-  .then(t => { _jsbSrc = t.replace(/<\/script>/gi, '<\\/script>'); })
-  .catch(() => {});
-
 loadDashboard();
 </script>
 </body>
