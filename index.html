@@ -1961,13 +1961,13 @@ function pmNumDel() {
 // ── ラベル印刷のみ（登録なし） ──
 let pmLastPrintInfo = null; // 最後に登録したラベル情報を保持
 
-async function pmPrintOnly() {
+function pmPrintOnly() {
   if (!pmLastPrintInfo) {
     toast('先に登録してください','error');
     return;
   }
   const { weight_kg, lotCode, identCode, fullPartName, labelWeight } = pmLastPrintInfo;
-  await pmPrintLabel(weight_kg, lotCode, identCode, fullPartName, labelWeight);
+  pmPrintLabel(weight_kg, lotCode, identCode, fullPartName, labelWeight);
   toast('再印刷しました');
 }
 
@@ -2196,6 +2196,20 @@ function scaleHandleLine(line) {
   }
 }
 
+// ── 印刷データ準備（同期・ユーザー操作コンテキスト内で呼ぶこと）──
+function pmDoPrint(weight_kg) {
+  if (!pmSelectedPart || !pmIndividual) return;
+  const existing  = pmCompletedParts.filter(c => c.part_name.includes(pmSelectedPart.part_name)).length;
+  const seq       = existing + 1;
+  const lotCode   = generateLotCode(pmIndividual.label_id, pmSelectedPart.part_name, seq);
+  const identCode = pmIndividual.label_id + '-' + pmSelectedPart.barcode_num + (seq > 1 ? '-' + seq : '');
+  const baseName  = pmSelectedPart.part_name;
+  const fullPart  = (pmBoneIn ? '骨付き ' : '') + baseName + (pmGrade !== '並' ? ' [' + pmGrade + ']' : '') + (pmRetail ? ' [小売]' : '');
+  const lw        = (pmRetail && PM_RETAIL_WEIGHTS[baseName]) ? PM_RETAIL_WEIGHTS[baseName] : weight_kg;
+  pmLastPrintInfo = { weight_kg, lotCode, identCode, fullPartName: fullPart, labelWeight: lw };
+  pmPrintLabel(weight_kg, lotCode, identCode, fullPart, lw);  // ← window.print() はここで呼ばれる
+}
+
 // ── 計量ボタン ──
 function pmStartMeasure() {
   // テンキー入力がある場合はその値を使う
@@ -2203,10 +2217,21 @@ function pmStartMeasure() {
     const w = parseFloat(pmNumBuf);
     if (isNaN(w) || w < 0.050) { toast('重量が小さすぎます（0.050kg未満）','error'); return; }
     pmNumBuf = '';
-    pmOnWeightReceived(w);
+    pmDoPrint(w);          // ★ 同期関数から直接呼ぶ → window.print()が動く
+    pmOnWeightReceived(w); // DB保存（非同期）
     return;
   }
   if (!pmSelectedPart) { toast('部位を選択してください','error'); return; }
+
+  const w = parseFloat(document.getElementById('pmWeightDisplay').textContent);
+  if (w >= 0.050) {
+    // 重量がすでに表示されている場合はそのまま登録
+    pmDoPrint(w);          // ★ 同期関数から直接呼ぶ
+    pmOnWeightReceived(w);
+    return;
+  }
+
+  // 重量がまだない場合はスケール待機
   pmWaitingForScale = true;
   pmScaleBuffer = '';
   document.getElementById('pmMeasureBtn').textContent = '⏳ 待機中...';
@@ -2218,9 +2243,11 @@ function pmStartMeasure() {
       document.getElementById('pmMeasureBtn').textContent = '登録';
       document.getElementById('pmMeasureBtn').disabled = false;
       document.getElementById('pmMeasureBtn').onclick = () => {
-        const w = parseFloat(document.getElementById('pmWeightDisplay').textContent);
-        if (w >= 0.050) { pmOnWeightReceived(w); }
-        else { toast('重量を入力してください','error'); }
+        const ww = parseFloat(document.getElementById('pmWeightDisplay').textContent);
+        if (ww >= 0.050) {
+          pmDoPrint(ww);          // ★ onclick から直接呼ぶ
+          pmOnWeightReceived(ww);
+        } else { toast('重量を入力してください','error'); }
         document.getElementById('pmMeasureBtn').onclick = pmStartMeasure;
       };
     }
@@ -2258,10 +2285,7 @@ async function pmOnWeightReceived(weight_kg) {
     const labelWeight = (pmRetail && PM_RETAIL_WEIGHTS[basePart]) ? PM_RETAIL_WEIGHTS[basePart] : weight_kg;
     pmLastPrintInfo = { weight_kg, lotCode, identCode, fullPartName, labelWeight };
 
-    // 3. ★印刷を先に実行（awaitの前 = ユーザー操作コンテキスト内）
-    pmPrintLabel(weight_kg, lotCode, identCode, fullPartName, labelWeight);
-
-    // 4. DB保存（印刷後に非同期）
+    // 3. DB保存
     const record = {
       individual_id: pmIndividual.label_id,
       individual_code: pmIndividual.label_id,
