@@ -2387,15 +2387,25 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
   expiryDate.setFullYear(expiryDate.getFullYear() + 1);
   const expiryStr   = expiryDate.toLocaleDateString('ja-JP');
 
-  // ── バーコードをcanvasで生成 → dataURL画像として埋め込む ──
-  let barcodeImg = '';
-  try {
-    if (typeof JsBarcode !== 'undefined') {
+  // ── バーコード生成：JsBarcodeをiframe内で直接実行（最確実） ──
+  const _bcSafeCode = identCode.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  let barcodeSection = '';
+  if (_jsbSrc) {
+    // JsBarcodeソースをiframe内インラインで実行→SVGに描画
+    barcodeSection = '<svg id="bc"></svg>'
+      + '<script>' + _jsbSrc
+      + ';try{JsBarcode(\'#bc\',\'' + _bcSafeCode + '\',{format:\'CODE128\',width:2,height:38,displayValue:false,margin:2});}catch(e){}<\/script>';
+  } else {
+    // フォールバック：canvasでdataURL生成
+    try {
       const canvas = document.createElement('canvas');
-      JsBarcode(canvas, identCode, {format:'CODE128', width:2, height:50, displayValue:false, margin:4});
-      barcodeImg = canvas.toDataURL('image/png');
-    }
-  } catch(e) { console.warn('barcode canvas:', e); }
+      canvas.width = 400; canvas.height = 120;
+      if (typeof JsBarcode !== 'undefined') {
+        JsBarcode(canvas, identCode, {format:'CODE128',width:2,height:80,displayValue:false,margin:10});
+        barcodeSection = '<img src="' + canvas.toDataURL('image/png') + '" style="width:36mm;height:10mm;display:block;">';
+      }
+    } catch(e) { console.warn('barcode fallback:', e); }
+  }
 
   // ── iframe に書き込んで印刷 ──
   const iframe = document.createElement('iframe');
@@ -2415,7 +2425,8 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
     .ex { font-size:7pt; font-weight:bold; margin-top:.5mm; }
     .tmp{ font-size:6pt; color:#333; }
     .bc { flex:1; display:flex; align-items:center; justify-content:center; min-height:0; }
-    .bc img { width:36mm; height:10mm; display:block; object-fit:contain; }
+    .bc svg { display:block; width:36mm !important; height:10mm !important; }
+    .bc img { display:block; width:36mm; height:10mm; object-fit:fill; }
     .bct{ font-size:5pt; text-align:center; font-family:monospace; }
     .mk { font-size:5pt; color:#444; margin-top:.3mm; }
     .ad { font-size:5pt; color:#444; }
@@ -2428,7 +2439,7 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
     <div class="w">${labelWeight.toFixed(3)}<span class="wu"> kg</span></div>
     <div class="ex">消費期限　${expiryStr}</div>
     <div class="tmp">保存温度　-18℃以下</div>
-    <div class="bc">${barcodeImg ? '<img src="' + barcodeImg + '">' : ''}</div>
+    <div class="bc">${barcodeSection}</div>
     <div class="bct">${identCode}</div>
     <div class="mk">館山ジビエセンター</div>
     <div class="ad">千葉県館山市西長田1163-5</div>
@@ -2480,6 +2491,13 @@ document.getElementById('pmOverlay').addEventListener('click', (e) => {
 });
 
 /* ===== Init ===== */
+// JsBarcodeソースをキャッシュ（iframe内インライン実行用）
+let _jsbSrc = null;
+fetch('https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.min.js')
+  .then(r => r.text())
+  .then(t => { _jsbSrc = t.replace(/<\/script>/gi, '<\\/script>'); })
+  .catch(() => {});
+
 loadDashboard();
 </script>
 </body>
