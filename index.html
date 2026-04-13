@@ -2387,17 +2387,15 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
   expiryDate.setFullYear(expiryDate.getFullYear() + 1);
   const expiryStr   = expiryDate.toLocaleDateString('ja-JP');
 
-  // ── バーコードSVGを親ウィンドウで先に生成 ──
-  let barcodeSVG = '';
+  // ── バーコードをcanvasで生成 → dataURL画像として埋め込む ──
+  let barcodeImg = '';
   try {
     if (typeof JsBarcode !== 'undefined') {
-      const tmpSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      document.body.appendChild(tmpSvg);
-      JsBarcode(tmpSvg, identCode, {format:'CODE128', width:1.4, height:30, displayValue:false, margin:2});
-      barcodeSVG = tmpSvg.outerHTML;
-      tmpSvg.remove();
+      const canvas = document.createElement('canvas');
+      JsBarcode(canvas, identCode, {format:'CODE128', width:2, height:50, displayValue:false, margin:4});
+      barcodeImg = canvas.toDataURL('image/png');
     }
-  } catch(e) {}
+  } catch(e) { console.warn('barcode canvas:', e); }
 
   // ── iframe に書き込んで印刷 ──
   const iframe = document.createElement('iframe');
@@ -2405,7 +2403,7 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
   document.body.appendChild(iframe);
 
   const css = `
-    @page { size: 40mm 60mm portrait; margin: 0; }
+    @page { size: 40mm 60mm; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { width:40mm; height:60mm; font-family:'Meiryo','Yu Gothic',sans-serif;
            padding:1.5mm 2mm; display:flex; flex-direction:column; overflow:hidden; }
@@ -2417,7 +2415,7 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
     .ex { font-size:7pt; font-weight:bold; margin-top:.5mm; }
     .tmp{ font-size:6pt; color:#333; }
     .bc { flex:1; display:flex; align-items:center; justify-content:center; min-height:0; }
-    .bc svg { width:36mm !important; height:10mm !important; }
+    .bc img { width:36mm; height:10mm; display:block; object-fit:contain; }
     .bct{ font-size:5pt; text-align:center; font-family:monospace; }
     .mk { font-size:5pt; color:#444; margin-top:.3mm; }
     .ad { font-size:5pt; color:#444; }
@@ -2430,7 +2428,7 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
     <div class="w">${labelWeight.toFixed(3)}<span class="wu"> kg</span></div>
     <div class="ex">消費期限　${expiryStr}</div>
     <div class="tmp">保存温度　-18℃以下</div>
-    <div class="bc">${barcodeSVG || '<svg></svg>'}</div>
+    <div class="bc">${barcodeImg ? '<img src="' + barcodeImg + '">' : ''}</div>
     <div class="bct">${identCode}</div>
     <div class="mk">館山ジビエセンター</div>
     <div class="ad">千葉県館山市西長田1163-5</div>
