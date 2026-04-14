@@ -548,8 +548,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <!-- セクション：捕獲情報 -->
       <div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px;">▌ 捕獲情報</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-        <div class="form-group"><label>捕獲年月日</label><input class="form-input" id="ind-f-capture_date" type="date" /></div>
-        <div class="form-group"><label>捕獲時刻</label><input class="form-input" id="ind-f-capture_time" type="time" /></div>
+        <div class="form-group"><label>捕獲年月日</label><input class="form-input" id="ind-f-capture_date" type="text" placeholder="例: 2026-04-10" /></div>
+        <div class="form-group"><label>捕獲時刻</label><input class="form-input" id="ind-f-capture_time" type="text" placeholder="例: 08:30" /></div>
         <div class="form-group"><label>捕獲市区町村</label><input class="form-input" id="ind-f-capture_city" list="dl-city" placeholder="例: 館山市" autocomplete="off" /></div>
         <div class="form-group"><label>捕獲地区</label><input class="form-input" id="ind-f-capture_area" list="dl-area" placeholder="例: 神余" autocomplete="off" /></div>
         <div class="form-group" style="grid-column:1/-1"><label>捕獲者名</label><input class="form-input" id="ind-f-hunter_name" list="dl-hunter" placeholder="捕獲者名" autocomplete="off" /></div>
@@ -569,7 +569,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <!-- セクション：処理情報 -->
       <div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px;">▌ 処理情報</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-        <div class="form-group"><label>放血時刻</label><input class="form-input" id="ind-f-bleed_time" type="time" /></div>
+        <div class="form-group"><label>放血時刻</label><input class="form-input" id="ind-f-bleed_time" type="text" placeholder="例: 08:30" /></div>
         <div class="form-group"><label>内臓摘出</label>
           <select class="form-input" id="ind-f-gutting">
             <option value="">選択...</option><option>現地</option><option>施設</option>
@@ -580,9 +580,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
             <option value="">選択...</option><option>氷冷</option><option>冷蔵庫</option><option>その他</option>
           </select>
         </div>
-        <div class="form-group"><label>搬送開始</label><input class="form-input" id="ind-f-transport_start" type="time" /></div>
-        <div class="form-group"><label>施設受入時刻</label><input class="form-input" id="ind-f-receive_time" type="time" /></div>
-        <div class="form-group"><label>処理開始時刻</label><input class="form-input" id="ind-f-process_time" type="time" /></div>
+        <div class="form-group"><label>搬送開始</label><input class="form-input" id="ind-f-transport_start" type="text" placeholder="例: 09:00" /></div>
+        <div class="form-group"><label>施設受入時刻</label><input class="form-input" id="ind-f-receive_time" type="text" placeholder="例: 10:00" /></div>
+        <div class="form-group"><label>処理開始時刻</label><input class="form-input" id="ind-f-process_time" type="text" placeholder="例: 10:30" /></div>
         <div class="form-group"><label>記録者</label><input class="form-input" id="ind-f-recorder" list="dl-recorder" placeholder="記録者名" autocomplete="off" /></div>
         <div class="form-group"><label>異常確認者</label><input class="form-input" id="ind-f-hunter_health_issues" list="dl-recorder" placeholder="異常確認者名" autocomplete="off" /></div>
       </div>
