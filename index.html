@@ -872,8 +872,8 @@ async function barcodeLookup(code) {
 async function loadDashboard() {
   try {
     const [individuals, allInv, procLogs, ships] = await Promise.all([
-      sb('GET', 'individuals', null, '?select=label_id'),
-      sb('GET', 'inventory', null, '?select=id,individual_id,part_name,weight,status,ident_code,updated_at,grade'),
+      sb('GET', 'individuals', null, '?select=label_id&deleted_at=is.null'),
+      sb('GET', 'inventory', null, '?select=id,individual_id,part_name,weight,status,ident_code,updated_at,grade&deleted_at=is.null'),
       sb('GET', 'processing_log', null, '?select=*&order=created_at.desc&limit=10'),
       sb('GET', 'shipments', null, '?select=*&order=created_at.desc&limit=10')
     ]);
@@ -906,7 +906,7 @@ async function loadDashboard() {
     individuals.forEach(i => indMap[i.label_id] = true);
     let indFull = [];
     try {
-      indFull = await sb('GET', 'individuals', null, '?select=label_id,species');
+      indFull = await sb('GET', 'individuals', null, '?select=label_id,species&deleted_at=is.null');
     } catch(e) {}
     const speciesMap = {};
     indFull.forEach(i => speciesMap[i.label_id] = i.species);
