@@ -74,11 +74,9 @@ tr:hover td{background:var(--surface2);}
 .btn:hover{border-color:var(--gold2);color:var(--gold);}
 .btn-primary{background:var(--gold2);color:#fff;border-color:var(--gold2);}
 .btn-primary:hover{background:var(--gold);border-color:var(--gold);}
-.btn-danger{background:var(--red);color:#fff;border-color:var(--red);}
-.btn-danger:hover{background:#c0392b;border-color:#c0392b;}
+.btn-danger{background:var(--red);color:#fff !important;border-color:var(--red);}
+.btn-danger:hover{background:#a03838;border-color:#a03838;}
 .btn-sm{padding:4px 10px;font-size:12px;}
-.btn-danger{border-color:var(--red);color:var(--red);}
-.btn-danger:hover{background:rgba(200,80,80,.1);}
 .btn:disabled{opacity:.4;cursor:not-allowed;}
 
 /* Forms */
@@ -484,13 +482,21 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         </label>
       </div>
       <!-- アクティブ一覧 -->
-      <div id="ind-active-section">
+      <div id="ind-active-section" style="overflow-x:auto;">
         <table id="ind-table">
           <thead><tr>
             <th style="width:32px;"></th>
-            <th>個体番号</th><th>種別</th><th>性別</th><th>体重</th><th>捕獲日</th><th>捕獲場所</th><th>捕獲者</th><th>品質</th><th>操作</th>
+            <th onclick="indSort('serial_number')" style="cursor:pointer;">通し番号 <span id="indSortIcon-serial_number"></span></th>
+            <th onclick="indSort('label_id')" style="cursor:pointer;">個体番号 <span id="indSortIcon-label_id"></span></th>
+            <th onclick="indSort('species')" style="cursor:pointer;">種別 <span id="indSortIcon-species"></span></th>
+            <th onclick="indSort('sex')" style="cursor:pointer;">性別 <span id="indSortIcon-sex"></span></th>
+            <th onclick="indSort('weight_total')" style="cursor:pointer;">体重 <span id="indSortIcon-weight_total"></span></th>
+            <th onclick="indSort('capture_date')" style="cursor:pointer;">捕獲日 <span id="indSortIcon-capture_date">▲</span></th>
+            <th>捕獲場所</th>
+            <th onclick="indSort('hunter_name')" style="cursor:pointer;">捕獲者 <span id="indSortIcon-hunter_name"></span></th>
+            <th>品質</th><th>操作</th>
           </tr></thead>
-          <tbody id="ind-body"><tr><td colspan="10" style="text-align:center;color:var(--text3);">読み込み中...</td></tr></tbody>
+          <tbody id="ind-body"><tr><td colspan="11" style="text-align:center;color:var(--text3);">読み込み中...</td></tr></tbody>
         </table>
       </div>
       <!-- 削除履歴 -->
@@ -509,13 +515,16 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 
   <!-- Individual Edit Modal -->
   <div id="indModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
-    <div style="max-width:560px;margin:40px auto;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:24px;">
+    <div style="max-width:640px;margin:30px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:24px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <div style="font-size:17px;font-weight:700;color:var(--gold);" id="indModalTitle">個体情報編集</div>
         <button onclick="indCloseModal()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <!-- セクション：基本情報 -->
+      <div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px;">▌ 基本情報</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
         <div class="form-group" style="grid-column:1/-1"><label>個体管理番号 *</label><input class="form-input" id="ind-f-label_id" placeholder="例: TGC-08-T002" /></div>
+        <div class="form-group"><label>通し番号</label><input class="form-input" id="ind-f-serial_number" type="number" placeholder="例: 017" /></div>
         <div class="form-group"><label>種別</label>
           <select class="form-input" id="ind-f-species">
             <option value="">選択...</option>
@@ -528,17 +537,70 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
             <option value="">選択...</option><option>オス</option><option>メス</option><option>不明</option>
           </select>
         </div>
+        <div class="form-group"><label>推定年齢</label><input class="form-input" id="ind-f-age_estimate" placeholder="例: 2歳" /></div>
         <div class="form-group"><label>体重(kg)</label><input class="form-input" id="ind-f-weight_total" type="number" step="0.1" placeholder="例: 45.5" /></div>
         <div class="form-group"><label>品質</label>
           <select class="form-input" id="ind-f-quality">
             <option value="">選択...</option><option>良</option><option>普通</option><option>不良</option>
           </select>
         </div>
+      </div>
+      <!-- セクション：捕獲情報 -->
+      <div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px;">▌ 捕獲情報</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
         <div class="form-group"><label>捕獲年月日</label><input class="form-input" id="ind-f-capture_date" type="date" /></div>
         <div class="form-group"><label>捕獲時刻</label><input class="form-input" id="ind-f-capture_time" type="time" /></div>
         <div class="form-group"><label>捕獲市区町村</label><input class="form-input" id="ind-f-capture_city" placeholder="例: 館山市" /></div>
         <div class="form-group"><label>捕獲地区</label><input class="form-input" id="ind-f-capture_area" placeholder="例: 神余" /></div>
         <div class="form-group" style="grid-column:1/-1"><label>捕獲者名</label><input class="form-input" id="ind-f-hunter_name" placeholder="捕獲者名" /></div>
+        <div class="form-group"><label>天候</label><input class="form-input" id="ind-f-weather" placeholder="例: 晴れ" /></div>
+        <div class="form-group"><label>捕獲方法</label>
+          <select class="form-input" id="ind-f-capture_method">
+            <option value="">選択...</option><option>くくり罠</option><option>箱罠</option><option>銃猟</option><option>その他</option>
+          </select>
+        </div>
+        <div class="form-group"><label>止め刺し方法</label>
+          <select class="form-input" id="ind-f-finishing_method">
+            <option value="">選択...</option><option>銃</option><option>刃物</option><option>電気</option><option>その他</option>
+          </select>
+        </div>
+        <div class="form-group"><label>命中部位</label><input class="form-input" id="ind-f-hit_location" placeholder="例: 頭部" /></div>
+      </div>
+      <!-- セクション：処理情報 -->
+      <div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px;">▌ 処理情報</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+        <div class="form-group"><label>放血時間(分)</label><input class="form-input" id="ind-f-bleed_time" type="number" placeholder="例: 30" /></div>
+        <div class="form-group"><label>内臓摘出</label>
+          <select class="form-input" id="ind-f-gutting">
+            <option value="">選択...</option><option>現地</option><option>施設</option>
+          </select>
+        </div>
+        <div class="form-group"><label>冷却方法</label>
+          <select class="form-input" id="ind-f-cooling_method">
+            <option value="">選択...</option><option>氷冷</option><option>冷蔵庫</option><option>その他</option>
+          </select>
+        </div>
+        <div class="form-group"><label>搬送開始</label><input class="form-input" id="ind-f-transport_start" type="time" /></div>
+        <div class="form-group"><label>施設受入時刻</label><input class="form-input" id="ind-f-receive_time" type="time" /></div>
+        <div class="form-group"><label>処理開始時刻</label><input class="form-input" id="ind-f-process_time" type="time" /></div>
+        <div class="form-group"><label>記録者</label><input class="form-input" id="ind-f-recorder" placeholder="記録者名" /></div>
+        <div class="form-group"><label>異常確認者</label><input class="form-input" id="ind-f-hunter_health_issues" placeholder="異常確認者名" /></div>
+      </div>
+      <!-- セクション：検査・備考 -->
+      <div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px;">▌ 検査・備考</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+        <div class="form-group"><label>捕獲時異常</label><input class="form-input" id="ind-f-capture_anomalies" placeholder="なし / 詳細" /></div>
+        <div class="form-group"><label>臓器異常</label><input class="form-input" id="ind-f-organ_anomalies" placeholder="なし / 詳細" /></div>
+        <div class="form-group"><label>胎子の有無</label>
+          <select class="form-input" id="ind-f-has_fetus">
+            <option value="">選択...</option><option value="true">あり</option><option value="false">なし</option>
+          </select>
+        </div>
+        <div class="form-group"><label>猟師の健康状態</label>
+          <select class="form-input" id="ind-f-hunter_health_ok">
+            <option value="">選択...</option><option value="true">問題なし</option><option value="false">要確認</option>
+          </select>
+        </div>
         <div class="form-group" style="grid-column:1/-1"><label>備考</label><textarea class="form-input" id="ind-f-memo" rows="3" style="resize:vertical;"></textarea></div>
       </div>
       <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
@@ -2640,41 +2702,77 @@ document.getElementById('pmOverlay').addEventListener('click', (e) => {
 
 /* ===== 個体管理 ===== */
 let indEditId = null;
-const indCache = new Map(); // label_id → データオブジェクト（onclickに直接JSON埋め込まない）
+const indCache = new Map();
+let indSortCol = 'capture_date';
+let indSortAsc = true;
+const IND_ALL_FIELDS = ['label_id','serial_number','species','sex','age_estimate','weight_total','quality',
+  'capture_date','capture_time','capture_city','capture_area','hunter_name',
+  'weather','capture_method','finishing_method','hit_location',
+  'bleed_time','gutting','cooling_method','transport_start','receive_time','process_time',
+  'recorder','hunter_health_issues','capture_anomalies','organ_anomalies','has_fetus','hunter_health_ok','memo'];
+
+function indSort(col) {
+  if (indSortCol === col) indSortAsc = !indSortAsc;
+  else { indSortCol = col; indSortAsc = true; }
+  document.querySelectorAll('[id^="indSortIcon-"]').forEach(el => el.textContent = '');
+  const icon = document.getElementById('indSortIcon-' + col);
+  if (icon) icon.textContent = indSortAsc ? '▲' : '▼';
+  indRender();
+}
+
+let indAllData = [];
+function indRender() {
+  const body = document.getElementById('ind-body');
+  if (!body) return;
+  let data = [...indAllData];
+  data.sort((a, b) => {
+    let va = a[indSortCol] ?? '';
+    let vb = b[indSortCol] ?? '';
+    if (indSortCol === 'serial_number' || indSortCol === 'weight_total') {
+      va = parseFloat(va) || 0; vb = parseFloat(vb) || 0;
+      return indSortAsc ? va - vb : vb - va;
+    }
+    va = String(va); vb = String(vb);
+    return indSortAsc ? va.localeCompare(vb, 'ja') : vb.localeCompare(va, 'ja');
+  });
+  if (!data.length) {
+    body.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text3);">該当なし</td></tr>';
+    return;
+  }
+  body.innerHTML = data.map(i => `<tr>
+    <td><input type="checkbox" class="ind-chk" data-id="${i.label_id}" onchange="indUpdateBulkBtn()"></td>
+    <td style="text-align:center;">${i.serial_number != null ? i.serial_number : '-'}</td>
+    <td style="color:var(--gold);font-weight:700;">${i.label_id}</td>
+    <td>${i.species || '-'}</td>
+    <td>${i.sex || '-'}</td>
+    <td>${i.weight_total != null ? i.weight_total + ' kg' : '-'}</td>
+    <td>${fmt(i.capture_date)}</td>
+    <td>${[i.capture_city, i.capture_area].filter(Boolean).join(' ') || '-'}</td>
+    <td>${i.hunter_name || '-'}</td>
+    <td>${i.quality || '-'}</td>
+    <td style="white-space:nowrap;">
+      <button class="btn btn-sm" onclick="indOpenEdit('${i.label_id}')">編集</button>
+      <button class="btn btn-sm btn-danger" onclick="indDelete('${i.label_id}')">削除</button>
+    </td>
+  </tr>`).join('');
+}
 
 async function indLoad() {
   const q = (document.getElementById('ind-search')?.value || '').trim();
   const sp = document.getElementById('ind-filter-species')?.value || '';
   const body = document.getElementById('ind-body');
   if (!body) return;
-  body.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
+  body.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
   try {
-    let qs = '?select=*&deleted_at=is.null&order=label_id.asc&limit=200';
-    if (q) qs = '?select=*&deleted_at=is.null&or=(label_id.ilike.*' + encodeURIComponent(q) + '*,hunter_name.ilike.*' + encodeURIComponent(q) + '*)&order=label_id.asc&limit=200';
+    let qs = '?select=*&deleted_at=is.null&order=capture_date.asc,serial_number.asc&limit=500';
+    if (q) qs = '?select=*&deleted_at=is.null&or=(label_id.ilike.*' + encodeURIComponent(q) + '*,hunter_name.ilike.*' + encodeURIComponent(q) + '*)&order=capture_date.asc,serial_number.asc&limit=500';
     let data = await sb('GET', 'individuals', null, qs);
     if (sp) data = data.filter(i => i.species === sp);
     indCache.clear();
     data.forEach(i => indCache.set(i.label_id, i));
-    if (!data.length) {
-      body.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text3);">該当なし</td></tr>';
-      return;
-    }
-    body.innerHTML = data.map(i => `<tr>
-      <td><input type="checkbox" class="ind-chk" data-id="${i.label_id}" onchange="indUpdateBulkBtn()"></td>
-      <td style="color:var(--gold);font-weight:700;">${i.label_id}</td>
-      <td>${i.species || '-'}</td>
-      <td>${i.sex || '-'}</td>
-      <td>${i.weight_total != null ? i.weight_total + ' kg' : '-'}</td>
-      <td>${fmt(i.capture_date)}</td>
-      <td>${[i.capture_city, i.capture_area].filter(Boolean).join(' ') || '-'}</td>
-      <td>${i.hunter_name || '-'}</td>
-      <td>${i.quality || '-'}</td>
-      <td style="white-space:nowrap;">
-        <button class="btn btn-sm" onclick="indOpenEdit('${i.label_id}')">編集</button>
-        <button class="btn btn-sm btn-danger" onclick="indDelete('${i.label_id}')">削除</button>
-      </td>
-    </tr>`).join('');
-  } catch(e) { body.innerHTML = '<tr><td colspan="10" style="color:var(--red);">読み込みエラー: ' + e.message + '</td></tr>'; }
+    indAllData = data;
+    indRender();
+  } catch(e) { body.innerHTML = '<tr><td colspan="11" style="color:var(--red);">読み込みエラー: ' + e.message + '</td></tr>'; }
 }
 
 function indUpdateBulkBtn() {
@@ -2742,15 +2840,20 @@ async function indRestore(labelId) {
   } catch(e) { toast('復元エラー: ' + e.message, 'error'); }
 }
 
+function indSetField(id, val) {
+  const el = document.getElementById('ind-f-' + id);
+  if (!el) return;
+  if (val == null) { el.value = ''; return; }
+  el.value = val;
+}
+
 function indOpenNew() {
   indEditId = null;
   document.getElementById('indModalTitle').textContent = '新規個体登録';
-  ['label_id','species','sex','weight_total','quality','capture_date','capture_time','capture_city','capture_area','hunter_name','memo'].forEach(f => {
-    const el = document.getElementById('ind-f-' + f);
-    if (el) el.value = '';
-  });
+  IND_ALL_FIELDS.forEach(f => indSetField(f, ''));
   document.getElementById('ind-f-label_id').disabled = false;
   document.getElementById('indModal').style.display = 'block';
+  document.getElementById('indModal').scrollTop = 0;
 }
 
 function indOpenEdit(labelId) {
@@ -2758,42 +2861,62 @@ function indOpenEdit(labelId) {
   if (!i) { toast('データが見つかりません。再読み込みしてください。', 'error'); return; }
   indEditId = i.label_id;
   document.getElementById('indModalTitle').textContent = '個体情報編集：' + i.label_id;
-  document.getElementById('ind-f-label_id').value = i.label_id || '';
+  IND_ALL_FIELDS.forEach(f => indSetField(f, i[f]));
+  // bool fields
+  indSetField('has_fetus', i.has_fetus == null ? '' : String(i.has_fetus));
+  indSetField('hunter_health_ok', i.hunter_health_ok == null ? '' : String(i.hunter_health_ok));
   document.getElementById('ind-f-label_id').disabled = true;
-  document.getElementById('ind-f-species').value = i.species || '';
-  document.getElementById('ind-f-sex').value = i.sex || '';
-  document.getElementById('ind-f-weight_total').value = i.weight_total != null ? i.weight_total : '';
-  document.getElementById('ind-f-quality').value = i.quality || '';
-  document.getElementById('ind-f-capture_date').value = i.capture_date || '';
-  document.getElementById('ind-f-capture_time').value = i.capture_time || '';
-  document.getElementById('ind-f-capture_city').value = i.capture_city || '';
-  document.getElementById('ind-f-capture_area').value = i.capture_area || '';
-  document.getElementById('ind-f-hunter_name').value = i.hunter_name || '';
-  document.getElementById('ind-f-memo').value = i.memo || '';
   document.getElementById('indModal').style.display = 'block';
+  document.getElementById('indModal').scrollTop = 0;
 }
 
 function indCloseModal() {
   document.getElementById('indModal').style.display = 'none';
 }
 
+function indGetVal(id) {
+  const el = document.getElementById('ind-f-' + id);
+  if (!el) return null;
+  return el.value.trim() || null;
+}
+
 async function indSave() {
   const btn = document.getElementById('indSaveBtn');
   btn.disabled = true; btn.textContent = '保存中...';
   try {
-    const label_id = document.getElementById('ind-f-label_id').value.trim();
-    if (!label_id) { toast('個体管理番号は必須です', 'error'); return; }
+    const label_id = (document.getElementById('ind-f-label_id').value || '').trim();
+    if (!label_id) { toast('個体管理番号は必須です', 'error'); btn.disabled=false; btn.textContent='保存'; return; }
+    const numVal = id => { const v = indGetVal(id); return v !== null ? parseFloat(v) || null : null; };
+    const boolVal = id => { const v = indGetVal(id); return v === 'true' ? true : v === 'false' ? false : null; };
     const payload = {
-      species:      document.getElementById('ind-f-species').value || null,
-      sex:          document.getElementById('ind-f-sex').value || null,
-      weight_total: document.getElementById('ind-f-weight_total').value !== '' ? parseFloat(document.getElementById('ind-f-weight_total').value) : null,
-      quality:      document.getElementById('ind-f-quality').value || null,
-      capture_date: document.getElementById('ind-f-capture_date').value || null,
-      capture_time: document.getElementById('ind-f-capture_time').value || null,
-      capture_city: document.getElementById('ind-f-capture_city').value.trim() || null,
-      capture_area: document.getElementById('ind-f-capture_area').value.trim() || null,
-      hunter_name:  document.getElementById('ind-f-hunter_name').value.trim() || null,
-      memo:         document.getElementById('ind-f-memo').value.trim() || null,
+      species:           indGetVal('species'),
+      sex:               indGetVal('sex'),
+      age_estimate:      indGetVal('age_estimate'),
+      weight_total:      numVal('weight_total'),
+      quality:           indGetVal('quality'),
+      serial_number:     numVal('serial_number'),
+      capture_date:      indGetVal('capture_date'),
+      capture_time:      indGetVal('capture_time'),
+      capture_city:      indGetVal('capture_city'),
+      capture_area:      indGetVal('capture_area'),
+      hunter_name:       indGetVal('hunter_name'),
+      weather:           indGetVal('weather'),
+      capture_method:    indGetVal('capture_method'),
+      finishing_method:  indGetVal('finishing_method'),
+      hit_location:      indGetVal('hit_location'),
+      bleed_time:        numVal('bleed_time'),
+      gutting:           indGetVal('gutting'),
+      cooling_method:    indGetVal('cooling_method'),
+      transport_start:   indGetVal('transport_start'),
+      receive_time:      indGetVal('receive_time'),
+      process_time:      indGetVal('process_time'),
+      recorder:              indGetVal('recorder'),
+      hunter_health_issues:  indGetVal('hunter_health_issues'),
+      capture_anomalies:     indGetVal('capture_anomalies'),
+      organ_anomalies:   indGetVal('organ_anomalies'),
+      has_fetus:         boolVal('has_fetus'),
+      hunter_health_ok:  boolVal('hunter_health_ok'),
+      memo:              indGetVal('memo'),
     };
     if (indEditId) {
       await sb('PATCH', 'individuals', payload, '?label_id=eq.' + encodeURIComponent(indEditId));
