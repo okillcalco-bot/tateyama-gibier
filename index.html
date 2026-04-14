@@ -74,6 +74,8 @@ tr:hover td{background:var(--surface2);}
 .btn:hover{border-color:var(--gold2);color:var(--gold);}
 .btn-primary{background:var(--gold2);color:#fff;border-color:var(--gold2);}
 .btn-primary:hover{background:var(--gold);border-color:var(--gold);}
+.btn-danger{background:var(--red);color:#fff;border-color:var(--red);}
+.btn-danger:hover{background:#c0392b;border-color:#c0392b;}
 .btn-sm{padding:4px 10px;font-size:12px;}
 .btn-danger{border-color:var(--red);color:var(--red);}
 .btn-danger:hover{background:rgba(200,80,80,.1);}
@@ -377,9 +379,18 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="form-group"><label>検索</label><input class="form-input" id="inv-filter-search" placeholder="識別コード・個体番号" /></div>
         <div class="form-group"><button class="btn btn-primary" onclick="loadInventory()">検索</button></div>
       </div>
-      <div style="overflow-x:auto;">
+      <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap;">
+        <label style="font-size:13px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer;">
+          <input type="checkbox" id="invSelectAll" onchange="invToggleAll(this.checked)"> 全選択
+        </label>
+        <button class="btn btn-danger" id="invBulkDelBtn" style="display:none;" onclick="invBulkDelete()">選択削除</button>
+        <button class="btn" onclick="invShowTrash()" id="invTrashBtn">🗑 削除履歴</button>
+      </div>
+      <!-- アクティブ在庫 -->
+      <div id="inv-active-section" style="overflow-x:auto;">
         <table>
           <thead><tr>
+            <th style="width:32px;"></th>
             <th onclick="sortInv('ident_code')">識別コード</th>
             <th onclick="sortInv('individual_id')">個体番号</th>
             <th onclick="sortInv('species')">種別</th>
@@ -394,6 +405,17 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         </table>
       </div>
       <div id="inv-empty" class="empty-state" style="display:none;">データがありません</div>
+      <!-- 削除履歴 -->
+      <div id="inv-trash-section" style="display:none;overflow-x:auto;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <span style="color:var(--red);font-weight:600;">🗑 削除済み在庫</span>
+          <button class="btn btn-sm" onclick="invHideTrash()">← 戻る</button>
+        </div>
+        <table>
+          <thead><tr><th>識別コード</th><th>個体番号</th><th>部位</th><th>重量</th><th>削除日時</th><th>操作</th></tr></thead>
+          <tbody id="inv-trash-body"><tr><td colspan="6" style="text-align:center;color:var(--text3);">読み込み中...</td></tr></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -441,25 +463,47 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <!-- Individuals -->
   <div class="tab-panel" id="panel-individuals">
     <div class="section">
-      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
         <span>個体一覧</span>
-        <button class="btn btn-primary" onclick="indOpenNew()">＋ 新規登録</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn" onclick="indShowTrash()" id="indTrashBtn">🗑 削除履歴</button>
+          <button class="btn btn-danger" id="indBulkDelBtn" style="display:none;" onclick="indBulkDelete()">選択削除</button>
+          <button class="btn btn-primary" onclick="indOpenNew()">＋ 新規登録</button>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-        <input class="form-input" id="ind-search" placeholder="個体番号・猟師名で検索" style="max-width:280px;" oninput="indLoad()" />
-        <select class="form-input" id="ind-filter-species" style="max-width:140px;" onchange="indLoad()">
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+        <input class="form-input" id="ind-search" placeholder="個体番号・猟師名で検索" style="max-width:260px;" oninput="indLoad()" />
+        <select class="form-input" id="ind-filter-species" style="max-width:130px;" onchange="indLoad()">
           <option value="">種別：全て</option>
           <option value="イノシシ">イノシシ</option>
           <option value="シカ">シカ</option>
           <option value="アライグマ">アライグマ</option>
         </select>
+        <label style="font-size:13px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer;">
+          <input type="checkbox" id="indSelectAll" onchange="indToggleAll(this.checked)"> 全選択
+        </label>
       </div>
-      <table id="ind-table">
-        <thead><tr>
-          <th>個体番号</th><th>種別</th><th>性別</th><th>体重</th><th>捕獲日</th><th>捕獲場所</th><th>捕獲者</th><th>品質</th><th>操作</th>
-        </tr></thead>
-        <tbody id="ind-body"><tr><td colspan="9" style="text-align:center;color:var(--text3);">読み込み中...</td></tr></tbody>
-      </table>
+      <!-- アクティブ一覧 -->
+      <div id="ind-active-section">
+        <table id="ind-table">
+          <thead><tr>
+            <th style="width:32px;"></th>
+            <th>個体番号</th><th>種別</th><th>性別</th><th>体重</th><th>捕獲日</th><th>捕獲場所</th><th>捕獲者</th><th>品質</th><th>操作</th>
+          </tr></thead>
+          <tbody id="ind-body"><tr><td colspan="10" style="text-align:center;color:var(--text3);">読み込み中...</td></tr></tbody>
+        </table>
+      </div>
+      <!-- 削除履歴 -->
+      <div id="ind-trash-section" style="display:none;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <span style="color:var(--red);font-weight:600;">🗑 削除済み個体</span>
+          <button class="btn btn-sm" onclick="indHideTrash()">← 戻る</button>
+        </div>
+        <table id="ind-trash-table">
+          <thead><tr><th>個体番号</th><th>種別</th><th>体重</th><th>捕獲日</th><th>捕獲者</th><th>削除日時</th><th>操作</th></tr></thead>
+          <tbody id="ind-trash-body"><tr><td colspan="7" style="text-align:center;color:var(--text3);">読み込み中...</td></tr></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -854,7 +898,7 @@ async function loadInventory() {
     if (search) filters.push(`or=(ident_code.ilike.*${encodeURIComponent(search)}*,individual_id.ilike.*${encodeURIComponent(search)}*)`);
 
     // Can't easily filter by species without join, so we filter client-side
-    let q = '?select=*&order=created_at.desc&limit=200';
+    let q = '?select=*&deleted_at=is.null&order=created_at.desc&limit=200';
     if (filters.length) q += '&' + filters.join('&');
 
     let data = await sb('GET', 'inventory', null, q);
@@ -914,6 +958,7 @@ function renderInventory() {
   }
   empty.style.display = 'none';
   body.innerHTML = data.map(item => `<tr>
+    <td><input type="checkbox" class="inv-chk" data-id="${item.id}" onchange="invUpdateBulkBtn()"></td>
     <td style="font-weight:600;color:var(--gold)">${item.ident_code || '-'}</td>
     <td>${item.individual_id || '-'}</td>
     <td>${speciesIcon(item._species)} ${item._species}</td>
@@ -922,9 +967,10 @@ function renderInventory() {
     <td>${item.grade || '-'}</td>
     <td>${statusBadge(item.status)}</td>
     <td>${fmt(item.created_at)}</td>
-    <td>
+    <td style="white-space:nowrap;">
       <button class="btn btn-sm" onclick="showDetailModal(invData.find(i=>i.id==='${item.id}'))">詳細</button>
       <button class="btn btn-sm" onclick="changeStatus('${item.id}','${item.ident_code}')">変更</button>
+      <button class="btn btn-sm btn-danger" onclick="invDelete('${item.id}')">削除</button>
     </td>
   </tr>`).join('');
 }
@@ -2593,24 +2639,28 @@ document.getElementById('pmOverlay').addEventListener('click', (e) => {
 });
 
 /* ===== 個体管理 ===== */
-let indEditId = null; // 編集中のlabel_id（nullなら新規）
+let indEditId = null;
+const indCache = new Map(); // label_id → データオブジェクト（onclickに直接JSON埋め込まない）
 
 async function indLoad() {
   const q = (document.getElementById('ind-search')?.value || '').trim();
   const sp = document.getElementById('ind-filter-species')?.value || '';
   const body = document.getElementById('ind-body');
   if (!body) return;
-  body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
+  body.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
   try {
-    let qs = '?select=*&order=label_id.asc&limit=100';
-    if (q) qs = '?select=*&or=(label_id.ilike.*' + encodeURIComponent(q) + '*,hunter_name.ilike.*' + encodeURIComponent(q) + '*)&order=label_id.asc&limit=100';
+    let qs = '?select=*&deleted_at=is.null&order=label_id.asc&limit=200';
+    if (q) qs = '?select=*&deleted_at=is.null&or=(label_id.ilike.*' + encodeURIComponent(q) + '*,hunter_name.ilike.*' + encodeURIComponent(q) + '*)&order=label_id.asc&limit=200';
     let data = await sb('GET', 'individuals', null, qs);
     if (sp) data = data.filter(i => i.species === sp);
+    indCache.clear();
+    data.forEach(i => indCache.set(i.label_id, i));
     if (!data.length) {
-      body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text3);">該当なし</td></tr>';
+      body.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text3);">該当なし</td></tr>';
       return;
     }
     body.innerHTML = data.map(i => `<tr>
+      <td><input type="checkbox" class="ind-chk" data-id="${i.label_id}" onchange="indUpdateBulkBtn()"></td>
       <td style="color:var(--gold);font-weight:700;">${i.label_id}</td>
       <td>${i.species || '-'}</td>
       <td>${i.sex || '-'}</td>
@@ -2619,9 +2669,77 @@ async function indLoad() {
       <td>${[i.capture_city, i.capture_area].filter(Boolean).join(' ') || '-'}</td>
       <td>${i.hunter_name || '-'}</td>
       <td>${i.quality || '-'}</td>
-      <td><button class="btn btn-sm" onclick="indOpenEdit(${JSON.stringify(JSON.stringify(i))})">編集</button></td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-sm" onclick="indOpenEdit('${i.label_id}')">編集</button>
+        <button class="btn btn-sm btn-danger" onclick="indDelete('${i.label_id}')">削除</button>
+      </td>
     </tr>`).join('');
-  } catch(e) { body.innerHTML = '<tr><td colspan="9" style="color:var(--red);">読み込みエラー: ' + e.message + '</td></tr>'; }
+  } catch(e) { body.innerHTML = '<tr><td colspan="10" style="color:var(--red);">読み込みエラー: ' + e.message + '</td></tr>'; }
+}
+
+function indUpdateBulkBtn() {
+  const checked = document.querySelectorAll('.ind-chk:checked').length;
+  document.getElementById('indBulkDelBtn').style.display = checked > 0 ? 'inline-block' : 'none';
+  document.getElementById('indBulkDelBtn').textContent = `選択削除（${checked}件）`;
+}
+
+function indToggleAll(checked) {
+  document.querySelectorAll('.ind-chk').forEach(c => c.checked = checked);
+  indUpdateBulkBtn();
+}
+
+async function indDelete(labelId) {
+  if (!confirm(`「${labelId}」を削除しますか？\n削除履歴からいつでも復元できます。`)) return;
+  try {
+    await sb('PATCH', 'individuals', { deleted_at: new Date().toISOString() }, '?label_id=eq.' + encodeURIComponent(labelId));
+    toast(`${labelId} を削除しました`);
+    indLoad();
+  } catch(e) { toast('削除エラー: ' + e.message, 'error'); }
+}
+
+async function indBulkDelete() {
+  const ids = [...document.querySelectorAll('.ind-chk:checked')].map(c => c.dataset.id);
+  if (!ids.length) return;
+  if (!confirm(`${ids.length}件を削除しますか？\n削除履歴からいつでも復元できます。`)) return;
+  try {
+    await Promise.all(ids.map(id => sb('PATCH', 'individuals', { deleted_at: new Date().toISOString() }, '?label_id=eq.' + encodeURIComponent(id))));
+    toast(`${ids.length}件を削除しました`);
+    document.getElementById('indSelectAll').checked = false;
+    indLoad();
+  } catch(e) { toast('削除エラー: ' + e.message, 'error'); }
+}
+
+async function indShowTrash() {
+  document.getElementById('ind-active-section').style.display = 'none';
+  document.getElementById('ind-trash-section').style.display = 'block';
+  const body = document.getElementById('ind-trash-body');
+  body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
+  try {
+    const data = await sb('GET', 'individuals', null, '?deleted_at=not.is.null&order=deleted_at.desc&limit=200');
+    if (!data.length) { body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);">削除履歴なし</td></tr>'; return; }
+    body.innerHTML = data.map(i => `<tr>
+      <td style="color:var(--gold);font-weight:700;">${i.label_id}</td>
+      <td>${i.species || '-'}</td>
+      <td>${i.weight_total != null ? i.weight_total + ' kg' : '-'}</td>
+      <td>${fmt(i.capture_date)}</td>
+      <td>${i.hunter_name || '-'}</td>
+      <td style="color:var(--red);font-size:12px;">${new Date(i.deleted_at).toLocaleString('ja-JP')}</td>
+      <td><button class="btn btn-sm" onclick="indRestore('${i.label_id}')">復元</button></td>
+    </tr>`).join('');
+  } catch(e) { body.innerHTML = '<tr><td colspan="7" style="color:var(--red);">読み込みエラー</td></tr>'; }
+}
+
+function indHideTrash() {
+  document.getElementById('ind-active-section').style.display = 'block';
+  document.getElementById('ind-trash-section').style.display = 'none';
+}
+
+async function indRestore(labelId) {
+  try {
+    await sb('PATCH', 'individuals', { deleted_at: null }, '?label_id=eq.' + encodeURIComponent(labelId));
+    toast(`${labelId} を復元しました`);
+    indShowTrash();
+  } catch(e) { toast('復元エラー: ' + e.message, 'error'); }
 }
 
 function indOpenNew() {
@@ -2635,8 +2753,9 @@ function indOpenNew() {
   document.getElementById('indModal').style.display = 'block';
 }
 
-function indOpenEdit(jsonStr) {
-  const i = JSON.parse(jsonStr);
+function indOpenEdit(labelId) {
+  const i = indCache.get(labelId);
+  if (!i) { toast('データが見つかりません。再読み込みしてください。', 'error'); return; }
   indEditId = i.label_id;
   document.getElementById('indModalTitle').textContent = '個体情報編集：' + i.label_id;
   document.getElementById('ind-f-label_id').value = i.label_id || '';
@@ -2691,6 +2810,71 @@ async function indSave() {
   } finally {
     btn.disabled = false; btn.textContent = '保存';
   }
+}
+
+/* ===== 在庫 削除・復元 ===== */
+function invUpdateBulkBtn() {
+  const checked = document.querySelectorAll('.inv-chk:checked').length;
+  document.getElementById('invBulkDelBtn').style.display = checked > 0 ? 'inline-block' : 'none';
+  document.getElementById('invBulkDelBtn').textContent = `選択削除（${checked}件）`;
+}
+
+function invToggleAll(checked) {
+  document.querySelectorAll('.inv-chk').forEach(c => c.checked = checked);
+  invUpdateBulkBtn();
+}
+
+async function invDelete(id) {
+  if (!confirm('この在庫レコードを削除しますか？\n削除履歴からいつでも復元できます。')) return;
+  try {
+    await sb('PATCH', 'inventory', { deleted_at: new Date().toISOString() }, '?id=eq.' + id);
+    toast('削除しました');
+    loadInventory();
+  } catch(e) { toast('削除エラー: ' + e.message, 'error'); }
+}
+
+async function invBulkDelete() {
+  const ids = [...document.querySelectorAll('.inv-chk:checked')].map(c => c.dataset.id);
+  if (!ids.length) return;
+  if (!confirm(`${ids.length}件を削除しますか？\n削除履歴からいつでも復元できます。`)) return;
+  try {
+    await Promise.all(ids.map(id => sb('PATCH', 'inventory', { deleted_at: new Date().toISOString() }, '?id=eq.' + id)));
+    toast(`${ids.length}件を削除しました`);
+    document.getElementById('invSelectAll').checked = false;
+    loadInventory();
+  } catch(e) { toast('削除エラー: ' + e.message, 'error'); }
+}
+
+async function invShowTrash() {
+  document.getElementById('inv-active-section').style.display = 'none';
+  document.getElementById('inv-trash-section').style.display = 'block';
+  const body = document.getElementById('inv-trash-body');
+  body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
+  try {
+    const data = await sb('GET', 'inventory', null, '?deleted_at=not.is.null&order=deleted_at.desc&limit=200');
+    if (!data.length) { body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text3);">削除履歴なし</td></tr>'; return; }
+    body.innerHTML = data.map(i => `<tr>
+      <td style="font-size:12px;font-family:monospace;">${i.ident_code || '-'}</td>
+      <td>${i.individual_id || '-'}</td>
+      <td>${i.part_name || '-'}</td>
+      <td>${i.weight != null ? i.weight + ' kg' : '-'}</td>
+      <td style="color:var(--red);font-size:12px;">${new Date(i.deleted_at).toLocaleString('ja-JP')}</td>
+      <td><button class="btn btn-sm" onclick="invRestore('${i.id}')">復元</button></td>
+    </tr>`).join('');
+  } catch(e) { body.innerHTML = '<tr><td colspan="6" style="color:var(--red);">読み込みエラー</td></tr>'; }
+}
+
+function invHideTrash() {
+  document.getElementById('inv-active-section').style.display = 'block';
+  document.getElementById('inv-trash-section').style.display = 'none';
+}
+
+async function invRestore(id) {
+  try {
+    await sb('PATCH', 'inventory', { deleted_at: null }, '?id=eq.' + id);
+    toast('復元しました');
+    invShowTrash();
+  } catch(e) { toast('復元エラー: ' + e.message, 'error'); }
 }
 
 /* ===== Init ===== */
