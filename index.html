@@ -326,6 +326,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 <div class="tabs">
   <button class="tab-btn active" data-tab="dashboard">&#x1F4CA; ダッシュボード</button>
   <button class="tab-btn" data-tab="inventory">&#x1F4E6; 在庫一覧</button>
+  <button class="tab-btn" data-tab="individuals">&#x1F43D; 個体管理</button>
   <button class="tab-btn" data-tab="processing">&#x1F52A; 精肉入力</button>
   <button class="tab-btn" data-tab="trace">&#x1F50D; トレーサビリティ</button>
   <button class="tab-btn" data-tab="shipping">&#x1F4E4; 出荷処理</button>
@@ -434,6 +435,72 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="form-group"><label>担当者名</label><input class="form-input" id="proc-operator" placeholder="担当者名" /></div>
       </div>
       <button class="btn btn-primary" onclick="submitProcessing()" id="proc-submit-btn">精肉データを登録</button>
+    </div>
+  </div>
+
+  <!-- Individuals -->
+  <div class="tab-panel" id="panel-individuals">
+    <div class="section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>個体一覧</span>
+        <button class="btn btn-primary" onclick="indOpenNew()">＋ 新規登録</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <input class="form-input" id="ind-search" placeholder="個体番号・猟師名で検索" style="max-width:280px;" oninput="indLoad()" />
+        <select class="form-input" id="ind-filter-species" style="max-width:140px;" onchange="indLoad()">
+          <option value="">種別：全て</option>
+          <option value="イノシシ">イノシシ</option>
+          <option value="シカ">シカ</option>
+          <option value="アライグマ">アライグマ</option>
+        </select>
+      </div>
+      <table id="ind-table">
+        <thead><tr>
+          <th>個体番号</th><th>種別</th><th>性別</th><th>体重</th><th>捕獲日</th><th>捕獲場所</th><th>捕獲者</th><th>品質</th><th>操作</th>
+        </tr></thead>
+        <tbody id="ind-body"><tr><td colspan="9" style="text-align:center;color:var(--text3);">読み込み中...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Individual Edit Modal -->
+  <div id="indModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:560px;margin:40px auto;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);" id="indModalTitle">個体情報編集</div>
+        <button onclick="indCloseModal()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group" style="grid-column:1/-1"><label>個体管理番号 *</label><input class="form-input" id="ind-f-label_id" placeholder="例: TGC-08-T002" /></div>
+        <div class="form-group"><label>種別</label>
+          <select class="form-input" id="ind-f-species">
+            <option value="">選択...</option>
+            <option>イノシシ</option><option>シカ</option><option>アライグマ</option>
+            <option>ハクビシン</option><option>キョン</option><option>タヌキ</option><option>ノウサギ</option>
+          </select>
+        </div>
+        <div class="form-group"><label>性別</label>
+          <select class="form-input" id="ind-f-sex">
+            <option value="">選択...</option><option>オス</option><option>メス</option><option>不明</option>
+          </select>
+        </div>
+        <div class="form-group"><label>体重(kg)</label><input class="form-input" id="ind-f-weight_total" type="number" step="0.1" placeholder="例: 45.5" /></div>
+        <div class="form-group"><label>品質</label>
+          <select class="form-input" id="ind-f-quality">
+            <option value="">選択...</option><option>良</option><option>普通</option><option>不良</option>
+          </select>
+        </div>
+        <div class="form-group"><label>捕獲年月日</label><input class="form-input" id="ind-f-capture_date" type="date" /></div>
+        <div class="form-group"><label>捕獲時刻</label><input class="form-input" id="ind-f-capture_time" type="time" /></div>
+        <div class="form-group"><label>捕獲市区町村</label><input class="form-input" id="ind-f-capture_city" placeholder="例: 館山市" /></div>
+        <div class="form-group"><label>捕獲地区</label><input class="form-input" id="ind-f-capture_area" placeholder="例: 神余" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>捕獲者名</label><input class="form-input" id="ind-f-hunter_name" placeholder="捕獲者名" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>備考</label><textarea class="form-input" id="ind-f-memo" rows="3" style="resize:vertical;"></textarea></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
+        <button class="btn" onclick="indCloseModal()">キャンセル</button>
+        <button class="btn btn-primary" onclick="indSave()" id="indSaveBtn">保存</button>
+      </div>
     </div>
   </div>
 
@@ -650,6 +717,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
     if (btn.dataset.tab === 'dashboard') loadDashboard();
     if (btn.dataset.tab === 'inventory') loadInventory();
+    if (btn.dataset.tab === 'individuals') indLoad();
     if (btn.dataset.tab === 'processing') loadProcessingSetup();
     if (btn.dataset.tab === 'shipping') loadShipping();
   });
@@ -2523,6 +2591,107 @@ document.getElementById('pmOverlay').addEventListener('click', (e) => {
     refocusScaleInput();
   }
 });
+
+/* ===== 個体管理 ===== */
+let indEditId = null; // 編集中のlabel_id（nullなら新規）
+
+async function indLoad() {
+  const q = (document.getElementById('ind-search')?.value || '').trim();
+  const sp = document.getElementById('ind-filter-species')?.value || '';
+  const body = document.getElementById('ind-body');
+  if (!body) return;
+  body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
+  try {
+    let qs = '?select=*&order=label_id.asc&limit=100';
+    if (q) qs = '?select=*&or=(label_id.ilike.*' + encodeURIComponent(q) + '*,hunter_name.ilike.*' + encodeURIComponent(q) + '*)&order=label_id.asc&limit=100';
+    let data = await sb('GET', 'individuals', null, qs);
+    if (sp) data = data.filter(i => i.species === sp);
+    if (!data.length) {
+      body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text3);">該当なし</td></tr>';
+      return;
+    }
+    body.innerHTML = data.map(i => `<tr>
+      <td style="color:var(--gold);font-weight:700;">${i.label_id}</td>
+      <td>${i.species || '-'}</td>
+      <td>${i.sex || '-'}</td>
+      <td>${i.weight_total != null ? i.weight_total + ' kg' : '-'}</td>
+      <td>${fmt(i.capture_date)}</td>
+      <td>${[i.capture_city, i.capture_area].filter(Boolean).join(' ') || '-'}</td>
+      <td>${i.hunter_name || '-'}</td>
+      <td>${i.quality || '-'}</td>
+      <td><button class="btn btn-sm" onclick="indOpenEdit(${JSON.stringify(JSON.stringify(i))})">編集</button></td>
+    </tr>`).join('');
+  } catch(e) { body.innerHTML = '<tr><td colspan="9" style="color:var(--red);">読み込みエラー: ' + e.message + '</td></tr>'; }
+}
+
+function indOpenNew() {
+  indEditId = null;
+  document.getElementById('indModalTitle').textContent = '新規個体登録';
+  ['label_id','species','sex','weight_total','quality','capture_date','capture_time','capture_city','capture_area','hunter_name','memo'].forEach(f => {
+    const el = document.getElementById('ind-f-' + f);
+    if (el) el.value = '';
+  });
+  document.getElementById('ind-f-label_id').disabled = false;
+  document.getElementById('indModal').style.display = 'block';
+}
+
+function indOpenEdit(jsonStr) {
+  const i = JSON.parse(jsonStr);
+  indEditId = i.label_id;
+  document.getElementById('indModalTitle').textContent = '個体情報編集：' + i.label_id;
+  document.getElementById('ind-f-label_id').value = i.label_id || '';
+  document.getElementById('ind-f-label_id').disabled = true;
+  document.getElementById('ind-f-species').value = i.species || '';
+  document.getElementById('ind-f-sex').value = i.sex || '';
+  document.getElementById('ind-f-weight_total').value = i.weight_total != null ? i.weight_total : '';
+  document.getElementById('ind-f-quality').value = i.quality || '';
+  document.getElementById('ind-f-capture_date').value = i.capture_date || '';
+  document.getElementById('ind-f-capture_time').value = i.capture_time || '';
+  document.getElementById('ind-f-capture_city').value = i.capture_city || '';
+  document.getElementById('ind-f-capture_area').value = i.capture_area || '';
+  document.getElementById('ind-f-hunter_name').value = i.hunter_name || '';
+  document.getElementById('ind-f-memo').value = i.memo || '';
+  document.getElementById('indModal').style.display = 'block';
+}
+
+function indCloseModal() {
+  document.getElementById('indModal').style.display = 'none';
+}
+
+async function indSave() {
+  const btn = document.getElementById('indSaveBtn');
+  btn.disabled = true; btn.textContent = '保存中...';
+  try {
+    const label_id = document.getElementById('ind-f-label_id').value.trim();
+    if (!label_id) { toast('個体管理番号は必須です', 'error'); return; }
+    const payload = {
+      species:      document.getElementById('ind-f-species').value || null,
+      sex:          document.getElementById('ind-f-sex').value || null,
+      weight_total: document.getElementById('ind-f-weight_total').value !== '' ? parseFloat(document.getElementById('ind-f-weight_total').value) : null,
+      quality:      document.getElementById('ind-f-quality').value || null,
+      capture_date: document.getElementById('ind-f-capture_date').value || null,
+      capture_time: document.getElementById('ind-f-capture_time').value || null,
+      capture_city: document.getElementById('ind-f-capture_city').value.trim() || null,
+      capture_area: document.getElementById('ind-f-capture_area').value.trim() || null,
+      hunter_name:  document.getElementById('ind-f-hunter_name').value.trim() || null,
+      memo:         document.getElementById('ind-f-memo').value.trim() || null,
+    };
+    if (indEditId) {
+      await sb('PATCH', 'individuals', payload, '?label_id=eq.' + encodeURIComponent(indEditId));
+      toast('保存しました');
+    } else {
+      payload.label_id = label_id;
+      await sb('POST', 'individuals', payload);
+      toast('登録しました');
+    }
+    indCloseModal();
+    indLoad();
+  } catch(e) {
+    toast('保存エラー: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '保存';
+  }
+}
 
 /* ===== Init ===== */
 loadDashboard();
