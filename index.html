@@ -550,10 +550,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
         <div class="form-group"><label>捕獲年月日</label><input class="form-input" id="ind-f-capture_date" type="date" /></div>
         <div class="form-group"><label>捕獲時刻</label><input class="form-input" id="ind-f-capture_time" type="time" /></div>
-        <div class="form-group"><label>捕獲市区町村</label><input class="form-input" id="ind-f-capture_city" placeholder="例: 館山市" /></div>
-        <div class="form-group"><label>捕獲地区</label><input class="form-input" id="ind-f-capture_area" placeholder="例: 神余" /></div>
-        <div class="form-group" style="grid-column:1/-1"><label>捕獲者名</label><input class="form-input" id="ind-f-hunter_name" placeholder="捕獲者名" /></div>
-        <div class="form-group"><label>天候</label><input class="form-input" id="ind-f-weather" placeholder="例: 晴れ" /></div>
+        <div class="form-group"><label>捕獲市区町村</label><input class="form-input" id="ind-f-capture_city" list="dl-city" placeholder="例: 館山市" autocomplete="off" /></div>
+        <div class="form-group"><label>捕獲地区</label><input class="form-input" id="ind-f-capture_area" list="dl-area" placeholder="例: 神余" autocomplete="off" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>捕獲者名</label><input class="form-input" id="ind-f-hunter_name" list="dl-hunter" placeholder="捕獲者名" autocomplete="off" /></div>
+        <div class="form-group"><label>天候</label><input class="form-input" id="ind-f-weather" list="dl-weather" placeholder="例: 晴れ" autocomplete="off" /></div>
         <div class="form-group"><label>捕獲方法</label>
           <select class="form-input" id="ind-f-capture_method">
             <option value="">選択...</option><option>くくり罠</option><option>箱罠</option><option>銃猟</option><option>その他</option>
@@ -561,15 +561,15 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         </div>
         <div class="form-group"><label>止め刺し方法</label>
           <select class="form-input" id="ind-f-finishing_method">
-            <option value="">選択...</option><option>銃</option><option>刃物</option><option>電気</option><option>その他</option>
+            <option value="">選択...</option><option>銃</option><option>ナイフ</option><option>電気</option><option>その他</option>
           </select>
         </div>
-        <div class="form-group"><label>命中部位</label><input class="form-input" id="ind-f-hit_location" placeholder="例: 頭部" /></div>
+        <div class="form-group"><label>被弾箇所</label><input class="form-input" id="ind-f-hit_location" list="dl-hit" placeholder="例: 頭部" autocomplete="off" /></div>
       </div>
       <!-- セクション：処理情報 -->
       <div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px;">▌ 処理情報</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-        <div class="form-group"><label>放血時間(分)</label><input class="form-input" id="ind-f-bleed_time" type="number" placeholder="例: 30" /></div>
+        <div class="form-group"><label>放血時刻</label><input class="form-input" id="ind-f-bleed_time" type="time" /></div>
         <div class="form-group"><label>内臓摘出</label>
           <select class="form-input" id="ind-f-gutting">
             <option value="">選択...</option><option>現地</option><option>施設</option>
@@ -583,9 +583,16 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="form-group"><label>搬送開始</label><input class="form-input" id="ind-f-transport_start" type="time" /></div>
         <div class="form-group"><label>施設受入時刻</label><input class="form-input" id="ind-f-receive_time" type="time" /></div>
         <div class="form-group"><label>処理開始時刻</label><input class="form-input" id="ind-f-process_time" type="time" /></div>
-        <div class="form-group"><label>記録者</label><input class="form-input" id="ind-f-recorder" placeholder="記録者名" /></div>
-        <div class="form-group"><label>異常確認者</label><input class="form-input" id="ind-f-hunter_health_issues" placeholder="異常確認者名" /></div>
+        <div class="form-group"><label>記録者</label><input class="form-input" id="ind-f-recorder" list="dl-recorder" placeholder="記録者名" autocomplete="off" /></div>
+        <div class="form-group"><label>異常確認者</label><input class="form-input" id="ind-f-hunter_health_issues" list="dl-recorder" placeholder="異常確認者名" autocomplete="off" /></div>
       </div>
+      <!-- datalists -->
+      <datalist id="dl-city"><option>館山市</option><option>南房総市</option><option>鴨川市</option><option>鋸南町</option></datalist>
+      <datalist id="dl-area"><option>神余</option><option>乙浜</option><option>竹原</option><option>黄羽</option><option>下井</option><option>坂田</option><option>童岡</option><option>犬石</option><option>土見</option><option>三坂</option><option>上直良</option><option>白浜町白浜</option><option>白浜町坂浜</option><option>白浜町沼</option><option>和田町黒岩</option><option>和田町和田</option></datalist>
+      <datalist id="dl-hunter"><option>山田千代子</option><option>須田茂</option><option>山藤忍</option><option>橋渡仁二</option><option>鈴木正人</option><option>石井英夫</option><option>小川勝己</option><option>今田順孝</option><option>飯田渚之助</option><option>南岡好幸</option><option>福留拓也</option><option>山下等一</option><option>山下洋一</option><option>越元修一</option><option>岩浪優</option><option>白石泰一</option><option>井上定男</option><option>早川菊象</option><option>安西和安</option><option>村田光夫</option><option>岩畳正</option><option>岩渡倭</option></datalist>
+      <datalist id="dl-weather"><option>晴れ</option><option>曇り</option><option>雨</option><option>霧</option><option>雪</option></datalist>
+      <datalist id="dl-hit"><option>頭部</option><option>首</option><option>胴体</option><option>肩</option><option>脚</option><option>腹部</option></datalist>
+      <datalist id="dl-recorder"><option>沖</option><option>大和田</option><option>鳥居</option></datalist>
       <!-- セクション：検査・備考 -->
       <div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px;">▌ 検査・備考</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
@@ -2904,7 +2911,7 @@ async function indSave() {
       capture_method:    indGetVal('capture_method'),
       finishing_method:  indGetVal('finishing_method'),
       hit_location:      indGetVal('hit_location'),
-      bleed_time:        numVal('bleed_time'),
+      bleed_time:        indGetVal('bleed_time'),
       gutting:           indGetVal('gutting'),
       cooling_method:    indGetVal('cooling_method'),
       transport_start:   indGetVal('transport_start'),
