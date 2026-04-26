@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>åä½è¨é²ä¸è¦§ã»ç·¨é â é¤¨å±±ã¸ãã¨</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg: #f5f5f0; --surface: #ffffff; --surface2: #f0f0ea;
+  --border: #ddddcc; --border2: #ccccbb;
+  --green: #1c3a1c; --green2: #2e5c2e;
+  --amber: #d4921e; --amber2: #b07010;
+  --blue: #1a3550; --blue2: #2171c1;
+  --red: #c82828; --red2: #a01010;
+  --text: #1a1a1a; --text2: #555544; --text3: #888877;
+  --radius: 8px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  background: var(--bg); color: var(--text); font-size: 14px; }
+.header {
+  background: var(--green); color: #fff;
+  padding: 14px 20px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 50;
+}
+.header-title { font-size: 18px; font-weight: 700; }
+.header-sub { font-size: 11px; opacity: .7; margin-top: 2px; }
+.toolbar {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  position: sticky; top: 58px; z-index: 40;
+}
+.btn {
+  padding: 7px 14px; border-radius: 6px; border: none;
+  cursor: pointer; font-size: 13px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: all 0.15s;
+}
+.btn-primary { background: var(--green); color: #fff; }
+.btn-primary:hover { background: var(--green2); }
+.btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--border); }
+.btn-danger { background: var(--red); color: #fff; }
+.btn-danger:hover { background: var(--red2); }
+.btn-amber { background: var(--amber); color: #fff; }
+.btn-amber:hover { background: var(--amber2); }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 99px;
+  font-size: 11px; font-weight: 700;
+}
+.badge-green { background: rgba(28,58,28,0.1); color: var(--green2); }
+.badge-amber { background: rgba(212,146,30,0.15); color: var(--amber2); }
+.badge-blue { background: rgba(26,53,80,0.1); color: var(--blue2); }
+.badge-red { background: rgba(200,40,40,0.1); color: var(--red2); }
+.filter-bar {
+  background: var(--surface2); padding: 10px 16px;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+.filter-input {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); font-size: 13px;
+  outline: none; min-width: 120px;
+}
+.filter-input:focus { border-color: var(--amber); }
+.filter-label { font-size: 12px; color: var(--text2); font-weight: 600; }
+.count-bar {
+  padding: 8px 16px; font-size: 13px; color: var(--text2);
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; gap: 16px; align-items: center;
+}
+.table-wrap { overflow-x: auto; }
+table {
+  width: 100%; border-collapse: collapse; min-width: 1200px;
+  background: var(--surface);
+}
+thead { position: sticky; top: 0; z-index: 30; background: var(--green); color: #fff; }
+th {
+  padding: 10px 8px; font-size: 12px; font-weight: 700;
+  text-align: left; white-space: nowrap;
+  cursor: pointer; user-select: none;
+}
+th:hover { background: var(--green2); }
+th.sort-asc::after { content: ' â'; }
+th.sort-desc::after { content: ' â'; }
+th.no-sort { cursor: default; }
+td {
+  padding: 6px 8px; border-bottom: 1px solid var(--border);
+  font-size: 13px; vertical-align: middle;
+}
+tr:hover td { background: rgba(212,146,30,0.05); }
+tr.selected td { background: rgba(212,146,30,0.12) !important; }
+.cell-edit {
+  display: inline-block; min-width: 60px; padding: 2px 4px;
+  border-radius: 4px; cursor: text;
+}
+.cell-edit:hover { background: var(--surface2); outline: 1px solid var(--border2); }
+.cell-edit:focus { outline: 2px solid var(--amber); background: #fff; }
+.cell-select {
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 2px 4px; background: var(--surface); font-size: 12px;
+}
+input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--amber); }
+.loading { text-align: center; padding: 60px; color: var(--text2); font-size: 16px; }
+.empty { text-align: center; padding: 60px; color: var(--text3); }
+.toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--green); color: #fff; padding: 10px 20px;
+  border-radius: 8px; font-size: 14px; font-weight: 600;
+  display: none; z-index: 999; box-shadow: 0 4px 16px rgba(0,0,0,.25);
+}
+.toast.show { display: block; }
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.6); z-index: 100;
+  align-items: center; justify-content: center; padding: 16px;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--surface); border-radius: 12px;
+  width: 100%; max-width: 480px; padding: 24px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.2);
+}
+.modal h3 { font-size: 18px; margin-bottom: 16px; color: var(--text); }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+.quick-form {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px;
+  margin: 12px 16px;
+}
+.quick-form h3 { font-size: 15px; font-weight: 700; margin-bottom: 12px; color: var(--green); }
+.form-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+.form-field { display: flex; flex-direction: column; gap: 4px; }
+.form-field label { font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase; }
+.form-field input, .form-field select {
+  padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 6px;
+  font-size: 14px; background: var(--bg); color: var(--text);
+  outline: none; font-family: inherit;
+}
+.form-field input:focus, .form-field select:focus { border-color: var(--amber); }
+.species-hint { font-size: 12px; color: var(--amber2); font-weight: 600; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">ð åä½è¨é²ä¸è¦§ã»ç·¨é</div>
+    <div class="header-sub">é¤¨å±±ã¸ãã¨æ¯èååä¼ç¤¾ â PCç®¡çãã¥ã¼</div>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <button class="btn btn-amber" onclick="exportXLSX()">â¬ Excelåºå</button>
+    <button class="btn btn-secondary" onclick="loadData()">ð æ´æ°</button>
+  </div>
+</div>
+
+<!-- ç°¡æå¥åãã©ã¼ã  (quick registration) -->
+<div class="quick-form" id="quickForm">
+  <h3>â¡ éãçªå·ã»åä½ç®¡ççªå· ç°¡æç»é²</h3>
+  <div class="form-row">
+    <div class="form-field">
+      <label>æç²æ¥ <span style="color:var(--red)">*</span></label>
+      <input type="date" id="qDate">
+    </div>
+    <div class="form-field">
+      <label>éãçªå· <span style="color:var(--red)">*</span></label>
+    2 <input type="number" id="qSerial" placeholder="ä¾: 17" min="1">
+    </div>
+    <div class="form-field">
+      <label>åä½ç®¡ççªå· <span style="color:var(--red)">*</span></label>
+      <input type="text" id="qMgmt" placeholder="ä¾: TGC-08-T001"
+        oninput="detectSpecies(this.value)">
+      <div class="species-hint" id="qSpeciesHint"></div>
+    </div>
+    <div class="form-field">
+      <label>ç¨®å¥ï¼èªåå¤å®ï¼</label>
+      <select id="qSpecies">
+        <option value="ã¤ãã·ã·">ð ã¤ãã·ã·</option>
+        <option value="ã·ã«">ð¦ ã·ã«</option>
+        <option value="ãã®ä»">ãã®ä»</option>
+      </select>
+    </div>
+  </div>
+  <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
+ 2  <button class="btn btn-primary" onclick="submitQuick()">ï¼ ç»é²</button>
+    <span id="qStatus" style="font-size:13px;color:var(--text2);"></span>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <span class="filter-label">çµãè¾¼ã¿:</span>
+  <input class="filter-input" id="filterDate" type="date" onchange="applyFilters()" placeholder="æç²æ¥">
+  <select class="filter-input" id="filterSpecies" onchange="applyFilters()">
+    <option value="">å¨ç¨®å¥</option>
+    <option value="ã¤ãã·ã·">ð ã¤ãã·ã·</option>
+    <option value="ã·ã«">ð¦ ã·ã«</option>
+    <option value="ãã®ä»">ãã®ä»</option>
+  </select>
+  <select class="filter-input" id="filterComplete" onchange="applyFilters()">
+    <option value="">å¨ãã¼ã¿</option>
+    <option value="complete">å¥åå®äº</option>
+    <option value="partial">æªå¥åãã</option>
+  </select>
+  <input class="filter-input" id="filterText" type="text" placeholder="éãçªå·ã»ç®¡ççªå·ã§æ¤ç´¢"
+    oninput="applyFilters()" style="min-width:200px;">
+  <button class="btn btn-secondary" onclick="clearFilters()">ã¯ãªã¢</button>
+</div>
+
+<div class="toolbar">
+  <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this.checked)" title="å¨é¸æ">
+  <span id="selectedCount" style="font-size:13px;color:var(--text2);min-width:80px;">é¸æ: 0ä»¶</span>
+  <button class="btn btn-danger" id="deleteSelectedBtn" disabled onclick="deleteSelected()">ð é¸æåé¤</button>
+  <div style="flex:1;"></div>
+  <span id="sortLabel" style="font-size:12px;color:var(--text2);"></span>
+</div>
+
+<div class="count-bar">
+  <span id="totalCount">èª­è¾¼ä¸­â¦</span>
+  <span style="color:var(--text3)">|</span>
+  <span id="filteredCount" style="color:var(--amber2);font-weight:600;"></span>
+</div>
+
+<div class="table-wrap">
+  <div class="loading" id="loadingMsg">ãã¼ã¿ãèª­ã¿è¾¼ã¿ä¸­â¦</div>
+  <table id="dataTable" style="display:none;">
+    <thead>
+      <tr>
+        <th class="no-sort" style="width:32px;"><input type="checkbox" id="thCheck" onchange="toggleSelectAll(this.checked)"></th>
+        <th onclick="sortBy('serial_number')">éãçªå·</th>
+        <th onclick="sortBy('label_id')">åä½ç®¡ççªå·</th>
+        <th onclick="sortBy('capture_date')">æç²æ¥</th>
+        <th onclick="sortBy('species')">ç¨®å¥</th>
+        <th onclick="sortBy('sex')">æ§å¥</th>
+        <th onclick="sortBy('capture_area')">æç²å ´æ</th>
+        <th onclick="sortBy('hunter_name')">æç²è</th>
+        <th onclick="sortBy('weight_total')">çä½é(kg)</th>
+        <th onclick="sortBy('weight_carcass')">æè(kg)</th>
+        <th onclick="sortBy('capture_time')">æç²æå»</th>
+        <th onclick="sortBy('bleed_time')">æ¾è¡æå»</th>
+        <th onclick="sortBy('receive_time')">åå¥æå»</th>
+        <th class="no-sort">ç¶æ</th>
+        <th class="no-sort">æä½</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+  <div class="empty" id="emptyMsg" style="display:none;">è¡¨ç¤ºãããã¼ã¿ãããã¾ãã</div>
+</div>
+
+<!-- åé¤ç¢ºèªã¢ã¼ãã« -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal">
+    <h3>ð åé¤ã®ç¢ºèª</h3>
+    <p id="deleteModalMsg" style="color:var(--text2);font-size:14px;line-height:1.6;"></p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeDeleteModal()">ã­ã£ã³ã»ã«</button>
+      <button class="btn btn-danger" onclick="confirmDelete()">åé¤ãã</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ1MzUzMjAsImV4cCI6MjA2MDExMTMyMH0.UDmCBUM3NurR7FIAI5bB7IkEDsHkDwROmW-1lm0c2_I';
+
+async function sb(method, table, body, query) {
+  const url = SB_URL + '/rest/v1/' + table + (query || '');
+  const res = await fetch(url, {
+    method,
+    headers: {
+      'apikey': SB_KEY,
+      'Authorization': 'Bearer ' + SB_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': method === 'POST' ? 'return=representation' : (method === 'PATCH' ? 'return=representation' : '')
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+let allData = [];
+let filteredData = [];
+let sortCol = 'capture_date';
+let sortDir = -1; // -1=desc, 1=asc
+let pendingDeleteIds = [];
+
+// ââ Quick entry ââ
+function detectSpecies(val) {
+  const m = val.match(/-([TM])\d+$/i);
+  const hint = document.getElementById('qSpeciesHint');
+  const sel = document.getElementById('qSpecies');
+  if (m) {
+    const sp = m[1].toUpperCase() === 'T' ? 'ã¤ãã·ã·' : 'ã·ã«';
+    sel.value = sp;
+    hint.textContent = 'â ' + sp + ' ã¨å¤å®';
+  } else {
+    hint.textContent = '';
+  }
+}
+
+async function submitQuick() {
+  const date = document.getElementById('qDate').value;
+  const serial = parseInt(document.getElementById('qSerial').value);
+  const mgmt = document.getElementById('qMgmt').value.trim();
+  const species = document.getElementById('qSpecies').value;
+  const status = document.getElementById('qStatus');
+
+  if (!date || !serial || !mgmt) {
+    status.textContent = 'â  æç²æ¥ã»éãçªå·ã»åä½ç®¡ççªå·ã¯å¿é ã§ã';
+    status.style.color = 'var(--red)';
+    return;
+  }
+
+  status.textContent = 'ç»é²ä¸­â¦';
+  status.style.color = 'var(--text2)';
+  try {
+    await sb('POST', 'individuals', {
+      serial_number: serial,
+      label_id: mgmt,
+      capture_date: date,
+      species: species
+    });
+    status.textContent = 'â ç»é²ãã¾ãã: ' + mgmt;
+    status.style.color = 'var(--green2)';
+    document.getElementById('qSerial').value = '';
+    document.getElementById('qMgmt').value = '';
+    document.getElementById('qSpeciesHint').textContent = '';
+    document.getElementById('qSerial').focus();
+    await loadData();
+  } catch(e) {
+    status.textContent = 'â ã¨ã©ã¼: ' + e.message;
+    status.style.color = 'var(--red)';
+  }
+}
+
+// ââ Data loading ââ
+async function loadData() {
+  document.getElementById('loadingMsg').style.display = 'block';
+  document.getElementById('dataTable').style.display = 'none';
+  document.getElementById('emptyMsg').style.display = 'none';
+  try {
+    allData = await sb('GET', 'individuals', null,
+      '?order=capture_date.desc,serial_number.desc&limit=2000');
+    document.getElementById('totalCount').textContent = 'å¨' + allData.length + 'ä»¶';
+    applyFilters();
+  } catch(e) {
+    document.getElementById('loadingMsg').textContent = 'ã¨ã©ã¼: ' + e.message;
+  }
+}
+
+// ââ Filters ââ
+function applyFilters() {
+  const dateF = document.getElementById('filterDate').value;
+  const speciesF = document.getElementById('filterSpecies').value;
+  const completeF = document.getElementById('filterComplete').value;
+  const textF = document.getElementById('filterText').value.toLowerCase();
+
+  filteredData = allData.filter(r => {
+    if (dateF && r.capture_date !== dateF) return false;
+    if (speciesF && r.species !== speciesF) return false;
+    if (completeF === 'complete' && (!r.capture_area || !r.hunter_name || !r.capture_time)) return false;
+    if (completeF === 'partial' && r.capture_area && r.hunter_name && r.capture_time) return false;
+    if (textF) {
+      const s = ((r.serial_number || '') + ' ' + (r.label_id || '')).toLowerCase();
+      if (!s.includes(textF)) return false;
+    }
+    return true;
+  });
+
+  // apply sort
+  applySortToData();
+
+  const fc = document.getElementById('filteredCount');
+  if (filteredData.length < allData.length) {
+    fc.textContent = 'çµè¾¼: ' + filteredData.length + 'ä»¶';
+  } else {
+    fc.textContent = '';
+  }
+
+  renderTable();
+}
+
+function clearFilters() {
+  document.getElementById('filterDate').value = '';
+  document.getElementById('filterSpecies').value = '';
+  document.getElementById('filterComplete').value = '';
+  document.getElementById('filterText').value = '';
+  applyFilters();
+}
+
+// ââ Sort ââ
+function sortBy(col) {
+  if (sortCol === col) {
+    sortDir *= -1;
+  } else {
+    sortCol = col;
+    sortDir = 1;
+  }
+  // Update header indicators
+  document.querySelectorAll('th').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+  });
+  const ths = document.querySelectorAll('th');
+  const colNames = [null,'serial_number','label_id','capture_date','species','sex',
+    'capture_area','hunter_name','weight_total','weight_carcass',
+    'capture_time','bleed_time','receive_time'];
+  const idx = colNames.indexOf(col);
+  if (idx >= 0 && ths[idx]) {
+    ths[idx].classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc');
+  }
+  document.getElementById('sortLabel').textContent = col + (sortDir===1?' â':' â');
+  applySortToData();
+  renderTable();
+}
+
+function applySortToData() {
+  filteredData.sort((a, b) => {
+    let av = a[sortCol], bv = b[sortCol];
+    if (av === null || av === undefined) av = '';
+    if (bv === null || bv === undefined) bv = '';
+    if (typeof av === 'number' && typeof bv === 'number') {
+      return (av - bv) * sortDir;
+    }
+    return String(av).localeCompare(String(bv), 'ja') * sortDir;
+  });
+}
+
+// ââ Render ââ
+function isComplete(r) {
+  return r.capture_area && r.hunter_name && r.capture_time && r.bleed_time;
+}
+
+function renderTable() {
+  document.getElementById('loadingMsg').style.display = 'none';
+  const tbody = document.getElementById('tableBody');
+
+  if (filteredData.length === 0) {
+    document.getElementById('dataTable').style.display = 'none';
+    document.getElementById('emptyMsg').style.display = 'block';
+    return;
+  }
+
+  document.getElementById('dataTable').style.display = 'table';
+  document.getElementById('emptyMsg').style.display = 'none';
+
+  tbody.innerHTML = filteredData.map(r => {
+    const complete = isComplete(r);
+    const speciesBadge = r.species === 'ã¤ãã·ã·' ? 'badge-green' :
+                         r.species === 'ã·ã«' ? 'badge-blue' : 'badge-amber';
+    return `<tr id="row-${r.id}" data-id="${r.id}">
+      <td><input type="checkbox" class="row-check" data-id="${r.id}" onchange="updateSelectedCount()"></td>
+      <td><span class="cell-edit" contenteditable="true" data-field="serial_number" data-id="${r.id}"
+        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${r.serial_number || ''}</span></td>
+      <td><span class="cell-edit" contenteditable="true" data-field="label_id" data-id="${r.id}"
+        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)" style="font-family:monospace;">${r.label_id || ''}</span></td>
+      <td><input type="date" class="cell-select" value="${r.capture_date || ''}"
+        data-field="capture_date" data-id="${r.id}" onchange="saveField(this)"></td>
+      <td><select class="cell-select" data-field="species" data-id="${r.id}" onchange="saveField(this)">
+        <option value="">-</option>
+        <option value="ã¤ãã·ã·" ${r.species==='ã¤ãã·ã·'?'selected':''}>ð ã¤ãã·ã·</option>
+        <option value="ã·ã«" ${r.species==='ã·ã«'?'selected':''}>ð¦ ã·ã«</option>
+      2 <option value="ã¢ã©ã¤ã°ã" ${r.species==='ã¢ã©ã¤ã°ã'?'selected':''}>ã¢ã©ã¤ã°ã</option>
+        <option value="ãã®ä»" ${r.species==='ãã®ä»'?'selected':''}>ãã®ä»</option>
+      </select></td>
+      <td><select class="cell-select" data-field="sex" data-id="${r.id}" onchange="saveField(this)">
+        <option value="">-</option>
+        <option value="ãªã¹" ${r.sex==='ãªã¹'?'selected':''}>â ãªã¹</option>
+        <option value="ã¡ã¹" ${r.sex==='ã¡ã¹'?'selected':''}>â ã¡ã¹</option>
+      </select></td>
+      <td><span class="cell-edit" contenteditable="true" data-field="capture_area" data-id="${r.id}"
+        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${r.capture_area || ''}</span></td>
+      <td><span class="cell-edit" contenteditable="true" data-field="hunter_name" data-id="${r.id}"
+        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${r.hunter_name || ''}</span></td>
+      <td><span class="cell-edit" contenteditable="true" data-field="weight_total" data-id="${r.id}"
+        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${r.weight_total != null ? r.weight_total : ''}</span></td>
+      <td><span class="cell-edit" contenteditable="true" data-field="weight_carcass" data-id="${r.id}"
+        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${r.weight_carcass != null ? r.weight_carcass : ''}</span></td>
+      <td><span class="cell-edit" contenteditable="true" data-field="capture_time" data-id="${r.id}"
+        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${r.capture_time || ''}</span></td>
+      <td><span class="cell-edit" contenteditable="true" data-field="bleed_time" data-id="${r.id}"
+        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${r.bleed_time || ''}</span></td>
+      <td><span class="cell-edit" contenteditable="true" data-field="receive_time" data-id="${r.id}"
+        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${r.receive_time || ''}</span></td>
+      <td><span class="badge ${complete ? 'badge-green' : 'badge-amber'}">${complete ? 'å®äº' : 'æªå®'}</span></td>
+      <td>
+        <button class="btn btn-danger" style="padding:4px 8px;font-size:12px;" onclick="deleteSingle(${r.id},'${(r.label_id||'').replace(/'/g,"\\'")}')">åé¤</button>
+      </td>
+    </tr>`;
+  }).join('');
+  updateSelectedCount();
+}
+
+// ââ Cell editing ââ
+function cellKeydown(e, el) {
+  if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
+  if (e.key === 'Escape') { el.blur(); }
+}
+
+async function saveCell(el) {
+  const field = el.dataset.field;
+  const id = el.dataset.id;
+  let val = el.textContent.trim();
+  if (field === 'serial_number' || field === 'weight_total' || field === 'weight_carcass') {
+    val = val === '' ? null : parseFloat(val);
+  }
+  await patchRecord(id, { [field]: val });
+  // Update local data
+  const row = allData.find(r => String(r.id) === String(id));
+  if (row) row[field] = val;
+}
+
+async function saveField(el) {
+  const field = el.dataset.field;
+  const id = el.dataset.id;
+  const val = el.value || null;
+  await patchRecord(id, { [field]: val });
+  const row = allData.find(r => String(r.id) === String(id));
+  if (row) row[field] = val;
+}
+
+async function patchRecord(id, body) {
+  try {
+    await sb('PATCH', 'individuals', body, '?id=eq.' + id);
+    showToast('ä¿å­ãã¾ãã');
+  } catch(e) {
+    showToast('ä¿å­ã¨ã©ã¼: ' + e.message, true);
+  }
+}
+
+// ââ Delete ââ
+function deleteSingle(id, label) {
+  pendingDeleteIds = [id];
+  document.getElementById('deleteModalMsg').textContent =
+    'ã' + label + 'ããåé¤ãã¾ãããã®æä½ã¯åãæ¶ãã¾ããã';
+  document.getElementById('deleteModal').classList.add('show');
+}
+
+function deleteSelected() {
+  const checks = document.querySelectorAll('.row-check:checked');
+  pendingDeleteIds = Array.from(checks).map(c => c.dataset.id);
+  if (!pendingDeleteIds.length) return;
+  document.getElementById('deleteModalMsg').textContent =
+    'é¸æãã ' + pendingDeleteIds.length + ' ä»¶ãåé¤ãã¾ãããã®æä½ã¯åãæ¶ãã¾ããã';
+  document.getElementById('deleteModal').classList.add('show');
+}
+
+function closeDeleteModal() {
+  document.getElementById('deleteModal').classList.remove('show');
+  pendingDeleteIds = [];
+}
+
+async function confirmDelete() {
+  closeDeleteModal();
+  try {
+    for (const id of pendingDeleteIds) {
+      await sb('DELETE', 'individuals', null, '?id=eq.' + id);
+    }
+    showToast(pendingDeleteIds.length + 'ä»¶ãåé¤ãã¾ãã');
+    pendingDeleteIds = [];
+    await loadData();
+  } catch(e) {
+    showToast('åé¤ã¨ã©ã¼: ' + e.message, true);
+  }
+}
+
+// ââ Select all ââ
+function toggleSelectAll(checked) {
+  document.querySelectorAll('.row-check').forEach(c => c.checked = checked);
+  document.getElementById('selectAll').checked = checked;
+  document.getElementById('thCheck').checked = checked;
+  updateSelectedCount();
+}
+
+function updateSelectedCount() {
+  const checked = document.querySelectorAll('.row-check:checked').length;
+  document.getElementById('selectedCount').textContent = 'é¸æ: ' + checked + 'ä»¶';
+  document.getElementById('deleteSelectedBtn').disabled = checked === 0;
+  document.querySelectorAll('tr[data-id]').forEach(tr => {
+    const cb = tr.querySelector('.row-check');
+    tr.classList.toggle('selected', cb && cb.checked);
+  });
+}
+
+// ââ Excel Export ââ
+function exportXLSX() {
+  const cols = ['éãçªå·','åä½ç®¡ççªå·','æç²æ¥','ç¨®å¥','æ§å¥','æç²å ´æ','æç²è',
+    'çä½é(kg)','æè(kg)','æç²æå»','æ¾è¡æå»','åå¥æå»','åè'];
+  const fields = ['serial_number','label_id','capture_date','species','sex',
+    'capture_area','hunter_name','weight_total','weight_carcass',
+    'capture_time','bleed_time','receive_time','remarks'];
+  const ws_data = [cols];
+  filteredData.forEach(r => {
+    ws_data.push(fields.map(f => r[f] != null ? r[f] : ''));
+  });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(ws_data);
+  // Column widths
+  ws['!cols'] = [8,16,12,8,6,18,12,10,10,10,10,10,20].map(w => ({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws, 'åä½è¨é²');
+  const date = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, 'åä½è¨é²_' + date + '.xlsx');
+}
+
+// ââ Toast ââ
+function showToast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = isError ? 'var(--red)' : 'var(--green)';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ââ Init ââ
+document.addEventListener('DOMContentLoaded', () => {
+  // Default quick form date to today
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById('qDate').value = today;
+  loadData();
+});
+</script>
+</body>
+</html>
