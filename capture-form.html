@@ -346,6 +346,8 @@ textarea { min-height: 80px; resize: vertical; }
 <div class="tabs">
   <div class="tab active" data-tab="form">&#x1F4DD; 捕獲票入力</div>
   <div class="tab" data-tab="list">&#x1F4CB; 搬入一覧</div>
+  <div class="tab" data-tab="quick">⚡ 簡易入力</div>
+  <div class="tab" data-tab="scan">📷 スキャン</div>
 </div>
 
 <!-- FORM TAB -->
@@ -712,6 +714,7 @@ textarea { min-height: 80px; resize: vertical; }
     <div class="filter-chip" data-species="タヌキ">タヌキ</div>
     <div class="filter-chip" data-species="ノウサギ">ノウサギ</div>
   </div>
+  <div class="sort-bar" style="display:flex;gap:8px;padding:10px 16px;background:var(--surface2);border-bottom:1px solid var(--border);align-items:center;flex-wrap:wrap;"><span style="font-size:12px;color:var(--text2);font-weight:700;">並び替え:</span><button class="sort-chip active-sort" id="sortDateDesc" onclick="setSort('date_desc',this)" style="padding:6px 12px;border-radius:16px;font-size:12px;border:1px solid var(--gold);color:var(--gold);background:rgba(200,164,90,0.1);cursor:pointer;">日付 新→旧</button><button class="sort-chip" id="sortDateAsc" onclick="setSort('date_asc',this)" style="padding:6px 12px;border-radius:16px;font-size:12px;border:1px solid var(--border2);color:var(--text2);background:transparent;cursor:pointer;">日付 旧→新</button><button class="sort-chip" id="sortSerial" onclick="setSort('serial',this)" style="padding:6px 12px;border-radius:16px;font-size:12px;border:1px solid var(--border2);color:var(--text2);background:transparent;cursor:pointer;">通し番号</button><button class="sort-chip" id="sortWeight" onclick="setSort('weight',this)" style="padding:6px 12px;border-radius:16px;font-size:12px;border:1px solid var(--border2);color:var(--text2);background:transparent;cursor:pointer;">体重</button><div style="flex:1;"></div><button id="bulkDeleteBtn" disabled onclick="bulkDeleteSelected()" style="padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;background:var(--red);color:#fff;border:none;cursor:pointer;opacity:0.4;">🗑 選択削除</button></div>
   <div class="card-list" id="cardList"></div>
   <div id="listEmpty" style="text-align:center;padding:40px;color:var(--text3);display:none;">
     本日の搬入データはありません
@@ -743,6 +746,70 @@ textarea { min-height: 80px; resize: vertical; }
     <div class="modal-body" id="detailBody"></div>
   </div>
 </div>
+
+<!-- QUICK ENTRY TAB -->
+<div class="tab-panel" id="panel-quick">
+  <div style="padding:16px;max-width:600px;margin:0 auto;">
+    <div class="section">
+      <div class="section-header">⚡ 通し番号・個体管理番号 簡易入力</div>
+      <div class="section-body">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:14px;">現場で通し番号と個体管理番号だけを素早く登録。残りの情報は後でパソコンから入力できます。</p>
+        <div class="field"><label class="form-label">捕獲日 *</label><input type="date" class="input" id="qDate"></div>
+        <div class="field-row">
+          <div><label class="form-label">通し番号 *</label><input type="number" class="input" id="qSerial" placeholder="例: 17" min="1"></div>
+          <div><label class="form-label">個体管理番号 *</label><input type="text" class="input" id="qMgmt" placeholder="例: TGC-08-T001" oninput="qDetectSpecies(this.value)"></div>
+        </div>
+        <div class="field"><label class="form-label">種別（自動判定）</label>
+          <div style="display:flex;gap:8px;margin-top:6px;">
+            <div class="toggle-btn" id="qSpBoar" data-val="イノシシ" onclick="qSetSpecies('イノシシ')" style="flex:1;text-align:center;">🐗 イノシシ</div>
+            <div class="toggle-btn" id="qSpDeer" data-val="シカ" onclick="qSetSpecies('シカ')" style="flex:1;text-align:center;">🦌 シカ</div>
+            <div class="toggle-btn" id="qSpOther" data-val="その他" onclick="qSetSpecies('その他')" style="flex:1;text-align:center;">その他</div>
+          </div>
+        </div>
+        <div class="field"><label class="form-label">備考（任意）</label><input type="text" class="input" id="qRemarks" placeholder="メモがあれば"></div>
+        <button class="submit-btn" style="margin-top:8px;" onclick="submitQuickEntry()">＋ 登録する</button>
+        <div id="qStatus" style="margin-top:10px;font-size:13px;text-align:center;"></div>
+      </div>
+    </div>
+    <div class="section" style="margin-top:12px;">
+      <div class="section-header">📋 本日の簡易登録一覧</div>
+      <div id="qListBody" style="padding:12px 16px;font-size:13px;color:var(--text2);">登録するとここに表示されます</div>
+    </div>
+    <div style="margin-top:12px;text-align:center;">
+      <a href="record-list.html" target="_blank" style="color:var(--accent);font-size:13px;">🖥 パソコン用一覧・編集画面を開く →</a>
+    </div>
+  </div>
+</div>
+
+<!-- SCAN TAB -->
+<div class="tab-panel" id="panel-scan">
+  <div style="padding:16px;max-width:700px;margin:0 auto;">
+    <div class="section">
+      <div class="section-header">📷 紙の捕獲票をスキャンして登録</div>
+      <div class="section-body">
+        <div id="scanDropZone" onclick="document.getElementById('scanFileInput').click()"
+          style="border:2px dashed var(--border);border-radius:var(--radius);padding:30px;text-align:center;cursor:pointer;margin-bottom:14px;"
+          ondragover="event.preventDefault()" ondrop="handleScanDrop(event)">
+          <div style="font-size:40px;margin-bottom:8px;">📷</div>
+          <div style="color:var(--text2);font-size:14px;">タップして写真を選択、またはドロップ</div>
+        </div>
+        <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none;" onchange="handleScanFile(this.files[0])">
+        <div id="scanPreviewWrap" style="display:none;margin-bottom:14px;"><img id="scanPreview" style="max-width:100%;border-radius:6px;"></div>
+        <div id="scanStatus" style="display:none;text-align:center;padding:20px;">
+          <div style="font-size:24px;margin-bottom:8px;">🔍</div>
+          <div id="scanStatusText">OCR解析中…</div>
+        </div>
+        <div id="scanResults" style="display:none;">
+          <div class="section-header" style="margin-bottom:8px;">📝 読み取り結果（修正可能）</div>
+          <div id="scanFieldsForm"></div>
+          <div style="margin-top:12px;padding:10px;background:var(--surface2);border-radius:6px;font-size:12px;"><strong>照合結果:</strong> <span id="scanMatchStatus"></span></div>
+          <button class="submit-btn" style="margin-top:12px;width:100%;" onclick="applyScanToForm()">✓ この内容でフォームに反映する</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 
 <script>
 /* ── Supabase helper ── */
@@ -974,6 +1041,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupToggles();
   setupCheckboxes();
   setupTabs();
+  refreshAutocomplete();
+  loadKnownValues();
+  const qd = document.getElementById('qDate');
+  if (qd) qd.value = today();
   setupTimeTracking();
   setupTimeInputs();
   setupFilterChips();
@@ -1011,6 +1082,198 @@ function setupTimeInputs() {
 function today() { return formatDate(new Date()); }
 
 /* ── Tabs ── */
+
+/* ── Quick Entry ── */
+let _qSpecies = '';
+function qDetectSpecies(val) {
+  const m = val.match(/-([TtMm])\d+$/);
+  if (m) { const sp = m[1].toUpperCase() === 'T' ? 'イノシシ' : 'シカ'; qSetSpecies(sp); }
+}
+function qSetSpecies(sp) {
+  _qSpecies = sp;
+  ['qSpBoar','qSpDeer','qSpOther'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('selected', el.dataset.val === sp);
+  });
+}
+async function submitQuickEntry() {
+  const date = document.getElementById('qDate').value;
+  const serial = parseInt(document.getElementById('qSerial').value);
+  const mgmt = document.getElementById('qMgmt').value.trim();
+  const remarks = document.getElementById('qRemarks').value.trim();
+  const st = document.getElementById('qStatus');
+  if (!date || !serial || !mgmt) {
+    st.textContent = '⚠ 捕獲日・通し番号・個体管理番号は必須です';
+    st.style.color = 'var(--red)'; return;
+  }
+  st.textContent = '登録中…'; st.style.color = 'var(--text2)';
+  try {
+    await sb('POST', 'individuals', { serial_number: serial, label_id: mgmt, capture_date: date, species: _qSpecies || 'イノシシ', remarks: remarks || null });
+    st.textContent = '✓ 登録しました: ' + mgmt; st.style.color = 'var(--green)';
+    document.getElementById('qSerial').value = '';
+    document.getElementById('qMgmt').value = '';
+    document.getElementById('qRemarks').value = '';
+    _qSpecies = '';
+    ['qSpBoar','qSpDeer','qSpOther'].forEach(id => { const el = document.getElementById(id); if (el) el.classList.remove('selected'); });
+    loadQList();
+  } catch(e) { st.textContent = '✗ エラー: ' + e.message; st.style.color = 'var(--red)'; }
+}
+async function loadQList() {
+  const d = document.getElementById('qDate');
+  if (!d || !d.value) return;
+  try {
+    const rows = await sb('GET', 'individuals', null, '?capture_date=eq.' + d.value + '&order=serial_number.desc&limit=50');
+    const tbody = document.getElementById('qListBody');
+    if (!tbody) return;
+    if (!rows || !rows.length) { tbody.textContent = 'まだ登録はありません'; return; }
+    tbody.innerHTML = '<table style="width:100%;border-collapse:collapse;"><tr style="font-size:11px;color:var(--text2);border-bottom:1px solid var(--border);">' +
+      '<th style="padding:4px 6px;text-align:left;">通し番号</th><th style="padding:4px 6px;text-align:left;">個体管理番号</th><th style="padding:4px 6px;text-align:left;">種別</th><th style="padding:4px 6px;text-align:left;">状態</th></tr>' +
+      rows.map(r => '<tr style="border-bottom:1px solid var(--border);font-size:13px;">' +
+        '<td style="padding:5px 6px;">' + (r.serial_number||'-') + '</td>' +
+        '<td style="padding:5px 6px;font-family:monospace;">' + (r.label_id||'-') + '</td>' +
+        '<td style="padding:5px 6px;">' + (r.species||'-') + '</td>' +
+        '<td style="padding:5px 6px;color:' + (r.capture_time ? 'var(--green)' : 'var(--gold)') + ';">' + (r.capture_time ? '入力済' : '未完') + '</td>' +
+        '</tr>').join('') + '</table>';
+  } catch(e) {}
+}
+
+/* ── Sort ── */
+window._listSort = 'date_desc';
+function setSort(mode, btn) {
+  window._listSort = mode;
+  document.querySelectorAll('.sort-chip').forEach(el => { el.style.borderColor='var(--border2)'; el.style.color='var(--text2)'; el.style.background='transparent'; });
+  if (btn) { btn.style.borderColor='var(--gold)'; btn.style.color='var(--gold)'; btn.style.background='rgba(200,164,90,0.1)'; }
+  renderList();
+}
+
+/* ── Bulk Delete ── */
+let _selectedIds = new Set();
+function toggleBulkSelect(id, checked) {
+  if (checked) _selectedIds.add(id); else _selectedIds.delete(id);
+  const btn = document.getElementById('bulkDeleteBtn');
+  if (btn) { btn.disabled = _selectedIds.size === 0; btn.style.opacity = _selectedIds.size > 0 ? '1' : '0.4'; btn.textContent = '🗑 選択削除 (' + _selectedIds.size + ')'; }
+}
+async function bulkDeleteSelected() {
+  if (_selectedIds.size === 0) return;
+  if (!confirm(_selectedIds.size + '件を削除しますか？この操作は取り消せません。')) return;
+  for (const id of _selectedIds) { await sb('DELETE', 'individuals', null, '?id=eq.' + id); }
+  _selectedIds.clear();
+  const btn = document.getElementById('bulkDeleteBtn');
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.4'; btn.textContent = '🗑 選択削除'; }
+  loadList();
+}
+
+/* ── Autocomplete refresh ── */
+async function refreshAutocomplete() {
+  try {
+    const rows = await sb('GET', 'individuals', null, '?select=hunter_name,capture_area&limit=1000');
+    if (!rows) return;
+    const hunters = [...new Set(rows.map(r => r.hunter_name).filter(Boolean))].sort();
+    const areas = [...new Set(rows.map(r => r.capture_area).filter(Boolean))].sort();
+    const hl = document.getElementById('hunterList');
+    if (hl) hl.innerHTML = hunters.map(h => '<option value="' + h + '">').join('');
+    const areaEl = document.getElementById('captureArea');
+    if (areaEl && areas.length) {
+      const cur = areaEl.value;
+      areaEl.innerHTML = '<option value="">-- 選択 --</option>' + areas.map(a => '<option value="' + a + '"' + (a===cur?' selected':'') + '>' + a + '</option>').join('');
+    }
+  } catch(e) {}
+}
+
+/* ── OCR Scan ── */
+let _ocrScript = false;
+const _knownHunters = [], _knownAreas = [];
+async function loadKnownValues() {
+  try {
+    const rows = await sb('GET', 'individuals', null, '?select=hunter_name,capture_area&limit=1000');
+    if (rows) rows.forEach(r => {
+      if (r.hunter_name && !_knownHunters.includes(r.hunter_name)) _knownHunters.push(r.hunter_name);
+      if (r.capture_area && !_knownAreas.includes(r.capture_area)) _knownAreas.push(r.capture_area);
+    });
+  } catch(e) {}
+}
+function loadTesseract(cb) {
+  if (window.Tesseract) { cb(); return; }
+  if (_ocrScript) { setTimeout(() => loadTesseract(cb), 300); return; }
+  _ocrScript = true;
+  const s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+  s.onload = cb; document.head.appendChild(s);
+}
+function handleScanDrop(event) {
+  event.preventDefault();
+  const file = event.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) handleScanFile(file);
+}
+function handleScanFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('scanPreview').src = e.target.result;
+    document.getElementById('scanPreviewWrap').style.display = 'block';
+    startOCR(e.target.result);
+  };
+  reader.readAsDataURL(file);
+}
+async function startOCR(imageData) {
+  document.getElementById('scanStatus').style.display = 'block';
+  document.getElementById('scanResults').style.display = 'none';
+  document.getElementById('scanStatusText').textContent = 'OCRライブラリを読み込み中…';
+  loadTesseract(async () => {
+    document.getElementById('scanStatusText').textContent = 'テキストを解析中…';
+    try {
+      const result = await Tesseract.recognize(imageData, 'jpn', {
+        logger: m => { if (m.status==='recognizing text') document.getElementById('scanStatusText').textContent = 'テキストを解析中… ' + Math.round(m.progress*100) + '%'; }
+      });
+      parseScanResult(result.data.text);
+    } catch(e) { document.getElementById('scanStatusText').textContent = 'OCRエラー: ' + e.message; }
+  });
+}
+function parseScanResult(text) {
+  document.getElementById('scanStatus').style.display = 'none';
+  document.getElementById('scanResults').style.display = 'block';
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  let parsed = { date:'', hunter:'', area:'', species:'', serial:'', label:'', weight:'' };
+  lines.forEach(line => {
+    if (!parsed.date) {
+      const dm = line.match(/(令和|R)(\d+)[年\.](\d+)[月\.](\d+)/);
+      if (dm) parsed.date = (2018+parseInt(dm[2])) + '-' + dm[3].padStart(2,'0') + '-' + dm[4].padStart(2,'0');
+      const dm2 = line.match(/(20\d{2})[\.\/年](\d{1,2})[\.\/月](\d{1,2})/);
+      if (dm2) parsed.date = dm2[1] + '-' + dm2[2].padStart(2,'0') + '-' + dm2[3].padStart(2,'0');
+    }
+    const sn = line.match(/通し[番号]*[:\s：]*(\d+)/);
+    if (sn) parsed.serial = sn[1];
+    const li = line.match(/TGC-\d{2}-[TM]\d+/i);
+    if (li) parsed.label = li[0];
+    const wm = line.match(/(\d+\.?\d*)\s*kg/i);
+    if (wm) parsed.weight = wm[1];
+    if (line.includes('イノシシ')||line.includes('猪')) parsed.species = 'イノシシ';
+    if (line.includes('シカ')||line.includes('鹿')) parsed.species = 'シカ';
+  });
+  let matchLog = [];
+  const allText = text.replace(/\n/g,' ');
+  _knownHunters.forEach(h => { if (allText.includes(h.replace(/\s/g,''))) { parsed.hunter=h; matchLog.push('捕獲者:'+h); } });
+  _knownAreas.forEach(a => { if (allText.includes(a)) { parsed.area=a; matchLog.push('場所:'+a); } });
+  const form = document.getElementById('scanFieldsForm');
+  form.innerHTML = [['捕獲日','scan_date','date',parsed.date],['通し番号','scan_serial','number',parsed.serial],
+    ['個体管理番号','scan_label','text',parsed.label],['捕獲者名','scan_hunter','text',parsed.hunter],
+    ['捕獲場所','scan_area','text',parsed.area],['生体重(kg)','scan_weight','text',parsed.weight],
+    ['種別','scan_species','text',parsed.species]
+  ].map(([label,id,type,val]) => '<div class="field"><label class="form-label">'+label+'</label><input type="'+type+'" class="input" id="'+id+'" value="'+(val||'')+'"></div>').join('');
+  document.getElementById('scanMatchStatus').textContent = matchLog.length ? matchLog.join(' / ') : '自動照合なし — 手動で確認してください';
+}
+function applyScanToForm() {
+  const fv = id => (document.getElementById(id)||{}).value||'';
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const ft = document.querySelector('.tab[data-tab="form"]'); if (ft) ft.classList.add('active');
+  const fp = document.getElementById('panel-form'); if (fp) fp.classList.add('active');
+  const sv = (id,val) => { const el=document.getElementById(id); if(el&&val) el.value=val; };
+  sv('captureDate',fv('scan_date')); sv('hunterName',fv('scan_hunter')); sv('captureArea',fv('scan_area'));
+  sv('weight',fv('scan_weight')); if(fv('scan_serial')) sv('serialNumber',fv('scan_serial'));
+  if(fv('scan_label')) sv('labelId',fv('scan_label'));
+}
+
 function setupTabs() {
   document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -1516,6 +1779,14 @@ function renderList() {
   }
   empty.style.display = 'none';
 
+  const currentSort = window._listSort || 'date_desc';
+  filtered = [...filtered].sort((a,b) => {
+    if (currentSort === 'date_desc') return (b.capture_date||'')<(a.capture_date||'')?-1:1;
+    if (currentSort === 'date_asc') return (a.capture_date||'')<(b.capture_date||'')?-1:1;
+    if (currentSort === 'serial') return (parseInt(a.serial_number)||0)-(parseInt(b.serial_number)||0);
+    if (currentSort === 'weight') return (parseFloat(b.weight_total)||0)-(parseFloat(a.weight_total)||0);
+    return 0;
+  });
   container.innerHTML = filtered.map(r => {
     const emojiMap = {'イノシシ':'&#x1F417;','シカ':'&#x1F98C;','アライグマ':'&#x1F99D;','ハクビシン':'&#x1F43C;','キョン':'&#x1F98C;','タヌキ':'&#x1F99D;','ノウサギ':'&#x1F430;'};
     const emoji = emojiMap[r.species] || '&#x1F43E;';
