@@ -1948,7 +1948,7 @@ async function pmLoadRecentIndividuals() {
   list.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
   try {
     const today = new Date().toISOString().split('T')[0];
-    let inds = await sb('GET', 'individuals', null, `?select=label_id,species,weight_total,capture_date,hunter_name,quality&order=capture_date.desc,created_at.desc&limit=20`);
+    let inds = await sb('GET', 'individuals', null, `?select=label_id,species,weight_total,capture_date,hunter_name,quality,serial_number&order=capture_date.desc,created_at.desc&limit=20`);
     pmRenderIndList(inds);
   } catch(e) {
     list.innerHTML = '<div class="empty-state">読み込みエラー</div>';
@@ -1975,7 +1975,7 @@ function pmRenderIndList(inds) {
       <div class="ind-icon">${speciesIcon(i.species)}</div>
       <div style="flex:1;">
         <div class="ind-label">${i.label_id}</div>
-        <div class="ind-meta">${i.species||'-'} / ${i.weight_total||'-'}kg / ${fmt(i.capture_date)} / ${i.hunter_name||'-'}</div>
+        <div class="ind-meta">${i.serial_number ? '#'+String(i.serial_number).padStart(3,'0')+' ' : ''}${i.species||'-'} / ${i.weight_total||'-'}kg / ${fmt(i.capture_date)} / ${i.hunter_name||'-'}</div>
       </div>
       <div>${i.quality === '食用不可' ? '<span class="badge badge-red">食用不可</span>' : ''}</div>
     </div>
