@@ -344,6 +344,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
       <div class="section">
         <div class="section-title">部位別在庫 - イノシシ</div>
+        <div id="sync-status" style="margin-bottom:24px;"><div style="font-size:11px;color:var(--text2);letter-spacing:.07em;text-transform:uppercase;margin-bottom:12px;">📊 DB 同期状況（個体管理番号で連携）</div><div id="sync-flow" class="sync-flow"><span style="color:var(--text2);font-size:13px;">読み込み中...</span></div></div>
         <div id="chart-boar" class="bar-chart"></div>
       </div>
       <div class="section">
@@ -869,7 +870,31 @@ async function barcodeLookup(code) {
 }
 
 /* ===== Dashboard ===== */
+async function loadSyncStatus() {
+  try {
+    const [r1, r2, r3] = await Promise.all([
+      sb('GET','individuals',null,'?select=label_id&deleted_at=is.null'),
+      sb('GET','inventory',null,'?select=individual_id&tier=eq.2&deleted_at=is.null'),
+      sb('GET','inventory',null,'?select=id&tier=eq.3&deleted_at=is.null')
+    ]);
+    const total1 = r1 ? r1.length : 0;
+    const processed = r2 ? new Set(r2.map(r=>r.individual_id).filter(Boolean)).size : 0;
+    const pending = Math.max(0, total1 - processed);
+    const total3 = r3 ? r3.length : 0;
+    const el = document.getElementById('sync-flow');
+    if (!el) return;
+    el.innerHTML =
+      '<div class="sync-node s-done"><div class="sync-num">'+total1+'</div><div class="sync-lbl">一次<br>個体登録</div></div>' +
+      '<div class="sync-arr">→</div>' +
+      '<div class="sync-node s-done"><div class="sync-num">'+processed+'</div><div class="sync-lbl">二次<br>精肉処理済</div></div>' +
+      '<div class="sync-arr">→</div>' +
+      '<div class="sync-node s-wait"><div class="sync-num">'+pending+'</div><div class="sync-lbl">精肉待ち</div></div>' +
+      '<div class="sync-arr">→</div>' +
+      '<div class="sync-node s-proc"><div class="sync-num">'+total3+'</div><div class="sync-lbl">三次<br>加工品</div></div>';
+  } catch(e) { console.error('sync',e); }
+}
 async function loadDashboard() {
+  loadSyncStatus();
   try {
     const [individuals, allInv, procLogs, ships] = await Promise.all([
       sb('GET', 'individuals', null, '?select=label_id&deleted_at=is.null'),
@@ -1948,7 +1973,7 @@ async function pmLoadRecentIndividuals() {
   list.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
   try {
     const today = new Date().toISOString().split('T')[0];
-    let inds = await sb('GET', 'individuals', null, `?select=label_id,species,weight_total,capture_date,hunter_name,quality,serial_number&order=serial_number.desc.nullslast,created_at.desc&limit=20`);
+    let inds = await sb('GET', 'individuals', null, `?select=label_id,species,weight_total,capture_date,hunter_name,quality,serial_number&deleted_at=is.null&order=serial_number.desc.nullslast,created_at.desc&limit=20`);
     pmRenderIndList(inds);
   } catch(e) {
     list.innerHTML = '<div class="empty-state">読み込みエラー</div>';
@@ -2653,7 +2678,23 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
     .wn { font-size:4.5pt; color:#555; margin-top:.5mm; line-height:1.3; }
   `;
 
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${css}</style></head><body>
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${css}
+/* Sync Status Section */
+.sync-flow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.sync-node{text-align:center;min-width:80px;padding:10px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);}
+.sync-node.s-done{border-color:#4ade80;background:rgba(74,222,128,.08);}
+.sync-node.s-wait{border-color:var(--gold);background:rgba(200,164,90,.08);}
+.sync-node.s-proc{border-color:#60a5fa;background:rgba(96,165,250,.08);}
+.sync-num{font-size:24px;font-weight:700;color:var(--gold);}
+.sync-node.s-done .sync-num{color:#4ade80;}
+.sync-node.s-wait .sync-num{color:var(--gold2);}
+.sync-node.s-proc .sync-num{color:#60a5fa;}
+.sync-lbl{font-size:11px;color:var(--text2);margin-top:4px;line-height:1.4;}
+.sync-arr{font-size:20px;color:var(--border);flex-shrink:0;}
+.ind-sync-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;}
+.ind-sync-done{background:rgba(74,222,128,.15);color:#4ade80;}
+.ind-sync-wait{background:rgba(200,164,90,.12);color:var(--gold2);}
+</style></head><body>
     <div class="o">${origin}　${speciesName}</div>
     <div class="id">個体管理番号　${pmIndividual.label_id}</div>
     <div class="p">${partName}</div>
