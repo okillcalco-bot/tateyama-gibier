@@ -308,6 +308,18 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 </style>
 </head>
 <body>
+<div id="passcode-gate">
+  <div class="pc-logo">🦌 館山ジビエセンター</div>
+  <div class="pc-sub">在庫管理システム</div>
+  <div class="pc-inputs">
+    <input class="pc-input" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]">
+    <input class="pc-input" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]">
+    <input class="pc-input" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]">
+    <input class="pc-input" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]">
+  </div>
+  <div class="pc-error" id="pc-error"></div>
+  <div class="pc-hint">4桁のアクセスコードを入力してください</div>
+</div>
 
 <div class="header">
   <div class="header-title">館山ジビエセンター 在庫管理</div>
@@ -2694,6 +2706,17 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
 .ind-sync-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;}
 .ind-sync-done{background:rgba(74,222,128,.15);color:#4ade80;}
 .ind-sync-wait{background:rgba(200,164,90,.12);color:var(--gold2);}
+
+/* Passcode Gate */
+#passcode-gate{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;}
+#passcode-gate.hidden{display:none;}
+.pc-logo{font-size:24px;font-weight:700;color:var(--gold);letter-spacing:.5px;}
+.pc-sub{font-size:13px;color:var(--text2);margin-top:-16px;}
+.pc-inputs{display:flex;gap:12px;margin-top:8px;}
+.pc-input{width:56px;height:64px;text-align:center;font-size:28px;font-weight:700;background:var(--surface2);border:2px solid var(--border);border-radius:var(--radius);color:var(--text);outline:none;caret-color:var(--gold);}
+.pc-input:focus{border-color:var(--gold);}
+.pc-error{font-size:13px;color:var(--red);min-height:18px;text-align:center;}
+.pc-hint{font-size:11px;color:var(--text3);text-align:center;margin-top:4px;}
 </style></head><body>
     <div class="o">${origin}　${speciesName}</div>
     <div class="id">個体管理番号　${pmIndividual.label_id}</div>
@@ -3056,5 +3079,39 @@ async function invRestore(id) {
 /* ===== Init ===== */
 loadDashboard();
 </script>
-</body>
+
+<script>
+(function(){
+  var CODES=['1357','2468'];
+  var KEY='tg_access_v1';
+  var gate=document.getElementById('passcode-gate');
+  if(!gate) return;
+  if(sessionStorage.getItem(KEY)==='ok'){gate.classList.add('hidden');return;}
+  var inputs=Array.from(gate.querySelectorAll('.pc-input'));
+  var errEl=document.getElementById('pc-error');
+  inputs.forEach(function(inp,i){
+    inp.addEventListener('input',function(){
+      inp.value=inp.value.replace(/[^0-9]/g,'');
+      if(inp.value&&i<inputs.length-1) inputs[i+1].focus();
+      if(i===inputs.length-1&&inp.value) checkCode();
+    });
+    inp.addEventListener('keydown',function(e){
+      if(e.key==='Backspace'&&!inp.value&&i>0){inputs[i-1].focus();inputs[i-1].value='';}
+    });
+  });
+  function checkCode(){
+    var code=inputs.map(function(x){return x.value;}).join('');
+    if(code.length<4) return;
+    if(CODES.indexOf(code)!==-1){
+      sessionStorage.setItem(KEY,'ok');
+      gate.classList.add('hidden');
+    } else {
+      errEl.textContent='コードが違います';
+      inputs.forEach(function(x){x.value='';x.style.borderColor='var(--red)';});
+      setTimeout(function(){inputs.forEach(function(x){x.style.borderColor='';});errEl.textContent='';inputs[0].focus();},1200);
+    }
+  }
+  inputs[0].focus();
+})();
+</script></body>
 </html>
