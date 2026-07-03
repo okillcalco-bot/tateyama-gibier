@@ -32,11 +32,25 @@ input,select,button,textarea{font-family:inherit;font-size:inherit;}
 .header-barcode input{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:var(--radius);width:220px;font-size:13px;}
 .header-barcode input:focus{outline:none;border-color:var(--gold2);}
 
-/* Tabs */
-.tabs{display:flex;gap:2px;padding:8px 24px 0;background:var(--surface);border-bottom:1px solid var(--border);}
-.tab-btn{background:none;border:none;color:var(--text2);padding:10px 18px;cursor:pointer;font-size:13px;font-weight:500;border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap;}
+/* Layout: 左サイドバーナビゲーション */
+.app-layout{display:flex;align-items:flex-start;}
+.sidenav{width:216px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);padding:10px 8px 24px;display:flex;flex-direction:column;gap:1px;position:sticky;top:0;height:100vh;overflow-y:auto;}
+.nav-group{font-size:10.5px;color:var(--text3);letter-spacing:.12em;padding:14px 12px 4px;font-weight:700;}
+.tab-btn{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:none;border:none;color:var(--text2);padding:9px 12px;cursor:pointer;font-size:13.5px;font-weight:500;border-radius:8px;transition:background .15s,color .15s;white-space:nowrap;}
 .tab-btn:hover{color:var(--text);background:var(--surface2);}
-.tab-btn.active{color:var(--gold);border-bottom-color:var(--gold);}
+.tab-btn.active{color:var(--gold);background:var(--surface2);box-shadow:inset 3px 0 0 var(--gold);}
+a.tab-btn{text-decoration:none;}
+.nav-badge{margin-left:auto;min-width:20px;text-align:center;font-size:11px;font-weight:700;padding:1px 6px;border-radius:9px;background:var(--surface2);border:1px solid var(--border2);color:var(--text2);}
+.nav-badge.warn{background:rgba(200,80,80,.18);border-color:rgba(200,80,80,.4);color:var(--red);}
+.nav-badge:empty{display:none;}
+.app-layout .content{flex:1;min-width:0;}
+@media(max-width:900px){
+  .app-layout{flex-direction:column;}
+  .sidenav{width:100%;height:auto;position:static;flex-direction:row;overflow-x:auto;border-right:none;border-bottom:1px solid var(--border);padding:6px 8px;}
+  .nav-group{display:none;}
+  .tab-btn{width:auto;}
+  .nav-badge{margin-left:4px;}
+}
 
 /* Content */
 .content{padding:24px;max-width:1400px;margin:0 auto;}
@@ -335,14 +349,27 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   </div>
 </div>
 
-<div class="tabs">
+<div class="app-layout">
+<nav class="sidenav" id="sidenav">
   <button class="tab-btn active" data-tab="dashboard">&#x1F4CA; ダッシュボード</button>
+  <div class="nav-group">日々の業務</div>
+  <button class="tab-btn" data-tab="individuals">&#x1FAA4; 捕獲受入・個体<span class="nav-badge" id="nav-badge-intake"></span></button>
+  <button class="tab-btn" data-tab="aging">&#x1F969; 熟成管理<span class="nav-badge" id="nav-badge-aging"></span></button>
+  <button class="tab-btn" data-tab="processing">&#x1F52A; 精肉入力<span class="nav-badge" id="nav-badge-processing"></span></button>
   <button class="tab-btn" data-tab="inventory">&#x1F4E6; 在庫一覧</button>
-  <button class="tab-btn" data-tab="individuals">&#x1F43D; 個体管理</button>
-  <button class="tab-btn" data-tab="processing">&#x1F52A; 精肉入力</button>
+  <button class="tab-btn" data-tab="shipping">&#x1F4E4; 出荷処理<span class="nav-badge" id="nav-badge-shipping"></span></button>
   <button class="tab-btn" data-tab="trace">&#x1F50D; トレーサビリティ</button>
-  <button class="tab-btn" data-tab="shipping">&#x1F4E4; 出荷処理</button>
-</div>
+  <div class="nav-group">受発注</div>
+  <a class="tab-btn" href="order-admin.html">&#x1F4CB; 注文管理</a>
+  <a class="tab-btn" href="order-portal.html">&#x1F6D2; 顧客ポータル</a>
+  <div class="nav-group">台帳</div>
+  <button class="tab-btn" data-tab="hunters">&#x1F3F9; 捕獲者台帳</button>
+  <button class="tab-btn" data-tab="staff">&#x1F465; スタッフ管理</button>
+  <button class="tab-btn" data-tab="supplies">&#x1F9F4; 資材在庫<span class="nav-badge" id="nav-badge-supplies"></span></button>
+  <div class="nav-group">施設・HACCP</div>
+  <button class="tab-btn" data-tab="cleaning">&#x1F9F9; 清掃記録<span class="nav-badge" id="nav-badge-cleaning"></span></button>
+  <button class="tab-btn" data-tab="datamgmt">&#x1F5C4; データ管理</button>
+</nav>
 
 <div class="content">
   <!-- Dashboard -->
@@ -352,6 +379,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div class="card"><div class="card-label">在庫点数</div><div class="card-value" id="dc-stock">-</div><div class="card-sub">在庫ステータス</div></div>
       <div class="card"><div class="card-label">在庫総重量</div><div class="card-value" id="dc-weight">-</div><div class="card-sub">kg</div></div>
       <div class="card"><div class="card-label">当月出荷数</div><div class="card-value" id="dc-shipped">-</div><div class="card-sub">今月実績</div></div>
+      <div class="card"><div class="card-label">熟成中</div><div class="card-value" id="dc-aging">-</div><div class="card-sub">半身熟成（目安7日）</div></div>
+      <div class="card"><div class="card-label">本日の清掃</div><div class="card-value" id="dc-clean">-</div><div class="card-sub">実施部屋数</div></div>
+      <div class="card"><div class="card-label">資材要発注</div><div class="card-value" id="dc-supply">-</div><div class="card-sub">発注点割れ</div></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
       <div class="section">
@@ -408,6 +438,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
             <th onclick="sortInv('part_name')">部位</th>
             <th onclick="sortInv('weight')">重量(kg)</th>
             <th onclick="sortInv('grade')">等級</th>
+            <th onclick="sortInv('location_code')">保管場所</th>
             <th onclick="sortInv('status')">ステータス</th>
             <th onclick="sortInv('created_at')">登録日</th>
             <th>操作</th>
@@ -606,6 +637,16 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <datalist id="dl-weather"><option>晴れ</option><option>曇り</option><option>雨</option><option>霧</option><option>雪</option></datalist>
       <datalist id="dl-hit"><option>頭部</option><option>首</option><option>胴体</option><option>肩</option><option>脚</option><option>腹部</option></datalist>
       <datalist id="dl-recorder"><option>沖</option><option>大和田</option><option>鳥居</option></datalist>
+      <!-- セクション：受入・解体情報 -->
+      <div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px;">▌ 受入・解体情報</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+        <div class="form-group"><label>受入方法</label><select class="form-input" id="ind-f-intake_method"><option value="">選択...</option><option>持込</option><option>出張止め刺し</option></select></div>
+        <div class="form-group"><label>出張対応者</label><input class="form-input" id="ind-f-intake_staff" placeholder="例: 沖 / 今泉" /></div>
+        <div class="form-group"><label>内臓の活用</label><input class="form-input" id="ind-f-organs_use" placeholder="例: 心臓・レバーを販売用に保管" /></div>
+        <div class="form-group"><label>皮の状態</label><select class="form-input" id="ind-f-hide_status"><option value="">選択...</option><option>販売可</option><option>保管中</option><option>加工中</option><option>廃棄</option></select></div>
+        <div class="form-group"><label>皮の保管場所</label><input class="form-input" id="ind-f-hide_location" placeholder="例: 冷凍庫F2 / 乾燥棚" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>解体時メモ（気になる点）</label><textarea class="form-input" id="ind-f-processing_notes" rows="2" style="resize:vertical;" placeholder="例: くくり罠の旧傷で右前脚が欠損"></textarea></div>
+      </div>
       <!-- セクション：検査・備考 -->
       <div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px;">▌ 検査・備考</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
@@ -642,6 +683,248 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div id="trace-result"></div>
   </div>
 
+  <!-- Aging (熟成管理) -->
+  <div class="tab-panel" id="panel-aging">
+    <div class="section">
+      <div class="section-title">熟成・処理方針の管理</div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;">受け入れた個体ごとに「半身熟成（目安7日）」か「直接分割」を選びます。熟成日数は開始日から精肉日まで自動計算されます。</div>
+      <div id="aging-stats" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;"></div>
+      <div id="aging-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+  </div>
+
+  <!-- Hunters (捕獲者台帳) -->
+  <div class="tab-panel" id="panel-hunters">
+    <div class="section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>捕獲者台帳（館山市・南房総市）</span>
+        <button class="btn btn-primary" onclick="hunterOpenNew()">＋ 新規登録</button>
+      </div>
+      <div id="hunters-stats" style="font-size:12.5px;color:var(--text2);margin-bottom:10px;"></div>
+      <input class="form-input" id="hunter-search" placeholder="氏名・地区・罠設置場所で検索" style="max-width:300px;margin-bottom:10px;" oninput="loadHunters()" />
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>氏名</th><th>地区</th><th>罠設置場所</th><th>電話番号</th><th>振込口座</th><th>捕獲実績</th><th>メモ</th><th>操作</th></tr></thead>
+          <tbody id="hunters-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Staff (スタッフ管理) -->
+  <div class="tab-panel" id="panel-staff">
+    <div class="section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>スタッフ台帳</span>
+        <button class="btn btn-primary" onclick="staffOpenNew()">＋ 新規登録</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>氏名</th><th>役割</th><th>雇用区分</th><th>給与</th><th>社会保険</th><th>雇用保険</th><th>電話</th><th>操作</th></tr></thead>
+          <tbody id="staff-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">出退勤記録</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+        <input class="form-input" id="att-date" type="date" style="max-width:170px;" onchange="loadAttendance()" />
+        <span style="font-size:12px;color:var(--text2);">日付を選んで各スタッフの出勤・退勤を入力し「保存」を押してください</span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>氏名</th><th>出勤</th><th>退勤</th><th>休憩</th><th>メモ</th><th>操作</th></tr></thead>
+          <tbody id="att-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">給与明細</div>
+      <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:10px;flex-wrap:wrap;">
+        <div class="form-group"><label>スタッフ</label><select class="form-input" id="pay-staff" style="min-width:180px;"></select></div>
+        <div class="form-group"><label>対象月</label><input class="form-input" id="pay-month" type="month" /></div>
+        <div class="form-group"><label>&nbsp;</label><button class="btn btn-primary" onclick="payrollCalc()">勤怠から集計</button></div>
+      </div>
+      <div id="payroll-result" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- Cleaning (清掃記録 / HACCP) -->
+  <div class="tab-panel" id="panel-cleaning">
+    <div class="section">
+      <div class="section-title">本日の清掃状況（部屋をタップして記録）</div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:12px;">HACCP・国産ジビエ認証ガイドラインに基づく衛生管理記録です。実施したらその場でタップ→実施者を選ぶだけで記録されます。</div>
+      <div id="clean-rooms" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;"></div>
+    </div>
+    <div class="section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>記録表の出力（保健所・認証審査用）</span>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input class="form-input" id="clean-month" type="month" style="max-width:170px;" />
+          <button class="btn btn-primary" onclick="cleaningReport()">🖨 月次記録表を印刷</button>
+          <button class="btn" onclick="exportCSV('cleaning_logs','清掃記録')">⬇ CSV</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>日時</th><th>場所</th><th>実施者</th><th>実施内容</th></tr></thead>
+          <tbody id="clean-recent"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supplies (資材在庫) -->
+  <div class="tab-panel" id="panel-supplies">
+    <div class="section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>資材在庫（消耗品）</span>
+        <div style="display:flex;gap:8px;">
+          <button class="btn" onclick="supplyOrderList()">🖨 発注リスト</button>
+          <button class="btn btn-primary" onclick="supplyOpenNew()">＋ 資材を追加</button>
+        </div>
+      </div>
+      <div id="supply-warn" style="display:none;margin-bottom:10px;padding:10px 14px;border:1px solid rgba(200,80,80,.4);border-radius:var(--radius);color:var(--red);font-size:13.5px;"></div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>品名</th><th>分類</th><th>在庫数</th><th>単位</th><th>発注点</th><th>仕入先</th><th>操作</th></tr></thead>
+          <tbody id="supplies-body"></tbody>
+        </table>
+      </div>
+      <div style="font-size:12px;color:var(--text2);margin-top:8px;">使ったら「−」、補充したら「＋」。在庫数が発注点以下になると警告が出ます。（Amazon等との自動連携は今後対応予定）</div>
+    </div>
+  </div>
+
+  <!-- Data Management (データ管理) -->
+  <div class="tab-panel" id="panel-datamgmt">
+    <div class="section">
+      <div class="section-title">CSV出力</div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;">大元のデータはこの画面から直接編集できません。CSVで確認し、修正が必要な場合は下の「気になる点フラグ」に記録して管理者に指示してください。</div>
+      <div id="csv-buttons" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+    </div>
+    <div class="section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>自動データチェック</span>
+        <button class="btn btn-primary" onclick="runDataChecks()">チェックを実行</button>
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;">個体番号の重複・重量未入力の在庫・台帳との不整合・発送済なのに在庫未割当・熟成の目安超過を自動で探します。</div>
+      <div id="check-results"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">気になる点フラグ</div>
+      <div class="form-row" style="flex-wrap:wrap;">
+        <div class="form-group"><label>対象（例: inventory / TGC-08-T001-11）</label><input class="form-input" id="flag-target" style="min-width:240px;" /></div>
+        <div class="form-group" style="flex:1;"><label>内容</label><input class="form-input" id="flag-comment" placeholder="例: 重量が明らかに大きすぎる" /></div>
+        <div class="form-group"><label>記録者</label><input class="form-input" id="flag-by" style="max-width:130px;" /></div>
+        <div class="form-group"><label>&nbsp;</label><button class="btn btn-primary" onclick="flagSave()">🚩 記録</button></div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>日時</th><th>対象</th><th>内容</th><th>記録者</th><th>状態</th></tr></thead>
+          <tbody id="flags-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hunter Modal -->
+  <div id="hunterModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:560px;margin:40px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);" id="hunterModalTitle">捕獲者 新規登録</div>
+        <button onclick="document.getElementById('hunterModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="form-group"><label>氏名 *</label><input class="form-input" id="hun-f-name" /></div>
+        <div class="form-group"><label>地区</label><select class="form-input" id="hun-f-city"><option value="">選択...</option><option>館山市</option><option>南房総市</option><option>その他</option></select></div>
+        <div class="form-group" style="grid-column:1/-1"><label>住所</label><input class="form-input" id="hun-f-address" /></div>
+        <div class="form-group"><label>電話番号</label><input class="form-input" id="hun-f-phone" /></div>
+        <div class="form-group"><label>罠の設置場所</label><input class="form-input" id="hun-f-trap_area" placeholder="例: 神余 山中" /></div>
+      </div>
+      <div style="font-size:12px;color:var(--gold);font-weight:600;margin:14px 0 6px;border-bottom:1px solid var(--border);padding-bottom:4px;">▌ 報奨金・買取の振込先</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="form-group"><label>銀行名</label><input class="form-input" id="hun-f-bank_name" /></div>
+        <div class="form-group"><label>支店名</label><input class="form-input" id="hun-f-bank_branch" /></div>
+        <div class="form-group"><label>口座種別</label><select class="form-input" id="hun-f-account_type"><option value="">選択...</option><option>普通</option><option>当座</option></select></div>
+        <div class="form-group"><label>口座番号</label><input class="form-input" id="hun-f-account_number" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>口座名義（カナ）</label><input class="form-input" id="hun-f-account_holder" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>メモ</label><textarea class="form-input" id="hun-f-memo" rows="2" style="resize:vertical;"></textarea></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
+        <button class="btn" onclick="document.getElementById('hunterModal').style.display='none'">キャンセル</button>
+        <button class="btn btn-primary" onclick="hunterSave()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Staff Modal -->
+  <div id="staffModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:560px;margin:40px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);" id="staffModalTitle">スタッフ 新規登録</div>
+        <button onclick="document.getElementById('staffModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="form-group"><label>氏名 *</label><input class="form-input" id="stf-f-name" /></div>
+        <div class="form-group"><label>役割</label><input class="form-input" id="stf-f-role" placeholder="例: 解体・精肉" /></div>
+        <div class="form-group"><label>電話番号</label><input class="form-input" id="stf-f-phone" /></div>
+        <div class="form-group"><label>入社日</label><input class="form-input" id="stf-f-hire_date" type="date" /></div>
+        <div class="form-group"><label>雇用区分</label><select class="form-input" id="stf-f-employment_type"><option value="">選択...</option><option>時給</option><option>月給</option></select></div>
+        <div class="form-group"><label>時給（円）</label><input class="form-input" id="stf-f-hourly_wage" type="number" /></div>
+        <div class="form-group"><label>月給（円）</label><input class="form-input" id="stf-f-monthly_salary" type="number" /></div>
+        <div class="form-group"><label>社会保険</label><select class="form-input" id="stf-f-social_insurance"><option value="">選択...</option><option>加入</option><option>未加入</option></select></div>
+        <div class="form-group"><label>雇用保険</label><select class="form-input" id="stf-f-employment_insurance"><option value="">選択...</option><option>加入</option><option>未加入</option></select></div>
+        <div class="form-group" style="grid-column:1/-1"><label>メモ</label><textarea class="form-input" id="stf-f-memo" rows="2" style="resize:vertical;"></textarea></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
+        <button class="btn" onclick="document.getElementById('staffModal').style.display='none'">キャンセル</button>
+        <button class="btn btn-primary" onclick="staffSave()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supply Modal -->
+  <div id="supplyModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:520px;margin:40px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);" id="supplyModalTitle">資材 新規登録</div>
+        <button onclick="document.getElementById('supplyModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="form-group" style="grid-column:1/-1"><label>品名 *</label><input class="form-input" id="sup-f-name" placeholder="例: 真空パック袋（大）" /></div>
+        <div class="form-group"><label>分類</label><input class="form-input" id="sup-f-category" placeholder="例: 包材 / 洗剤 / 消耗品" /></div>
+        <div class="form-group"><label>単位</label><input class="form-input" id="sup-f-unit" placeholder="例: 枚 / 箱 / 本" /></div>
+        <div class="form-group"><label>在庫数</label><input class="form-input" id="sup-f-stock_qty" type="number" /></div>
+        <div class="form-group"><label>発注点（この数以下で警告）</label><input class="form-input" id="sup-f-min_qty" type="number" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>仕入先</label><input class="form-input" id="sup-f-supplier" placeholder="例: ○○商店 / Amazon" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>メモ</label><textarea class="form-input" id="sup-f-memo" rows="2" style="resize:vertical;"></textarea></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
+        <button class="btn" onclick="document.getElementById('supplyModal').style.display='none'">キャンセル</button>
+        <button class="btn btn-primary" onclick="supplySave()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cleaning Modal -->
+  <div id="cleanModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:520px;margin:40px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);" id="cleanModalTitle">清掃記録</div>
+        <button onclick="document.getElementById('cleanModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div class="form-group"><label>実施者 *</label><select class="form-input" id="clean-staff"></select></div>
+      <div style="font-size:12px;color:var(--text2);margin:10px 0 6px;">実施した項目（チェックを外すと未実施として記録されません）</div>
+      <div id="clean-items" style="display:flex;flex-direction:column;gap:6px;"></div>
+      <div class="form-group" id="clean-temp-row" style="display:none;margin-top:10px;"><label>庫内温度（例: 冷蔵2℃ / 冷凍-20℃）</label><input class="form-input" id="clean-temp" /></div>
+      <div class="form-group" style="margin-top:10px;"><label>特記事項</label><input class="form-input" id="clean-note" placeholder="例: 排水溝の詰まりを解消" /></div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
+        <button class="btn" onclick="document.getElementById('cleanModal').style.display='none'">キャンセル</button>
+        <button class="btn btn-primary" style="font-size:15px;padding:10px 24px;" onclick="cleaningSave()">✅ 記録する</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Shipping -->
   <div class="tab-panel" id="panel-shipping">
     <div class="section" id="ship-workbench">
@@ -664,6 +947,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     </div>
   </div>
 </div>
+</div><!-- /app-layout -->
 
 <!-- Hidden Scale Input (HID receiver) -->
 <input id="scaleInput" style="opacity:0;position:fixed;top:-100px;left:-100px;" autocomplete="off" inputmode="none" />
@@ -717,6 +1001,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
             <button class="pm-toggle-btn pm-grade-btn grade-active" data-grade="並" onclick="pmSetGrade('並')">並</button>
             <button class="pm-toggle-btn pm-grade-btn" data-grade="上" onclick="pmSetGrade('上')">上</button>
             <button class="pm-toggle-btn pm-grade-btn" data-grade="極上" onclick="pmSetGrade('極上')">極上</button>
+            <span style="color:var(--text2);font-size:12px;margin-left:12px;">❄️ 冷凍庫:</span>
+            <select id="pmLocationSel" class="form-input" style="width:auto;padding:5px 8px;font-size:13px;"><option value="">未指定</option></select>
           </div>
         </div>
         <div style="font-size:12px;color:var(--text2);">部位選択</div>
@@ -884,15 +1170,22 @@ function closeModal(id) {
 /* ===== Tabs ===== */
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
+    if (!btn.dataset.tab) return; // <a>のナビリンク（注文管理など）はそのままページ遷移
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
-    if (btn.dataset.tab === 'dashboard') loadDashboard();
+    if (btn.dataset.tab === 'dashboard') { loadDashboard(); refreshNavBadges(); }
     if (btn.dataset.tab === 'inventory') loadInventory();
     if (btn.dataset.tab === 'individuals') indLoad();
     if (btn.dataset.tab === 'processing') loadProcessingSetup();
     if (btn.dataset.tab === 'shipping') { loadShipping(); setTimeout(maintainShippingScannerFocus, 50); }
+    if (btn.dataset.tab === 'aging') loadAging();
+    if (btn.dataset.tab === 'hunters') loadHunters();
+    if (btn.dataset.tab === 'staff') loadStaffPanel();
+    if (btn.dataset.tab === 'cleaning') loadCleaning();
+    if (btn.dataset.tab === 'supplies') loadSupplies();
+    if (btn.dataset.tab === 'datamgmt') loadDataMgmt();
   });
 });
 
@@ -1126,6 +1419,7 @@ function renderInventory() {
     <td>${item.part_name || '-'}</td>
     <td style="text-align:right">${item.weight != null ? parseFloat(item.weight).toFixed(2) : '-'}</td>
     <td>${item.grade || '-'}</td>
+    <td>${item.location_code ? '❄️ ' + item.location_code : '-'}</td>
     <td>${statusBadge(item.status)}</td>
     <td>${fmt(item.created_at)}</td>
     <td style="white-space:nowrap;">
@@ -1146,6 +1440,7 @@ async function showDetailModal(item) {
     <div><span style="color:var(--text2);font-size:12px;">部位</span><br><strong>${item.part_name||'-'}</strong></div>
     <div><span style="color:var(--text2);font-size:12px;">重量</span><br><strong>${item.weight ? parseFloat(item.weight).toFixed(2)+' kg' : '-'}</strong></div>
     <div><span style="color:var(--text2);font-size:12px;">等級</span><br><strong>${item.grade||'-'}</strong></div>
+    <div><span style="color:var(--text2);font-size:12px;">保管場所（冷凍庫）</span><br><strong>${item.location_code||'-'}</strong></div>
     <div><span style="color:var(--text2);font-size:12px;">ステータス</span><br>${statusBadge(item.status)}</div>
     <div><span style="color:var(--text2);font-size:12px;">担当者</span><br><strong>${item.operator||'-'}</strong></div>
     <div><span style="color:var(--text2);font-size:12px;">単価</span><br><strong>${item.unit_price ? '\u00A5'+item.unit_price.toLocaleString() : '-'}</strong></div>
@@ -2823,6 +3118,8 @@ async function pmOnWeightReceived(weight_kg) {
       unit_price: parseInt(pmSelectedPart.price_standard) || 0,
       lot_code: lotCode
     };
+    const pmLoc = pmGetLocationCode();
+    if (pmLoc) record.location_code = pmLoc; // 冷凍庫選択時のみ（カラム未追加のDBでも壊さない）
     await sb('POST', 'inventory', record);
     await sb('POST', 'processing_log', {
       parent_ident_code: pmIndividual.label_id,
@@ -3088,7 +3385,8 @@ const IND_ALL_FIELDS = ['label_id','serial_number','species','sex','age_estimate
   'capture_date','capture_time','capture_city','capture_area','hunter_name',
   'weather','capture_method','finishing_method','hit_location',
   'bleed_time','gutting','cooling_method','transport_start','receive_time','process_time',
-  'recorder','hunter_health_issues','capture_anomalies','organ_anomalies','has_fetus','hunter_health_ok','memo'];
+  'recorder','hunter_health_issues','capture_anomalies','organ_anomalies','has_fetus','hunter_health_ok','memo',
+  'intake_method','intake_staff','organs_use','hide_status','hide_location','processing_notes'];
 
 function indSort(col) {
   if (indSortCol === col) indSortAsc = !indSortAsc;
@@ -3297,6 +3595,11 @@ async function indSave() {
       hunter_health_ok:  boolVal('hunter_health_ok'),
       memo:              indGetVal('memo'),
     };
+    // 受入・解体情報の追加カラム: 値がある場合のみ送信（カラム未追加のDBでも既存保存を壊さない）
+    ['intake_method','intake_staff','organs_use','hide_status','hide_location','processing_notes'].forEach(f => {
+      const el = document.getElementById('ind-f-' + f);
+      if (el && el.value && el.value.trim() !== '') payload[f] = el.value.trim();
+    });
     if (indEditId) {
       await sb('PATCH', 'individuals', payload, '?label_id=eq.' + encodeURIComponent(indEditId));
       toast('保存しました');
@@ -3379,8 +3682,776 @@ async function invRestore(id) {
   } catch(e) { toast('復元エラー: ' + e.message, 'error'); }
 }
 
+/* ============================================================
+   施設アプリ 追加モジュール
+   捕獲者台帳 / 熟成管理 / スタッフ・給与 / 清掃記録(HACCP) /
+   資材在庫 / データ管理(CSV・チェック・フラグ) / ナビバッジ
+   ※ 追加テーブル未作成のDBでは各モジュールが案内を表示し、
+     既存機能（受入・精肉・在庫・出荷）には影響しない。
+   ============================================================ */
+
+const MIGRATION_HINT = 'このモジュール用のテーブルがまだDBにありません。migrations/20260703_facility_app.sql を適用すると使えるようになります。';
+
+function sbSafeMsg(err) {
+  const m = String(err && err.message || err);
+  if (m.includes('does not exist') || m.includes('PGRST') || m.includes('relation') || m.includes('column')) return MIGRATION_HINT;
+  return m;
+}
+
+function esc2(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/* ───────── 捕獲者台帳 ───────── */
+let huntersData = [];
+let hunterEditId = null;
+
+async function loadHunters() {
+  const body = document.getElementById('hunters-body');
+  body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
+  try {
+    huntersData = await sb('GET', 'hunters', null, '?select=*&deleted_at=is.null&order=name.asc');
+    // 捕獲実績（個体台帳の捕獲者名で集計）
+    let countMap = {};
+    try {
+      const inds = await sb('GET', 'individuals', null, '?select=hunter_name&deleted_at=is.null&limit=2000');
+      inds.forEach(i => { if (i.hunter_name) countMap[i.hunter_name] = (countMap[i.hunter_name] || 0) + 1; });
+    } catch (e) {}
+    const q = (document.getElementById('hunter-search').value || '').trim();
+    const list = q ? huntersData.filter(h => (h.name || '').includes(q) || (h.trap_area || '').includes(q) || (h.city || '').includes(q)) : huntersData;
+    const tateyama = huntersData.filter(h => h.city === '館山市').length;
+    const minami = huntersData.filter(h => h.city === '南房総市').length;
+    document.getElementById('hunters-stats').textContent = `登録 ${huntersData.length}名（館山市 ${tateyama} / 南房総市 ${minami} / その他 ${huntersData.length - tateyama - minami}）`;
+    if (!list.length) { body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text3);">登録がありません。「＋新規登録」から捕獲者を登録してください。</td></tr>'; return; }
+    body.innerHTML = list.map(h => `<tr>
+      <td style="font-weight:600;">${esc2(h.name)}</td>
+      <td>${esc2(h.city || '-')}</td>
+      <td>${esc2(h.trap_area || '-')}</td>
+      <td style="white-space:nowrap;">${esc2(h.phone || '-')}</td>
+      <td style="font-size:12px;">${h.bank_name ? esc2(h.bank_name) + ' ' + esc2(h.bank_branch || '') + '<br>' + esc2(h.account_type || '') + ' ' + esc2(h.account_number || '') : '<span style="color:var(--red);">未登録</span>'}</td>
+      <td style="text-align:center;">${countMap[h.name] || 0}頭</td>
+      <td style="font-size:12px;color:var(--text2);">${esc2(h.memo || '')}</td>
+      <td style="white-space:nowrap;"><button class="btn btn-sm" onclick="hunterEdit('${h.id}')">編集</button></td>
+    </tr>`).join('');
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red);">${esc2(sbSafeMsg(err))}</td></tr>`;
+  }
+}
+
+const HUNTER_FIELDS = ['name', 'city', 'address', 'phone', 'trap_area', 'bank_name', 'bank_branch', 'account_type', 'account_number', 'account_holder', 'memo'];
+
+function hunterOpenNew() {
+  hunterEditId = null;
+  document.getElementById('hunterModalTitle').textContent = '捕獲者 新規登録';
+  HUNTER_FIELDS.forEach(f => document.getElementById('hun-f-' + f).value = '');
+  document.getElementById('hunterModal').style.display = 'block';
+}
+
+function hunterEdit(id) {
+  const h = huntersData.find(x => String(x.id) === String(id));
+  if (!h) return;
+  hunterEditId = id;
+  document.getElementById('hunterModalTitle').textContent = '捕獲者情報編集';
+  HUNTER_FIELDS.forEach(f => document.getElementById('hun-f-' + f).value = h[f] || '');
+  document.getElementById('hunterModal').style.display = 'block';
+}
+
+async function hunterSave() {
+  const payload = {};
+  HUNTER_FIELDS.forEach(f => payload[f] = document.getElementById('hun-f-' + f).value.trim() || null);
+  if (!payload.name) { toast('氏名は必須です', 'error'); return; }
+  try {
+    if (hunterEditId) {
+      await sb('PATCH', 'hunters', payload, '?id=eq.' + hunterEditId);
+      toast(`捕獲者「${payload.name}」を更新しました`);
+    } else {
+      await sb('POST', 'hunters', payload);
+      toast(`捕獲者「${payload.name}」を登録しました`);
+    }
+    document.getElementById('hunterModal').style.display = 'none';
+    loadHunters();
+  } catch (err) { toast('保存に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+/* ───────── 熟成管理 ─────────
+   個体ごとの流れ: 受入済（方針未選択）→ 熟成中 or 直接分割 → 精肉待ち → 精肉済
+   熟成日数 = 解体（受入）日 〜 精肉開始日 を自動計算 */
+
+function agingDays(from, to) {
+  if (!from) return null;
+  const a = new Date(from); const b = to ? new Date(to) : new Date();
+  return Math.max(0, Math.round((b - a) / 86400000));
+}
+
+function agingStateOf(ind, processedSet) {
+  if (processedSet.has(ind.label_id)) return '精肉済';
+  if (ind.aging_method === '熟成' && !ind.aging_ended_at) return '熟成中';
+  if (ind.aging_method) return '精肉待ち';
+  return '受入済';
+}
+
+async function fetchAgingData() {
+  const inds = await sb('GET', 'individuals', null, '?select=label_id,species,weight_total,capture_date,hunter_name,aging_method,aging_started_at,aging_ended_at,created_at&deleted_at=is.null&order=capture_date.desc&limit=300');
+  let processedSet = new Set();
+  let firstInvMap = {};
+  try {
+    const invs = await sb('GET', 'inventory', null, '?select=individual_id,created_at&deleted_at=is.null&limit=2000');
+    invs.forEach(v => {
+      if (!v.individual_id) return;
+      processedSet.add(v.individual_id);
+      if (!firstInvMap[v.individual_id] || v.created_at < firstInvMap[v.individual_id]) firstInvMap[v.individual_id] = v.created_at;
+    });
+  } catch (e) {}
+  return { inds, processedSet, firstInvMap };
+}
+
+async function loadAging() {
+  const listEl = document.getElementById('aging-list');
+  listEl.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
+  try {
+    const { inds, processedSet, firstInvMap } = await fetchAgingData();
+    const groups = { '受入済': [], '熟成中': [], '精肉待ち': [], '精肉済': [] };
+    inds.forEach(i => groups[agingStateOf(i, processedSet)].push(i));
+    document.getElementById('aging-stats').innerHTML =
+      `<span class="badge badge-gray">受入済（方針未選択） ${groups['受入済'].length}</span> ` +
+      `<span class="badge badge-blue">熟成中 ${groups['熟成中'].length}</span> ` +
+      `<span class="badge badge-red">精肉待ち ${groups['精肉待ち'].length}</span> ` +
+      `<span class="badge badge-green">精肉済 ${groups['精肉済'].length}</span>`;
+
+    const card = (i, inner) => `<div style="border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);padding:12px 14px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+      <div style="min-width:180px;"><strong style="color:var(--gold);">${esc2(i.label_id)}</strong><br><span style="font-size:12px;color:var(--text2);">${speciesIcon(i.species)} ${esc2(i.species || '-')} / ${i.weight_total || '-'}kg / 捕獲 ${fmt(i.capture_date)} / ${esc2(i.hunter_name || '-')}</span></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:auto;">${inner}</div>
+    </div>`;
+
+    let html = '';
+    if (groups['受入済'].length) {
+      html += '<div style="font-size:13px;color:var(--gold);font-weight:600;margin:6px 0;">▌ 受入済 — 処理方針を選択してください</div>';
+      html += groups['受入済'].map(i => card(i,
+        `<button class="btn btn-primary btn-sm" onclick="agingStart('${esc2(i.label_id)}')">🥩 半身熟成を開始</button>
+         <button class="btn btn-sm" onclick="agingDirect('${esc2(i.label_id)}')">🔪 直接分割（熟成なし）</button>`)).join('');
+    }
+    if (groups['熟成中'].length) {
+      html += '<div style="font-size:13px;color:var(--gold);font-weight:600;margin:14px 0 6px;">▌ 熟成中（目安 7日間）</div>';
+      html += groups['熟成中'].map(i => {
+        const d = agingDays(i.aging_started_at || i.capture_date, null);
+        const over = d > 7;
+        return card(i,
+          `<span class="badge ${over ? 'badge-red' : 'badge-blue'}">熟成 ${d}日目${over ? '（目安超過）' : ''}</span>
+           <span style="font-size:12px;color:var(--text2);">開始 ${fmt(i.aging_started_at || i.capture_date)}</span>
+           <button class="btn btn-primary btn-sm" onclick="agingFinish('${esc2(i.label_id)}')">✅ 熟成完了 → 精肉待ちへ</button>`);
+      }).join('');
+    }
+    if (groups['精肉待ち'].length) {
+      html += '<div style="font-size:13px;color:var(--gold);font-weight:600;margin:14px 0 6px;">▌ 精肉待ち — 精肉モードで処理してください</div>';
+      html += groups['精肉待ち'].map(i => {
+        const aged = i.aging_method === '熟成' ? `<span class="badge badge-blue">熟成 ${agingDays(i.aging_started_at || i.capture_date, i.aging_ended_at)}日間</span>` : '<span class="badge badge-gray">直接分割</span>';
+        return card(i, `${aged} <button class="btn btn-primary btn-sm" onclick="openProcessingMode()">🔪 精肉モードを開く</button>`);
+      }).join('');
+    }
+    if (groups['精肉済'].length) {
+      html += `<details style="margin-top:14px;"><summary style="cursor:pointer;color:var(--text2);font-size:13px;">精肉済 ${groups['精肉済'].length}頭（熟成日数の実績）</summary><div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">`;
+      html += groups['精肉済'].map(i => {
+        const end = i.aging_ended_at || firstInvMap[i.label_id];
+        const d = i.aging_method === '熟成' ? agingDays(i.aging_started_at || i.capture_date, end) : null;
+        return card(i, d != null ? `<span class="badge badge-green">熟成 ${d}日間で精肉</span>` : '<span class="badge badge-gray">熟成なし</span>');
+      }).join('');
+      html += '</div></details>';
+    }
+    listEl.innerHTML = html || '<div class="empty-state">対象の個体がありません</div>';
+  } catch (err) {
+    listEl.innerHTML = `<div class="empty-state" style="color:var(--red);">${esc2(sbSafeMsg(err))}</div>`;
+  }
+}
+
+async function agingStart(labelId) {
+  if (!confirm(`${labelId} の半身熟成を開始しますか？\n（開始日から精肉日までの日数を自動計算します）`)) return;
+  try {
+    await sb('PATCH', 'individuals', { aging_method: '熟成', aging_started_at: new Date().toISOString(), aging_ended_at: null }, '?label_id=eq.' + encodeURIComponent(labelId));
+    toast(`${labelId} の熟成を開始しました`);
+    loadAging(); refreshNavBadges();
+  } catch (err) { toast('熟成開始に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+async function agingDirect(labelId) {
+  try {
+    await sb('PATCH', 'individuals', { aging_method: '直接分割', aging_started_at: null, aging_ended_at: null }, '?label_id=eq.' + encodeURIComponent(labelId));
+    toast(`${labelId} は熟成なしで精肉待ちにしました`);
+    loadAging(); refreshNavBadges();
+  } catch (err) { toast('更新に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+async function agingFinish(labelId) {
+  if (!confirm(`${labelId} の熟成を完了して精肉待ちにしますか？`)) return;
+  try {
+    await sb('PATCH', 'individuals', { aging_ended_at: new Date().toISOString() }, '?label_id=eq.' + encodeURIComponent(labelId));
+    toast(`${labelId} を精肉待ちにしました`);
+    loadAging(); refreshNavBadges();
+  } catch (err) { toast('更新に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+/* ───────── スタッフ管理 ───────── */
+let staffData = [];
+let staffEditId = null;
+const STAFF_FIELDS = ['name', 'role', 'phone', 'hire_date', 'employment_type', 'hourly_wage', 'monthly_salary', 'social_insurance', 'employment_insurance', 'memo'];
+
+async function loadStaffPanel() {
+  const body = document.getElementById('staff-body');
+  body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
+  try {
+    staffData = await sb('GET', 'staff', null, '?select=*&deleted_at=is.null&order=name.asc');
+    if (!staffData.length) {
+      body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text3);">スタッフが未登録です。「＋新規登録」から追加してください。</td></tr>';
+    } else {
+      body.innerHTML = staffData.map(s => `<tr>
+        <td style="font-weight:600;">${esc2(s.name)}</td>
+        <td>${esc2(s.role || '-')}</td>
+        <td>${esc2(s.employment_type || '-')}</td>
+        <td style="text-align:right;">${s.employment_type === '月給' ? (s.monthly_salary ? '¥' + Number(s.monthly_salary).toLocaleString() + '/月' : '-') : (s.hourly_wage ? '¥' + Number(s.hourly_wage).toLocaleString() + '/時' : '-')}</td>
+        <td style="text-align:center;">${s.social_insurance === '加入' ? '✅' : '—'}</td>
+        <td style="text-align:center;">${s.employment_insurance === '加入' ? '✅' : '—'}</td>
+        <td>${esc2(s.phone || '-')}</td>
+        <td><button class="btn btn-sm" onclick="staffEdit('${s.id}')">編集</button></td>
+      </tr>`).join('');
+    }
+    // 給与明細の対象セレクトも更新
+    const sel = document.getElementById('pay-staff');
+    sel.innerHTML = '<option value="">スタッフを選択...</option>' + staffData.map(s => `<option value="${s.id}">${esc2(s.name)}</option>`).join('');
+    if (!document.getElementById('pay-month').value) document.getElementById('pay-month').value = new Date().toISOString().slice(0, 7);
+    if (!document.getElementById('att-date').value) document.getElementById('att-date').value = new Date().toISOString().slice(0, 10);
+    loadAttendance();
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red);">${esc2(sbSafeMsg(err))}</td></tr>`;
+  }
+}
+
+function staffOpenNew() {
+  staffEditId = null;
+  document.getElementById('staffModalTitle').textContent = 'スタッフ 新規登録';
+  STAFF_FIELDS.forEach(f => document.getElementById('stf-f-' + f).value = '');
+  document.getElementById('staffModal').style.display = 'block';
+}
+
+function staffEdit(id) {
+  const s = staffData.find(x => String(x.id) === String(id));
+  if (!s) return;
+  staffEditId = id;
+  document.getElementById('staffModalTitle').textContent = 'スタッフ情報編集';
+  STAFF_FIELDS.forEach(f => document.getElementById('stf-f-' + f).value = s[f] != null ? s[f] : '');
+  document.getElementById('staffModal').style.display = 'block';
+}
+
+async function staffSave() {
+  const payload = {};
+  STAFF_FIELDS.forEach(f => {
+    let v = document.getElementById('stf-f-' + f).value.trim();
+    if (f === 'hourly_wage' || f === 'monthly_salary') v = v ? parseFloat(v) : null;
+    payload[f] = v === '' ? null : v;
+  });
+  if (!payload.name) { toast('氏名は必須です', 'error'); return; }
+  try {
+    if (staffEditId) { await sb('PATCH', 'staff', payload, '?id=eq.' + staffEditId); toast(`スタッフ「${payload.name}」を更新しました`); }
+    else { await sb('POST', 'staff', payload); toast(`スタッフ「${payload.name}」を登録しました`); }
+    document.getElementById('staffModal').style.display = 'none';
+    loadStaffPanel();
+  } catch (err) { toast('保存に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+/* ── 出退勤 ── */
+let attCache = [];
+
+async function loadAttendance() {
+  const body = document.getElementById('att-body');
+  const date = document.getElementById('att-date').value;
+  if (!date || !staffData.length) { body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text3);">スタッフを登録すると出退勤を記録できます</td></tr>'; return; }
+  try {
+    attCache = await sb('GET', 'attendance', null, `?work_date=eq.${date}&select=*`);
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--red);">${esc2(sbSafeMsg(err))}</td></tr>`;
+    return;
+  }
+  body.innerHTML = staffData.map(s => {
+    const a = attCache.find(x => String(x.staff_id) === String(s.id)) || {};
+    return `<tr data-staff="${s.id}">
+      <td style="font-weight:600;">${esc2(s.name)}</td>
+      <td><input class="form-input att-in" type="time" value="${a.clock_in || ''}" style="width:110px;padding:6px;"></td>
+      <td><input class="form-input att-out" type="time" value="${a.clock_out || ''}" style="width:110px;padding:6px;"></td>
+      <td><input class="form-input att-break" type="number" value="${a.break_minutes != null ? a.break_minutes : 60}" style="width:70px;padding:6px;" min="0"> 分</td>
+      <td><input class="form-input att-note" value="${esc2(a.note || '')}" placeholder="メモ" style="min-width:120px;padding:6px;"></td>
+      <td><button class="btn btn-sm btn-primary" onclick="attSave('${s.id}','${esc2(s.name)}')">保存</button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function attSave(staffId, staffName) {
+  const row = document.querySelector(`#att-body tr[data-staff="${staffId}"]`);
+  const date = document.getElementById('att-date').value;
+  const payload = {
+    staff_id: staffId, staff_name: staffName, work_date: date,
+    clock_in: row.querySelector('.att-in').value || null,
+    clock_out: row.querySelector('.att-out').value || null,
+    break_minutes: parseInt(row.querySelector('.att-break').value) || 0,
+    note: row.querySelector('.att-note').value.trim() || null,
+  };
+  try {
+    const existing = attCache.find(x => String(x.staff_id) === String(staffId));
+    if (existing) await sb('PATCH', 'attendance', payload, '?id=eq.' + existing.id);
+    else await sb('POST', 'attendance', payload);
+    toast(`${staffName} ${date} の勤怠を保存しました`);
+    loadAttendance();
+  } catch (err) { toast('勤怠の保存に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+/* ── 給与明細 ── */
+let payCurrent = null;
+
+function attHours(a) {
+  if (!a.clock_in || !a.clock_out) return 0;
+  const [ih, im] = a.clock_in.split(':').map(Number);
+  const [oh, om] = a.clock_out.split(':').map(Number);
+  return Math.max(0, (oh * 60 + om - ih * 60 - im - (a.break_minutes || 0)) / 60);
+}
+
+async function payrollCalc() {
+  const staffId = document.getElementById('pay-staff').value;
+  const month = document.getElementById('pay-month').value;
+  const out = document.getElementById('payroll-result');
+  if (!staffId || !month) { toast('スタッフと対象月を選択してください', 'error'); return; }
+  const s = staffData.find(x => String(x.id) === String(staffId));
+  try {
+    const rows = await sb('GET', 'attendance', null, `?staff_id=eq.${staffId}&work_date=gte.${month}-01&work_date=lte.${month}-31&select=*&order=work_date.asc`);
+    const days = rows.filter(r => r.clock_in && r.clock_out);
+    const hours = days.reduce((t, r) => t + attHours(r), 0);
+    const gross = s.employment_type === '月給' ? (Number(s.monthly_salary) || 0) : Math.round(hours * (Number(s.hourly_wage) || 0));
+    payCurrent = { staff: s, month, days: days.length, hours, gross, rows };
+    out.style.display = 'block';
+    out.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px;">
+        <div class="card" style="padding:12px;"><div class="card-label">出勤日数</div><div class="card-value" style="font-size:20px;">${days.length}日</div></div>
+        <div class="card" style="padding:12px;"><div class="card-label">実働時間</div><div class="card-value" style="font-size:20px;">${hours.toFixed(1)}h</div></div>
+        <div class="card" style="padding:12px;"><div class="card-label">支給額（総額）</div><div class="card-value" style="font-size:20px;">¥${gross.toLocaleString()}</div></div>
+      </div>
+      <div class="form-row" style="flex-wrap:wrap;">
+        <div class="form-group"><label>社会保険料</label><input class="form-input" id="pay-ded-shakai" type="number" value="0" style="width:130px;"></div>
+        <div class="form-group"><label>雇用保険料</label><input class="form-input" id="pay-ded-koyou" type="number" value="0" style="width:130px;"></div>
+        <div class="form-group"><label>所得税</label><input class="form-input" id="pay-ded-tax" type="number" value="0" style="width:130px;"></div>
+        <div class="form-group"><label>その他控除</label><input class="form-input" id="pay-ded-other" type="number" value="0" style="width:130px;"></div>
+        <div class="form-group"><label>&nbsp;</label><button class="btn btn-primary" onclick="payrollPrint()">🖨 給与明細を印刷</button></div>
+      </div>
+      <div style="font-size:12px;color:var(--text2);">※控除額を入力してから印刷してください。保険加入状況: 社会保険 ${s.social_insurance === '加入' ? '加入' : '未加入'} / 雇用保険 ${s.employment_insurance === '加入' ? '加入' : '未加入'}</div>`;
+  } catch (err) { toast('集計に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+function payrollPrint() {
+  if (!payCurrent) return;
+  const { staff: s, month, days, hours, gross, rows } = payCurrent;
+  const d1 = parseInt(document.getElementById('pay-ded-shakai').value) || 0;
+  const d2 = parseInt(document.getElementById('pay-ded-koyou').value) || 0;
+  const d3 = parseInt(document.getElementById('pay-ded-tax').value) || 0;
+  const d4 = parseInt(document.getElementById('pay-ded-other').value) || 0;
+  const net = gross - d1 - d2 - d3 - d4;
+  const detail = rows.map(r => `<tr><td>${r.work_date}</td><td>${r.clock_in || '-'}〜${r.clock_out || '-'}</td><td style="text-align:right;">${attHours(r).toFixed(1)}h</td><td>${esc2(r.note || '')}</td></tr>`).join('');
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>給与明細 ${esc2(s.name)} ${month}</title>
+  <style>body{font-family:'Noto Sans JP',sans-serif;padding:32px;color:#222;} h1{font-size:20px;border-bottom:2px solid #222;padding-bottom:8px;} table{border-collapse:collapse;width:100%;margin:12px 0;} th,td{border:1px solid #999;padding:6px 10px;font-size:13px;text-align:left;} th{background:#f0f0f0;} .big{font-size:18px;font-weight:700;}</style></head><body>
+  <h1>給与明細書　${month.replace('-', '年')}月分</h1>
+  <p>氏名: <strong>${esc2(s.name)}</strong>　（${esc2(s.role || '')} / ${esc2(s.employment_type || '')}）<br>館山ジビエセンター</p>
+  <table><tr><th>出勤日数</th><td>${days}日</td><th>実働時間</th><td>${hours.toFixed(1)}時間</td></tr>
+  <tr><th>支給額（総額）</th><td class="big">¥${gross.toLocaleString()}</td><th>${s.employment_type === '月給' ? '月給' : '時給'}</th><td>¥${Number(s.employment_type === '月給' ? s.monthly_salary : s.hourly_wage || 0).toLocaleString()}</td></tr>
+  <tr><th>社会保険料</th><td>¥${d1.toLocaleString()}（${s.social_insurance === '加入' ? '加入' : '未加入'}）</td><th>雇用保険料</th><td>¥${d2.toLocaleString()}（${s.employment_insurance === '加入' ? '加入' : '未加入'}）</td></tr>
+  <tr><th>所得税</th><td>¥${d3.toLocaleString()}</td><th>その他控除</th><td>¥${d4.toLocaleString()}</td></tr>
+  <tr><th>差引支給額</th><td colspan="3" class="big">¥${net.toLocaleString()}</td></tr></table>
+  <h2 style="font-size:15px;">勤怠明細</h2>
+  <table><thead><tr><th>日付</th><th>時刻</th><th>実働</th><th>メモ</th></tr></thead><tbody>${detail || '<tr><td colspan="4">記録なし</td></tr>'}</tbody></table>
+  <p style="font-size:11px;color:#666;">発行日: ${new Date().toLocaleDateString('ja-JP')}</p>
+  </body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { toast('ポップアップがブロックされました。ブラウザの設定を確認してください。', 'error'); return; }
+  w.document.write(html); w.document.close();
+  setTimeout(() => w.print(), 300);
+}
+
+/* ───────── 清掃記録（HACCP・国産ジビエ認証準拠） ───────── */
+const CLEAN_ROOMS = [
+  { key: '解体室', icon: '🔪', items: ['床・排水溝の洗浄', '懸吊フック・レールの洗浄', '作業台・シンクの洗浄・消毒', 'ナイフ・器具の洗浄（83℃以上の温湯消毒）', '残渣・廃棄物の処理'] },
+  { key: '精肉室', icon: '🥩', items: ['床・排水溝の洗浄', '作業台・まな板の洗浄・消毒', 'スライサー等機械の分解洗浄', 'ナイフ・器具の温湯消毒', '包材・資材の整理整頓'] },
+  { key: '冷蔵・冷凍庫', icon: '❄️', items: ['庫内温度の確認・記録', '庫内の整理・清掃', 'ドアパッキン・取手の消毒'], temp: true },
+  { key: '前室・更衣室', icon: '🚪', items: ['手洗い場の清掃・石鹸/消毒液の補充', '長靴・エプロンの洗浄消毒', '更衣室の整理清掃'] },
+  { key: 'トイレ', icon: '🚻', items: ['便器・床の清掃・消毒', '手洗い設備の点検・ペーパー補充'] },
+  { key: '施設外周', icon: '🏠', items: ['搬入口まわりの清掃', '防虫・防鼠の点検', '排水・臭気の確認'] },
+];
+let cleanTodayLogs = [];
+let cleanCurrentRoom = null;
+
+async function loadCleaning() {
+  const grid = document.getElementById('clean-rooms');
+  const mEl = document.getElementById('clean-month');
+  if (mEl && !mEl.value) mEl.value = new Date().toISOString().slice(0, 7);
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    cleanTodayLogs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${today}T00:00:00&select=*&order=cleaned_at.desc`);
+  } catch (err) {
+    grid.innerHTML = `<div class="empty-state" style="color:var(--red);grid-column:1/-1;">${esc2(sbSafeMsg(err))}</div>`;
+    return;
+  }
+  grid.innerHTML = CLEAN_ROOMS.map(r => {
+    const log = cleanTodayLogs.find(l => l.room === r.key);
+    const done = !!log;
+    return `<button onclick="cleaningOpen('${r.key}')" style="text-align:left;cursor:pointer;padding:16px;border-radius:var(--radius);border:1px solid ${done ? 'rgba(106,158,90,.5)' : 'var(--border)'};background:${done ? 'rgba(106,158,90,.08)' : 'var(--surface)'};color:var(--text);">
+      <div style="font-size:15px;font-weight:700;">${r.icon} ${r.key}</div>
+      <div style="font-size:12px;margin-top:6px;color:${done ? 'var(--green)' : 'var(--red)'};">${done ? `✅ ${new Date(log.cleaned_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} ${esc2(log.staff_name)} 実施済` : '未実施 — タップして記録'}</div>
+      ${log && log.temperature ? `<div style="font-size:11px;color:var(--text2);margin-top:2px;">庫内温度: ${esc2(log.temperature)}</div>` : ''}
+    </button>`;
+  }).join('');
+  loadCleaningRecent();
+}
+
+async function loadCleaningRecent() {
+  const body = document.getElementById('clean-recent');
+  try {
+    const logs = await sb('GET', 'cleaning_logs', null, '?select=*&order=cleaned_at.desc&limit=30');
+    body.innerHTML = logs.length ? logs.map(l => `<tr>
+      <td>${fmtDt(l.cleaned_at)}</td><td>${esc2(l.room)}</td><td>${esc2(l.staff_name)}</td>
+      <td style="font-size:12px;color:var(--text2);">${esc2(l.items || '')}${l.temperature ? ' / 温度: ' + esc2(l.temperature) : ''}${l.note ? ' / ' + esc2(l.note) : ''}</td>
+    </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text3);">記録がありません</td></tr>';
+  } catch (e) { body.innerHTML = ''; }
+}
+
+function cleaningOpen(roomKey) {
+  const room = CLEAN_ROOMS.find(r => r.key === roomKey);
+  cleanCurrentRoom = room;
+  document.getElementById('cleanModalTitle').textContent = `${room.icon} ${room.key} の清掃記録`;
+  const names = staffData.length ? staffData.map(s => s.name) : PM_OPERATORS;
+  document.getElementById('clean-staff').innerHTML = '<option value="">実施者を選択...</option>' + names.map(n => `<option>${esc2(n)}</option>`).join('');
+  document.getElementById('clean-items').innerHTML = room.items.map((it, i) => `<label style="display:flex;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:14px;"><input type="checkbox" class="clean-chk" value="${esc2(it)}" checked> ${esc2(it)}</label>`).join('');
+  document.getElementById('clean-temp-row').style.display = room.temp ? 'block' : 'none';
+  document.getElementById('clean-temp').value = '';
+  document.getElementById('clean-note').value = '';
+  document.getElementById('cleanModal').style.display = 'block';
+}
+
+async function cleaningSave() {
+  const staff = document.getElementById('clean-staff').value;
+  if (!staff) { toast('実施者を選択してください', 'error'); return; }
+  const items = [...document.querySelectorAll('.clean-chk:checked')].map(c => c.value);
+  if (!items.length) { toast('実施した項目にチェックを入れてください', 'error'); return; }
+  const payload = {
+    room: cleanCurrentRoom.key,
+    staff_name: staff,
+    cleaned_at: new Date().toISOString(),
+    items: items.join('、'),
+    temperature: cleanCurrentRoom.temp ? (document.getElementById('clean-temp').value.trim() || null) : null,
+    note: document.getElementById('clean-note').value.trim() || null,
+  };
+  try {
+    await sb('POST', 'cleaning_logs', payload);
+    playFeedbackSound(true);
+    toast(`${cleanCurrentRoom.key} の清掃を記録しました（${staff}）`);
+    document.getElementById('cleanModal').style.display = 'none';
+    loadCleaning(); refreshNavBadges();
+  } catch (err) { toast('清掃記録に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+async function cleaningReport() {
+  const month = document.getElementById('clean-month').value;
+  if (!month) { toast('対象月を選択してください', 'error'); return; }
+  try {
+    const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${month}-01T00:00:00&cleaned_at=lte.${month}-31T23:59:59&select=*&order=cleaned_at.asc`);
+    const [y, m] = month.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    let rows = '';
+    for (let d = 1; d <= daysInMonth; d++) {
+      const ds = `${month}-${String(d).padStart(2, '0')}`;
+      const cells = CLEAN_ROOMS.map(r => {
+        const log = logs.find(l => l.room === r.key && l.cleaned_at.slice(0, 10) === ds);
+        return `<td style="text-align:center;">${log ? '○<br><span style="font-size:9px;">' + esc2(log.staff_name) + (log.temperature ? '<br>' + esc2(log.temperature) : '') + '</span>' : ''}</td>`;
+      }).join('');
+      rows += `<tr><td>${m}/${d}</td>${cells}</tr>`;
+    }
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>清掃・衛生管理記録表 ${month}</title>
+    <style>body{font-family:'Noto Sans JP',sans-serif;padding:24px;color:#222;} h1{font-size:18px;} table{border-collapse:collapse;width:100%;} th,td{border:1px solid #666;padding:3px 5px;font-size:10.5px;} th{background:#f0f0f0;} p{font-size:11px;}</style></head><body>
+    <h1>清掃・衛生管理記録表（${y}年${m}月）</h1>
+    <p>施設名: 館山ジビエセンター　／　HACCPに基づく衛生管理・国産ジビエ認証ガイドライン準拠　／　○=実施（下段: 実施者・庫内温度）</p>
+    <table><thead><tr><th>日付</th>${CLEAN_ROOMS.map(r => `<th>${r.key}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>
+    <p>確認者サイン: ＿＿＿＿＿＿＿＿　　発行日: ${new Date().toLocaleDateString('ja-JP')}</p>
+    </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) { toast('ポップアップがブロックされました', 'error'); return; }
+    w.document.write(html); w.document.close();
+    setTimeout(() => w.print(), 300);
+  } catch (err) { toast('記録表の作成に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+/* ───────── 資材在庫 ───────── */
+let suppliesData = [];
+let supplyEditId = null;
+const SUPPLY_FIELDS = ['name', 'category', 'unit', 'stock_qty', 'min_qty', 'supplier', 'memo'];
+
+async function loadSupplies() {
+  const body = document.getElementById('supplies-body');
+  body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
+  try {
+    suppliesData = await sb('GET', 'supplies', null, '?select=*&deleted_at=is.null&order=name.asc');
+    const low = suppliesData.filter(s => Number(s.stock_qty) <= Number(s.min_qty));
+    const warn = document.getElementById('supply-warn');
+    if (low.length) {
+      warn.style.display = 'block';
+      warn.innerHTML = `⚠ <strong>発注が必要: ${low.length}品目</strong> — ${low.map(s => esc2(s.name)).join('、')}`;
+    } else warn.style.display = 'none';
+    if (!suppliesData.length) { body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);">資材が未登録です。「＋資材を追加」から登録してください。</td></tr>'; return; }
+    body.innerHTML = suppliesData.map(s => {
+      const isLow = Number(s.stock_qty) <= Number(s.min_qty);
+      return `<tr style="${isLow ? 'background:rgba(200,80,80,.08);' : ''}">
+        <td style="font-weight:600;">${esc2(s.name)} ${isLow ? '<span class="badge badge-red">要発注</span>' : ''}</td>
+        <td>${esc2(s.category || '-')}</td>
+        <td style="text-align:right;font-weight:700;font-size:15px;">${s.stock_qty != null ? s.stock_qty : '-'}</td>
+        <td>${esc2(s.unit || '-')}</td>
+        <td style="text-align:right;color:var(--text2);">${s.min_qty != null ? s.min_qty : '-'}</td>
+        <td>${esc2(s.supplier || '-')}</td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-sm" style="font-size:16px;padding:4px 14px;" onclick="supplyAdjust('${s.id}',-1)">−</button>
+          <button class="btn btn-sm" style="font-size:16px;padding:4px 14px;" onclick="supplyAdjust('${s.id}',1)">＋</button>
+          <button class="btn btn-sm" onclick="supplyEdit('${s.id}')">編集</button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);">${esc2(sbSafeMsg(err))}</td></tr>`;
+  }
+}
+
+async function supplyAdjust(id, delta) {
+  const s = suppliesData.find(x => String(x.id) === String(id));
+  if (!s) return;
+  const next = Math.max(0, (Number(s.stock_qty) || 0) + delta);
+  try {
+    await sb('PATCH', 'supplies', { stock_qty: next, updated_at: new Date().toISOString() }, '?id=eq.' + id);
+    loadSupplies(); refreshNavBadges();
+  } catch (err) { toast('在庫数の更新に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+function supplyOpenNew() {
+  supplyEditId = null;
+  document.getElementById('supplyModalTitle').textContent = '資材 新規登録';
+  SUPPLY_FIELDS.forEach(f => document.getElementById('sup-f-' + f).value = '');
+  document.getElementById('supplyModal').style.display = 'block';
+}
+
+function supplyEdit(id) {
+  const s = suppliesData.find(x => String(x.id) === String(id));
+  if (!s) return;
+  supplyEditId = id;
+  document.getElementById('supplyModalTitle').textContent = '資材情報編集';
+  SUPPLY_FIELDS.forEach(f => document.getElementById('sup-f-' + f).value = s[f] != null ? s[f] : '');
+  document.getElementById('supplyModal').style.display = 'block';
+}
+
+async function supplySave() {
+  const payload = {};
+  SUPPLY_FIELDS.forEach(f => {
+    let v = document.getElementById('sup-f-' + f).value.trim();
+    if (f === 'stock_qty' || f === 'min_qty') v = v === '' ? 0 : parseFloat(v);
+    payload[f] = v === '' ? null : v;
+  });
+  if (!payload.name) { toast('品名は必須です', 'error'); return; }
+  try {
+    if (supplyEditId) { await sb('PATCH', 'supplies', payload, '?id=eq.' + supplyEditId); toast(`資材「${payload.name}」を更新しました`); }
+    else { await sb('POST', 'supplies', payload); toast(`資材「${payload.name}」を登録しました`); }
+    document.getElementById('supplyModal').style.display = 'none';
+    loadSupplies(); refreshNavBadges();
+  } catch (err) { toast('保存に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+function supplyOrderList() {
+  const low = suppliesData.filter(s => Number(s.stock_qty) <= Number(s.min_qty));
+  if (!low.length) { toast('発注が必要な資材はありません', 'info'); return; }
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>資材発注リスト</title>
+  <style>body{font-family:'Noto Sans JP',sans-serif;padding:32px;color:#222;} table{border-collapse:collapse;width:100%;} th,td{border:1px solid #999;padding:6px 10px;font-size:13px;} th{background:#f0f0f0;}</style></head><body>
+  <h1 style="font-size:18px;">資材発注リスト（${new Date().toLocaleDateString('ja-JP')}）</h1>
+  <table><thead><tr><th>品名</th><th>分類</th><th>現在庫</th><th>発注点</th><th>仕入先</th><th>発注数</th></tr></thead>
+  <tbody>${low.map(s => `<tr><td>${esc2(s.name)}</td><td>${esc2(s.category || '')}</td><td>${s.stock_qty}${esc2(s.unit || '')}</td><td>${s.min_qty}${esc2(s.unit || '')}</td><td>${esc2(s.supplier || '')}</td><td></td></tr>`).join('')}</tbody></table>
+  </body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { toast('ポップアップがブロックされました', 'error'); return; }
+  w.document.write(html); w.document.close();
+  setTimeout(() => w.print(), 300);
+}
+
+/* ───────── データ管理（CSV・チェック・フラグ） ───────── */
+const CSV_TABLES = [
+  ['individuals', '個体（捕獲受入）'], ['inventory', '在庫'], ['processing_log', '精肉加工履歴'],
+  ['orders', '注文'], ['order_items', '注文明細'], ['shipments', '発送'],
+  ['hunters', '捕獲者台帳'], ['staff', 'スタッフ'], ['attendance', '出退勤'],
+  ['cleaning_logs', '清掃記録'], ['supplies', '資材在庫'],
+];
+
+function loadDataMgmt() {
+  const grid = document.getElementById('csv-buttons');
+  grid.innerHTML = CSV_TABLES.map(([t, label]) => `<button class="btn" onclick="exportCSV('${t}','${label}')">⬇ ${label}</button>`).join('');
+  loadFlags();
+}
+
+async function exportCSV(table, label) {
+  try {
+    const rows = await sb('GET', table, null, '?select=*&limit=10000');
+    if (!rows.length) { toast(`${label}: データがありません`, 'info'); return; }
+    const cols = [...new Set(rows.flatMap(r => Object.keys(r)))];
+    const escCsv = v => { const s = v == null ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v)); return '"' + s.replace(/"/g, '""') + '"'; };
+    const csv = '﻿' + cols.join(',') + '\n' + rows.map(r => cols.map(c => escCsv(r[c])).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = `${table}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast(`${label} ${rows.length}件をCSV出力しました`);
+  } catch (err) { toast(`${label} のCSV出力に失敗しました: ` + sbSafeMsg(err), 'error'); }
+}
+
+async function runDataChecks() {
+  const out = document.getElementById('check-results');
+  out.innerHTML = '<div class="loading"><span class="spin"></span>チェック中...</div>';
+  const issues = [];
+  try {
+    const [inds, invs, orders, items] = await Promise.all([
+      sb('GET', 'individuals', null, '?select=label_id,species,capture_date,aging_method,aging_started_at,aging_ended_at&deleted_at=is.null&limit=2000'),
+      sb('GET', 'inventory', null, '?select=id,ident_code,individual_id,weight,status&deleted_at=is.null&limit=2000'),
+      sb('GET', 'orders', null, '?select=id,order_code,status&limit=1000'),
+      sb('GET', 'order_items', null, '?select=id,order_id,inventory_id,part_name&limit=2000'),
+    ]);
+    // 1. 個体番号の重複
+    const seen = new Set();
+    inds.forEach(i => { if (seen.has(i.label_id)) issues.push({ target: `individuals / ${i.label_id}`, msg: '個体番号が重複しています' }); seen.add(i.label_id); });
+    // 2. 重量未入力の在庫
+    invs.filter(v => v.status === '在庫' && (!v.weight || v.weight <= 0)).forEach(v => issues.push({ target: `inventory / ${v.ident_code}`, msg: '在庫なのに重量が未入力（0kg）です' }));
+    // 3. 個体台帳に存在しない個体番号を持つ在庫
+    const indSet = new Set(inds.map(i => i.label_id));
+    invs.filter(v => v.individual_id && !indSet.has(v.individual_id)).forEach(v => issues.push({ target: `inventory / ${v.ident_code}`, msg: `在庫の個体番号 ${v.individual_id} が個体台帳にありません` }));
+    // 4. 発送済注文で在庫未割当の明細
+    const shipped = new Set(orders.filter(o => o.status === '発送済').map(o => String(o.id)));
+    items.filter(it => shipped.has(String(it.order_id)) && !it.inventory_id).forEach(it => issues.push({ target: `order_items / ${it.id}`, msg: `発送済注文の明細「${it.part_name || '-'}」に在庫が割当てられていません` }));
+    // 5. 熟成の目安超過
+    inds.filter(i => i.aging_method === '熟成' && !i.aging_ended_at && agingDays(i.aging_started_at || i.capture_date, null) > 10)
+      .forEach(i => issues.push({ target: `individuals / ${i.label_id}`, msg: `熟成が${agingDays(i.aging_started_at || i.capture_date, null)}日を超えています（目安7日）` }));
+  } catch (err) {
+    out.innerHTML = `<div class="empty-state" style="color:var(--red);">チェックに失敗しました: ${esc2(sbSafeMsg(err))}</div>`;
+    return;
+  }
+  if (!issues.length) {
+    out.innerHTML = '<div style="padding:12px;border:1px solid rgba(106,158,90,.4);border-radius:var(--radius);color:var(--green);">✅ 自動チェックで問題は見つかりませんでした</div>';
+    return;
+  }
+  out.innerHTML = `<div style="margin-bottom:8px;color:var(--red);font-weight:600;">⚠ ${issues.length}件の気になる点が見つかりました</div>` +
+    issues.map(i => `<div style="display:flex;gap:10px;align-items:center;padding:8px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;font-size:13px;flex-wrap:wrap;">
+      <strong style="color:var(--gold);white-space:nowrap;">${esc2(i.target)}</strong><span>${esc2(i.msg)}</span>
+      <button class="btn btn-sm" style="margin-left:auto;" onclick="flagPrefill('${esc2(i.target)}','${esc2(i.msg)}')">🚩 フラグを立てる</button>
+    </div>`).join('');
+}
+
+function flagPrefill(target, msg) {
+  document.getElementById('flag-target').value = target;
+  document.getElementById('flag-comment').value = msg;
+  document.getElementById('flag-target').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+async function flagSave() {
+  const target = document.getElementById('flag-target').value.trim();
+  const comment = document.getElementById('flag-comment').value.trim();
+  const by = document.getElementById('flag-by').value.trim();
+  if (!target || !comment) { toast('対象と内容を入力してください', 'error'); return; }
+  try {
+    await sb('POST', 'data_flags', { target: target, comment: comment, flagged_by: by || null, status: '未対応' });
+    toast('フラグを記録しました');
+    document.getElementById('flag-target').value = '';
+    document.getElementById('flag-comment').value = '';
+    loadFlags();
+  } catch (err) { toast('フラグの記録に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+async function loadFlags() {
+  const body = document.getElementById('flags-body');
+  try {
+    const flags = await sb('GET', 'data_flags', null, '?select=*&order=created_at.desc&limit=100');
+    body.innerHTML = flags.length ? flags.map(f => `<tr style="${f.status === '対応済' ? 'opacity:.55;' : ''}">
+      <td>${fmtDt(f.created_at)}</td><td style="color:var(--gold);">${esc2(f.target)}</td><td>${esc2(f.comment)}</td><td>${esc2(f.flagged_by || '-')}</td>
+      <td>${f.status === '対応済' ? '<span class="badge badge-green">対応済</span>' : `<button class="btn btn-sm" onclick="flagResolve('${f.id}')">対応済にする</button>`}</td>
+    </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--text3);">フラグはありません</td></tr>';
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--red);">${esc2(sbSafeMsg(err))}</td></tr>`;
+  }
+}
+
+async function flagResolve(id) {
+  try {
+    await sb('PATCH', 'data_flags', { status: '対応済' }, '?id=eq.' + id);
+    loadFlags();
+  } catch (err) { toast('更新に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+/* ───────── 冷凍庫ロケーション（精肉モード連携） ───────── */
+async function loadFreezerOptions() {
+  const sel = document.getElementById('pmLocationSel');
+  if (!sel) return;
+  let options = [];
+  try {
+    const fr = await sb('GET', 'freezers', null, '?select=*&order=code.asc');
+    options = fr.map(f => ({ code: f.code, name: f.name || f.code }));
+  } catch (e) { /* freezersテーブル未作成なら選択なしのまま（既存DBを壊さない） */ }
+  sel.innerHTML = '<option value="">未指定</option>' + options.map(o => `<option value="${esc2(o.code)}">${esc2(o.code)} ${esc2(o.name !== o.code ? o.name : '')}</option>`).join('');
+}
+
+function pmGetLocationCode() {
+  const sel = document.getElementById('pmLocationSel');
+  return sel && sel.value ? sel.value : null;
+}
+
+/* ───────── ナビバッジ / ダッシュボード追加カード ───────── */
+async function refreshNavBadges() {
+  const setBadge = (id, n, warn) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = n > 0 ? n : '';
+    el.classList.toggle('warn', !!warn && n > 0);
+  };
+  const setCard = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  // 熟成・精肉待ち
+  try {
+    const { inds, processedSet } = await fetchAgingData();
+    let agingN = 0, waitN = 0, intakeN = 0;
+    inds.forEach(i => {
+      const st = agingStateOf(i, processedSet);
+      if (st === '熟成中') agingN++;
+      else if (st === '精肉待ち') waitN++;
+      else if (st === '受入済') intakeN++;
+    });
+    setBadge('nav-badge-aging', agingN);
+    setBadge('nav-badge-processing', waitN);
+    setBadge('nav-badge-intake', intakeN);
+    setCard('dc-aging', agingN);
+  } catch (e) { setCard('dc-aging', '-'); }
+  // 出荷待ち注文
+  try {
+    const orders = await sb('GET', 'orders', null, '?status=eq.確認済&select=id');
+    setBadge('nav-badge-shipping', orders.length);
+  } catch (e) {}
+  // 資材の発注点割れ
+  try {
+    const sup = await sb('GET', 'supplies', null, '?select=stock_qty,min_qty&deleted_at=is.null');
+    const low = sup.filter(s => Number(s.stock_qty) <= Number(s.min_qty)).length;
+    setBadge('nav-badge-supplies', low, true);
+    setCard('dc-supply', low);
+  } catch (e) { setCard('dc-supply', '-'); }
+  // 本日の清掃実施部屋数
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${today}T00:00:00&select=room`);
+    const done = new Set(logs.map(l => l.room)).size;
+    setBadge('nav-badge-cleaning', CLEAN_ROOMS.length - done, true);
+    setCard('dc-clean', `${done}/${CLEAN_ROOMS.length}`);
+  } catch (e) { setCard('dc-clean', '-'); }
+}
+
 /* ===== Init ===== */
 loadDashboard();
+refreshNavBadges();
+loadFreezerOptions();
 </script>
 
 <script>
