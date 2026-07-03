@@ -1180,6 +1180,25 @@ function fmt(d) {
   return new Date(d).toLocaleDateString('ja-JP');
 }
 
+/* ── コアDB保護: 破壊的操作は管理者コードが必要 ──
+   軸となるデータ（個体・在庫・加工履歴・注文連携）は日常業務のフロー以外から
+   簡単に書き換え・削除できないようにする。気づいた点はデータ管理のフラグで記録し、
+   修正は管理者が行う運用。 */
+function isAdminRole() { return sessionStorage.getItem('tg_role_v1') === 'admin'; }
+function requireAdmin(actionLabel) {
+  if (isAdminRole()) return true;
+  const code = prompt('「' + actionLabel + '」は管理者専用の操作です。\n誤操作からデータを守るため、管理者コードを入力してください。\n（気づいた点の共有は「データ管理 → 気になる点フラグ」へ）');
+  if (code === null) return false;
+  if (code.trim() === '2468') {
+    sessionStorage.setItem('tg_role_v1', 'admin');
+    toast('管理者として認証しました（このセッションの間有効）');
+    return true;
+  }
+  playFeedbackSound(false);
+  toast('管理者コードが違います。「' + actionLabel + '」は実行されませんでした。', 'error');
+  return false;
+}
+
 function fmtDt(d) {
   if (!d) return '-';
   const dt = new Date(d);
@@ -1498,6 +1517,7 @@ async function showDetailModal(item) {
 }
 
 async function changeStatus(id, code) {
+  if (!requireAdmin('在庫ステータスの手動変更')) return;
   const statuses = ['在庫', '引当済', '出荷済', '加工済', '廃棄'];
   const newStatus = prompt(`${code} のステータスを変更:\n${statuses.join(' / ')}`);
   if (!newStatus || !statuses.includes(newStatus)) return;
@@ -3472,6 +3492,7 @@ function indToggleAll(checked) {
 }
 
 async function indDelete(labelId) {
+  if (!requireAdmin('個体の削除')) return;
   if (!confirm(`「${labelId}」を削除しますか？\n削除履歴からいつでも復元できます。`)) return;
   try {
     await sb('PATCH', 'individuals', { deleted_at: new Date().toISOString() }, '?label_id=eq.' + encodeURIComponent(labelId));
@@ -3481,6 +3502,7 @@ async function indDelete(labelId) {
 }
 
 async function indBulkDelete() {
+  if (!requireAdmin('個体の一括削除')) return;
   const ids = [...document.querySelectorAll('.ind-chk:checked')].map(c => c.dataset.id);
   if (!ids.length) return;
   if (!confirm(`${ids.length}件を削除しますか？\n削除履歴からいつでも復元できます。`)) return;
@@ -3518,6 +3540,7 @@ function indHideTrash() {
 }
 
 async function indRestore(labelId) {
+  if (!requireAdmin('削除済み個体の復元')) return;
   try {
     await sb('PATCH', 'individuals', { deleted_at: null }, '?label_id=eq.' + encodeURIComponent(labelId));
     toast(`${labelId} を復元しました`);
@@ -3638,6 +3661,7 @@ function invToggleAll(checked) {
 }
 
 async function invDelete(id) {
+  if (!requireAdmin('在庫の削除')) return;
   if (!confirm('この在庫レコードを削除しますか？\n削除履歴からいつでも復元できます。')) return;
   try {
     await sb('PATCH', 'inventory', { deleted_at: new Date().toISOString() }, '?id=eq.' + id);
@@ -3647,6 +3671,7 @@ async function invDelete(id) {
 }
 
 async function invBulkDelete() {
+  if (!requireAdmin('在庫の一括削除')) return;
   const ids = [...document.querySelectorAll('.inv-chk:checked')].map(c => c.dataset.id);
   if (!ids.length) return;
   if (!confirm(`${ids.length}件を削除しますか？\n削除履歴からいつでも復元できます。`)) return;
@@ -3683,6 +3708,7 @@ function invHideTrash() {
 }
 
 async function invRestore(id) {
+  if (!requireAdmin('削除済み在庫の復元')) return;
   try {
     await sb('PATCH', 'inventory', { deleted_at: null }, '?id=eq.' + id);
     toast('復元しました');
@@ -4020,6 +4046,7 @@ function attHours(a) {
 }
 
 async function payrollCalc() {
+  if (!requireAdmin('給与明細の作成')) return;
   const staffId = document.getElementById('pay-staff').value;
   const month = document.getElementById('pay-month').value;
   const out = document.getElementById('payroll-result');
@@ -4486,6 +4513,7 @@ loadFreezerOptions();
     if(code.length<4) return;
     if(CODES.indexOf(code)!==-1){
       sessionStorage.setItem(KEY,'ok');
+      sessionStorage.setItem('tg_role_v1', code==='2468' ? 'admin' : 'staff');
       gate.classList.add('hidden');
     } else {
       errEl.textContent='コードが違います';
