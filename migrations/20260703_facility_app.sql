@@ -1,7 +1,9 @@
--- 施設アプリ化 追加スキーマ（2026-07-03）
--- 適用前に必ずバックアップを取得すること。
--- このSQLは追加のみ（CREATE TABLE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS）で、
--- 既存テーブル・既存データは変更しない。
+-- 施設アプリ化 追加スキーマ（2026-07-03 適用済み）
+-- 本番DB(clpdyrehdgzgiidbfucj)の実スキーマ確認後に調整した版。
+-- 追加のみ（CREATE TABLE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS）で、
+-- 既存テーブル・既存カラム・既存データは変更しない。
+-- RLSは既存テーブルと同じパターン（有効化 + allow_all ポリシー）に合わせる。
+-- ※staffテーブルは既存（シフト管理用: id/name/color/is_active）のためカラム追加で拡張。
 
 -- ── 捕獲者台帳 ──
 create table if not exists hunters (
@@ -22,23 +24,17 @@ create table if not exists hunters (
   deleted_at timestamptz
 );
 
--- ── スタッフ ──
-create table if not exists staff (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  role text,
-  phone text,
-  hire_date date,
-  employment_type text,     -- 時給 / 月給
-  hourly_wage numeric,
-  monthly_salary numeric,
-  social_insurance text,    -- 加入 / 未加入
-  employment_insurance text,-- 加入 / 未加入
-  memo text,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now(),
-  deleted_at timestamptz
-);
+-- ── スタッフ（既存テーブルに人事・給与カラムを追加） ──
+alter table staff add column if not exists role text;
+alter table staff add column if not exists phone text;
+alter table staff add column if not exists hire_date date;
+alter table staff add column if not exists employment_type text;      -- 時給 / 月給
+alter table staff add column if not exists hourly_wage numeric;
+alter table staff add column if not exists monthly_salary numeric;
+alter table staff add column if not exists social_insurance text;     -- 加入 / 未加入
+alter table staff add column if not exists employment_insurance text; -- 加入 / 未加入
+alter table staff add column if not exists memo text;
+alter table staff add column if not exists deleted_at timestamptz;
 
 -- ── 出退勤 ──
 create table if not exists attendance (
@@ -86,7 +82,7 @@ create table if not exists supplies (
 -- ── 冷凍庫ロケーションマスタ ──
 create table if not exists freezers (
   id uuid primary key default gen_random_uuid(),
-  code text not null unique, -- 例: F1-A
+  code text not null unique, -- 例: F1
   name text,
   note text,
   created_at timestamptz default now()
@@ -116,7 +112,34 @@ alter table individuals add column if not exists aging_ended_at timestamptz;
 -- ── 在庫（inventory）への追加カラム ──
 alter table inventory add column if not exists location_code text;        -- 冷凍庫ロケーション
 
--- ── 冷凍庫の初期データ（任意・実際の構成に合わせて変更） ──
+-- ── RLS: 既存テーブルと同じパターン（有効化 + allow_all） ──
+alter table hunters enable row level security;
+alter table attendance enable row level security;
+alter table cleaning_logs enable row level security;
+alter table supplies enable row level security;
+alter table freezers enable row level security;
+alter table data_flags enable row level security;
+
+do $$ begin
+  create policy allow_all on hunters for all using (true) with check (true);
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy allow_all on attendance for all using (true) with check (true);
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy allow_all on cleaning_logs for all using (true) with check (true);
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy allow_all on supplies for all using (true) with check (true);
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy allow_all on freezers for all using (true) with check (true);
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy allow_all on data_flags for all using (true) with check (true);
+exception when duplicate_object then null; end $$;
+
+-- ── 冷凍庫の初期データ（実際の構成に合わせて後から編集可） ──
 insert into freezers (code, name)
 values ('F1', '冷凍庫1（大型ストッカー）'), ('F2', '冷凍庫2（大型ストッカー）'), ('F3', '冷凍庫3（小型）'), ('R1', '冷蔵庫1（熟成用）')
 on conflict (code) do nothing;
