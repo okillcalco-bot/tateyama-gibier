@@ -8,11 +8,12 @@
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.min.js"></script>
 <style>
 :root {
-  --bg: #0d0f0a; --surface: #141710; --surface2: #1c1f16;
-  --border: #2a2e22; --border2: #363b2a;
-  --gold: #c8a45a; --gold2: #a07e38; --gold-light: #e8c878;
-  --text: #e8e4d8; --text2: #8a8670; --text3: #5a5848;
-  --red: #c85050; --green: #6a9e5a; --blue: #5a8cd8;
+  /* ライトテーマ: 白基調・清潔感優先 */
+  --bg: #f5f6f2; --surface: #ffffff; --surface2: #eff1ea;
+  --border: #dfe3d6; --border2: #c7ccba;
+  --gold: #8d6a1d; --gold2: #97772a; --gold-light: #6e5314;
+  --text: #23271c; --text2: #626854; --text3: #9aa08c;
+  --red: #b93d3d; --green: #3d7a34; --blue: #2f66b5;
   --radius: 8px;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -219,7 +220,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .pm-header-ops{display:flex;align-items:center;gap:5px;flex:1;flex-wrap:wrap;}
 .pm-op-btn{padding:5px 12px;border-radius:14px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-size:12px;cursor:pointer;transition:all .2s;white-space:nowrap;position:relative;font-family:inherit;}
 .pm-op-btn:hover{border-color:var(--gold2);color:var(--gold);}
-.pm-op-btn.active{background:var(--gold);color:#1a1a0f;border-color:var(--gold);font-weight:700;}
+.pm-op-btn.active{background:var(--gold);color:#fff;border-color:var(--gold);font-weight:700;}
 .pm-op-btn .session-dot{position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;background:var(--green);border:1px solid var(--bg);}
 .pm-header-right{display:flex;align-items:center;gap:8px;flex:0 0 auto;}
 .pm-close{background:none;border:1px solid var(--border);color:var(--text2);padding:5px 12px;border-radius:var(--radius);cursor:pointer;font-size:13px;transition:all .2s;font-family:inherit;}
@@ -263,9 +264,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .part-btn{min-height:70px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:var(--surface2);border:2px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:16px;font-weight:600;cursor:pointer;transition:all .15s;user-select:none;-webkit-tap-highlight-color:transparent;position:relative;padding:8px 6px;}
 .part-btn:hover{border-color:var(--gold2);background:rgba(200,164,90,.05);}
 .part-btn:active{transform:scale(.97);}
-.part-btn.active{background:var(--gold);color:#1a1a0f;border-color:var(--gold);}
+.part-btn.active{background:var(--gold);color:#fff;border-color:var(--gold);}
 .part-btn .part-btn-done{position:absolute;top:3px;right:5px;font-size:11px;color:var(--green);}
-.part-btn.active .part-btn-done{color:rgba(26,26,15,.7);}
+.part-btn.active .part-btn-done{color:rgba(255,255,255,.85);}
 
 /* Weight Area */
 .pm-weight-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;text-align:center;flex-shrink:0;}
@@ -273,7 +274,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .pm-weight-selected strong{color:var(--gold);font-size:17px;}
 .pm-weight-display{font-size:56px;font-weight:700;color:var(--gold-light);font-variant-numeric:tabular-nums;letter-spacing:2px;line-height:1.1;margin:6px 0;}
 .pm-weight-unit{font-size:22px;color:var(--text2);font-weight:400;}
-.pm-measure-btn{display:block;width:100%;padding:18px;font-size:22px;font-weight:700;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#1a1a0f;border:none;border-radius:var(--radius);cursor:pointer;transition:all .2s;margin-top:10px;font-family:inherit;}
+.pm-measure-btn{display:block;width:100%;padding:18px;font-size:22px;font-weight:700;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#fff;border:none;border-radius:var(--radius);cursor:pointer;transition:all .2s;margin-top:10px;font-family:inherit;}
 .pm-measure-btn:hover{background:linear-gradient(135deg,var(--gold),var(--gold-light));box-shadow:0 4px 16px rgba(200,164,90,.3);}
 .pm-measure-btn:active{transform:scale(.99);}
 .pm-measure-btn:disabled{opacity:.4;cursor:not-allowed;box-shadow:none;}
@@ -319,6 +320,33 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   .pm-label-barcode-text { font-size: 7px; font-family: monospace; text-align: center; border-top: 0.5pt solid #000; margin-top: 1mm; padding-top: 0.5mm; letter-spacing: 1px; }
   .pm-label-expiry { font-size: 8.5px; font-weight: bold; border-top: 0.5pt solid #000; margin-top: 1mm; padding-top: 0.5mm; }
 }
+
+/* Sync Status Section */
+.sync-flow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.sync-node{text-align:center;min-width:80px;padding:10px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);}
+.sync-node.s-done{border-color:#2e8b46;background:rgba(74,222,128,.08);}
+.sync-node.s-wait{border-color:var(--gold);background:rgba(200,164,90,.08);}
+.sync-node.s-proc{border-color:#2f66b5;background:rgba(96,165,250,.08);}
+.sync-num{font-size:24px;font-weight:700;color:var(--gold);}
+.sync-node.s-done .sync-num{color:#2e8b46;}
+.sync-node.s-wait .sync-num{color:var(--gold2);}
+.sync-node.s-proc .sync-num{color:#2f66b5;}
+.sync-lbl{font-size:11px;color:var(--text2);margin-top:4px;line-height:1.4;}
+.sync-arr{font-size:20px;color:var(--border);flex-shrink:0;}
+.ind-sync-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;}
+.ind-sync-done{background:rgba(74,222,128,.15);color:#2e8b46;}
+.ind-sync-wait{background:rgba(200,164,90,.12);color:var(--gold2);}
+
+/* Passcode Gate */
+#passcode-gate{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;}
+#passcode-gate.hidden{display:none;}
+.pc-logo{font-size:24px;font-weight:700;color:var(--gold);letter-spacing:.5px;}
+.pc-sub{font-size:13px;color:var(--text2);margin-top:-16px;}
+.pc-inputs{display:flex;gap:12px;margin-top:8px;}
+.pc-input{width:56px;height:64px;text-align:center;font-size:28px;font-weight:700;background:var(--surface2);border:2px solid var(--border);border-radius:var(--radius);color:var(--text);outline:none;caret-color:var(--gold);}
+.pc-input:focus{border-color:var(--gold);}
+.pc-error{font-size:13px;color:var(--red);min-height:18px;text-align:center;}
+.pc-hint{font-size:11px;color:var(--text3);text-align:center;margin-top:4px;}
 </style>
 </head>
 <body>
@@ -3178,7 +3206,7 @@ function pmRenderCompleted() {
 
   grid.innerHTML = pmCompletedParts.map(c => {
     const gradeBadge = c.grade && c.grade !== '並' ? `<span style="font-size:10px;color:var(--gold);margin-left:2px;">${c.grade}</span>` : '';
-    const boneBadge = c.bone_in ? `<span style="font-size:10px;color:#8acfcf;margin-left:2px;">骨付き</span>` : '';
+    const boneBadge = c.bone_in ? `<span style="font-size:10px;color:#2e7d7d;margin-left:2px;">骨付き</span>` : '';
     return `<div class="pm-completed-chip">
       <span>✓</span>
       <span class="chip-name">${c.part_name}</span>${gradeBadge}${boneBadge}
@@ -3291,32 +3319,6 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
   `;
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${css}
-/* Sync Status Section */
-.sync-flow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
-.sync-node{text-align:center;min-width:80px;padding:10px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);}
-.sync-node.s-done{border-color:#4ade80;background:rgba(74,222,128,.08);}
-.sync-node.s-wait{border-color:var(--gold);background:rgba(200,164,90,.08);}
-.sync-node.s-proc{border-color:#60a5fa;background:rgba(96,165,250,.08);}
-.sync-num{font-size:24px;font-weight:700;color:var(--gold);}
-.sync-node.s-done .sync-num{color:#4ade80;}
-.sync-node.s-wait .sync-num{color:var(--gold2);}
-.sync-node.s-proc .sync-num{color:#60a5fa;}
-.sync-lbl{font-size:11px;color:var(--text2);margin-top:4px;line-height:1.4;}
-.sync-arr{font-size:20px;color:var(--border);flex-shrink:0;}
-.ind-sync-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;}
-.ind-sync-done{background:rgba(74,222,128,.15);color:#4ade80;}
-.ind-sync-wait{background:rgba(200,164,90,.12);color:var(--gold2);}
-
-/* Passcode Gate */
-#passcode-gate{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;}
-#passcode-gate.hidden{display:none;}
-.pc-logo{font-size:24px;font-weight:700;color:var(--gold);letter-spacing:.5px;}
-.pc-sub{font-size:13px;color:var(--text2);margin-top:-16px;}
-.pc-inputs{display:flex;gap:12px;margin-top:8px;}
-.pc-input{width:56px;height:64px;text-align:center;font-size:28px;font-weight:700;background:var(--surface2);border:2px solid var(--border);border-radius:var(--radius);color:var(--text);outline:none;caret-color:var(--gold);}
-.pc-input:focus{border-color:var(--gold);}
-.pc-error{font-size:13px;color:var(--red);min-height:18px;text-align:center;}
-.pc-hint{font-size:11px;color:var(--text3);text-align:center;margin-top:4px;}
 </style></head><body>
     <div class="o">${origin}　${speciesName}</div>
     <div class="id">個体管理番号　${pmIndividual.label_id}</div>
