@@ -644,6 +644,20 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 
   <!-- Shipping -->
   <div class="tab-panel" id="panel-shipping">
+    <div class="section" id="ship-workbench">
+      <div class="section-title">バーコード出荷スキャン</div>
+      <div id="ship-selected-order" style="margin-bottom:10px;padding:10px 14px;border-radius:var(--radius);border:1px dashed var(--border);background:var(--surface2);font-size:14px;color:var(--text2);">
+        出庫先の注文が未選択です。下の注文一覧から「📌 この注文に割当」を押してください。
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;">
+        <input class="form-input" id="ship-scan-code" placeholder="バーコードをスキャン（識別コード）" autocomplete="off" style="flex:1;min-width:240px;font-size:20px;padding:14px 16px;" />
+        <button class="btn btn-primary" id="ship-scan-submit" onclick="handleShippingScan()" style="font-size:18px;padding:14px 28px;min-width:140px;">読取登録</button>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px;">
+        <div class="form-group" style="margin:0;"><label>出荷担当者（確認画面に表示）</label><input class="form-input" id="ship-operator" placeholder="担当者名" style="max-width:220px;" /></div>
+      </div>
+      <div id="ship-scan-result" style="display:none;margin-top:12px;padding:12px 14px;border-radius:var(--radius);font-size:14px;line-height:1.6;"></div>
+    </div>
     <div class="section">
       <div class="section-title">出荷待ち注文一覧</div>
       <div id="ship-orders"><div class="loading"><span class="spin"></span>読み込み中...</div></div>
@@ -739,6 +753,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
             </div>
           </div>
         </div>
+        <div id="pmLastActionCard" style="display:none;margin-top:8px;padding:10px 12px;border-radius:var(--radius);border:1px solid var(--gold2);background:var(--surface2);">
+          <div style="font-size:11px;color:var(--gold);font-weight:600;letter-spacing:.05em;">✅ 直前登録</div>
+          <div id="pmLastActionBody" style="font-size:13px;line-height:1.6;margin-top:2px;"></div>
+        </div>
         <div class="pm-completed-section">
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <div style="font-size:13px;color:var(--gold);font-weight:600;">登録済み <span id="pmCompletedCount">(0件)</span></div>
@@ -808,6 +826,35 @@ function toast(msg, type = 'success') {
   setTimeout(() => el.remove(), 4000);
 }
 
+// 成功/失敗の操作音（Web Audio API 非対応でも処理は止めない）
+function playFeedbackSound(ok) {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    if (!playFeedbackSound._ctx) playFeedbackSound._ctx = new Ctx();
+    const ctx = playFeedbackSound._ctx;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    const beep = (freq, start, dur, type, gainVal) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(gainVal, ctx.currentTime + start);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(ctx.currentTime + start);
+      osc.stop(ctx.currentTime + start + dur);
+    };
+    if (ok) {
+      beep(880, 0, 0.12, 'sine', 0.25);
+      beep(1320, 0.13, 0.18, 'sine', 0.25);
+    } else {
+      beep(220, 0, 0.25, 'square', 0.2);
+      beep(180, 0.28, 0.35, 'square', 0.2);
+    }
+  } catch (e) { /* 音が鳴らなくても処理は継続 */ }
+}
+
 function fmt(d) {
   if (!d) return '-';
   return new Date(d).toLocaleDateString('ja-JP');
@@ -845,8 +892,16 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'inventory') loadInventory();
     if (btn.dataset.tab === 'individuals') indLoad();
     if (btn.dataset.tab === 'processing') loadProcessingSetup();
-    if (btn.dataset.tab === 'shipping') loadShipping();
+    if (btn.dataset.tab === 'shipping') { loadShipping(); setTimeout(maintainShippingScannerFocus, 50); }
   });
+});
+
+/* 出荷スキャン欄: スキャナーのEnterで読取登録 */
+document.getElementById('ship-scan-code').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    handleShippingScan();
+  }
 });
 
 /* ===== Barcode Scanner ===== */
@@ -1324,7 +1379,8 @@ async function submitProcessing() {
     const partsW = parts.reduce((s, p) => s + p.weight, 0);
     const yieldPct = totalW > 0 ? (partsW / totalW * 100).toFixed(1) : '-';
 
-    toast(`${parts.length}部位を登録しました (歩留まり: ${yieldPct}%)`);
+    toast(`${parts.length}部位を登録しました: ${parts.map(p => `${p.partName} ${p.weight}kg → ${p.identCode}`).join(' / ')} (歩留まり: ${yieldPct}%)`);
+    playFeedbackSound(true);
 
     // Reset
     selectedIndividual = null;
@@ -1335,7 +1391,8 @@ async function submitProcessing() {
     document.getElementById('proc-search').value = '';
     loadProcessingSetup();
   } catch (err) {
-    toast('登録エラー: ' + err.message, 'error');
+    playFeedbackSound(false);
+    toast('精肉登録に失敗しました: ' + err.message, 'error');
   } finally {
     document.getElementById('proc-submit-btn').disabled = false;
   }
@@ -1482,26 +1539,81 @@ async function traceSearch() {
 }
 
 /* ===== Shipping ===== */
+let shipSelectedOrderId = null;      // スキャン割当先として選択中の注文ID
+let shippingScanBusy = false;        // スキャン処理中の二重送信防止フラグ
+let shipConfirmDialogOpen = false;   // 確認ダイアログ表示中はフォーカスを奪わない
+let shipOrdersCache = {};            // orderId → { order, items }
+
+function maintainShippingScannerFocus() {
+  if (shipConfirmDialogOpen) return;
+  const panel = document.getElementById('panel-shipping');
+  if (!panel || !panel.classList.contains('active')) return;
+  const el = document.getElementById('ship-scan-code');
+  if (el && !el.disabled) el.focus();
+}
+
+function shipOrderLabel(order) {
+  return order ? (order.order_code || String(order.id).slice(0, 8)) : '-';
+}
+
+function shipScanShowResult(ok, html) {
+  const el = document.getElementById('ship-scan-result');
+  if (!el) return;
+  el.style.display = 'block';
+  el.style.border = '1px solid ' + (ok ? 'var(--green, #4caf50)' : 'var(--red, #e05555)');
+  el.style.background = 'var(--surface2)';
+  el.style.color = ok ? 'var(--green, #4caf50)' : 'var(--red, #e05555)';
+  el.innerHTML = (ok ? '✅ ' : '⛔ ') + html;
+}
+
+function shipSelectOrder(orderId) {
+  shipSelectedOrderId = orderId;
+  const cached = shipOrdersCache[orderId];
+  const el = document.getElementById('ship-selected-order');
+  if (el && cached) {
+    el.style.border = '1px solid var(--gold)';
+    el.style.color = 'var(--text)';
+    el.innerHTML = `📌 割当先: <strong style="color:var(--gold);">注文 ${shipOrderLabel(cached.order)}</strong> / ${cached.order.customer_name || '-'} / 配達予定: ${fmt(cached.order.delivery_date)} — バーコードをスキャンしてください`;
+  }
+  document.querySelectorAll('.order-card').forEach(c => c.style.outline = '');
+  const card = document.getElementById(`order-${orderId}`);
+  if (card) card.style.outline = '2px solid var(--gold)';
+  maintainShippingScannerFocus();
+}
+
 async function loadShipping() {
   const container = document.getElementById('ship-orders');
   container.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
   try {
     const orders = await sb('GET', 'orders', null, `?status=eq.確認済&select=*&order=delivery_date.asc`);
     if (!orders.length) {
+      shipOrdersCache = {};
       container.innerHTML = '<div class="empty-state">出荷待ちの注文はありません</div>';
       return;
     }
 
+    shipOrdersCache = {};
     let html = '';
     for (const order of orders) {
       const items = await sb('GET', 'order_items', null, `?order_id=eq.${order.id}&select=*`);
+      shipOrdersCache[order.id] = { order, items };
+      const assignedCount = items.filter(i => i.inventory_id).length;
+      const totalWeight = items.reduce((s, i) => s + (parseFloat(i.weight_kg || i.weight) || 0), 0);
+      const allAssigned = items.length > 0 && assignedCount === items.length;
+      const statusHtml = allAssigned
+        ? `<span class="badge badge-green">✅ 全行割当済み — 出荷確定できます</span>`
+        : `<span class="badge badge-red">⚠ 未割当 ${items.length - assignedCount}行あり</span>`;
       html += `<div class="order-card" id="order-${order.id}">
         <div class="order-card-header">
           <div>
-            <div class="order-code">${order.order_code || order.id.slice(0, 8)}</div>
+            <div class="order-code">${shipOrderLabel(order)}</div>
             <div class="order-meta">${order.customer_name || '-'} / 配達予定: ${fmt(order.delivery_date)} / ${order.channel || '-'}</div>
+            <div class="order-meta" style="margin-top:4px;">割当 <strong>${assignedCount} / ${items.length}行</strong> ・ 必要重量合計 <strong>${totalWeight.toFixed(1)}kg</strong> ${statusHtml}</div>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="shipOrder('${order.id}')" id="ship-btn-${order.id}" disabled>出荷処理</button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;">
+            <button class="btn btn-sm" onclick="shipSelectOrder('${order.id}')">📌 この注文に割当</button>
+            <button class="btn btn-primary btn-sm" onclick="shipOrder('${order.id}')" id="ship-btn-${order.id}" disabled>出荷確定</button>
+          </div>
         </div>
         <table>
           <thead><tr><th>種別</th><th>部位</th><th>重量(kg)</th><th>単価</th><th>小計</th><th>在庫割当</th></tr></thead>
@@ -1511,9 +1623,9 @@ async function loadShipping() {
         html += `<tr>
           <td>${speciesIcon(item.species)} ${item.species || '-'}</td>
           <td>${item.part_name || '-'}</td>
-          <td>${item.weight_kg || '-'}</td>
-          <td>${item.unit_price ? '\u00A5' + item.unit_price.toLocaleString() : '-'}</td>
-          <td>${item.subtotal ? '\u00A5' + parseFloat(item.subtotal).toLocaleString() : '-'}</td>
+          <td>${item.weight_kg || item.weight || '-'}</td>
+          <td>${item.unit_price ? '¥' + item.unit_price.toLocaleString() : '-'}</td>
+          <td>${item.subtotal ? '¥' + parseFloat(item.subtotal).toLocaleString() : '-'}</td>
           <td>${assigned
             ? `<span class="badge badge-blue">割当済</span>`
             : `<select class="assign-select" data-order-item-id="${item.id}" data-species="${item.species}" data-part="${item.part_name}" onchange="onAssignChange('${order.id}')">
@@ -1527,7 +1639,7 @@ async function loadShipping() {
     container.innerHTML = html;
 
     // Load available inventory for assignment dropdowns
-    const stockItems = await sb('GET', 'inventory', null, `?status=eq.在庫&select=id,ident_code,part_name,weight,individual_id`);
+    const stockItems = await sb('GET', 'inventory', null, `?status=eq.在庫&deleted_at=is.null&select=id,ident_code,part_name,weight,individual_id`);
     // Get species mapping
     const indIds = [...new Set(stockItems.map(i => i.individual_id).filter(Boolean))];
     let speciesMap = {};
@@ -1552,6 +1664,16 @@ async function loadShipping() {
         sel.appendChild(opt);
       });
     });
+
+    // 出荷確定ボタンの活性状態を初期評価（スキャン割当済み行を考慮）
+    orders.forEach(o => onAssignChange(o.id));
+    // 選択中注文の維持
+    if (shipSelectedOrderId && shipOrdersCache[shipSelectedOrderId]) {
+      shipSelectOrder(shipSelectedOrderId);
+    } else {
+      shipSelectedOrderId = null;
+      maintainShippingScannerFocus();
+    }
   } catch (err) {
     container.innerHTML = `<div class="empty-state" style="color:var(--red);">読み込みエラー: ${err.message}</div>`;
   }
@@ -1559,26 +1681,171 @@ async function loadShipping() {
 
 function onAssignChange(orderId) {
   const card = document.getElementById(`order-${orderId}`);
+  const btn = document.getElementById(`ship-btn-${orderId}`);
+  if (!card || !btn) return;
   const selects = card.querySelectorAll('.assign-select');
-  const allAssigned = [...selects].every(s => s.value);
-  document.getElementById(`ship-btn-${orderId}`).disabled = !allAssigned;
+  const cached = shipOrdersCache[orderId];
+  const hasItems = cached ? cached.items.length > 0 : true;
+  // 未割当行はドロップダウンとして描画されるため、全selectに値があれば全行割当可能
+  const allAssigned = hasItems && [...selects].every(s => s.value);
+  btn.disabled = !allAssigned;
 }
 
-async function shipOrder(orderId) {
-  const card = document.getElementById(`order-${orderId}`);
-  const selects = card.querySelectorAll('.assign-select');
-  const assignments = [];
-  selects.forEach(s => {
-    if (s.value) assignments.push({ orderItemId: s.dataset.orderItemId, inventoryId: s.value });
-  });
+/* ── バーコード出荷スキャン ── */
+function shipScanFail(message) {
+  shipScanShowResult(false, `読取失敗: ${message}`);
+  playFeedbackSound(false);
+}
 
-  if (!assignments.length) { toast('在庫を割り当ててください', 'error'); return; }
+async function handleShippingScan() {
+  if (shippingScanBusy) return;
+  const input = document.getElementById('ship-scan-code');
+  const btn = document.getElementById('ship-scan-submit');
+  const code = (input.value || '').trim();
+
+  if (!code) {
+    shipScanFail('バーコードが空です。スキャンし直すか、識別コードを入力してください。');
+    maintainShippingScannerFocus();
+    return;
+  }
+  if (!shipSelectedOrderId || !shipOrdersCache[shipSelectedOrderId]) {
+    shipScanFail(`出庫先の注文が未選択です。注文一覧の「📌 この注文に割当」を押してから「${code}」を再スキャンしてください。`);
+    input.value = '';
+    maintainShippingScannerFocus();
+    return;
+  }
+
+  shippingScanBusy = true;
+  input.disabled = true;
+  btn.disabled = true;
+  const btnOriginal = btn.textContent;
+  btn.textContent = '⏳ 読取中...';
 
   try {
-    // Update each inventory to 引当済 then 出荷済
-    for (const a of assignments) {
-      await sb('PATCH', 'inventory', { status: '出荷済', updated_at: new Date().toISOString() }, `?id=eq.${a.inventoryId}`);
+    const cached = shipOrdersCache[shipSelectedOrderId];
+    const orderLabel = shipOrderLabel(cached.order);
+
+    // 在庫を取得（削除済みも取得して理由を具体的に返す）
+    const rows = await sb('GET', 'inventory', null, `?ident_code=eq.${encodeURIComponent(code)}&select=*`);
+    if (!rows.length) { shipScanFail(`識別コード「${code}」の在庫が見つかりません。ラベルを確認してください。`); return; }
+    const inv = rows.find(r => !r.deleted_at) || rows[0];
+
+    if (inv.deleted_at) { shipScanFail(`「${code}」は削除済みの在庫です。割当できません。`); return; }
+    if (inv.status === '出荷済') { shipScanFail(`「${code}」はすでに出荷済みです。`); return; }
+    if (inv.status === '廃棄') { shipScanFail(`「${code}」は廃棄済みの在庫です。`); return; }
+
+    // 他注文への引当チェック
+    const linked = await sb('GET', 'order_items', null, `?inventory_id=eq.${inv.id}&select=id,order_id,part_name`);
+    if (linked.length) {
+      const sameOrder = linked.find(l => String(l.order_id) === String(shipSelectedOrderId));
+      if (sameOrder) { shipScanFail(`「${code}」はこの注文の商品行「${sameOrder.part_name || '-'}」にすでに割当済みです。`); return; }
+      shipScanFail(`「${code}」は他の注文に引当済みです（注文ID: ${String(linked[0].order_id).slice(0, 8)}）。`); return;
+    }
+    if (inv.status !== '在庫') { shipScanFail(`「${code}」はステータス「${inv.status || '-'}」のため割当できません（割当できるのは「在庫」のみ）。`); return; }
+
+    // 在庫の鳥獣種を特定（inventory.species が無い旧データは個体台帳から補完）
+    let invSpecies = inv.species || '';
+    if (!invSpecies && inv.individual_id) {
+      try {
+        const inds = await sb('GET', 'individuals', null, `?label_id=eq.${encodeURIComponent(inv.individual_id)}&select=species`);
+        if (inds.length) invSpecies = inds[0].species || '';
+      } catch (e) {}
+    }
+
+    // 割当先の商品行を決定（最新のorder_itemsを再取得して競合を防ぐ）
+    const items = await sb('GET', 'order_items', null, `?order_id=eq.${shipSelectedOrderId}&select=*`);
+    shipOrdersCache[shipSelectedOrderId].items = items;
+    const unassigned = items.filter(i => !i.inventory_id);
+    if (!unassigned.length) { shipScanFail(`注文 ${orderLabel} は全商品行が割当済みです。出荷確定に進んでください。`); return; }
+
+    const speciesOk = unassigned.filter(i => !i.species || !invSpecies || i.species === invSpecies);
+    if (!speciesOk.length) {
+      shipScanFail(`鳥獣種が一致しません。在庫「${code}」は ${invSpecies || '不明'} ですが、未割当の商品行は ${[...new Set(unassigned.map(i => i.species || '-'))].join('・')} です。`);
+      return;
+    }
+    const invPart = inv.part_name || '';
+    const target = speciesOk.find(i => i.part_name === invPart)
+      || speciesOk.find(i => i.part_name && invPart && invPart.includes(i.part_name));
+    if (!target) {
+      shipScanFail(`部位が一致しません。在庫「${code}」は「${invPart || '-'}」ですが、未割当の商品行は ${[...new Set(speciesOk.map(i => i.part_name || '-'))].join('・')} です。`);
+      return;
+    }
+
+    // 割当を保存: order_items に在庫を紐付け、在庫を引当済にする
+    await sb('PATCH', 'order_items', { inventory_id: inv.id }, `?id=eq.${target.id}`);
+    await sb('PATCH', 'inventory', { status: '引当済', updated_at: new Date().toISOString() }, `?id=eq.${inv.id}`);
+
+    const w = parseFloat(inv.weight || inv.weight_kg) || 0;
+    shipScanShowResult(true, `割当完了: <strong>${code}</strong>（${invPart || '-'} ${w ? w.toFixed(1) + 'kg' : '重量不明'}） → 注文 <strong>${orderLabel}</strong> / 商品行「${target.part_name || '-'}」`);
+    playFeedbackSound(true);
+    toast(`割当完了: ${code} → 注文 ${orderLabel}「${target.part_name || '-'}」`);
+    await loadShipping();
+  } catch (err) {
+    shipScanFail(`通信エラーで割当できませんでした: ${err.message}`);
+  } finally {
+    shippingScanBusy = false;
+    input.disabled = false;
+    btn.disabled = false;
+    btn.textContent = btnOriginal;
+    input.value = '';
+    maintainShippingScannerFocus();
+  }
+}
+
+/* ── 出荷確定（確認ダイアログ → shipOrderConfirmed でDB更新） ── */
+function shipOrder(orderId) {
+  const cached = shipOrdersCache[orderId];
+  if (!cached) { toast('注文情報を再読込してください', 'error'); loadShipping(); return; }
+
+  const card = document.getElementById(`order-${orderId}`);
+  const selects = card ? card.querySelectorAll('.assign-select') : [];
+  const dropdownAssignments = [];
+  let unassignedRemain = 0;
+  selects.forEach(s => {
+    if (s.value) dropdownAssignments.push({ orderItemId: s.dataset.orderItemId, inventoryId: s.value });
+    else unassignedRemain++;
+  });
+  const preAssigned = cached.items.filter(i => i.inventory_id);
+  if (!dropdownAssignments.length && !preAssigned.length) { toast('在庫を割り当ててください', 'error'); return; }
+  if (unassignedRemain > 0) { toast(`未割当の商品行が${unassignedRemain}行あります。全行に在庫を割り当ててから出荷確定してください。`, 'error'); return; }
+
+  const totalWeight = cached.items.reduce((s, i) => s + (parseFloat(i.weight_kg || i.weight) || 0), 0);
+  const operatorEl = document.getElementById('ship-operator');
+  const operator = operatorEl ? operatorEl.value.trim() : '';
+  const msg = [
+    '【出荷確定前確認】',
+    `注文番号: ${shipOrderLabel(cached.order)}`,
+    `顧客名: ${cached.order.customer_name || '-'}`,
+    `商品行数: ${cached.items.length}行（割当済み ${preAssigned.length + dropdownAssignments.length}行）`,
+    `合計必要重量: ${totalWeight.toFixed(1)}kg`,
+    `担当者: ${operator || '（未入力）'}`,
+    '',
+    '⚠ 出荷確定後、在庫・注文・発送履歴が更新されます。',
+    'この操作は取り消せません。実行しますか？'
+  ].join('\n');
+
+  shipConfirmDialogOpen = true;
+  const ok = confirm(msg);
+  shipConfirmDialogOpen = false;
+  if (!ok) { toast('出荷確定をキャンセルしました', 'info'); maintainShippingScannerFocus(); return; }
+  shipOrderConfirmed(orderId, dropdownAssignments);
+}
+
+async function shipOrderConfirmed(orderId, dropdownAssignments) {
+  const btn = document.getElementById(`ship-btn-${orderId}`);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 出荷処理中...'; }
+  try {
+    const cached = shipOrdersCache[orderId];
+
+    // ドロップダウン割当分: order_items に紐付けてから出荷済へ
+    for (const a of dropdownAssignments) {
       await sb('PATCH', 'order_items', { inventory_id: a.inventoryId }, `?id=eq.${a.orderItemId}`);
+      await sb('PATCH', 'inventory', { status: '出荷済', updated_at: new Date().toISOString() }, `?id=eq.${a.inventoryId}`);
+    }
+    // スキャン割当済み分（引当済）: 出荷済へ
+    const preAssigned = cached ? cached.items.filter(i => i.inventory_id) : [];
+    for (const item of preAssigned) {
+      await sb('PATCH', 'inventory', { status: '出荷済', updated_at: new Date().toISOString() }, `?id=eq.${item.inventory_id}`);
     }
 
     // Update order status
@@ -1596,10 +1863,20 @@ async function shipOrder(orderId) {
       }]);
     }
 
-    toast('出荷処理が完了しました');
+    playFeedbackSound(true);
+    toast(`注文 ${cached ? shipOrderLabel(cached.order) : orderId} の出荷処理が完了しました`);
+    if (shipSelectedOrderId === orderId) shipSelectedOrderId = null;
+    const selEl = document.getElementById('ship-selected-order');
+    if (selEl) {
+      selEl.style.border = '1px dashed var(--border)';
+      selEl.style.color = 'var(--text2)';
+      selEl.innerHTML = '出庫先の注文が未選択です。下の注文一覧から「📌 この注文に割当」を押してください。';
+    }
     loadShipping();
   } catch (err) {
+    playFeedbackSound(false);
     toast('出荷処理エラー: ' + err.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '出荷確定'; }
   }
 }
 
@@ -2180,6 +2457,22 @@ function pmNumDel() {
 
 // ── ラベル印刷のみ（登録なし） ──
 let pmLastPrintInfo = null; // 最後に登録したラベル情報を保持
+let pmLastLabelPrinted = false; // 直近の登録でラベル印刷が実行されたか
+let pmLastAction = null; // 直前登録カードの内容 { part, weight, ident, printed }
+
+// 直前登録カードの描画
+function pmShowLastAction(action) {
+  pmLastAction = action;
+  const card = document.getElementById('pmLastActionCard');
+  const body = document.getElementById('pmLastActionBody');
+  if (!card || !body) return;
+  if (!action) { card.style.display = 'none'; return; }
+  const printBadge = action.printed
+    ? '<span class="badge badge-green">ラベル印刷済み</span>'
+    : '<span class="badge badge-gray">登録のみ（ラベル未印刷）</span>';
+  body.innerHTML = `<strong>${action.part}</strong> / ${action.weight.toFixed(3)}kg → 在庫 <strong style="color:var(--gold);">${action.ident}</strong> ${printBadge}`;
+  card.style.display = 'block';
+}
 
 function pmPrintOnly() {
   if (!pmLastPrintInfo) {
@@ -2188,7 +2481,11 @@ function pmPrintOnly() {
   }
   const { weight_kg, lotCode, identCode, fullPartName, labelWeight } = pmLastPrintInfo;
   pmPrintLabel(weight_kg, lotCode, identCode, fullPartName, labelWeight);
-  toast('再印刷しました');
+  // 再印刷したら直前登録カードの印刷状態も更新
+  if (pmLastAction && pmLastAction.ident === identCode) {
+    pmShowLastAction({ ...pmLastAction, printed: true });
+  }
+  toast(`ラベルを再印刷しました: ${identCode}`);
 }
 
 // ── Bluetooth計量器 (SJ-15KAWAP-BT) Web Bluetooth API ──
@@ -2427,6 +2724,7 @@ function pmDoPrint(weight_kg) {
   const fullPart  = (pmBoneIn ? '骨付き ' : '') + baseName + (pmGrade !== '並' ? ' [' + pmGrade + ']' : '') + (pmRetail ? ' [小売]' : '');
   const lw        = (pmRetail && PM_RETAIL_WEIGHTS[baseName]) ? PM_RETAIL_WEIGHTS[baseName] : weight_kg;
   pmLastPrintInfo = { weight_kg, lotCode, identCode, fullPartName: fullPart, labelWeight: lw };
+  pmLastLabelPrinted = true; // 直前登録カードの「ラベル印刷済み」判定に使用
   pmPrintLabel(weight_kg, lotCode, identCode, fullPart, lw);  // ← window.print() はここで呼ばれる
 }
 
@@ -2543,10 +2841,13 @@ async function pmOnWeightReceived(weight_kg) {
       bone_in: pmBoneIn
     });
 
-    // 6. UI更新
+    // 6. UI更新（直前登録カード + 具体的なtoast + 成功音）
     pmRenderParts();
     pmRenderCompleted();
-    toast(`${fullPartName} ${weight_kg.toFixed(3)}kg 登録完了`);
+    pmShowLastAction({ part: fullPartName, weight: weight_kg, ident: identCode, printed: pmLastLabelPrinted });
+    pmLastLabelPrinted = false;
+    toast(`${fullPartName} ${weight_kg.toFixed(3)}kg → 在庫 ${identCode} 登録完了`);
+    playFeedbackSound(true);
 
     // 7. リセット
     document.getElementById('pmMeasureBtn').textContent = '登録';
@@ -2557,7 +2858,9 @@ async function pmOnWeightReceived(weight_kg) {
     refocusScaleInput();
 
   } catch(err) {
-    toast('登録エラー: ' + err.message, 'error');
+    pmLastLabelPrinted = false;
+    playFeedbackSound(false);
+    toast('精肉登録に失敗しました: ' + err.message, 'error');
     document.getElementById('pmMeasureBtn').textContent = '登録';
     document.getElementById('pmMeasureBtn').disabled = false;
     document.getElementById('pmMeasureBtn').onclick = pmStartMeasure;
