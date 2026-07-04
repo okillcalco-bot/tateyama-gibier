@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>館山ジビエセンター 在庫管理</title>
+<title>館山ジビエセンター 業務</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.min.js"></script>
 <style>
@@ -369,7 +369,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 </div>
 
 <div class="header">
-  <div class="header-title">館山ジビエセンター 在庫管理</div>
+  <div class="header-title">館山ジビエセンター 業務</div>
   <button class="btn btn-primary" onclick="openProcessingMode()" style="margin-left:12px;font-size:13px;">🔪 精肉モード</button>
   <nav class="header-nav">
     <a href="capture-form.html">捕獲票入力</a>
@@ -3589,6 +3589,7 @@ function indGetVal(id) {
 }
 
 async function indSave() {
+  if (indEditId && !requireAdmin('個体情報の編集（既存データの書き換え）')) return;
   const btn = document.getElementById('indSaveBtn');
   btn.disabled = true; btn.textContent = '保存中...';
   try {
@@ -3775,6 +3776,7 @@ async function loadHunters() {
 const HUNTER_FIELDS = ['name', 'city', 'address', 'phone', 'trap_area', 'bank_name', 'bank_branch', 'account_type', 'account_number', 'account_holder', 'memo'];
 
 function hunterOpenNew() {
+  if (!requireAdmin('捕獲者の新規登録')) return;
   hunterEditId = null;
   document.getElementById('hunterModalTitle').textContent = '捕獲者 新規登録';
   HUNTER_FIELDS.forEach(f => document.getElementById('hun-f-' + f).value = '');
@@ -3782,6 +3784,7 @@ function hunterOpenNew() {
 }
 
 function hunterEdit(id) {
+  if (!requireAdmin('捕獲者情報の編集')) return;
   const h = huntersData.find(x => String(x.id) === String(id));
   if (!h) return;
   hunterEditId = id;
@@ -3959,6 +3962,7 @@ async function loadStaffPanel() {
 }
 
 function staffOpenNew() {
+  if (!requireAdmin('スタッフの新規登録')) return;
   staffEditId = null;
   document.getElementById('staffModalTitle').textContent = 'スタッフ 新規登録';
   STAFF_FIELDS.forEach(f => document.getElementById('stf-f-' + f).value = '');
@@ -3966,6 +3970,7 @@ function staffOpenNew() {
 }
 
 function staffEdit(id) {
+  if (!requireAdmin('スタッフ情報の編集')) return;
   const s = staffData.find(x => String(x.id) === String(id));
   if (!s) return;
   staffEditId = id;
@@ -4264,6 +4269,7 @@ async function supplyAdjust(id, delta) {
 }
 
 function supplyOpenNew() {
+  if (!requireAdmin('資材の新規登録')) return;
   supplyEditId = null;
   document.getElementById('supplyModalTitle').textContent = '資材 新規登録';
   SUPPLY_FIELDS.forEach(f => document.getElementById('sup-f-' + f).value = '');
@@ -4271,6 +4277,7 @@ function supplyOpenNew() {
 }
 
 function supplyEdit(id) {
+  if (!requireAdmin('資材情報の編集')) return;
   const s = suppliesData.find(x => String(x.id) === String(id));
   if (!s) return;
   supplyEditId = id;
@@ -4414,10 +4421,24 @@ async function loadFlags() {
 }
 
 async function flagResolve(id) {
+  if (!requireAdmin('フラグの対応済み処理')) return;
   try {
     await sb('PATCH', 'data_flags', { status: '対応済' }, '?id=eq.' + id);
     loadFlags();
   } catch (err) { toast('更新に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+/* ───────── マスタdatalist（捕獲者台帳・地区マスタから動的取得） ───────── */
+async function loadMasterDatalists() {
+  try {
+    const hs = await sb('GET', 'hunters', null, '?select=name,memo&deleted_at=is.null&order=name.asc&limit=500');
+    const active = hs.filter(h => !['逝去', '返納'].includes(h.memo)).map(h => h.name);
+    if (active.length) document.getElementById('dl-hunter').innerHTML = [...new Set(active)].map(n => `<option>${esc2(n)}</option>`).join('');
+  } catch (e) {}
+  try {
+    const as = await sb('GET', 'area_master', null, '?select=oaza&order=sort_order.asc&limit=300');
+    if (as.length) document.getElementById('dl-area').innerHTML = [...new Set(as.map(a => a.oaza).filter(Boolean))].map(a => `<option>${esc2(a)}</option>`).join('');
+  } catch (e) {}
 }
 
 /* ───────── 冷凍庫ロケーション（精肉モード連携） ───────── */
@@ -4487,6 +4508,7 @@ async function refreshNavBadges() {
 loadDashboard();
 refreshNavBadges();
 loadFreezerOptions();
+loadMasterDatalists();
 </script>
 
 <script>

@@ -334,6 +334,7 @@ textarea { min-height: 80px; resize: vertical; }
 
 <div class="header">
   <div class="header-title">
+    <a href="index.html" style="color:var(--gold);text-decoration:none;font-size:13px;white-space:nowrap;border:1px solid var(--border);border-radius:8px;padding:5px 10px;margin-right:8px;">← 業務トップ</a>
     <span>館山ジビエセンター</span>
   </div>
   <div style="display:flex;align-items:center;gap:8px;">
@@ -453,22 +454,19 @@ textarea { min-height: 80px; resize: vertical; }
           <div class="toggle-btn" data-val="南房総市">南房総市</div>
         </div>
       </div>
-      <div class="form-row" id="oldTownRow" style="display:none">
-        <label class="form-label">旧町村</label>
-        <div class="select-wrap">
-          <select id="captureOldTown" class="input">
-            <option value="">-- 旧町村を選択 --</option>
-          </select>
-        </div>
+      <div class="form-row" id="districtRow" style="display:none">
+        <label class="form-label">地区（旧町村）</label>
+        <div class="toggle-group" id="districtBtns"></div>
       </div>
-      <div class="form-row">
-        <label class="form-label">捕獲地区 (大字)</label>
-        <div class="select-wrap">
-          <select id="captureArea" class="input">
-            <option value="">-- 市町村を選択 --</option>
-          </select>
-        </div>
+      <div class="form-row" id="oazaRow" style="display:none">
+        <label class="form-label">現住所表記</label>
+        <div class="toggle-group" id="oazaBtns" style="max-height:230px;overflow-y:auto;"></div>
       </div>
+      <div class="form-row" id="areaPickedRow" style="display:none">
+        <div id="areaPickedLabel" style="font-size:14px;color:var(--gold-light);font-weight:600;"></div>
+      </div>
+      <input type="hidden" id="captureOldTown" value="">
+      <input type="hidden" id="captureArea" value="">
       <div class="form-row">
         <label class="form-label">捕獲者名</label>
         <input type="text" class="input" id="hunterName" placeholder="氏名" list="hunterList" autocomplete="off">
@@ -1042,6 +1040,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupCheckboxes();
   setupTabs();
   refreshAutocomplete();
+  loadAreaMaster();
   loadKnownValues();
   const qd = document.getElementById('qDate');
   if (qd) qd.value = today();
@@ -1163,21 +1162,15 @@ async function bulkDeleteSelected() {
   loadList();
 }
 
-/* ── Autocomplete refresh ── */
+/* ── Autocomplete refresh（捕獲者台帳マスタから取得） ── */
 async function refreshAutocomplete() {
   try {
-    const rows = await sb('GET', 'individuals', null, '?select=hunter_name,capture_area&limit=1000');
-    if (!rows) return;
-    const hunters = [...new Set(rows.map(r => r.hunter_name).filter(Boolean))].sort();
-    const areas = [...new Set(rows.map(r => r.capture_area).filter(Boolean))].sort();
+    // 捕獲者台帳に登録のある人のみ（逝去・返納は除外）
+    const hs = await sb('GET', 'hunters', null, '?select=name,memo&deleted_at=is.null&order=name.asc&limit=500');
+    const names = [...new Set(hs.filter(h => !['逝去', '返納'].includes(h.memo)).map(h => h.name).filter(Boolean))];
     const hl = document.getElementById('hunterList');
-    if (hl) hl.innerHTML = hunters.map(h => '<option value="' + h + '">').join('');
-    const areaEl = document.getElementById('captureArea');
-    if (areaEl && areas.length) {
-      const cur = areaEl.value;
-      areaEl.innerHTML = '<option value="">-- 選択 --</option>' + areas.map(a => '<option value="' + a + '"' + (a===cur?' selected':'') + '>' + a + '</option>').join('');
-    }
-  } catch(e) {}
+    if (hl && names.length) hl.innerHTML = names.map(h => '<option value="' + h + '">').join('');
+  } catch(e) { /* オフライン時はHTMLの固定リストのまま */ }
 }
 
 /* ── OCR Scan ── */
@@ -1330,39 +1323,80 @@ function onToggleChange(field, val) {
   }
 }
 
-function updateAreaDropdown(city) {
-  const sel = document.getElementById('captureArea');
-  const oldTownRow = document.getElementById('oldTownRow');
-  const oldTownSel = document.getElementById('captureOldTown');
-  sel.innerHTML = '<option value="">-- 地区を選択 --</option>';
-  if (city === '南房総市') {
-    oldTownRow.style.display = '';
-    oldTownSel.innerHTML = '<option value="">-- 旧町村を選択 --</option>';
-    Object.keys(MINAMIBOSO).forEach(t => {
-      const o = document.createElement('option');
-      o.value = t; o.textContent = t;
-      oldTownSel.appendChild(o);
-    });
-  } else {
-    oldTownRow.style.display = 'none';
-    oldTownSel.innerHTML = '<option value="">-- 旧町村を選択 --</option>';
-    (AREAS[city] || []).forEach(a => {
-      const o = document.createElement('option');
-      o.value = a; o.textContent = a;
-      sel.appendChild(o);
-    });
-  }
+/* ── 地区マスタ（DB）→ 市 → 地区（旧町村） → 現住所表記 のボタン選択 ──
+   DBが読めない場合は従来の固定リスト（AREAS/MINAMIBOSO）で代替する。 */
+let areaMasterRows = null; // [{city, district, oaza, address_label}]
+
+async function loadAreaMaster() {
+  try {
+    const rows = await sb('GET', 'area_master', null, '?select=city,district,oaza,address_label&order=sort_order.asc&limit=300');
+    if (rows && rows.length) areaMasterRows = rows;
+  } catch (e) { /* オフライン時は固定リストで代替 */ }
 }
 
-document.getElementById('captureOldTown').addEventListener('change', function() {
-  const sel = document.getElementById('captureArea');
-  sel.innerHTML = '<option value="">-- 地区を選択 --</option>';
-  (MINAMIBOSO[this.value] || []).forEach(a => {
-    const o = document.createElement('option');
-    o.value = a; o.textContent = a;
-    sel.appendChild(o);
+function areaDistrictsOf(city) {
+  if (areaMasterRows) {
+    return [...new Set(areaMasterRows.filter(r => r.city === city).map(r => r.district).filter(Boolean))];
+  }
+  if (city === '南房総市') return Object.keys(MINAMIBOSO);
+  return ['館山市内'];
+}
+
+function areaOazaOf(city, district) {
+  if (areaMasterRows) {
+    return areaMasterRows.filter(r => r.city === city && r.district === district).map(r => r.oaza).filter(Boolean);
+  }
+  if (city === '南房総市') return MINAMIBOSO[district] || [];
+  return AREAS[city] || [];
+}
+
+function mkAreaBtn(label, onclick) {
+  const b = document.createElement('div');
+  b.className = 'toggle-btn';
+  b.textContent = label;
+  b.addEventListener('click', onclick);
+  return b;
+}
+
+function updateAreaDropdown(city) {
+  // 市が変わったら下位の選択をリセット
+  document.getElementById('captureOldTown').value = '';
+  document.getElementById('captureArea').value = '';
+  document.getElementById('areaPickedRow').style.display = 'none';
+  document.getElementById('oazaRow').style.display = 'none';
+  const row = document.getElementById('districtRow');
+  const box = document.getElementById('districtBtns');
+  box.innerHTML = '';
+  if (!city) { row.style.display = 'none'; return; }
+  row.style.display = '';
+  areaDistrictsOf(city).forEach(d => {
+    box.appendChild(mkAreaBtn(d, function () {
+      box.querySelectorAll('.toggle-btn').forEach(x => x.classList.remove('active'));
+      this.classList.add('active');
+      document.getElementById('captureOldTown').value = d;
+      renderOazaButtons(city, d);
+    }));
   });
-});
+}
+
+function renderOazaButtons(city, district) {
+  const row = document.getElementById('oazaRow');
+  const box = document.getElementById('oazaBtns');
+  document.getElementById('captureArea').value = '';
+  document.getElementById('areaPickedRow').style.display = 'none';
+  box.innerHTML = '';
+  row.style.display = '';
+  areaOazaOf(city, district).forEach(o => {
+    box.appendChild(mkAreaBtn(o, function () {
+      box.querySelectorAll('.toggle-btn').forEach(x => x.classList.remove('active'));
+      this.classList.add('active');
+      document.getElementById('captureArea').value = o;
+      const lbl = document.getElementById('areaPickedLabel');
+      lbl.textContent = '📍 捕獲場所: ' + city + ' → ' + district + ' → ' + o;
+      document.getElementById('areaPickedRow').style.display = '';
+    }));
+  });
+}
 
 /* ── Checkboxes ── */
 function setupCheckboxes() {
@@ -1503,6 +1537,11 @@ function loadForEdit(rec) {
   sv('captureDate', rec.capture_date);
   sv('captureTime', rec.capture_time);
   sv('captureArea', rec.capture_area);
+  if (rec.capture_area) {
+    const lbl = document.getElementById('areaPickedLabel');
+    lbl.textContent = '📍 捕獲場所: ' + (rec.capture_city || '') + ' ' + rec.capture_area + '（登録済みの値）';
+    document.getElementById('areaPickedRow').style.display = '';
+  }
   sv('hunterName', rec.hunter_name);
   sv('bleedTime', rec.bleed_time);
   sv('receiveTime', rec.receive_time);
@@ -1724,7 +1763,11 @@ function resetForm() {
    'transportStart','processTime','healthIssues','memo','recorder'].forEach(id => {
     document.getElementById(id).value = '';
   });
-  document.getElementById('captureArea').innerHTML = '<option value="">-- 市町村を選択 --</option>';
+  document.getElementById('captureArea').value = '';
+  document.getElementById('captureOldTown').value = '';
+  document.getElementById('districtRow').style.display = 'none';
+  document.getElementById('oazaRow').style.display = 'none';
+  document.getElementById('areaPickedRow').style.display = 'none';
   document.getElementById('indSerial').value = '';
   document.getElementById('indLabelId').value = '';
   document.getElementById('indLabelId').placeholder = '種別・市町村を選択';
