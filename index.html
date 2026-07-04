@@ -398,8 +398,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <div class="nav-group">受発注</div>
   <a class="tab-btn" href="order-admin.html">&#x1F4CB; 注文管理</a>
   <a class="tab-btn" href="order-portal.html">&#x1F6D2; 顧客ポータル</a>
-  <div class="nav-group">台帳</div>
+  <div class="nav-group">台帳（管理者のみ）</div>
   <button class="tab-btn" data-tab="hunters">&#x1F3F9; 捕獲者台帳</button>
+  <button class="tab-btn" data-tab="customers">&#x1F3E2; 顧客台帳</button>
   <button class="tab-btn" data-tab="staff">&#x1F465; スタッフ管理</button>
   <button class="tab-btn" data-tab="supplies">&#x1F9F4; 資材在庫<span class="nav-badge" id="nav-badge-supplies"></span></button>
   <div class="nav-group">施設・HACCP</div>
@@ -729,11 +730,20 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <div class="tab-panel" id="panel-punch">
     <div class="section">
       <div class="section-title">出退勤打刻</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:14px;">自分の名前を選んで「出勤」「退勤」ボタンを押すだけで、時刻が自動で記録されます。退勤のときに休憩時間を入れてください。記録の修正は管理者に依頼してください。</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:8px;">自分の名前を選んで、体調をチェックして「出勤」「退勤」ボタンを押すだけで時刻が自動で記録されます。記録の修正は管理者に依頼してください。</div>
+      <div style="margin-bottom:14px;"><a href="punch.html" target="_blank" class="btn" style="display:inline-block;text-decoration:none;">📺 タブレット常時表示用の打刻ページを開く（punch.html）</a></div>
       <div id="punch-names" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:16px;"></div>
       <div id="punch-panel" style="display:none;max-width:480px;padding:18px;border:1px solid var(--gold2);border-radius:var(--radius);background:var(--surface);">
         <div style="font-size:17px;font-weight:700;margin-bottom:6px;" id="punch-who"></div>
         <div id="punch-status" style="font-size:14px;line-height:1.8;margin-bottom:14px;"></div>
+        <div id="punch-health-box" style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--surface2);margin-bottom:12px;">
+          <div style="font-size:12.5px;color:var(--text2);font-weight:600;margin-bottom:8px;">体調チェック（基本は「異常なし」。異常があるときだけ変更）</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn" id="punch-health-ok" style="flex:1;border-color:var(--green);color:var(--green);font-weight:700;" onclick="punchSetHealth(true)">😊 異常なし</button>
+            <button class="btn" id="punch-health-ng" style="flex:1;" onclick="punchSetHealth(false)">🤒 異常あり</button>
+          </div>
+          <input class="form-input" id="punch-health-note" placeholder="症状を入力（例: 発熱 / 手指に傷）" style="display:none;margin-top:8px;" />
+        </div>
         <div id="punch-in-row" style="display:none;">
           <button class="btn btn-primary" style="width:100%;font-size:20px;padding:16px;" onclick="punchIn()">🟢 出勤する（今の時刻で記録）</button>
         </div>
@@ -833,6 +843,85 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <thead><tr><th>氏名</th><th>地区</th><th>罠設置場所</th><th>電話番号</th><th>振込口座</th><th>捕獲実績</th><th>メモ</th><th>操作</th></tr></thead>
           <tbody id="hunters-body"></tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Customers Registry (顧客台帳) -->
+  <div class="tab-panel" id="panel-customers">
+    <div class="section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>顧客台帳</span>
+        <button class="btn btn-primary" onclick="custRegOpenNew()">＋ 新規登録</button>
+      </div>
+      <div id="cust-stats" style="font-size:12.5px;color:var(--text2);margin-bottom:10px;"></div>
+      <input class="form-input" id="cust-search" placeholder="名前・かな・電話番号・住所で検索" style="max-width:320px;margin-bottom:10px;" oninput="renderCustomersReg()" />
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>顧客名</th><th>かな</th><th>電話</th><th>住所</th><th>価格ランク</th><th>有効</th><th>操作</th></tr></thead>
+          <tbody id="cust-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Customer Edit Modal -->
+  <div id="custModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:560px;margin:40px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);" id="custModalTitle">顧客 新規登録</div>
+        <button onclick="document.getElementById('custModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="form-group"><label>顧客名 *</label><input class="form-input" id="cst-f-name" /></div>
+        <div class="form-group"><label>かな</label><input class="form-input" id="cst-f-kana" /></div>
+        <div class="form-group"><label>敬称</label><select class="form-input" id="cst-f-honorific"><option>様</option><option>御中</option></select></div>
+        <div class="form-group"><label>電話番号</label><input class="form-input" id="cst-f-phone" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>住所</label><input class="form-input" id="cst-f-address" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>建物名など</label><input class="form-input" id="cst-f-building" /></div>
+        <div class="form-group"><label>メール</label><input class="form-input" id="cst-f-email" /></div>
+        <div class="form-group"><label>価格ランク</label><select class="form-input" id="cst-f-price_rank"><option value="standard">standard（通常）</option><option value="premium">premium</option><option value="wholesale">wholesale（卸）</option></select></div>
+        <div class="form-group"><label>有効</label><select class="form-input" id="cst-f-is_active"><option value="true">有効</option><option value="false">無効</option></select></div>
+        <div class="form-group" style="grid-column:1/-1"><label>メモ</label><textarea class="form-input" id="cst-f-notes" rows="2" style="resize:vertical;"></textarea></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
+        <button class="btn" onclick="document.getElementById('custModal').style.display='none'">キャンセル</button>
+        <button class="btn btn-primary" onclick="custRegSave()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Waybill Modal (送り状作成) -->
+  <div id="waybillModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:620px;margin:30px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);">🚚 送り状作成（ヤマト / 佐川）</div>
+        <button onclick="document.getElementById('waybillModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">CSVはヤマト「B2クラウド」・佐川「e飛伝」の外部データ取込に対応（初回のみ取込画面で項目の割り当てを保存してください）。専用伝票への直接印字はプリンタの位置合わせが必要なため、白紙に貼る簡易ラベル印刷も用意しています。</div>
+      <div style="font-size:12px;color:var(--gold);font-weight:600;border-bottom:1px solid var(--border);padding-bottom:4px;margin-bottom:8px;">▌ お届け先</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="form-group"><label>郵便番号</label><input class="form-input" id="wb-postal" placeholder="294-0000" /></div>
+        <div class="form-group"><label>電話番号</label><input class="form-input" id="wb-phone" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>住所</label><input class="form-input" id="wb-address" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>建物名など</label><input class="form-input" id="wb-building" /></div>
+        <div class="form-group"><label>お名前</label><input class="form-input" id="wb-name" /></div>
+        <div class="form-group"><label>敬称</label><select class="form-input" id="wb-honorific"><option>様</option><option>御中</option></select></div>
+      </div>
+      <div style="font-size:12px;color:var(--gold);font-weight:600;border-bottom:1px solid var(--border);padding-bottom:4px;margin:12px 0 8px;">▌ 荷物・配達</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="form-group"><label>品名</label><input class="form-input" id="wb-item" value="ジビエ肉（要冷凍）" /></div>
+        <div class="form-group"><label>クール区分</label><select class="form-input" id="wb-cool"><option>冷凍</option><option>冷蔵</option><option>なし（常温）</option></select></div>
+        <div class="form-group"><label>出荷予定日</label><input class="form-input" id="wb-ship-date" type="date" /></div>
+        <div class="form-group"><label>お届け希望日</label><input class="form-input" id="wb-delivery-date" type="date" /></div>
+        <div class="form-group"><label>時間帯指定</label><select class="form-input" id="wb-time"><option value="">指定なし</option><option>午前中</option><option>14-16時</option><option>16-18時</option><option>18-20時</option><option>19-21時</option></select></div>
+        <div class="form-group"><label>管理番号（注文番号）</label><input class="form-input" id="wb-code" /></div>
+      </div>
+      <div id="wb-sender" style="font-size:12px;color:var(--text2);margin-top:8px;"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;flex-wrap:wrap;">
+        <button class="btn" onclick="waybillCSV('yamato')">⬇ ヤマトB2用CSV</button>
+        <button class="btn" onclick="waybillCSV('sagawa')">⬇ 佐川e飛伝用CSV</button>
+        <button class="btn btn-primary" onclick="waybillPrint()">🖨 簡易ラベル印刷</button>
       </div>
     </div>
   </div>
@@ -1130,6 +1219,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="pm-setup-ind-list" id="pmIndList">
       <div class="loading"><span class="spin"></span>搬入個体を読み込み中...</div>
     </div>
+    <div style="margin-top:16px;padding:12px 14px;border:1px dashed var(--gold2);border-radius:var(--radius);font-size:13px;color:var(--text2);line-height:1.8;background:var(--surface2);">
+      📖 <strong style="color:var(--gold);">使い方</strong>：① 上で<strong>作業者</strong>を選ぶ → ② <strong>精肉する個体</strong>を選ぶ → 精肉画面が開きます。途中でやめても登録済みデータは保存されています。
+    </div>
   </div>
 
   <!-- Main Processing Screen -->
@@ -1165,6 +1257,15 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         </div>
         <div style="font-size:12px;color:var(--text2);">部位選択</div>
         <div class="pm-parts-grid" id="pmPartsGrid"></div>
+        <div style="margin-top:12px;padding:12px 14px;border:1px dashed var(--gold2);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.9;background:var(--surface2);">
+          📖 <strong style="color:var(--gold);">登録の手順</strong><br>
+          ① 上の<strong>部位ボタン</strong>を押す<br>
+          ② <strong>はかりに肉を載せる</strong>（右に重量が表示されます）。はかりが無いときは右の「🔢 手動入力」で数字を入力<br>
+          ③ 右の<strong>「登録」</strong>を押す → ラベルが自動印刷され、在庫に登録されます<br>
+          ・骨付き / 小売 / ランク / 冷凍庫は<strong>登録の前に</strong>上で選ぶ<br>
+          ・続けて登録するときは、次の部位ボタンを押すだけ<br>
+          ・ラベルの刷り直しは「🖨 ラベル印刷」、全部終わったら右下の「全部位完了」
+        </div>
       </div>
       <!-- Right: Weight + Completed -->
       <div class="pm-right">
@@ -1348,6 +1449,8 @@ function closeModal(id) {
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     if (!btn.dataset.tab) return; // <a>のナビリンク（注文管理など）はそのままページ遷移
+    // 台帳（捕獲者・顧客・スタッフ）は管理者のみ閲覧可（口座・個人情報・給与を含むため）
+    if (['hunters', 'customers', 'staff'].includes(btn.dataset.tab) && !requireAdmin('台帳の閲覧')) return;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
@@ -1362,6 +1465,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'products') loadProducts();
     if (btn.dataset.tab === 'aging') loadAging();
     if (btn.dataset.tab === 'hunters') loadHunters();
+    if (btn.dataset.tab === 'customers') loadCustomersReg();
     if (btn.dataset.tab === 'staff') loadStaffPanel();
     if (btn.dataset.tab === 'cleaning') loadCleaning();
     if (btn.dataset.tab === 'supplies') loadSupplies();
@@ -2088,6 +2192,7 @@ async function loadShipping() {
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;">
             <button class="btn btn-sm" onclick="shipSelectOrder('${order.id}')">📌 この注文に割当</button>
+            <button class="btn btn-sm" onclick="waybillOpenFromOrder('${order.id}')">🚚 送り状</button>
             <button class="btn btn-primary btn-sm" onclick="shipOrder('${order.id}')" id="ship-btn-${order.id}" disabled>出荷確定</button>
           </div>
         </div>
@@ -2424,15 +2529,34 @@ async function punchRefresh() {
   }
 }
 
+let punchHealthOK = true;
+function punchSetHealth(ok) {
+  punchHealthOK = ok;
+  const okBtn = document.getElementById('punch-health-ok');
+  const ngBtn = document.getElementById('punch-health-ng');
+  okBtn.style.borderColor = ok ? 'var(--green)' : 'var(--border)';
+  okBtn.style.color = ok ? 'var(--green)' : 'var(--text2)';
+  ngBtn.style.borderColor = ok ? 'var(--border)' : 'var(--red)';
+  ngBtn.style.color = ok ? 'var(--text2)' : 'var(--red)';
+  document.getElementById('punch-health-note').style.display = ok ? 'none' : 'block';
+}
+function punchHealthValue() {
+  if (punchHealthOK) return '異常なし';
+  const note = document.getElementById('punch-health-note').value.trim();
+  return note ? '異常あり: ' + note : '異常あり';
+}
+
 async function punchIn() {
   if (!punchSelected) return;
   const t = punchNowHM();
   try {
+    const hv = punchHealthValue();
     await sb('POST', 'attendance', {
       staff_id: punchSelected.id, staff_name: punchSelected.name,
       work_date: new Date().toISOString().slice(0, 10),
-      clock_in: t, break_minutes: 0,
+      clock_in: t, break_minutes: 0, health_in: hv,
     });
+    if (!punchHealthOK) toast('体調異常が記録されました。責任者に必ず報告してください。', 'error');
     playFeedbackSound(true);
     toast(`${punchSelected.name}さん 出勤を記録しました（${t}）`);
     punchRefresh(); 
@@ -2444,7 +2568,8 @@ async function punchOut() {
   const t = punchNowHM();
   const brk = parseInt(document.getElementById('punch-break').value) || 0;
   try {
-    await sb('PATCH', 'attendance', { clock_out: t, break_minutes: brk, updated_at: new Date().toISOString() }, `?id=eq.${punchTodayRec.id}`);
+    await sb('PATCH', 'attendance', { clock_out: t, break_minutes: brk, health_out: punchHealthValue(), updated_at: new Date().toISOString() }, `?id=eq.${punchTodayRec.id}`);
+    if (!punchHealthOK) toast('体調異常が記録されました。責任者に必ず報告してください。', 'error');
     playFeedbackSound(true);
     toast(`${punchSelected.name}さん 退勤を記録しました（${t} / 休憩${brk}分）お疲れさまでした`);
     punchRefresh();
@@ -4844,6 +4969,13 @@ const DOC_DEFS = [
         rows: inds.map(i => [i.label_id, i.capture_date, i.species || '', i.hunter_name || '', i.capture_anomalies || 'なし', i.organ_anomalies || 'なし', i.hunter_health_ok === false ? '要確認' : '問題なし', i.quality || '', i.recorder || '']),
         note: '捕獲票入力から自動転記。' };
     } },
+  { key: 'staff_health', cat: 'HACCP・衛生管理', title: '従事者健康チェック記録', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const atts = await sb('GET', 'attendance', null, `?work_date=gte.${d1}&work_date=lte.${d2}&select=*&order=work_date.asc&limit=1000`);
+      return { columns: ['日付', '氏名', '出勤時の体調', '退勤時の体調'],
+        rows: atts.map(a => [a.work_date, a.staff_name, a.health_in || '（記録なし）', a.health_out || (a.clock_out ? '（記録なし）' : '—')]),
+        note: '出退勤打刻の体調チェックから自動転記。「異常あり」の日は責任者の対応記録を是正処置記録に残してください。' };
+    } },
   { key: 'anomaly_disposal', cat: 'HACCP・衛生管理', title: '異常個体・廃棄記録', gen: async (m) => {
       const [d1, d2] = docMonthRange(m);
       const inds = await sb('GET', 'individuals', null, `?capture_date=gte.${d1}&capture_date=lte.${d2}&deleted_at=is.null&select=*&limit=500`);
@@ -5266,6 +5398,182 @@ async function loadTodayTodos() {
     </button>`).join('');
 }
 
+/* ───────── 顧客台帳（管理者のみ） ───────── */
+let customersRegData = [];
+let custEditId = null;
+const CUST_FIELDS = ['name', 'kana', 'honorific', 'phone', 'address', 'building', 'email', 'price_rank', 'is_active', 'notes'];
+
+async function loadCustomersReg() {
+  const body = document.getElementById('cust-body');
+  body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
+  try {
+    customersRegData = await sb('GET', 'customers', null, '?select=id,code,name,kana,honorific,phone,email,address,building,price_rank,is_active,notes&order=kana.asc.nullslast&limit=2000');
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);">${esc2(sbSafeMsg(err))}</td></tr>`;
+    return;
+  }
+  renderCustomersReg();
+}
+
+function renderCustomersReg() {
+  const body = document.getElementById('cust-body');
+  const q = (document.getElementById('cust-search').value || '').trim();
+  let list = customersRegData;
+  if (q) list = list.filter(c => [c.name, c.kana, c.phone, c.address].some(v => v && String(v).includes(q)));
+  document.getElementById('cust-stats').textContent = `登録 ${customersRegData.length}件${q ? ` / 検索一致 ${list.length}件` : ''}（表示は先頭100件）`;
+  body.innerHTML = list.slice(0, 100).map(c => `<tr style="${c.is_active === false ? 'opacity:.5;' : ''}">
+    <td style="font-weight:600;">${esc2(c.name)} ${esc2(c.honorific || '様')}</td>
+    <td style="font-size:12px;color:var(--text2);">${esc2(c.kana || '')}</td>
+    <td style="white-space:nowrap;">${esc2(c.phone || '-')}</td>
+    <td style="font-size:12px;">${esc2(c.address || '')}${c.building ? ' ' + esc2(c.building) : ''}</td>
+    <td>${esc2(c.price_rank || 'standard')}</td>
+    <td>${c.is_active === false ? '無効' : '有効'}</td>
+    <td style="white-space:nowrap;">
+      <button class="btn btn-sm" onclick="custRegEdit('${c.id}')">編集</button>
+      <button class="btn btn-sm" onclick="waybillOpenFromCustomer('${c.id}')">🚚 送り状</button>
+    </td>
+  </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text3);">該当なし</td></tr>';
+}
+
+function custRegOpenNew() {
+  custEditId = null;
+  document.getElementById('custModalTitle').textContent = '顧客 新規登録';
+  CUST_FIELDS.forEach(f => {
+    const el = document.getElementById('cst-f-' + f);
+    el.value = f === 'honorific' ? '様' : f === 'price_rank' ? 'standard' : f === 'is_active' ? 'true' : '';
+  });
+  document.getElementById('custModal').style.display = 'block';
+}
+
+function custRegEdit(id) {
+  const c = customersRegData.find(x => String(x.id) === String(id));
+  if (!c) return;
+  custEditId = id;
+  document.getElementById('custModalTitle').textContent = '顧客情報編集';
+  CUST_FIELDS.forEach(f => {
+    const el = document.getElementById('cst-f-' + f);
+    if (f === 'is_active') el.value = c.is_active === false ? 'false' : 'true';
+    else el.value = c[f] != null ? c[f] : (f === 'honorific' ? '様' : f === 'price_rank' ? 'standard' : '');
+  });
+  document.getElementById('custModal').style.display = 'block';
+}
+
+async function custRegSave() {
+  if (!requireAdmin('顧客情報の保存')) return;
+  const payload = {};
+  CUST_FIELDS.forEach(f => {
+    let v = document.getElementById('cst-f-' + f).value.trim();
+    if (f === 'is_active') v = v === 'true';
+    payload[f] = v === '' ? null : v;
+  });
+  if (!payload.name) { toast('顧客名は必須です', 'error'); return; }
+  try {
+    if (custEditId) { await sb('PATCH', 'customers', payload, '?id=eq.' + custEditId); toast(`顧客「${payload.name}」を更新しました`); }
+    else {
+      payload.code = 'C' + Date.now().toString().slice(-8); // 既存codeはunique制約のため自動採番
+      await sb('POST', 'customers', payload);
+      toast(`顧客「${payload.name}」を登録しました`);
+    }
+    document.getElementById('custModal').style.display = 'none';
+    loadCustomersReg();
+  } catch (err) { toast('保存に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+/* ───────── 送り状作成（ヤマトB2 / 佐川e飛伝 / 簡易ラベル） ───────── */
+let orgInfo = { org_name: '館山ジビエセンター', org_address: '千葉県館山市西長田1163-5', org_phone: '', org_postal: '' };
+
+async function loadOrgInfo() {
+  try {
+    const rows = await sb('GET', 'org_settings', null, '?select=key,value');
+    rows.forEach(r => { if (r.value) orgInfo[r.key] = r.value; });
+  } catch (e) {}
+}
+
+function waybillOpenWith(v) {
+  document.getElementById('wb-postal').value = v.postal || '';
+  document.getElementById('wb-phone').value = v.phone || '';
+  document.getElementById('wb-address').value = v.address || '';
+  document.getElementById('wb-building').value = v.building || '';
+  document.getElementById('wb-name').value = v.name || '';
+  document.getElementById('wb-honorific').value = v.honorific || '様';
+  document.getElementById('wb-code').value = v.code || '';
+  document.getElementById('wb-ship-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('wb-delivery-date').value = v.deliveryDate || '';
+  document.getElementById('wb-time').value = v.time || '';
+  document.getElementById('wb-sender').innerHTML = `ご依頼主（自動）: ${esc2(orgInfo.org_name)}　〒${esc2(orgInfo.org_postal)}　${esc2(orgInfo.org_address)}　TEL ${esc2(orgInfo.org_phone)}`;
+  document.getElementById('waybillModal').style.display = 'block';
+}
+
+function waybillOpenFromOrder(orderId) {
+  const cached = shipOrdersCache[orderId];
+  if (!cached) { toast('注文情報を再読込してください', 'error'); return; }
+  const o = cached.order;
+  waybillOpenWith({
+    postal: o.delivery_postal, phone: o.delivery_phone, address: o.delivery_address,
+    building: o.delivery_building, name: o.delivery_name || o.customer_name,
+    code: o.order_code, deliveryDate: o.delivery_date,
+    time: o.delivery_time_zone && o.delivery_time_zone !== '0000' ? o.delivery_time_zone : '',
+  });
+}
+
+function waybillOpenFromCustomer(id) {
+  const c = customersRegData.find(x => String(x.id) === String(id));
+  if (!c) return;
+  waybillOpenWith({ phone: c.phone, address: c.address, building: c.building, name: c.name, honorific: c.honorific });
+}
+
+function waybillValues() {
+  const g = id => document.getElementById(id).value.trim();
+  return {
+    postal: g('wb-postal'), phone: g('wb-phone'), address: g('wb-address'), building: g('wb-building'),
+    name: g('wb-name'), honorific: document.getElementById('wb-honorific').value,
+    item: g('wb-item'), cool: document.getElementById('wb-cool').value,
+    shipDate: g('wb-ship-date'), deliveryDate: g('wb-delivery-date'),
+    time: document.getElementById('wb-time').value, code: g('wb-code'),
+  };
+}
+
+function waybillCSV(carrier) {
+  const v = waybillValues();
+  if (!v.name || !v.address) { toast('お届け先の名前と住所を入力してください', 'error'); return; }
+  const d8 = s => s ? s.replace(/-/g, '/') : '';
+  if (carrier === 'yamato') {
+    downloadCSV(`ヤマトB2_${v.code || v.name}.csv`,
+      ['お客様管理番号', '送り状種類', 'クール区分', '出荷予定日', 'お届け予定日', '配達時間帯', 'お届け先電話番号', 'お届け先郵便番号', 'お届け先住所', 'お届け先建物名', 'お届け先名', '敬称', 'ご依頼主電話番号', 'ご依頼主郵便番号', 'ご依頼主住所', 'ご依頼主名', '品名', '記事'],
+      [[v.code, '発払い', v.cool, d8(v.shipDate), d8(v.deliveryDate), v.time, v.phone, v.postal, v.address, v.building, v.name, v.honorific, orgInfo.org_phone, orgInfo.org_postal, orgInfo.org_address, orgInfo.org_name, v.item, '']]);
+    toast('ヤマトB2クラウド取込用CSVを出力しました（B2の外部データ取込→項目割り当てで登録）');
+  } else {
+    downloadCSV(`佐川e飛伝_${v.code || v.name}.csv`,
+      ['お客様管理番号', '便種', 'クール便区分', '出荷日', '配達指定日', '配達時間帯', 'お届け先電話番号', 'お届け先郵便番号', 'お届け先住所1', 'お届け先住所2', 'お届け先名称', '敬称', 'ご依頼主電話番号', 'ご依頼主郵便番号', 'ご依頼主住所', 'ご依頼主名称', '品名'],
+      [[v.code, '飛脚宅配便', v.cool, d8(v.shipDate), d8(v.deliveryDate), v.time, v.phone, v.postal, v.address, v.building, v.name, v.honorific, orgInfo.org_phone, orgInfo.org_postal, orgInfo.org_address, orgInfo.org_name, v.item]]);
+    toast('佐川e飛伝取込用CSVを出力しました（e飛伝の出荷データ取込で登録）');
+  }
+}
+
+function waybillPrint() {
+  const v = waybillValues();
+  if (!v.name || !v.address) { toast('お届け先の名前と住所を入力してください', 'error'); return; }
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>送り状ラベル ${esc2(v.name)}</title>
+  <style>body{font-family:'Noto Sans JP',sans-serif;padding:20px;color:#111;} .lbl{border:2px solid #111;border-radius:8px;padding:16px 20px;max-width:560px;margin-bottom:20px;page-break-inside:avoid;}
+  .to-post{font-size:14px;} .to-addr{font-size:17px;line-height:1.6;margin:4px 0;} .to-name{font-size:26px;font-weight:700;margin:6px 0;} .cool{display:inline-block;border:2px solid #111;padding:2px 12px;font-weight:700;font-size:15px;margin-right:8px;}
+  .from{border-top:1px solid #999;margin-top:10px;padding-top:8px;font-size:12px;color:#333;line-height:1.6;} .meta{font-size:12px;color:#333;margin-top:6px;}</style></head><body>
+  ${[1, 2].map(() => `<div class="lbl">
+    <div><span class="cool">${v.cool === 'なし（常温）' ? '通常便' : 'クール便・' + v.cool}</span><span style="font-size:12px;">品名: ${esc2(v.item)}</span></div>
+    <div class="to-post">〒${esc2(v.postal)}</div>
+    <div class="to-addr">${esc2(v.address)}${v.building ? '<br>' + esc2(v.building) : ''}</div>
+    <div class="to-name">${esc2(v.name)} ${esc2(v.honorific)}</div>
+    <div class="to-post">TEL: ${esc2(v.phone)}${v.deliveryDate ? '　お届け希望: ' + esc2(v.deliveryDate) + (v.time ? ' ' + esc2(v.time) : '') : ''}</div>
+    <div class="from">ご依頼主: ${esc2(orgInfo.org_name)}　〒${esc2(orgInfo.org_postal)}<br>${esc2(orgInfo.org_address)}　TEL ${esc2(orgInfo.org_phone)}</div>
+    <div class="meta">管理番号: ${esc2(v.code)}　出荷日: ${esc2(v.shipDate)}</div>
+  </div>`).join('')}
+  <p style="font-size:11px;color:#666;">※同じラベルを2枚印刷しています（控え用）。専用伝票を使う場合はB2クラウド/e飛伝のCSV取込をご利用ください。</p>
+  </body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { toast('ポップアップがブロックされました', 'error'); return; }
+  w.document.write(html); w.document.close();
+  setTimeout(() => w.print(), 300);
+}
+
 /* ───────── マスタdatalist（捕獲者台帳・地区マスタから動的取得） ───────── */
 async function loadMasterDatalists() {
   try {
@@ -5354,6 +5662,7 @@ loadFreezerOptions();
 loadMasterDatalists();
 loadStaffNames();
 loadTodayTodos();
+loadOrgInfo();
 </script>
 
 <script>

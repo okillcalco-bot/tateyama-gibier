@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>出退勤打刻 | 館山ジビエセンター</title>
+<style>
+:root {
+  --bg: #f5f6f2; --surface: #ffffff; --surface2: #eff1ea;
+  --border: #dfe3d6; --gold: #8d6a1d; --gold2: #97772a;
+  --text: #23271c; --text2: #626854; --text3: #9aa08c;
+  --red: #b93d3d; --green: #3d7a34; --radius: 12px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 16px; }
+.wrap { max-width: 720px; margin: 0 auto; padding: 20px 16px 60px; }
+.clock { text-align: center; margin: 10px 0 4px; }
+.clock .time { font-size: 56px; font-weight: 700; color: var(--gold); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.clock .date { font-size: 17px; color: var(--text2); }
+h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600; margin-bottom: 18px; }
+.names { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.name-btn { font-family: inherit; font-size: 20px; font-weight: 600; padding: 24px 8px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+.name-btn:active { background: var(--surface2); }
+.panel { background: var(--surface); border: 1px solid var(--gold2); border-radius: var(--radius); padding: 22px; margin-top: 14px; }
+.who { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+.status { font-size: 16px; line-height: 1.9; margin-bottom: 16px; }
+.big-btn { font-family: inherit; display: block; width: 100%; font-size: 26px; font-weight: 700; padding: 22px; border-radius: var(--radius); border: none; cursor: pointer; color: #fff; margin-top: 10px; }
+.btn-in { background: var(--green); }
+.btn-out { background: var(--red); }
+.btn-back { background: none; border: 1px solid var(--border); color: var(--text2); font-size: 15px; padding: 10px 18px; border-radius: 10px; cursor: pointer; font-family: inherit; margin-top: 16px; }
+.health { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-top: 12px; background: var(--surface2); }
+.health-title { font-size: 14px; font-weight: 600; color: var(--text2); margin-bottom: 8px; }
+.health-row { display: flex; gap: 10px; }
+.health-btn { flex: 1; font-family: inherit; font-size: 18px; font-weight: 600; padding: 16px 8px; border-radius: 10px; border: 2px solid var(--border); background: var(--surface); cursor: pointer; color: var(--text); }
+.health-btn.ok.active { border-color: var(--green); background: rgba(61,122,52,.1); color: var(--green); }
+.health-btn.ng.active { border-color: var(--red); background: rgba(185,61,61,.1); color: var(--red); }
+.health textarea { width: 100%; margin-top: 10px; padding: 12px; font-family: inherit; font-size: 16px; border: 1px solid var(--border); border-radius: 10px; display: none; }
+.brk { margin-top: 12px; }
+.brk label { font-size: 14px; color: var(--text2); display: block; margin-bottom: 6px; }
+.brk input { width: 130px; font-size: 22px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; font-family: inherit; }
+.done { text-align: center; padding: 30px 10px; }
+.done .mark { font-size: 64px; }
+.done .msg { font-size: 22px; font-weight: 700; margin: 10px 0 4px; }
+.done .sub { color: var(--text2); }
+.toast { position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%); background: var(--red); color: #fff; padding: 12px 22px; border-radius: 10px; font-size: 15px; display: none; z-index: 10; }
+.footer-note { text-align: center; color: var(--text3); font-size: 12px; margin-top: 26px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="clock"><div class="time" id="clock-time">--:--</div><div class="date" id="clock-date"></div></div>
+  <h1>🐗 館山ジビエセンター 出退勤打刻 — 自分の名前を押してください</h1>
+
+  <div class="names" id="names"></div>
+
+  <div class="panel" id="panel" style="display:none;">
+    <div class="who" id="who"></div>
+    <div class="status" id="status"></div>
+
+    <div class="health" id="health-box">
+      <div class="health-title">体調チェック（該当する方を押してください）</div>
+      <div class="health-row">
+        <button class="health-btn ok active" id="health-ok" onclick="setHealth(true)">😊 異常なし</button>
+        <button class="health-btn ng" id="health-ng" onclick="setHealth(false)">🤒 異常あり</button>
+      </div>
+      <textarea id="health-note" rows="2" placeholder="症状を入力（例: 発熱 / 下痢 / 手指に傷）"></textarea>
+    </div>
+
+    <div class="brk" id="brk-box" style="display:none;">
+      <label>休憩時間（分）</label>
+      <input type="number" id="brk-min" value="60" min="0" step="5">
+    </div>
+
+    <button class="big-btn btn-in" id="btn-in" onclick="punchIn()">🟢 出勤する</button>
+    <button class="big-btn btn-out" id="btn-out" onclick="punchOut()">🔴 退勤する</button>
+    <button class="btn-back" onclick="goHome()">← 名前の選択に戻る</button>
+  </div>
+
+  <div class="panel done" id="done" style="display:none;">
+    <div class="mark" id="done-mark">✅</div>
+    <div class="msg" id="done-msg"></div>
+    <div class="sub" id="done-sub"></div>
+  </div>
+
+  <div class="footer-note">このページはタブレット常時表示用です。体調に異常がある場合は必ず「異常あり」を選び、責任者に報告してください。</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+async function sb(method, table, body, query = '') {
+  const res = await fetch(`${SB_URL}/rest/v1/${table}${query}`, {
+    method,
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const t = await res.text();
+  return t ? JSON.parse(t) : [];
+}
+const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 4500);
+}
+function beep(ok) {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    if (!beep._c) beep._c = new Ctx();
+    const c = beep._c; if (c.state === 'suspended') c.resume().catch(() => {});
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = ok ? 'sine' : 'square'; o.frequency.value = ok ? 1040 : 220;
+    g.gain.setValueAtTime(0.25, c.currentTime); g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.4);
+    o.connect(g).connect(c.destination); o.start(); o.stop(c.currentTime + 0.4);
+  } catch (e) {}
+}
+
+/* 時計 */
+function tick() {
+  const n = new Date();
+  document.getElementById('clock-time').textContent = n.toTimeString().slice(0, 5);
+  document.getElementById('clock-date').textContent = n.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+}
+setInterval(tick, 1000); tick();
+
+let staffList = [];
+let selected = null;
+let todayRec = null;
+let healthOK = true;
+let busy = false;
+
+async function loadNames() {
+  try {
+    staffList = await sb('GET', 'staff', null, '?select=id,name&deleted_at=is.null&is_active=eq.true&order=name.asc');
+  } catch (e) { showToast('スタッフの読み込みに失敗しました。通信を確認してください。'); staffList = []; }
+  document.getElementById('names').innerHTML = staffList.map(s =>
+    `<button class="name-btn" onclick="select('${s.id}')">${esc(s.name)}</button>`).join('');
+}
+
+function goHome() {
+  selected = null; todayRec = null;
+  document.getElementById('panel').style.display = 'none';
+  document.getElementById('done').style.display = 'none';
+  document.getElementById('names').style.display = 'grid';
+  loadNames();
+}
+
+function setHealth(ok) {
+  healthOK = ok;
+  document.getElementById('health-ok').classList.toggle('active', ok);
+  document.getElementById('health-ng').classList.toggle('active', !ok);
+  document.getElementById('health-note').style.display = ok ? 'none' : 'block';
+}
+
+function healthValue() {
+  if (healthOK) return '異常なし';
+  const note = document.getElementById('health-note').value.trim();
+  return note ? '異常あり: ' + note : '異常あり';
+}
+
+async function select(id) {
+  selected = staffList.find(s => String(s.id) === String(id));
+  if (!selected) return;
+  document.getElementById('names').style.display = 'none';
+  document.getElementById('done').style.display = 'none';
+  document.getElementById('panel').style.display = 'block';
+  document.getElementById('who').textContent = `👤 ${selected.name} さん`;
+  setHealth(true);
+  document.getElementById('health-note').value = '';
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const rows = await sb('GET', 'attendance', null, `?staff_id=eq.${selected.id}&work_date=eq.${today}&select=*`);
+    todayRec = rows[0] || null;
+  } catch (e) { showToast('勤怠の読み込みに失敗しました'); todayRec = null; }
+  const st = document.getElementById('status');
+  const bin = document.getElementById('btn-in');
+  const bout = document.getElementById('btn-out');
+  const brk = document.getElementById('brk-box');
+  const health = document.getElementById('health-box');
+  if (!todayRec || !todayRec.clock_in) {
+    st.textContent = '本日はまだ出勤していません。体調を確認して「出勤する」を押してください。';
+    bin.style.display = 'block'; bout.style.display = 'none'; brk.style.display = 'none'; health.style.display = 'block';
+  } else if (!todayRec.clock_out) {
+    st.innerHTML = `🟢 出勤中（出勤 <strong>${todayRec.clock_in}</strong>）。休憩時間を確認し、体調をチェックして「退勤する」を押してください。`;
+    bin.style.display = 'none'; bout.style.display = 'block'; brk.style.display = 'block'; health.style.display = 'block';
+    if (todayRec.break_minutes) document.getElementById('brk-min').value = todayRec.break_minutes;
+  } else {
+    st.innerHTML = `✅ 本日は退勤済みです。<br>出勤 <strong>${todayRec.clock_in}</strong> / 退勤 <strong>${todayRec.clock_out}</strong> / 休憩 ${todayRec.break_minutes || 0}分`;
+    bin.style.display = 'none'; bout.style.display = 'none'; brk.style.display = 'none'; health.style.display = 'none';
+  }
+}
+
+function showDone(msg, sub, warn) {
+  document.getElementById('panel').style.display = 'none';
+  document.getElementById('done').style.display = 'block';
+  document.getElementById('done-mark').textContent = warn ? '🤒' : '✅';
+  document.getElementById('done-msg').textContent = msg;
+  document.getElementById('done-sub').textContent = sub;
+  beep(true);
+  setTimeout(goHome, 6000); // 6秒後に名前選択へ自動で戻る（次の人用）
+}
+
+async function punchIn() {
+  if (busy || !selected) return;
+  busy = true;
+  const t = new Date().toTimeString().slice(0, 5);
+  const hv = healthValue();
+  try {
+    await sb('POST', 'attendance', {
+      staff_id: selected.id, staff_name: selected.name,
+      work_date: new Date().toISOString().slice(0, 10),
+      clock_in: t, break_minutes: 0, health_in: hv,
+    });
+    showDone(`${selected.name}さん おはようございます`, `出勤 ${t} ／ 体調: ${hv}`, !healthOK);
+    if (!healthOK) showToast('体調異常が記録されました。責任者に必ず報告してください。');
+  } catch (e) { beep(false); showToast('出勤の記録に失敗しました。もう一度押してください。'); }
+  busy = false;
+}
+
+async function punchOut() {
+  if (busy || !selected || !todayRec) return;
+  busy = true;
+  const t = new Date().toTimeString().slice(0, 5);
+  const brk = parseInt(document.getElementById('brk-min').value) || 0;
+  const hv = healthValue();
+  try {
+    await sb('PATCH', 'attendance', { clock_out: t, break_minutes: brk, health_out: hv, updated_at: new Date().toISOString() }, `?id=eq.${todayRec.id}`);
+    showDone(`${selected.name}さん お疲れさまでした`, `退勤 ${t} ／ 休憩 ${brk}分 ／ 体調: ${hv}`, !healthOK);
+    if (!healthOK) showToast('体調異常が記録されました。責任者に必ず報告してください。');
+  } catch (e) { beep(false); showToast('退勤の記録に失敗しました。もう一度押してください。'); }
+  busy = false;
+}
+
+loadNames();
+// タブレット常時表示: 復帰時と1時間ごとに名簿を再読込
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !selected) loadNames(); });
+setInterval(() => { if (!selected) loadNames(); }, 3600000);
+</script>
+</body>
+</html>
