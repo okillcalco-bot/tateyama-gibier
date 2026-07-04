@@ -1015,7 +1015,7 @@ let listFilter = '';
 document.addEventListener('DOMContentLoaded', async () => {
   // スタッフリストを読み込む
   try {
-    const staffRows = await sb('GET', 'staff', null, '?select=name&order=name&is_active=eq.true');
+    const staffRows = await sb('GET', 'staff', null, '?select=name&order=name&is_active=eq.true&deleted_at=is.null');
     const sel = document.getElementById('recorder');
     if (sel && Array.isArray(staffRows)) {
       staffRows.forEach(function(s){

@@ -386,6 +386,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 <nav class="sidenav" id="sidenav">
   <button class="tab-btn active" data-tab="dashboard">&#x1F4CA; ダッシュボード</button>
   <div class="nav-group">日々の業務</div>
+  <button class="tab-btn" data-tab="punch">&#x23F1; 出退勤打刻</button>
   <a class="tab-btn" href="capture-form.html">&#x1F4DD; 捕獲票入力</a>
   <button class="tab-btn" data-tab="individuals">&#x1FAA4; 捕獲受入・個体<span class="nav-badge" id="nav-badge-intake"></span></button>
   <button class="tab-btn" data-tab="aging">&#x1F969; 熟成管理<span class="nav-badge" id="nav-badge-aging"></span></button>
@@ -717,6 +718,26 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div id="trace-result"></div>
   </div>
 
+  <!-- Punch (出退勤打刻) -->
+  <div class="tab-panel" id="panel-punch">
+    <div class="section">
+      <div class="section-title">出退勤打刻</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px;">自分の名前を選んで「出勤」「退勤」ボタンを押すだけで、時刻が自動で記録されます。退勤のときに休憩時間を入れてください。記録の修正は管理者に依頼してください。</div>
+      <div id="punch-names" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:16px;"></div>
+      <div id="punch-panel" style="display:none;max-width:480px;padding:18px;border:1px solid var(--gold2);border-radius:var(--radius);background:var(--surface);">
+        <div style="font-size:17px;font-weight:700;margin-bottom:6px;" id="punch-who"></div>
+        <div id="punch-status" style="font-size:14px;line-height:1.8;margin-bottom:14px;"></div>
+        <div id="punch-in-row" style="display:none;">
+          <button class="btn btn-primary" style="width:100%;font-size:20px;padding:16px;" onclick="punchIn()">🟢 出勤する（今の時刻で記録）</button>
+        </div>
+        <div id="punch-out-row" style="display:none;">
+          <div class="form-group" style="margin-bottom:10px;"><label>休憩時間（分）</label><input class="form-input" id="punch-break" type="number" value="60" min="0" step="5" style="max-width:140px;font-size:16px;" /></div>
+          <button class="btn btn-primary" style="width:100%;font-size:20px;padding:16px;background:var(--red);border-color:var(--red);" onclick="punchOut()">🔴 退勤する（今の時刻で記録）</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Aging (熟成管理) -->
   <div class="tab-panel" id="panel-aging">
     <div class="section">
@@ -760,10 +781,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
     </div>
     <div class="section">
-      <div class="section-title">出退勤記録</div>
+      <div class="section-title">出退勤記録（管理者チェック）</div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
         <input class="form-input" id="att-date" type="date" style="max-width:170px;" onchange="loadAttendance()" />
-        <span style="font-size:12px;color:var(--text2);">日付を選んで各スタッフの出勤・退勤を入力し「保存」を押してください</span>
+        <span style="font-size:12px;color:var(--text2);">スタッフの打刻は「⏱ 出退勤打刻」から。ここでは管理者が確認・修正します</span>
       </div>
       <div style="overflow-x:auto;">
         <table>
@@ -971,7 +992,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <button class="btn btn-primary" id="ship-scan-submit" onclick="handleShippingScan()" style="font-size:18px;padding:14px 28px;min-width:140px;">読取登録</button>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px;">
-        <div class="form-group" style="margin:0;"><label>出荷担当者（確認画面に表示）</label><input class="form-input" id="ship-operator" placeholder="担当者名" style="max-width:220px;" /></div>
+        <div class="form-group" style="margin:0;"><label>出荷担当者</label><select class="form-input" id="ship-operator" style="max-width:220px;"><option value="">担当者を選択...</option></select></div>
       </div>
       <div id="ship-scan-result" style="display:none;margin-top:12px;padding:12px 14px;border-radius:var(--radius);font-size:14px;line-height:1.6;"></div>
     </div>
@@ -1233,6 +1254,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'individuals') indLoad();
     if (btn.dataset.tab === 'processing') loadProcessingSetup();
     if (btn.dataset.tab === 'shipping') { loadShipping(); setTimeout(maintainShippingScannerFocus, 50); }
+    if (btn.dataset.tab === 'punch') loadPunch();
     if (btn.dataset.tab === 'aging') loadAging();
     if (btn.dataset.tab === 'hunters') loadHunters();
     if (btn.dataset.tab === 'staff') loadStaffPanel();
@@ -2230,7 +2252,99 @@ async function shipOrderConfirmed(orderId, dropdownAssignments) {
 }
 
 /* ===== Processing Mode (精肉モード) ===== */
-const PM_OPERATORS = ['田口','白石','大和田','沖','名取','渡邊','相川','長谷川'];
+let PM_OPERATORS = ['田口','白石','大和田','沖','名取','渡邊','相川','長谷川']; // DB読込前のフォールバック
+let STAFF_MASTER = []; // {id, name} スタッフマスタ（作業者選択はここから）
+
+// 作業者はスタッフマスタ（staffテーブル）から必ず選択する
+async function loadStaffNames() {
+  try {
+    const rows = await sb('GET', 'staff', null, '?select=id,name&deleted_at=is.null&is_active=eq.true&order=name.asc');
+    const seen = new Set();
+    STAFF_MASTER = rows.filter(r => r.name && !seen.has(r.name) && seen.add(r.name));
+    if (STAFF_MASTER.length) PM_OPERATORS = STAFF_MASTER.map(s => s.name);
+    // 出荷担当者セレクトにも反映
+    const shipOp = document.getElementById('ship-operator');
+    if (shipOp && shipOp.tagName === 'SELECT') {
+      shipOp.innerHTML = '<option value="">担当者を選択...</option>' + PM_OPERATORS.map(n => `<option>${esc2(n)}</option>`).join('');
+    }
+  } catch (e) { /* オフライン時はフォールバックのまま */ }
+}
+
+/* ── 出退勤打刻（スタッフ各自用） ── */
+let punchSelected = null;   // {id, name}
+let punchTodayRec = null;
+
+function punchNowHM() { return new Date().toTimeString().slice(0, 5); }
+
+async function loadPunch() {
+  if (!STAFF_MASTER.length) await loadStaffNames();
+  const box = document.getElementById('punch-names');
+  box.innerHTML = STAFF_MASTER.map(s =>
+    `<button class="btn ${punchSelected && punchSelected.id === s.id ? 'btn-primary' : ''}" style="font-size:16px;padding:16px 10px;" onclick="punchSelect('${s.id}')">${esc2(s.name)}</button>`).join('')
+    || '<div class="empty-state">スタッフが未登録です（管理者がスタッフ管理から登録してください）</div>';
+  if (punchSelected) punchRefresh();
+}
+
+async function punchSelect(id) {
+  punchSelected = STAFF_MASTER.find(s => String(s.id) === String(id)) || null;
+  loadPunch();
+}
+
+async function punchRefresh() {
+  const panel = document.getElementById('punch-panel');
+  panel.style.display = 'block';
+  document.getElementById('punch-who').textContent = `👤 ${punchSelected.name} さん — ${new Date().toLocaleDateString('ja-JP')}`;
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const rows = await sb('GET', 'attendance', null, `?staff_id=eq.${punchSelected.id}&work_date=eq.${today}&select=*`);
+    punchTodayRec = rows[0] || null;
+  } catch (e) {
+    document.getElementById('punch-status').textContent = '勤怠の読み込みに失敗しました: ' + sbSafeMsg(e);
+    return;
+  }
+  const st = document.getElementById('punch-status');
+  const inRow = document.getElementById('punch-in-row');
+  const outRow = document.getElementById('punch-out-row');
+  if (!punchTodayRec || !punchTodayRec.clock_in) {
+    st.innerHTML = '本日はまだ出勤していません。';
+    inRow.style.display = 'block'; outRow.style.display = 'none';
+  } else if (!punchTodayRec.clock_out) {
+    st.innerHTML = `🟢 出勤中（出勤 <strong>${punchTodayRec.clock_in}</strong>）`;
+    inRow.style.display = 'none'; outRow.style.display = 'block';
+    if (punchTodayRec.break_minutes) document.getElementById('punch-break').value = punchTodayRec.break_minutes;
+  } else {
+    const h = (() => { const [ih,im]=punchTodayRec.clock_in.split(':').map(Number); const [oh,om]=punchTodayRec.clock_out.split(':').map(Number); return Math.max(0,(oh*60+om-ih*60-im-(punchTodayRec.break_minutes||0))/60); })();
+    st.innerHTML = `✅ 本日は退勤済みです。<br>出勤 <strong>${punchTodayRec.clock_in}</strong> / 退勤 <strong>${punchTodayRec.clock_out}</strong> / 休憩 ${punchTodayRec.break_minutes || 0}分 / 実働 <strong>${h.toFixed(1)}時間</strong><br><span style="color:var(--text2);font-size:12px;">修正が必要な場合は管理者に依頼してください。</span>`;
+    inRow.style.display = 'none'; outRow.style.display = 'none';
+  }
+}
+
+async function punchIn() {
+  if (!punchSelected) return;
+  const t = punchNowHM();
+  try {
+    await sb('POST', 'attendance', {
+      staff_id: punchSelected.id, staff_name: punchSelected.name,
+      work_date: new Date().toISOString().slice(0, 10),
+      clock_in: t, break_minutes: 0,
+    });
+    playFeedbackSound(true);
+    toast(`${punchSelected.name}さん 出勤を記録しました（${t}）`);
+    punchRefresh(); 
+  } catch (e) { playFeedbackSound(false); toast('出勤の記録に失敗しました: ' + sbSafeMsg(e), 'error'); }
+}
+
+async function punchOut() {
+  if (!punchSelected || !punchTodayRec) return;
+  const t = punchNowHM();
+  const brk = parseInt(document.getElementById('punch-break').value) || 0;
+  try {
+    await sb('PATCH', 'attendance', { clock_out: t, break_minutes: brk, updated_at: new Date().toISOString() }, `?id=eq.${punchTodayRec.id}`);
+    playFeedbackSound(true);
+    toast(`${punchSelected.name}さん 退勤を記録しました（${t} / 休憩${brk}分）お疲れさまでした`);
+    punchRefresh();
+  } catch (e) { playFeedbackSound(false); toast('退勤の記録に失敗しました: ' + sbSafeMsg(e), 'error'); }
+}
 // 小売モード時にラベルに印字するプリセット重量 (kg)
 const PM_RETAIL_WEIGHTS = {
   'ロース':   0.170,
@@ -4022,6 +4136,7 @@ async function loadAttendance() {
 }
 
 async function attSave(staffId, staffName) {
+  if (!requireAdmin('勤怠記録の修正')) return;
   const row = document.querySelector(`#att-body tr[data-staff="${staffId}"]`);
   const date = document.getElementById('att-date').value;
   const payload = {
@@ -4159,7 +4274,7 @@ function cleaningOpen(roomKey) {
   const room = CLEAN_ROOMS.find(r => r.key === roomKey);
   cleanCurrentRoom = room;
   document.getElementById('cleanModalTitle').textContent = `${room.icon} ${room.key} の清掃記録`;
-  const names = staffData.length ? staffData.map(s => s.name) : PM_OPERATORS;
+  const names = PM_OPERATORS; // スタッフマスタ（staffテーブル）由来に統一
   document.getElementById('clean-staff').innerHTML = '<option value="">実施者を選択...</option>' + names.map(n => `<option>${esc2(n)}</option>`).join('');
   document.getElementById('clean-items').innerHTML = room.items.map((it, i) => `<label style="display:flex;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:14px;"><input type="checkbox" class="clean-chk" value="${esc2(it)}" checked> ${esc2(it)}</label>`).join('');
   document.getElementById('clean-temp-row').style.display = room.temp ? 'block' : 'none';
@@ -4509,6 +4624,7 @@ loadDashboard();
 refreshNavBadges();
 loadFreezerOptions();
 loadMasterDatalists();
+loadStaffNames();
 </script>
 
 <script>
