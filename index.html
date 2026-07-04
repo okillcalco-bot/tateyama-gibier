@@ -1263,7 +1263,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div style="margin-top:12px;padding:12px 14px;border:1px dashed var(--gold2);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.9;background:var(--surface2);">
           📖 <strong style="color:var(--gold);">登録の手順</strong><br>
           ① 上の<strong>部位ボタン</strong>を押す<br>
-          ② <strong>はかりに肉を載せる</strong>（右に重量が表示されます）。はかりが無いときは右の「🔢 手動入力」で数字を入力<br>
+          ② <strong>はかりに肉を載せて、はかり本体の「プリント」ボタンを押す</strong>（押すと右に重量が表示されます。載せただけでは表示されません）。はかりが無いときは右の「🔢 手動入力」で数字を入力<br>
           ③ 右の<strong>「登録」</strong>を押す → ラベルが自動印刷され、在庫に登録されます<br>
           ・骨付き / 小売 / ランク / 冷凍庫は<strong>登録の前に</strong>上で選ぶ<br>
           ・続けて登録するときは、次の部位ボタンを押すだけ<br>
@@ -1280,7 +1280,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <button class="pm-measure-btn" id="pmMeasureBtn" onclick="pmStartMeasure()" disabled>登録</button>
           <button class="pm-measure-btn" id="pmPrintBtn" onclick="pmPrintOnly()" disabled style="margin-top:6px;background:linear-gradient(135deg,#4a7ab8,#5a8cd8);font-size:15px;">🖨 ラベル印刷</button>
           <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;">
-            <div class="pm-weight-hint" style="margin-top:0;">はかりに肉を載せてからボタンを押す</div>
+            <div class="pm-weight-hint" style="margin-top:0;">はかりに載せたら本体の「プリント」ボタン → 重量表示</div>
             <button class="pm-numpad-toggle" id="pmNumpadToggle" onclick="pmToggleNumpad()">🔢 手動入力</button>
             <button class="pm-numpad-toggle" onclick="alert('SJ-15KAWAP-BT接続手順:\n①WindowsのBluetooth設定でSJ-15をペアリング\n②COMポートが自動作成される\n③上の「⚖️ はかり未接続」ボタンを押してそのCOMポートを選択')" style="color:var(--blue);">📶 BT計量器?</button>
           </div>
@@ -2616,6 +2616,10 @@ const PM_PARTS = [
   { id:'pp-nk',  part_name:'ネック',           barcode_num:'NK' },
   { id:'pp-sn',  part_name:'スネ',             barcode_num:'SN' },
   { id:'pp-mu',  part_name:'ミンチ用',         barcode_num:'MU' },
+  { id:'pp-aj',  part_name:'味肉用',           barcode_num:'AJ' },
+  { id:'pp-sl',  part_name:'スライス用',       barcode_num:'SL' },
+  { id:'pp-kg',  part_name:'唐揚げ用',         barcode_num:'KG' },
+  { id:'pp-cb',  part_name:'チチカブ',         barcode_num:'CB' },
   { id:'pp-pf1', part_name:'ペットフード用（あり）', barcode_num:'PF1' },
   { id:'pp-pf2', part_name:'ペットフード用（なし）', barcode_num:'PF2' },
 ];
@@ -2909,6 +2913,7 @@ function generateLotCode(individualCode, partName, seq) {
     'ヒレ':'HI','ロース':'RO','肩ロース':'KR','バラ':'BA',
     'モモ':'MO','カタ（ウデ）':'KA','カタ':'KA','ネック':'NE','スネ':'SU',
     'ミンチ用':'MI','ミンチ肉':'MI','ペットフード用':'PE','ペットフード':'PE','骨':'HO',
+    '味肉用':'AJ','スライス用':'SL','唐揚げ用':'KG','チチカブ':'CB',
     '赤つなぎセット':'AK','タン（舌）':'TN','ハツ（心臓）':'HT','レバ（肝臓）':'LV',
     'フワ（肺）':'FW','マメ（腎臓）':'MM','チレ（脾臓）':'CR'
   };
@@ -2952,7 +2957,8 @@ function connDiag() {
     ① はかりの電源とUSBケーブル（充電専用ケーブルでないこと）<br>
     ② 「⚖️ はかり未接続」を押す → ポート選択に出てくるか。<strong>出てこない場合はドライバ未インストール</strong>（A&D製はUSBシリアルドライバ、SJ-15KAWAP-BTはWindowsのBluetooth設定でペアリング→COMポート作成が必要）<br>
     ③ ボーレート: SJ-15は<strong>2400</strong> / AD-8541-PCは<strong>9600</strong><br>
-    ④ 他のソフト（メーカー製ツール等）がポートを掴んでいたら閉じる</p>`;
+    ④ 他のソフト（メーカー製ツール等）がポートを掴んでいたら閉じる<br>
+    ⑤ 接続できたら: 肉を載せて<strong>はかり本体の「プリント」ボタン</strong>を押すと重量が画面に入ります（載せただけでは入りません）</p>`;
   }
 
   // ラベラーの診断
@@ -2971,7 +2977,7 @@ function connDiag() {
     ② Brother <strong>b-PAC Client Component</strong>（32bit版）をBrotherサイトからインストール<br>
     ③ Chromeウェブストアで拡張機能「<strong>b-PAC Extension</strong>」を追加<br>
     ④ ブラウザを再起動して精肉モードを開き直す → 「🖨 b-PAC OK」になれば完了<br>
-    ※b-PACが無くても登録はでき、ラベルはブラウザの印刷ダイアログから出せます（用紙サイズをラベルに合わせてください）。</p>`;
+    ※b-PACが無くても登録はでき、ラベルはブラウザの印刷ダイアログから出せます。<strong>印刷ダイアログにプリンタが出てこない場合は、①のドライバがこのPCに未インストール</strong>です（タブレットで印刷できていた場合も、PCには別途ドライバが必要です）。</p>`;
   }
   html += `<p style="font-size:11.5px;color:var(--text2);margin-top:10px;">それでも繋がらない場合は、この画面のスクリーンショットと「端末の種類・はかりの型番・プリンタの型番」を送ってください。</p>`;
 
