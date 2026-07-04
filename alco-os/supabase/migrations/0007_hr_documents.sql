@@ -50,7 +50,9 @@ create table if not exists checklist_runs (
 );
 
 -- 社内Wiki / ナレッジ（判断基準・行政対応・過去資料・AI参照資料）
-create table if not exists documents (
+-- ※ テーブル名は knowledge_docs。既存ジビエ基幹に documents テーブル
+--   （帳票用）が存在するため衝突を避けている。
+create table if not exists knowledge_docs (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id),
   title text not null,
@@ -67,16 +69,16 @@ create table if not exists documents (
   updated_at timestamptz not null default now(),
   deleted_at timestamptz
 );
-create index if not exists idx_documents_tags on documents using gin (tags);
+create index if not exists idx_knowledge_docs_tags on knowledge_docs using gin (tags);
 
 do $$
 declare t text;
 begin
-  foreach t in array array['sops','checklists','checklist_runs','documents']
+  foreach t in array array['sops','checklists','checklist_runs','knowledge_docs']
   loop
     perform alco_add_member_policy(t);
   end loop;
-  foreach t in array array['sops','checklists','documents']
+  foreach t in array array['sops','checklists','knowledge_docs']
   loop
     execute format('drop trigger if exists trg_%s_updated_at on %s', t, t);
     execute format('create trigger trg_%s_updated_at before update on %s

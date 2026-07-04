@@ -14,8 +14,13 @@
 | 0004_nature.sql | sites, survey_points, field_surveys, biodiversity_observations, management_actions |
 | 0005_crm.sql | contacts, interactions, deals, referrals |
 | 0006_projects.sql | projects, project_phases, project_issues, project_decisions, vendors, vendor_quotes |
-| 0007_hr_documents.sql | sops, checklists, checklist_runs, documents |
+| 0007_hr_documents.sql | sops, checklists, checklist_runs, knowledge_docs（既存の documents と衝突するため改名） |
 | 0008_dashboard_views.sql | v_open_tasks, v_pending_drafts, v_grant_pipeline, v_deal_pipeline, v_site_activity, v_ai_usage |
+| 0009_provisioning_and_approval.sql | デフォルト組織・ロール投入、provision_profile()（初回ログイン自動作成）、can_approve()、generated_drafts の update を owner/manager に限定 |
+
+**適用状況**: 0001〜0009 は本番 Supabase プロジェクト（tateyama-gibier /
+clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（2026-07-04）。
+seed.sql（ダミーデータ）は本番には投入していない。
 
 ## テーブル設計の標準
 
@@ -41,7 +46,7 @@ deleted_at       timestamptz                            -- ソフトデリート
 
 ## 汎用参照（related_table / related_id）
 
-tasks, files, documents は特定モジュールに依存しないよう
+tasks, files, knowledge_docs は特定モジュールに依存しないよう
 `related_table` + `related_id` の汎用参照を使う（FKなし）。
 モジュール固有の強い整合性が必要な場合のみ専用FKカラムを足す。
 

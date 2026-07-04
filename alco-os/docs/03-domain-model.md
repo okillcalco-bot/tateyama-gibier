@@ -52,7 +52,8 @@ draft ──承認(approveDraft)──→ approved（業務テーブルへ反映
 
 ### HR / Documents
 - **Sop**（作業標準書）/ **Checklist**（定義）/ **ChecklistRun**（実施記録）
-- **Document**（社内Wiki。is_ai_reference=true はAIワークフローの参照資料）
+- **KnowledgeDoc**（社内Wiki。テーブル名は knowledge_docs — 既存ジビエ基幹の
+  documents と衝突するため。is_ai_reference=true はAIワークフローの参照資料）
 - シフト・勤怠は既存ジビエ基幹の staff / attendance が正（重複させない）
 
 ### Gibier（既存システム側が正）

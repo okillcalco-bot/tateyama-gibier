@@ -1,8 +1,9 @@
 -- ============================================================
 -- ALCO OS  seed data（開発用ダミーデータ）
 -- ※ 実在の顧客情報・個人情報は入れない。設計段階はダミーで検証する。
--- ※ profiles は auth.users に依存するため、開発環境で
---    ユーザー作成後に organization_id を紐付けること。
+-- ※ 本番DB（ジビエ基幹と共有）には投入しない。組織・ロールの初期投入は
+--    マイグレーション 0009 が行うため、本番はマイグレーションのみでよい。
+-- ※ profiles は初回ログイン時に provision_profile()（0009）が自動作成する。
 -- ============================================================
 
 insert into organizations (id, name, slug)
@@ -116,7 +117,7 @@ insert into checklists (organization_id, title, category, frequency, items) valu
 on conflict do nothing;
 
 -- ── サンプル: ナレッジ ──
-insert into documents (organization_id, title, doc_type, module, body, tags, is_ai_reference) values
+insert into knowledge_docs (organization_id, title, doc_type, module, body, tags, is_ai_reference) values
   ('00000000-0000-0000-0000-000000000001', '補助金申請の基本方針（サンプル）', 'policy', 'grants',
    E'# 補助金申請の基本方針\n\n- 事実と異なる記載は絶対にしない\n- 数字は必ず根拠資料と紐付ける\n- AI生成文は必ず人間がレビューしてから提出する\n\n（開発用ダミー）',
    array['補助金','方針'], true)

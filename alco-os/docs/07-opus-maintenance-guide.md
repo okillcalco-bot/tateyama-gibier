@@ -56,5 +56,5 @@ ai/prompts/<name>.prompt.ts のみ変更。PROMPT_VERSION を上げ、
 mock-provider の応答がスキーマに合っているか確認。
 
 ### 新しい補助金テンプレ
-プロンプトではなく documents（doc_type: template）に入れて
+プロンプトではなく knowledge_docs（doc_type: template）に入れて
 ワークフロー入力に渡す設計を優先する（プロンプト肥大化を防ぐ）。

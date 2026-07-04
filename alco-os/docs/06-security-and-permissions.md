@@ -10,9 +10,12 @@
 - 認証: Supabase Auth（メール+パスワードから開始。必要に応じMFA/SSO拡張）
 - profiles が auth.users と 1:1。organization_id を持つ
 - ロール: roles / user_roles（owner / manager / staff）
-  - 現段階のRLSは「組織メンバーなら CRUD 可」の粗い粒度
-  - ロール別の細粒度制御（例: 承認は manager 以上）は `has_role()` を
-    使ってポリシー追加する（ロードマップ Phase 2）
+  - 初回ログイン時に `provision_profile()` がプロフィールを自動作成
+    （最初のユーザー = owner、以降 = staff。昇格は user_roles を編集）
+  - 承認（generated_drafts の update）は `can_approve()`
+    ＝ owner / manager のみ。RLSポリシーとserver actionの両方で強制
+  - その他の業務テーブルは「組織メンバーなら CRUD 可」。
+    細粒度化が必要になったら `has_role()` でポリシーを追加する
 
 ## RLS 方針
 
@@ -41,8 +44,11 @@
 
 ## 既知のギャップ（次に塞ぐもの）
 
-- [ ] middleware による未ログイン時の /login リダイレクトとセッションリフレッシュ
-- [ ] 承認操作の manager 以上限定（has_role ベースのRLS + UI制御)
+- [x] middleware による未ログイン時の /login リダイレクトとセッションリフレッシュ（src/middleware.ts）
+- [x] 承認操作の owner / manager 限定（0009: RLS + server action の二重チェック）
 - [ ] Storage バケットのRLSポリシー定義（files テーブルと対で）
 - [ ] レート制限（AI実行の暴走防止。ai_runs の集計で監視は可能）
 - [ ] 既存ジビエ基幹の allow_all RLS の段階的な厳格化（docs/09）
+- [ ] 本番の secretary_pages テーブルは RLS 無効（ジビエ基幹側の課題。
+      anon キーで全行読み書き可能な状態。既存アプリの動作確認の上で
+      `alter table secretary_pages enable row level security;` + ポリシー追加を検討）

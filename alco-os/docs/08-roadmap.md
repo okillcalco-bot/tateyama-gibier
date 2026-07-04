@@ -12,15 +12,21 @@
 - [x] ユニットテスト20件 + e2eスモーク + seed
 - [x] Opus 保守ガイド
 
-## Phase 2: 立ち上げ（次にやること）— Opus 中心
+## Phase 2: 立ち上げ
 
-1. Supabase プロジェクトへのマイグレーション適用 + 初期ユーザー作成
-2. auth middleware（未ログインリダイレクト・セッションリフレッシュ）
-3. 承認権限の絞り込み（manager 以上のみ承認可）
-4. Voice Memo の音声ファイルアップロード + 文字起こし連携
-5. Grants: 要件チェックリストUI・ドラフト生成ボタン・レビュー画面
-6. Nature: 観察記録のモバイル入力フォーム（写真+GPS）・レポート生成UI
-7. Vercel デプロイ + 運用開始（まずは代表のメモ運用から）
+- [x] 本番 Supabase（tateyama-gibier）へ 0001〜0009 適用
+      （既存テーブル無変更。documents 衝突を検出し knowledge_docs に改名）
+- [x] auth middleware（未ログインリダイレクト・セッションリフレッシュ）
+- [x] プロフィール自動プロビジョニング（初回ログインで profiles + ロール自動作成。
+      最初のユーザー = owner）
+- [x] 承認権限の絞り込み（owner / manager のみ。RLS + server action）
+- [ ] Supabase Dashboard で代表のユーザーを作成 → ログイン確認
+- [ ] Vercel デプロイ（環境変数: NEXT_PUBLIC_SUPABASE_URL /
+      NEXT_PUBLIC_SUPABASE_ANON_KEY / AI_PROVIDER / AI_DEFAULT_MODEL / ANTHROPIC_API_KEY）
+- [ ] Voice Memo の音声ファイルアップロード + 文字起こし連携
+- [ ] Grants: 要件チェックリストUI・ドラフト生成ボタン・レビュー画面
+- [ ] Nature: 観察記録のモバイル入力フォーム（写真+GPS）・レポート生成UI
+- [ ] 運用開始（まずは代表のメモ運用から）
 
 ## Phase 3: 現場仕様に育てる — Opus
 

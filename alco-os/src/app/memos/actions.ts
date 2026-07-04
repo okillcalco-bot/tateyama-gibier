@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { SupabaseDb } from "@/lib/db/supabase-db";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, canApprove } from "@/lib/auth";
 import { getProvider } from "@/ai/model-router";
 import { classifyVoiceMemo } from "@/ai/workflows/classify-voice-memo";
 import { approveDraft, discardDraft } from "@/domain/drafts/draft-service";
@@ -57,11 +57,17 @@ export async function createAndClassifyMemo(formData: FormData) {
   revalidatePath("/drafts");
 }
 
-/** ドラフト承認: 提案タスクの作成などの反映は draft-service が行う */
+/**
+ * ドラフト承認: 提案タスクの作成などの反映は draft-service が行う。
+ * 承認は owner / manager のみ（RLS でも generated_drafts の update を制限済み）。
+ */
 export async function approveDraftAction(draftId: string) {
   const supabase = await createSupabaseServerClient();
   const user = await getCurrentUser(supabase);
   if (!user) throw new Error("ログインが必要です");
+  if (!(await canApprove(supabase))) {
+    throw new Error("承認権限がありません（owner / manager のみ承認できます）");
+  }
 
   await approveDraft(new SupabaseDb(supabase), {
     organizationId: user.organizationId,
@@ -72,11 +78,14 @@ export async function approveDraftAction(draftId: string) {
   revalidatePath("/tasks");
 }
 
-/** ドラフト破棄 */
+/** ドラフト破棄（owner / manager のみ） */
 export async function discardDraftAction(draftId: string) {
   const supabase = await createSupabaseServerClient();
   const user = await getCurrentUser(supabase);
   if (!user) throw new Error("ログインが必要です");
+  if (!(await canApprove(supabase))) {
+    throw new Error("承認権限がありません（owner / manager のみ破棄できます）");
+  }
 
   await discardDraft(new SupabaseDb(supabase), {
     organizationId: user.organizationId,

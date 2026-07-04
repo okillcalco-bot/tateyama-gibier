@@ -25,12 +25,26 @@ pnpm dev                     # http://localhost:3000
 Supabase 未設定でも起動でき、各画面にセットアップ案内が表示されます
 （AI は `AI_PROVIDER=mock` でAPIキーなしで動作）。
 
-### Supabase の準備
+### Supabase（本番プロジェクトは適用済み）
 
-1. 既存ジビエ基幹と同じ Supabase プロジェクトを使う（推奨）
-2. `supabase/migrations/` を番号順に適用（SQL Editor または `supabase db push`）
-3. `supabase/seed.sql` を適用（開発用ダミーデータ）
-4. Auth でユーザーを作成し、`profiles` に organization_id 付きで登録
+マイグレーション 0001〜0009 は既存ジビエ基幹と同じ本番プロジェクト
+**tateyama-gibier（clpdyrehdgzgiidbfucj）に適用済み**（既存テーブルは無変更）。
+`.env.local` / Vercel には以下を設定する:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://clpdyrehdgzgiidbfucj.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck
+```
+
+（anon キーはクライアント配布前提の公開キー。データ保護は RLS が担う）
+
+**ユーザー作成**: Supabase Dashboard → Authentication → Add user で
+メール+パスワードのユーザーを作るだけ。初回ログイン時に
+`provision_profile()` がプロフィールを自動作成する
+（**最初のユーザーが owner** になる。以降のユーザーは staff）。
+
+**別プロジェクトで新規に立てる場合**: `supabase/migrations/` を番号順に適用し、
+開発用ダミーデータが欲しければ `supabase/seed.sql` を適用（本番には入れない）。
 
 ## コマンド
 
