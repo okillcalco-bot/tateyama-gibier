@@ -1203,7 +1203,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 <div class="pm-overlay" id="pmOverlay">
   <!-- Setup Screen -->
   <div id="pmSetup" class="pm-setup">
-    <div class="pm-setup-title">🔪 精肉モード セットアップ</div>
+    <div class="pm-setup-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;"><span>🔪 精肉モード セットアップ</span>
+      <button onclick="connDiag()" style="font-size:12px;padding:5px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;">🔧 はかり・ラベラー接続診断</button>
+    </div>
     <!-- Active Sessions -->
     <div id="pmSessionSection" style="display:none;margin-bottom:16px;">
       <div style="font-size:13px;color:var(--gold);margin-bottom:8px;font-weight:600;">▶ 進行中のセッション（タップして再開）</div>
@@ -1234,7 +1236,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div class="pm-header-ops" id="pmHeaderOps"></div>
       <div class="pm-header-right">
         <button id="scaleConnBtn" onclick="scaleConnect()" style="font-size:11px;padding:3px 8px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;white-space:nowrap;">⚖️ はかり未接続</button>
-<span id="bpacStatus" style="font-size:11px;padding:3px 8px;border-radius:10px;border:1px solid var(--border);white-space:nowrap;color:var(--text2);">確認中...</span>
+<span id="bpacStatus" onclick="connDiag()" style="cursor:pointer;font-size:11px;padding:3px 8px;border-radius:10px;border:1px solid var(--border);white-space:nowrap;color:var(--text2);">確認中...</span>
+        <button onclick="connDiag()" style="font-size:11px;padding:3px 8px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;white-space:nowrap;">🔧 接続診断</button>
         <button class="pm-close" onclick="closeProcessingMode()">✕ 閉じる</button>
       </div>
     </div>
@@ -1327,6 +1330,17 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <div class="modal">
     <div class="modal-header"><div class="modal-title" id="modal-detail-title">在庫詳細</div><button class="modal-close" onclick="closeModal('modal-detail')">&times;</button></div>
     <div class="modal-body" id="modal-detail-body"></div>
+  </div>
+</div>
+
+<!-- 接続診断モーダル -->
+<div id="connDiagModal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.7);overflow-y:auto;">
+  <div style="max-width:640px;margin:30px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div style="font-size:17px;font-weight:700;color:var(--gold);">🔧 はかり・ラベラー接続診断</div>
+      <button onclick="document.getElementById('connDiagModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+    </div>
+    <div id="connDiagBody" style="font-size:13.5px;line-height:1.8;"></div>
   </div>
 </div>
 
@@ -2904,6 +2918,67 @@ function generateLotCode(individualCode, partName, seq) {
   return `${indNum}-${abbr}-${date}-${String(seq).padStart(3,'0')}`;
 }
 
+// ── 接続診断（はかり・ラベラーが繋がらないときの原因表示） ──
+function connDiag() {
+  const ua = navigator.userAgent;
+  const isAndroid = /Android/i.test(ua);
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isWindows = /Windows/i.test(ua);
+  const isMac = /Macintosh/i.test(ua) && !isIOS;
+  const os = isAndroid ? 'Androidタブレット/スマホ' : isIOS ? 'iPad/iPhone' : isWindows ? 'Windows PC' : isMac ? 'Mac' : 'その他';
+  const hasSerial = 'serial' in navigator;
+  const hasBT = 'bluetooth' in navigator;
+  const hasBpac = typeof bpac !== 'undefined' && bpac.IDocument;
+  const https = location.protocol === 'https:' || location.hostname === 'localhost';
+  const okBadge = (b) => b ? '<span class="badge badge-green">OK</span>' : '<span class="badge badge-red">×</span>';
+
+  let html = `<div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);margin-bottom:12px;">
+    <strong>この端末:</strong> ${os}<br>
+    HTTPS接続 ${okBadge(https)}　USB/シリアル対応(Web Serial) ${okBadge(hasSerial)}　Bluetooth対応 ${okBadge(hasBT)}　b-PAC拡張 ${okBadge(hasBpac)}
+  </div>`;
+
+  // はかりの診断
+  html += `<div style="font-size:13px;color:var(--gold);font-weight:600;border-bottom:1px solid var(--border);padding-bottom:4px;margin-bottom:6px;">▌ ⚖️ はかり</div>`;
+  if (isAndroid || isIOS) {
+    html += `<p>❌ <strong>${os}ではUSB/シリアル接続のはかりは使えません</strong>（ブラウザの制限です）。<br>
+    対応方法（どれか）:<br>
+    ① <strong>Windows PC/ノートのChrome/Edge</strong>で精肉モードを開く（推奨・従来どおり）<br>
+    ② 「🔢 手動入力」ではかりの表示を手で打つ（今すぐ使える）<br>
+    ③ USBキーボード型のはかり（HID出力タイプ）に変える → 接続なしで自動入力されます</p>`;
+  } else if (!hasSerial) {
+    html += `<p>❌ このブラウザはWeb Serial非対応です。<strong>Google Chrome か Microsoft Edge の最新版</strong>で開いてください（Safari・Firefoxは不可）。</p>`;
+  } else {
+    html += `<p>✅ この端末はUSB/シリアル接続に対応しています。繋がらない場合の確認:<br>
+    ① はかりの電源とUSBケーブル（充電専用ケーブルでないこと）<br>
+    ② 「⚖️ はかり未接続」を押す → ポート選択に出てくるか。<strong>出てこない場合はドライバ未インストール</strong>（A&D製はUSBシリアルドライバ、SJ-15KAWAP-BTはWindowsのBluetooth設定でペアリング→COMポート作成が必要）<br>
+    ③ ボーレート: SJ-15は<strong>2400</strong> / AD-8541-PCは<strong>9600</strong><br>
+    ④ 他のソフト（メーカー製ツール等）がポートを掴んでいたら閉じる</p>`;
+  }
+
+  // ラベラーの診断
+  html += `<div style="font-size:13px;color:var(--gold);font-weight:600;border-bottom:1px solid var(--border);padding-bottom:4px;margin:12px 0 6px;">▌ 🖨 ラベルプリンタ（Brother）</div>`;
+  if (hasBpac) {
+    html += `<p>✅ b-PAC拡張を検出済み。印刷できない場合は、Brotherのプリンタドライバとラベル用紙サイズ、プリンタの電源・接続を確認してください。</p>`;
+  } else if (isAndroid || isIOS) {
+    html += `<p>❌ <strong>${os}ではb-PAC（Brotherラベル直接印刷）は使えません</strong>。<br>
+    対応方法（どれか）:<br>
+    ① <strong>Windows PCのChrome/Edge</strong>で精肉モードを使う（推奨）<br>
+    ② 登録だけタブレットで行い、「🖨 ラベル印刷」はブラウザの印刷ダイアログからBrotherを選んで印刷（事前にタブレットへプリンタ登録が必要）<br>
+    ③ Brother純正アプリ（iPrint&Label）で識別コードを手動印刷（応急）</p>`;
+  } else {
+    html += `<p>⚠️ b-PAC拡張が未検出です。<strong>Windowsでの設定手順</strong>（3点セットが必要）:<br>
+    ① Brotherの<strong>プリンタドライバ</strong>をインストール（QL/TDシリーズ）<br>
+    ② Brother <strong>b-PAC Client Component</strong>（32bit版）をBrotherサイトからインストール<br>
+    ③ Chromeウェブストアで拡張機能「<strong>b-PAC Extension</strong>」を追加<br>
+    ④ ブラウザを再起動して精肉モードを開き直す → 「🖨 b-PAC OK」になれば完了<br>
+    ※b-PACが無くても登録はでき、ラベルはブラウザの印刷ダイアログから出せます（用紙サイズをラベルに合わせてください）。</p>`;
+  }
+  html += `<p style="font-size:11.5px;color:var(--text2);margin-top:10px;">それでも繋がらない場合は、この画面のスクリーンショットと「端末の種類・はかりの型番・プリンタの型番」を送ってください。</p>`;
+
+  document.getElementById('connDiagBody').innerHTML = html;
+  document.getElementById('connDiagModal').style.display = 'block';
+}
+
 // ── b-PAC 接続状態チェック ──
 function checkBpacStatus() {
   const el = document.getElementById('bpacStatus');
@@ -3289,7 +3364,7 @@ async function scaleConnect() {
   }
 
   if (!('serial' in navigator)) {
-    toast('このブラウザはWeb Serial非対応です。Chrome/Edgeを使用してください。', 'error');
+    connDiag(); // 原因と対応方法を表示
     return;
   }
 
