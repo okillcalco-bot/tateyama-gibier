@@ -2622,6 +2622,17 @@ const PM_PARTS = [
   { id:'pp-cb',  part_name:'チチカブ',         barcode_num:'CB' },
   { id:'pp-pf1', part_name:'ペットフード用（あり）', barcode_num:'PF1' },
   { id:'pp-pf2', part_name:'ペットフード用（なし）', barcode_num:'PF2' },
+  { divider: true },
+  { id:'pp-tn',  part_name:'タン',             barcode_num:'TN' },
+  { id:'pp-ht',  part_name:'ハツ',             barcode_num:'HT' },
+  { id:'pp-fw',  part_name:'フワ',             barcode_num:'FW' },
+  { id:'pp-lv',  part_name:'レバー',           barcode_num:'LV' },
+  { id:'pp-mm',  part_name:'マメ',             barcode_num:'MM' },
+  { id:'pp-gt',  part_name:'ガツ',             barcode_num:'GT' },
+  { id:'pp-sc',  part_name:'ショウチョウ',     barcode_num:'SC' },
+  { id:'pp-dc',  part_name:'ダイチョウ',       barcode_num:'DC' },
+  { id:'pp-hd',  part_name:'ホーデン',         barcode_num:'HD' },
+  { id:'pp-kb',  part_name:'コブクロ',         barcode_num:'KB' },
 ];
 
 // セッションメモリ: { '田口': { individual, completedParts, selectedPart, boneIn, grade }, ... }
@@ -2914,6 +2925,8 @@ function generateLotCode(individualCode, partName, seq) {
     'モモ':'MO','カタ（ウデ）':'KA','カタ':'KA','ネック':'NE','スネ':'SU',
     'ミンチ用':'MI','ミンチ肉':'MI','ペットフード用':'PE','ペットフード':'PE','骨':'HO',
     '味肉用':'AJ','スライス用':'SL','唐揚げ用':'KG','チチカブ':'CB',
+    'タン':'TN','ハツ':'HT','フワ':'FW','レバー':'LV','マメ':'MM',
+    'ガツ':'GT','ショウチョウ':'SC','ダイチョウ':'DC','ホーデン':'HD','コブクロ':'KB',
     '赤つなぎセット':'AK','タン（舌）':'TN','ハツ（心臓）':'HT','レバ（肝臓）':'LV',
     'フワ（肺）':'FW','マメ（腎臓）':'MM','チレ（脾臓）':'CR'
   };
@@ -3114,8 +3127,9 @@ async function pmSelectIndividual(labelId) {
 function pmRenderParts() {
   const grid = document.getElementById('pmPartsGrid');
   const doneParts = pmCompletedParts.map(c => c.part_name);
-  const partsToShow = pmRetail ? PM_PARTS.filter(p => RETAIL_PART_IDS.includes(p.id)) : PM_PARTS;
+  const partsToShow = pmRetail ? PM_PARTS.filter(p => !p.divider && RETAIL_PART_IDS.includes(p.id)) : PM_PARTS;
   grid.innerHTML = partsToShow.map(p => {
+    if (p.divider) return `<div style="grid-column:1/-1;border-top:1px solid var(--border2);margin:4px 0;"></div>`;
     const doneCount = doneParts.filter(d => d.includes(p.part_name)).length;
     const isSelected = pmSelectedPart && pmSelectedPart.id === p.id;
     return `<button class="part-btn ${isSelected ? 'active' : ''}" id="pm-part-${p.id}" onclick="pmSelectPart('${p.id}')">
