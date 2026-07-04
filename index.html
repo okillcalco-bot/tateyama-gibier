@@ -2593,6 +2593,7 @@ async function punchOut() {
 const PM_RETAIL_WEIGHTS = {
   'ロース':   0.170,
   'モモ':     0.220,
+  'モモ（全体）': 0.220,
   '肩ロース': 0.200,
   'バラ':     0.200,
   'スネ':     0.250,
@@ -2603,6 +2604,7 @@ const RETAIL_PRESETS = {
   'バラ':     { weight: 0.200 },
   '肩ロース': { weight: 0.200 },
   'モモ':     { weight: 0.220 },
+  'モモ（全体）': { weight: 0.220 },
   'スネ':     { weight: 0.250 }
 };
 const RETAIL_PART_IDS = ['pp-ro', 'pp-ba', 'pp-kr', 'pp-mo', 'pp-sn'];
@@ -2611,7 +2613,10 @@ const PM_PARTS = [
   { id:'pp-hi',  part_name:'ヒレ',             barcode_num:'HI' },
   { id:'pp-ba',  part_name:'バラ',             barcode_num:'BA' },
   { id:'pp-kr',  part_name:'肩ロース',         barcode_num:'KR' },
-  { id:'pp-mo',  part_name:'モモ',             barcode_num:'MO' },
+  { id:'pp-mo',  part_name:'モモ（全体）',     barcode_num:'MO' },
+  { id:'pp-mou', part_name:'モモ（ウチ）',     barcode_num:'MOU' },
+  { id:'pp-mos', part_name:'モモ（ソト）',     barcode_num:'MOS' },
+  { id:'pp-mot', part_name:'モモ（シンタマ）', barcode_num:'MOT' },
   { id:'pp-kt',  part_name:'カタ',             barcode_num:'KT' },
   { id:'pp-nk',  part_name:'ネック',           barcode_num:'NK' },
   { id:'pp-sn',  part_name:'スネ',             barcode_num:'SN' },
@@ -2922,7 +2927,8 @@ const PM_LABEL_TEMPLATE = 'C:\\TGC\\labels\\TGC_inventory_label.lbx';
 function generateLotCode(individualCode, partName, seq) {
   const partAbbr = {
     'ヒレ':'HI','ロース':'RO','肩ロース':'KR','バラ':'BA',
-    'モモ':'MO','カタ（ウデ）':'KA','カタ':'KA','ネック':'NE','スネ':'SU',
+    'モモ':'MO','モモ（全体）':'MO','モモ（ウチ）':'MOU','モモ（ソト）':'MOS','モモ（シンタマ）':'MOT',
+    'カタ（ウデ）':'KA','カタ':'KA','ネック':'NE','スネ':'SU',
     'ミンチ用':'MI','ミンチ肉':'MI','ペットフード用':'PE','ペットフード':'PE','骨':'HO',
     '味肉用':'AJ','スライス用':'SL','唐揚げ用':'KG','チチカブ':'CB',
     'タン':'TN','ハツ':'HT','フワ':'FW','レバー':'LV','マメ':'MM',
