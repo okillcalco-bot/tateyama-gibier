@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>館山ジビエセンター 在庫管理</title>
+<title>館山ジビエセンター 業務</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.min.js"></script>
 <style>
@@ -369,7 +369,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 </div>
 
 <div class="header">
-  <div class="header-title">館山ジビエセンター 在庫管理</div>
+  <div class="header-title">館山ジビエセンター 業務</div>
   <button class="btn btn-primary" onclick="openProcessingMode()" style="margin-left:12px;font-size:13px;">🔪 精肉モード</button>
   <nav class="header-nav">
     <a href="capture-form.html">捕獲票入力</a>
@@ -386,10 +386,12 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 <nav class="sidenav" id="sidenav">
   <button class="tab-btn active" data-tab="dashboard">&#x1F4CA; ダッシュボード</button>
   <div class="nav-group">日々の業務</div>
+  <button class="tab-btn" data-tab="punch">&#x23F1; 出退勤打刻</button>
   <a class="tab-btn" href="capture-form.html">&#x1F4DD; 捕獲票入力</a>
   <button class="tab-btn" data-tab="individuals">&#x1FAA4; 捕獲受入・個体<span class="nav-badge" id="nav-badge-intake"></span></button>
   <button class="tab-btn" data-tab="aging">&#x1F969; 熟成管理<span class="nav-badge" id="nav-badge-aging"></span></button>
   <button class="tab-btn" data-tab="processing">&#x1F52A; 精肉入力<span class="nav-badge" id="nav-badge-processing"></span></button>
+  <button class="tab-btn" data-tab="products">&#x1F6CD; 加工処理<span class="nav-badge" id="nav-badge-products"></span></button>
   <button class="tab-btn" data-tab="inventory">&#x1F4E6; 在庫一覧</button>
   <button class="tab-btn" data-tab="shipping">&#x1F4E4; 出荷処理<span class="nav-badge" id="nav-badge-shipping"></span></button>
   <button class="tab-btn" data-tab="trace">&#x1F50D; トレーサビリティ</button>
@@ -402,12 +404,18 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <button class="tab-btn" data-tab="supplies">&#x1F9F4; 資材在庫<span class="nav-badge" id="nav-badge-supplies"></span></button>
   <div class="nav-group">施設・HACCP</div>
   <button class="tab-btn" data-tab="cleaning">&#x1F9F9; 清掃記録<span class="nav-badge" id="nav-badge-cleaning"></span></button>
+  <div class="nav-group">書類・帳票</div>
+  <button class="tab-btn" data-tab="docs">&#x1F4C4; 書類・帳票<span class="nav-badge" id="nav-badge-docs"></span></button>
   <button class="tab-btn" data-tab="datamgmt">&#x1F5C4; データ管理</button>
 </nav>
 
 <div class="content">
   <!-- Dashboard -->
   <div class="tab-panel active" id="panel-dashboard">
+    <div class="section">
+      <div class="section-title">📌 今日やること</div>
+      <div id="today-todos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px;"><div class="loading"><span class="spin"></span>確認中...</div></div>
+    </div>
     <div class="card-row" id="dash-cards">
       <div class="card"><div class="card-label">搬入待ち個体数</div><div class="card-value" id="dc-pending">-</div><div class="card-sub">精肉処理前</div></div>
       <div class="card"><div class="card-label">在庫点数</div><div class="card-value" id="dc-stock">-</div><div class="card-sub">在庫ステータス</div></div>
@@ -717,6 +725,26 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div id="trace-result"></div>
   </div>
 
+  <!-- Punch (出退勤打刻) -->
+  <div class="tab-panel" id="panel-punch">
+    <div class="section">
+      <div class="section-title">出退勤打刻</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px;">自分の名前を選んで「出勤」「退勤」ボタンを押すだけで、時刻が自動で記録されます。退勤のときに休憩時間を入れてください。記録の修正は管理者に依頼してください。</div>
+      <div id="punch-names" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:16px;"></div>
+      <div id="punch-panel" style="display:none;max-width:480px;padding:18px;border:1px solid var(--gold2);border-radius:var(--radius);background:var(--surface);">
+        <div style="font-size:17px;font-weight:700;margin-bottom:6px;" id="punch-who"></div>
+        <div id="punch-status" style="font-size:14px;line-height:1.8;margin-bottom:14px;"></div>
+        <div id="punch-in-row" style="display:none;">
+          <button class="btn btn-primary" style="width:100%;font-size:20px;padding:16px;" onclick="punchIn()">🟢 出勤する（今の時刻で記録）</button>
+        </div>
+        <div id="punch-out-row" style="display:none;">
+          <div class="form-group" style="margin-bottom:10px;"><label>休憩時間（分）</label><input class="form-input" id="punch-break" type="number" value="60" min="0" step="5" style="max-width:140px;font-size:16px;" /></div>
+          <button class="btn btn-primary" style="width:100%;font-size:20px;padding:16px;background:var(--red);border-color:var(--red);" onclick="punchOut()">🔴 退勤する（今の時刻で記録）</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Aging (熟成管理) -->
   <div class="tab-panel" id="panel-aging">
     <div class="section">
@@ -724,6 +752,70 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;">受け入れた個体ごとに「半身熟成（目安7日）」か「直接分割」を選びます。熟成日数は開始日から精肉日まで自動計算されます。</div>
       <div id="aging-stats" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;"></div>
       <div id="aging-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+  </div>
+
+  <!-- Products (加工処理・完成品在庫) -->
+  <div class="tab-panel" id="panel-products">
+    <div class="section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>加工処理・完成品在庫</span>
+        <button class="btn btn-primary" onclick="productOpenNew()">＋ 商品を追加</button>
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:12px;">精肉を加工して作った卸売・小売商品の完成個数をここで記録します（ホワイトボードの置き換え）。完成したら「＋完成」、イベント等へ持ち出したら「−持ち出し」。BASEネットショップの商品と対応しています。</div>
+      <div id="products-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">最近の動き（完成・持ち出し・販売）</div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>日時</th><th>商品</th><th>区分</th><th>数量</th><th>担当</th><th>原料コード</th><th>メモ</th></tr></thead>
+          <tbody id="product-moves-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Product Movement Modal -->
+  <div id="prodMoveModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:460px;margin:40px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);" id="prodMoveTitle">記録</div>
+        <button onclick="document.getElementById('prodMoveModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div id="prodMoveProduct" style="font-size:15px;font-weight:600;margin-bottom:12px;"></div>
+      <div class="form-group"><label>区分</label><select class="form-input" id="pmv-type"><option>完成</option><option>持ち出し</option><option>店頭販売</option><option>廃棄</option><option>棚卸調整</option></select></div>
+      <div class="form-group"><label>数量</label><input class="form-input" id="pmv-qty" type="number" min="1" value="1" style="font-size:20px;max-width:140px;" /></div>
+      <div class="form-group"><label>担当者</label><select class="form-input" id="pmv-staff"></select></div>
+      <div class="form-group" id="pmv-source-row"><label>原料に使った精肉の識別コード（任意・スキャン可）</label><input class="form-input" id="pmv-source" placeholder="例: TGC-08-T001-RO" /></div>
+      <div class="form-group"><label>メモ（持ち出し先など）</label><input class="form-input" id="pmv-note" placeholder="例: 道の駅イベント販売用" /></div>
+      <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;">
+        <button class="btn" onclick="document.getElementById('prodMoveModal').style.display='none'">キャンセル</button>
+        <button class="btn btn-primary" style="font-size:15px;padding:10px 24px;" onclick="productMoveSave()">記録する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Product Edit Modal -->
+  <div id="productModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:480px;margin:40px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);" id="productModalTitle">商品 新規登録</div>
+        <button onclick="document.getElementById('productModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="form-group" style="grid-column:1/-1"><label>商品名 *</label><input class="form-input" id="prd-f-name" /></div>
+        <div class="form-group"><label>区分</label><select class="form-input" id="prd-f-category"><option>小売</option><option>卸売</option></select></div>
+        <div class="form-group"><label>単位</label><input class="form-input" id="prd-f-unit" placeholder="個 / 袋" /></div>
+        <div class="form-group"><label>販売価格（円）</label><input class="form-input" id="prd-f-price" type="number" /></div>
+        <div class="form-group"><label>在庫数（棚卸）</label><input class="form-input" id="prd-f-stock_qty" type="number" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>BASE商品URL（連携用）</label><input class="form-input" id="prd-f-base_url" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>メモ</label><input class="form-input" id="prd-f-memo" /></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;">
+        <button class="btn" onclick="document.getElementById('productModal').style.display='none'">キャンセル</button>
+        <button class="btn btn-primary" onclick="productSave()">保存</button>
+      </div>
     </div>
   </div>
 
@@ -760,10 +852,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
     </div>
     <div class="section">
-      <div class="section-title">出退勤記録</div>
+      <div class="section-title">出退勤記録（管理者チェック）</div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
         <input class="form-input" id="att-date" type="date" style="max-width:170px;" onchange="loadAttendance()" />
-        <span style="font-size:12px;color:var(--text2);">日付を選んで各スタッフの出勤・退勤を入力し「保存」を押してください</span>
+        <span style="font-size:12px;color:var(--text2);">スタッフの打刻は「⏱ 出退勤打刻」から。ここでは管理者が確認・修正します</span>
       </div>
       <div style="overflow-x:auto;">
         <table>
@@ -826,6 +918,38 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         </table>
       </div>
       <div style="font-size:12px;color:var(--text2);margin-top:8px;">使ったら「−」、補充したら「＋」。在庫数が発注点以下になると警告が出ます。（Amazon等との自動連携は今後対応予定）</div>
+    </div>
+  </div>
+
+  <!-- Docs Hub (書類・帳票) -->
+  <div class="tab-panel" id="panel-docs">
+    <div class="section">
+      <div class="section-title">書類・帳票</div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:12px;">日々の業務入力（受入・精肉・出荷・清掃・勤怠・加工）から自動転記で帳票を生成します。HACCP・労務・税務の様式は<strong>専門家確認前提の参考様式</strong>、給与関連の金額は<strong>参考計算</strong>です。PDF保存は「印刷/PDF」→印刷ダイアログで「PDFに保存」。</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+        <div class="form-group" style="margin:0;"><label>対象月</label><input class="form-input" id="doc-month" type="month" onchange="loadDocsHub()" style="max-width:170px;" /></div>
+        <div class="form-group" style="margin:0;"><label>カテゴリ</label><select class="form-input" id="doc-cat-filter" onchange="renderDocsList()">
+          <option value="">全て</option>
+          <option>HACCP・衛生管理</option>
+          <option>労務・社労士</option>
+          <option>経理・税理士</option>
+          <option>認証・監査対応</option>
+        </select></div>
+        <div class="form-group" style="margin:0;flex:1;min-width:180px;"><label>検索</label><input class="form-input" id="doc-search" placeholder="帳票名で検索" oninput="renderDocsList()" /></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+        <button class="btn" onclick="docZipCategory('HACCP・衛生管理')">⬇ HACCP一括ZIP</button>
+        <button class="btn" onclick="docZipCategory('労務・社労士')">⬇ 労務一括ZIP</button>
+        <button class="btn" onclick="docZipCategory('経理・税理士')">⬇ 経理一括ZIP（税理士パッケージ）</button>
+      </div>
+      <div id="docs-list"></div>
+    </div>
+    <div class="section" id="doc-preview-section" style="display:none;">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>プレビュー</span>
+        <div id="doc-approve-bar" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"></div>
+      </div>
+      <div id="doc-preview-body" style="overflow-x:auto;background:#fff;color:#222;padding:18px;border-radius:var(--radius);border:1px solid var(--border);"></div>
     </div>
   </div>
 
@@ -971,7 +1095,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <button class="btn btn-primary" id="ship-scan-submit" onclick="handleShippingScan()" style="font-size:18px;padding:14px 28px;min-width:140px;">読取登録</button>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px;">
-        <div class="form-group" style="margin:0;"><label>出荷担当者（確認画面に表示）</label><input class="form-input" id="ship-operator" placeholder="担当者名" style="max-width:220px;" /></div>
+        <div class="form-group" style="margin:0;"><label>出荷担当者</label><select class="form-input" id="ship-operator" style="max-width:220px;"><option value="">担当者を選択...</option></select></div>
       </div>
       <div id="ship-scan-result" style="display:none;margin-top:12px;padding:12px 14px;border-radius:var(--radius);font-size:14px;line-height:1.6;"></div>
     </div>
@@ -1228,11 +1352,14 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
-    if (btn.dataset.tab === 'dashboard') { loadDashboard(); refreshNavBadges(); }
+    if (btn.dataset.tab === 'dashboard') { loadDashboard(); refreshNavBadges(); loadTodayTodos(); }
+    if (btn.dataset.tab === 'docs') loadDocsHub();
     if (btn.dataset.tab === 'inventory') loadInventory();
     if (btn.dataset.tab === 'individuals') indLoad();
     if (btn.dataset.tab === 'processing') loadProcessingSetup();
     if (btn.dataset.tab === 'shipping') { loadShipping(); setTimeout(maintainShippingScannerFocus, 50); }
+    if (btn.dataset.tab === 'punch') loadPunch();
+    if (btn.dataset.tab === 'products') loadProducts();
     if (btn.dataset.tab === 'aging') loadAging();
     if (btn.dataset.tab === 'hunters') loadHunters();
     if (btn.dataset.tab === 'staff') loadStaffPanel();
@@ -2230,7 +2357,99 @@ async function shipOrderConfirmed(orderId, dropdownAssignments) {
 }
 
 /* ===== Processing Mode (精肉モード) ===== */
-const PM_OPERATORS = ['田口','白石','大和田','沖','名取','渡邊','相川','長谷川'];
+let PM_OPERATORS = ['沖浩志','田口和利','白石秀一','大和田薫','渡邊恵','相川武士','名取祐次郎','大橋直人','石橋早奈恵','黒川珠絵','今泉貴雄','吉田友美']; // 正式名簿（DB読込前のフォールバック）
+let STAFF_MASTER = []; // {id, name} スタッフマスタ（作業者選択はここから）
+
+// 作業者はスタッフマスタ（staffテーブル）から必ず選択する
+async function loadStaffNames() {
+  try {
+    const rows = await sb('GET', 'staff', null, '?select=id,name&deleted_at=is.null&is_active=eq.true&order=name.asc');
+    const seen = new Set();
+    STAFF_MASTER = rows.filter(r => r.name && !seen.has(r.name) && seen.add(r.name));
+    if (STAFF_MASTER.length) PM_OPERATORS = STAFF_MASTER.map(s => s.name);
+    // 出荷担当者セレクトにも反映
+    const shipOp = document.getElementById('ship-operator');
+    if (shipOp && shipOp.tagName === 'SELECT') {
+      shipOp.innerHTML = '<option value="">担当者を選択...</option>' + PM_OPERATORS.map(n => `<option>${esc2(n)}</option>`).join('');
+    }
+  } catch (e) { /* オフライン時はフォールバックのまま */ }
+}
+
+/* ── 出退勤打刻（スタッフ各自用） ── */
+let punchSelected = null;   // {id, name}
+let punchTodayRec = null;
+
+function punchNowHM() { return new Date().toTimeString().slice(0, 5); }
+
+async function loadPunch() {
+  if (!STAFF_MASTER.length) await loadStaffNames();
+  const box = document.getElementById('punch-names');
+  box.innerHTML = STAFF_MASTER.map(s =>
+    `<button class="btn ${punchSelected && punchSelected.id === s.id ? 'btn-primary' : ''}" style="font-size:16px;padding:16px 10px;" onclick="punchSelect('${s.id}')">${esc2(s.name)}</button>`).join('')
+    || '<div class="empty-state">スタッフが未登録です（管理者がスタッフ管理から登録してください）</div>';
+  if (punchSelected) punchRefresh();
+}
+
+async function punchSelect(id) {
+  punchSelected = STAFF_MASTER.find(s => String(s.id) === String(id)) || null;
+  loadPunch();
+}
+
+async function punchRefresh() {
+  const panel = document.getElementById('punch-panel');
+  panel.style.display = 'block';
+  document.getElementById('punch-who').textContent = `👤 ${punchSelected.name} さん — ${new Date().toLocaleDateString('ja-JP')}`;
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const rows = await sb('GET', 'attendance', null, `?staff_id=eq.${punchSelected.id}&work_date=eq.${today}&select=*`);
+    punchTodayRec = rows[0] || null;
+  } catch (e) {
+    document.getElementById('punch-status').textContent = '勤怠の読み込みに失敗しました: ' + sbSafeMsg(e);
+    return;
+  }
+  const st = document.getElementById('punch-status');
+  const inRow = document.getElementById('punch-in-row');
+  const outRow = document.getElementById('punch-out-row');
+  if (!punchTodayRec || !punchTodayRec.clock_in) {
+    st.innerHTML = '本日はまだ出勤していません。';
+    inRow.style.display = 'block'; outRow.style.display = 'none';
+  } else if (!punchTodayRec.clock_out) {
+    st.innerHTML = `🟢 出勤中（出勤 <strong>${punchTodayRec.clock_in}</strong>）`;
+    inRow.style.display = 'none'; outRow.style.display = 'block';
+    if (punchTodayRec.break_minutes) document.getElementById('punch-break').value = punchTodayRec.break_minutes;
+  } else {
+    const h = (() => { const [ih,im]=punchTodayRec.clock_in.split(':').map(Number); const [oh,om]=punchTodayRec.clock_out.split(':').map(Number); return Math.max(0,(oh*60+om-ih*60-im-(punchTodayRec.break_minutes||0))/60); })();
+    st.innerHTML = `✅ 本日は退勤済みです。<br>出勤 <strong>${punchTodayRec.clock_in}</strong> / 退勤 <strong>${punchTodayRec.clock_out}</strong> / 休憩 ${punchTodayRec.break_minutes || 0}分 / 実働 <strong>${h.toFixed(1)}時間</strong><br><span style="color:var(--text2);font-size:12px;">修正が必要な場合は管理者に依頼してください。</span>`;
+    inRow.style.display = 'none'; outRow.style.display = 'none';
+  }
+}
+
+async function punchIn() {
+  if (!punchSelected) return;
+  const t = punchNowHM();
+  try {
+    await sb('POST', 'attendance', {
+      staff_id: punchSelected.id, staff_name: punchSelected.name,
+      work_date: new Date().toISOString().slice(0, 10),
+      clock_in: t, break_minutes: 0,
+    });
+    playFeedbackSound(true);
+    toast(`${punchSelected.name}さん 出勤を記録しました（${t}）`);
+    punchRefresh(); 
+  } catch (e) { playFeedbackSound(false); toast('出勤の記録に失敗しました: ' + sbSafeMsg(e), 'error'); }
+}
+
+async function punchOut() {
+  if (!punchSelected || !punchTodayRec) return;
+  const t = punchNowHM();
+  const brk = parseInt(document.getElementById('punch-break').value) || 0;
+  try {
+    await sb('PATCH', 'attendance', { clock_out: t, break_minutes: brk, updated_at: new Date().toISOString() }, `?id=eq.${punchTodayRec.id}`);
+    playFeedbackSound(true);
+    toast(`${punchSelected.name}さん 退勤を記録しました（${t} / 休憩${brk}分）お疲れさまでした`);
+    punchRefresh();
+  } catch (e) { playFeedbackSound(false); toast('退勤の記録に失敗しました: ' + sbSafeMsg(e), 'error'); }
+}
 // 小売モード時にラベルに印字するプリセット重量 (kg)
 const PM_RETAIL_WEIGHTS = {
   'ロース':   0.170,
@@ -3589,6 +3808,7 @@ function indGetVal(id) {
 }
 
 async function indSave() {
+  if (indEditId && !requireAdmin('個体情報の編集（既存データの書き換え）')) return;
   const btn = document.getElementById('indSaveBtn');
   btn.disabled = true; btn.textContent = '保存中...';
   try {
@@ -3775,6 +3995,7 @@ async function loadHunters() {
 const HUNTER_FIELDS = ['name', 'city', 'address', 'phone', 'trap_area', 'bank_name', 'bank_branch', 'account_type', 'account_number', 'account_holder', 'memo'];
 
 function hunterOpenNew() {
+  if (!requireAdmin('捕獲者の新規登録')) return;
   hunterEditId = null;
   document.getElementById('hunterModalTitle').textContent = '捕獲者 新規登録';
   HUNTER_FIELDS.forEach(f => document.getElementById('hun-f-' + f).value = '');
@@ -3782,6 +4003,7 @@ function hunterOpenNew() {
 }
 
 function hunterEdit(id) {
+  if (!requireAdmin('捕獲者情報の編集')) return;
   const h = huntersData.find(x => String(x.id) === String(id));
   if (!h) return;
   hunterEditId = id;
@@ -3959,6 +4181,7 @@ async function loadStaffPanel() {
 }
 
 function staffOpenNew() {
+  if (!requireAdmin('スタッフの新規登録')) return;
   staffEditId = null;
   document.getElementById('staffModalTitle').textContent = 'スタッフ 新規登録';
   STAFF_FIELDS.forEach(f => document.getElementById('stf-f-' + f).value = '');
@@ -3966,6 +4189,7 @@ function staffOpenNew() {
 }
 
 function staffEdit(id) {
+  if (!requireAdmin('スタッフ情報の編集')) return;
   const s = staffData.find(x => String(x.id) === String(id));
   if (!s) return;
   staffEditId = id;
@@ -4017,6 +4241,7 @@ async function loadAttendance() {
 }
 
 async function attSave(staffId, staffName) {
+  if (!requireAdmin('勤怠記録の修正')) return;
   const row = document.querySelector(`#att-body tr[data-staff="${staffId}"]`);
   const date = document.getElementById('att-date').value;
   const payload = {
@@ -4154,7 +4379,7 @@ function cleaningOpen(roomKey) {
   const room = CLEAN_ROOMS.find(r => r.key === roomKey);
   cleanCurrentRoom = room;
   document.getElementById('cleanModalTitle').textContent = `${room.icon} ${room.key} の清掃記録`;
-  const names = staffData.length ? staffData.map(s => s.name) : PM_OPERATORS;
+  const names = PM_OPERATORS; // スタッフマスタ（staffテーブル）由来に統一
   document.getElementById('clean-staff').innerHTML = '<option value="">実施者を選択...</option>' + names.map(n => `<option>${esc2(n)}</option>`).join('');
   document.getElementById('clean-items').innerHTML = room.items.map((it, i) => `<label style="display:flex;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:14px;"><input type="checkbox" class="clean-chk" value="${esc2(it)}" checked> ${esc2(it)}</label>`).join('');
   document.getElementById('clean-temp-row').style.display = room.temp ? 'block' : 'none';
@@ -4264,6 +4489,7 @@ async function supplyAdjust(id, delta) {
 }
 
 function supplyOpenNew() {
+  if (!requireAdmin('資材の新規登録')) return;
   supplyEditId = null;
   document.getElementById('supplyModalTitle').textContent = '資材 新規登録';
   SUPPLY_FIELDS.forEach(f => document.getElementById('sup-f-' + f).value = '');
@@ -4271,6 +4497,7 @@ function supplyOpenNew() {
 }
 
 function supplyEdit(id) {
+  if (!requireAdmin('資材情報の編集')) return;
   const s = suppliesData.find(x => String(x.id) === String(id));
   if (!s) return;
   supplyEditId = id;
@@ -4414,10 +4641,642 @@ async function loadFlags() {
 }
 
 async function flagResolve(id) {
+  if (!requireAdmin('フラグの対応済み処理')) return;
   try {
     await sb('PATCH', 'data_flags', { status: '対応済' }, '?id=eq.' + id);
     loadFlags();
   } catch (err) { toast('更新に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+/* ───────── 加工処理（完成品在庫・ホワイトボード置き換え） ───────── */
+let productsData = [];
+let productEditId = null;
+let prodMoveTarget = null;
+const PRODUCT_FIELDS = ['name', 'category', 'unit', 'price', 'stock_qty', 'base_url', 'memo'];
+
+async function loadProducts() {
+  const grid = document.getElementById('products-grid');
+  grid.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
+  try {
+    productsData = await sb('GET', 'products', null, '?select=*&deleted_at=is.null&order=category.asc,name.asc');
+  } catch (err) {
+    grid.innerHTML = `<div class="empty-state" style="color:var(--red);grid-column:1/-1;">${esc2(sbSafeMsg(err))}</div>`;
+    return;
+  }
+  if (!productsData.length) {
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;">商品が未登録です。「＋商品を追加」から登録してください。</div>';
+  } else {
+    grid.innerHTML = productsData.map(p => `
+      <div style="border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);padding:14px;">
+        <div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;">
+          <div style="font-weight:600;font-size:14px;line-height:1.4;">${esc2(p.name)}</div>
+          <span class="badge ${p.category === '卸売' ? 'badge-blue' : 'badge-gold'}">${esc2(p.category || '小売')}</span>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:6px;margin:8px 0;">
+          <span style="font-size:34px;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums;">${p.stock_qty != null ? p.stock_qty : 0}</span>
+          <span style="color:var(--text2);">${esc2(p.unit || '個')}</span>
+          ${p.price ? `<span style="margin-left:auto;font-size:12px;color:var(--text2);">¥${Number(p.price).toLocaleString()}</span>` : ''}
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" style="flex:1;" onclick="productMoveOpen('${p.id}','完成')">＋ 完成</button>
+          <button class="btn btn-sm" style="flex:1;" onclick="productMoveOpen('${p.id}','持ち出し')">− 持ち出し</button>
+          <button class="btn btn-sm" onclick="productEdit('${p.id}')">編集</button>
+        </div>
+      </div>`).join('');
+  }
+  loadProductMoves();
+}
+
+async function loadProductMoves() {
+  const body = document.getElementById('product-moves-body');
+  try {
+    const moves = await sb('GET', 'product_movements', null, '?select=*&order=created_at.desc&limit=30');
+    body.innerHTML = moves.length ? moves.map(m => `<tr>
+      <td>${fmtDt(m.created_at)}</td><td>${esc2(m.product_name || '-')}</td>
+      <td>${m.movement_type === '完成' ? '<span class="badge badge-green">完成</span>' : `<span class="badge badge-red">${esc2(m.movement_type)}</span>`}</td>
+      <td style="text-align:right;font-weight:600;">${m.movement_type === '完成' ? '+' : '−'}${Math.abs(m.qty)}</td>
+      <td>${esc2(m.staff_name || '-')}</td>
+      <td style="color:var(--gold);font-size:12px;">${esc2(m.source_ident_code || '')}</td>
+      <td style="font-size:12px;color:var(--text2);">${esc2(m.note || '')}</td>
+    </tr>`).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text3);">記録がありません</td></tr>';
+  } catch (e) { body.innerHTML = ''; }
+}
+
+function productMoveOpen(id, type) {
+  prodMoveTarget = productsData.find(p => String(p.id) === String(id));
+  if (!prodMoveTarget) return;
+  document.getElementById('prodMoveTitle').textContent = type === '完成' ? '＋ 完成の記録' : '− 持ち出し等の記録';
+  document.getElementById('prodMoveProduct').textContent = `${prodMoveTarget.name}（現在庫 ${prodMoveTarget.stock_qty || 0}${prodMoveTarget.unit || '個'}）`;
+  document.getElementById('pmv-type').value = type;
+  document.getElementById('pmv-qty').value = 1;
+  document.getElementById('pmv-source').value = '';
+  document.getElementById('pmv-note').value = '';
+  document.getElementById('pmv-source-row').style.display = type === '完成' ? 'block' : 'none';
+  document.getElementById('pmv-staff').innerHTML = '<option value="">担当者を選択...</option>' + PM_OPERATORS.map(n => `<option>${esc2(n)}</option>`).join('');
+  document.getElementById('pmv-type').onchange = function () {
+    document.getElementById('pmv-source-row').style.display = this.value === '完成' ? 'block' : 'none';
+  };
+  document.getElementById('prodMoveModal').style.display = 'block';
+}
+
+async function productMoveSave() {
+  const type = document.getElementById('pmv-type').value;
+  const qty = parseInt(document.getElementById('pmv-qty').value);
+  const staff = document.getElementById('pmv-staff').value;
+  if (!qty || qty < 1) { toast('数量を入力してください', 'error'); return; }
+  if (!staff) { toast('担当者を選択してください', 'error'); return; }
+  const cur = prodMoveTarget.stock_qty || 0;
+  const delta = type === '完成' ? qty : -qty;
+  const next = cur + delta;
+  if (next < 0 && type !== '棚卸調整') {
+    toast(`在庫が足りません（現在 ${cur}${prodMoveTarget.unit || '個'}）。棚卸調整を使う場合は管理者に依頼してください。`, 'error');
+    return;
+  }
+  try {
+    await sb('POST', 'product_movements', {
+      product_id: prodMoveTarget.id, product_name: prodMoveTarget.name,
+      movement_type: type, qty: qty, staff_name: staff,
+      source_ident_code: type === '完成' ? (document.getElementById('pmv-source').value.trim() || null) : null,
+      note: document.getElementById('pmv-note').value.trim() || null,
+    });
+    await sb('PATCH', 'products', { stock_qty: Math.max(0, next), updated_at: new Date().toISOString() }, `?id=eq.${prodMoveTarget.id}`);
+    playFeedbackSound(true);
+    toast(`${prodMoveTarget.name} ${type} ${qty}${prodMoveTarget.unit || '個'} を記録しました（在庫 ${Math.max(0, next)}）`);
+    document.getElementById('prodMoveModal').style.display = 'none';
+    loadProducts();
+  } catch (err) { playFeedbackSound(false); toast('記録に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+function productOpenNew() {
+  if (!requireAdmin('商品の新規登録')) return;
+  productEditId = null;
+  document.getElementById('productModalTitle').textContent = '商品 新規登録';
+  PRODUCT_FIELDS.forEach(f => document.getElementById('prd-f-' + f).value = f === 'category' ? '小売' : '');
+  document.getElementById('productModal').style.display = 'block';
+}
+
+function productEdit(id) {
+  if (!requireAdmin('商品情報の編集')) return;
+  const p = productsData.find(x => String(x.id) === String(id));
+  if (!p) return;
+  productEditId = id;
+  document.getElementById('productModalTitle').textContent = '商品情報編集';
+  PRODUCT_FIELDS.forEach(f => document.getElementById('prd-f-' + f).value = p[f] != null ? p[f] : '');
+  document.getElementById('productModal').style.display = 'block';
+}
+
+async function productSave() {
+  const payload = {};
+  PRODUCT_FIELDS.forEach(f => {
+    let v = document.getElementById('prd-f-' + f).value.trim();
+    if (f === 'price' || f === 'stock_qty') v = v === '' ? null : parseInt(v);
+    payload[f] = v === '' ? null : v;
+  });
+  if (!payload.name) { toast('商品名は必須です', 'error'); return; }
+  if (payload.stock_qty === null) payload.stock_qty = 0;
+  try {
+    if (productEditId) { await sb('PATCH', 'products', payload, '?id=eq.' + productEditId); toast(`商品「${payload.name}」を更新しました`); }
+    else { await sb('POST', 'products', payload); toast(`商品「${payload.name}」を登録しました`); }
+    document.getElementById('productModal').style.display = 'none';
+    loadProducts();
+  } catch (err) { toast('保存に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+/* ───────── 書類・帳票ハブ ─────────
+   日々の業務入力（受入・精肉・出荷・清掃・勤怠・資材・加工）から
+   HACCP/労務/税務向けの帳票を自動転記で生成する。
+   HACCP・労務・税務の様式は最終的に専門家確認が必要（参考様式）。
+   給与関連の金額はすべて「参考計算」。 */
+
+const DOC_STATUSES = ['下書き', '作成済み', '確認待ち', '承認済み', '差戻し'];
+
+function docMonth() {
+  const el = document.getElementById('doc-month');
+  return el && el.value ? el.value : new Date().toISOString().slice(0, 7);
+}
+function docMonthRange(m) { return [m + '-01', m + '-31']; }
+function attHoursOf(a) {
+  if (!a.clock_in || !a.clock_out) return 0;
+  const [ih, im] = a.clock_in.split(':').map(Number);
+  const [oh, om] = a.clock_out.split(':').map(Number);
+  return Math.max(0, (oh * 60 + om - ih * 60 - im - (a.break_minutes || 0)) / 60);
+}
+
+/* 帳票定義: gen(month) → { columns, rows, note?, extraHtml? } */
+const DOC_DEFS = [
+  // ── HACCP・衛生管理 ──
+  { key: 'sanitation_plan', cat: 'HACCP・衛生管理', title: '衛生管理計画書', template: true,
+    gen: async () => ({ columns: ['管理項目', 'いつ', 'どのように', '問題があったとき'], rows: [
+      ['施設・設備の衛生管理（清掃・消毒）', '作業終了後 毎日', '各区域のチェックリストに従い清掃・消毒し、本アプリの清掃記録に記録する', '再清掃を行い、記録表に特記事項を残す'],
+      ['冷蔵・冷凍庫の温度確認', '毎日', '庫内温度計を確認し清掃記録（冷蔵・冷凍庫）に記録（冷蔵10℃以下/冷凍-15℃以下）', '温度を調整し、商品の状態を確認。異常は廃棄記録へ'],
+      ['器具・機械の洗浄消毒', '使用の都度', 'ナイフ等は83℃以上の温湯消毒。まな板・機械は分解洗浄', '再洗浄・再消毒を実施'],
+      ['受入時の個体検査', '受入の都度', '捕獲票（本アプリ）で健康状態・異常の有無を記録。異常個体は受け入れない/廃棄', '異常個体・廃棄記録に記録し全部廃棄'],
+      ['交差汚染の防止', '作業中 常時', '汚染区域（解体室）と清浄区域（精肉室）を区分し、手洗い・器具の使い分けを徹底', '汚染の可能性がある製品は廃棄'],
+      ['従事者の健康管理', '毎日 作業前', '体調不良・手指の傷の有無を確認', '症状がある場合は食品を扱う作業に従事させない'],
+    ], note: 'HACCPの考え方を取り入れた衛生管理計画（参考様式・専門家確認前提）。日々の実施記録は「日次衛生点検表」「清掃・消毒記録表」に自動転記されます。' }) },
+  { key: 'daily_check', cat: 'HACCP・衛生管理', title: '日次衛生点検表', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${d1}T00:00:00&cleaned_at=lte.${d2}T23:59:59&select=*&order=cleaned_at.asc`);
+      const days = {};
+      logs.forEach(l => { const d = l.cleaned_at.slice(0, 10); (days[d] = days[d] || {})[l.room] = l; });
+      const rooms = CLEAN_ROOMS.map(r => r.key);
+      return { columns: ['日付', ...rooms],
+        rows: Object.keys(days).sort().map(d => [d.slice(5), ...rooms.map(r => days[d][r] ? `○ ${days[d][r].staff_name}` : '—')]),
+        note: '清掃記録から自動転記。○=実施（実施者名）。' };
+    } },
+  { key: 'temp_log', cat: 'HACCP・衛生管理', title: '冷蔵庫・冷凍庫温度記録表', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const logs = await sb('GET', 'cleaning_logs', null, `?room=eq.冷蔵・冷凍庫&cleaned_at=gte.${d1}T00:00:00&cleaned_at=lte.${d2}T23:59:59&select=*&order=cleaned_at.asc`);
+      return { columns: ['日付', '時刻', '記録温度', '確認者', '特記事項'],
+        rows: logs.map(l => [l.cleaned_at.slice(5, 10), l.cleaned_at.slice(11, 16), l.temperature || '未記録', l.staff_name, l.note || '']),
+        note: '清掃記録（冷蔵・冷凍庫）の温度入力から自動転記。基準: 冷蔵10℃以下 / 冷凍-15℃以下。' };
+    } },
+  { key: 'cleaning_record', cat: 'HACCP・衛生管理', title: '清掃・消毒記録表', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${d1}T00:00:00&cleaned_at=lte.${d2}T23:59:59&select=*&order=cleaned_at.asc`);
+      return { columns: ['日時', '場所', '実施者', '実施内容', '特記事項'],
+        rows: logs.map(l => [fmtDt(l.cleaned_at), l.room, l.staff_name, l.items || '', l.note || '']) };
+    } },
+  { key: 'intake_inspection', cat: 'HACCP・衛生管理', title: '捕獲個体受入検査記録', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const inds = await sb('GET', 'individuals', null, `?capture_date=gte.${d1}&capture_date=lte.${d2}&deleted_at=is.null&select=*&order=capture_date.asc&limit=500`);
+      return { columns: ['個体番号', '受入日', '種別', '捕獲者', '捕獲時異常', '内臓異常', '猟師健康', '品質', '記録者'],
+        rows: inds.map(i => [i.label_id, i.capture_date, i.species || '', i.hunter_name || '', i.capture_anomalies || 'なし', i.organ_anomalies || 'なし', i.hunter_health_ok === false ? '要確認' : '問題なし', i.quality || '', i.recorder || '']),
+        note: '捕獲票入力から自動転記。' };
+    } },
+  { key: 'anomaly_disposal', cat: 'HACCP・衛生管理', title: '異常個体・廃棄記録', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const inds = await sb('GET', 'individuals', null, `?capture_date=gte.${d1}&capture_date=lte.${d2}&deleted_at=is.null&select=*&limit=500`);
+      const anom = inds.filter(i => (i.capture_anomalies && i.capture_anomalies !== 'なし') || (i.organ_anomalies && i.organ_anomalies !== 'なし') || i.quality === '不良' || i.hunter_health_ok === false);
+      const disposed = await sb('GET', 'inventory', null, `?status=eq.廃棄&updated_at=gte.${d1}T00:00:00&updated_at=lte.${d2}T23:59:59&select=*&limit=500`);
+      return { columns: ['区分', '番号', '内容', '日付', '担当'],
+        rows: [
+          ...anom.map(i => ['異常個体', i.label_id, [i.capture_anomalies, i.organ_anomalies, i.quality === '不良' ? '品質不良' : '', i.hunter_health_ok === false ? '猟師健康要確認' : ''].filter(x => x && x !== 'なし').join(' / '), i.capture_date, i.recorder || '']),
+          ...disposed.map(v => ['在庫廃棄', v.ident_code, `${v.part_name || ''} ${v.weight || ''}kg`, (v.updated_at || '').slice(0, 10), v.operator || '']),
+        ], note: '捕獲票の異常記録と在庫の廃棄処理から自動転記。' };
+    } },
+  { key: 'process_record', cat: 'HACCP・衛生管理', title: '加工工程記録', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const logs = await sb('GET', 'processing_log', null, `?created_at=gte.${d1}T00:00:00&created_at=lte.${d2}T23:59:59&select=*&order=created_at.asc&limit=1000`);
+      const moves = await sb('GET', 'product_movements', null, `?movement_type=eq.完成&created_at=gte.${d1}T00:00:00&created_at=lte.${d2}T23:59:59&select=*&order=created_at.asc&limit=500`);
+      return { columns: ['日時', '工程', '対象', '数量/重量', '担当'],
+        rows: [
+          ...logs.map(l => [fmtDt(l.created_at), '精肉（分割）', `${l.parent_ident_code || ''} → ${l.child_ident_code || ''}`, (l.weight || '') + 'kg', l.operator || '']),
+          ...moves.map(v => [fmtDt(v.created_at), '二次加工（完成）', `${v.source_ident_code ? v.source_ident_code + ' → ' : ''}${v.product_name}`, v.qty + '個', v.staff_name || '']),
+        ], note: '精肉登録と加工処理の完成記録から自動転記。' };
+    } },
+  { key: 'shipping_judgment', cat: 'HACCP・衛生管理', title: '出荷判定記録', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const ships = await sb('GET', 'shipments', null, `?shipment_date=gte.${d1}&shipment_date=lte.${d2}&select=*&order=shipment_date.asc&limit=300`);
+      const orders = await sb('GET', 'orders', null, '?select=id,order_code,customer_name&limit=1000');
+      const om = {}; orders.forEach(o => om[o.id] = o);
+      return { columns: ['出荷日', '注文番号', '出荷先', 'ステータス', '判定'],
+        rows: ships.map(s => [s.shipment_date, om[s.order_id]?.order_code || '', om[s.order_id]?.customer_name || '', s.status, '適合（出荷確定時に在庫・注文照合済み）']),
+        note: '出荷確定処理（バーコード照合・確認ダイアログ）を経た出荷のみが記録されます。' };
+    } },
+  { key: 'complaint_record', cat: 'HACCP・衛生管理', title: 'クレーム・回収対応記録', template: true,
+    gen: async () => ({ columns: ['受付日', '申出者', '内容', '対象製品（識別コード）', '原因調査', '対応・回収措置', '再発防止策', '担当', '完了日'], rows: [['', '', '', '', '', '', '', '', ''], ['', '', '', '', '', '', '', '', '']],
+      note: '記入用の様式です。発生時はデータ管理の「気になる点フラグ」にも記録してください。対象製品の識別コードからトレーサビリティ検索で流通先を特定できます。' }) },
+  { key: 'corrective_action', cat: 'HACCP・衛生管理', title: '是正処置記録', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const flags = await sb('GET', 'data_flags', null, `?created_at=gte.${d1}T00:00:00&created_at=lte.${d2}T23:59:59&select=*&order=created_at.asc&limit=300`);
+      return { columns: ['記録日', '対象', '内容（不適合・気づき）', '記録者', '状態'],
+        rows: flags.map(f => [fmtDt(f.created_at), f.target, f.comment, f.flagged_by || '', f.status || '未対応']),
+        note: '「気になる点フラグ」から自動転記。対応済み処理は管理者が行います。' };
+    } },
+  { key: 'trace_evidence', cat: 'HACCP・衛生管理', title: 'トレーサビリティ証跡一覧', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const inds = await sb('GET', 'individuals', null, `?capture_date=gte.${d1}&capture_date=lte.${d2}&deleted_at=is.null&select=label_id,species,capture_date,capture_city,capture_area,hunter_name&order=capture_date.asc&limit=500`);
+      const invs = await sb('GET', 'inventory', null, '?select=individual_id,status&deleted_at=is.null&limit=2000');
+      const cnt = {}; invs.forEach(v => { if (!v.individual_id) return; (cnt[v.individual_id] = cnt[v.individual_id] || { t: 0, s: 0 }); cnt[v.individual_id].t++; if (v.status === '出荷済') cnt[v.individual_id].s++; });
+      return { columns: ['個体番号', '種別', '捕獲日', '捕獲場所', '捕獲者', '精肉点数', 'うち出荷済'],
+        rows: inds.map(i => [i.label_id, i.species || '', i.capture_date, `${i.capture_city || ''}${i.capture_area || ''}`, i.hunter_name || '', (cnt[i.label_id] || {}).t || 0, (cnt[i.label_id] || {}).s || 0]),
+        note: '個体→精肉→出荷の紐付け状況。詳細はトレーサビリティ検索で個体番号を検索してください。' };
+    } },
+  // ── 労務・社労士 ──
+  { key: 'attendance_summary', cat: '労務・社労士', title: 'スタッフ別勤怠集計表', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const atts = await sb('GET', 'attendance', null, `?work_date=gte.${d1}&work_date=lte.${d2}&select=*&limit=1000`);
+      const by = {};
+      atts.forEach(a => { const b = by[a.staff_name] = by[a.staff_name] || { d: 0, h: 0, brk: 0 }; if (a.clock_in && a.clock_out) { b.d++; b.h += attHoursOf(a); b.brk += (a.break_minutes || 0); } });
+      return { columns: ['氏名', '出勤日数', '実働時間(h)', '休憩合計(分)'],
+        rows: Object.entries(by).map(([n, b]) => [n, b.d, b.h.toFixed(1), b.brk]),
+        note: '出退勤打刻から自動集計。' };
+    } },
+  { key: 'monthly_work', cat: '労務・社労士', title: '月次勤務実績表', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const atts = await sb('GET', 'attendance', null, `?work_date=gte.${d1}&work_date=lte.${d2}&select=*&order=work_date.asc&limit=1000`);
+      return { columns: ['日付', '氏名', '出勤', '退勤', '休憩(分)', '実働(h)', 'メモ'],
+        rows: atts.map(a => [a.work_date, a.staff_name, a.clock_in || '', a.clock_out || '', a.break_minutes || 0, attHoursOf(a).toFixed(1), a.note || '']) };
+    } },
+  { key: 'wage_ledger', cat: '労務・社労士', title: '賃金台帳（参考計算）', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const [sts, atts] = await Promise.all([
+        sb('GET', 'staff', null, '?select=*&deleted_at=is.null&is_active=eq.true'),
+        sb('GET', 'attendance', null, `?work_date=gte.${d1}&work_date=lte.${d2}&select=*&limit=1000`),
+      ]);
+      return { columns: ['氏名', '雇用区分', '単価', '出勤日数', '実働(h)', '支給額（参考）', '社会保険', '雇用保険', '控除（社労士確認）', '差引（参考）'],
+        rows: sts.map(s => {
+          const mine = atts.filter(a => String(a.staff_id) === String(s.id) && a.clock_in && a.clock_out);
+          const h = mine.reduce((t, a) => t + attHoursOf(a), 0);
+          const gross = s.employment_type === '月給' ? (Number(s.monthly_salary) || 0) : Math.round(h * (Number(s.hourly_wage) || 0));
+          return [s.name, s.employment_type || '', s.employment_type === '月給' ? `月給¥${Number(s.monthly_salary || 0).toLocaleString()}` : `時給¥${Number(s.hourly_wage || 0).toLocaleString()}`, mine.length, h.toFixed(1), '¥' + gross.toLocaleString(), s.social_insurance || '未設定', s.employment_insurance || '未設定', '', ''];
+        }),
+        note: '※参考計算です。控除額・割増賃金等は社労士確認のうえ確定してください。' };
+    } },
+  { key: 'worker_roster', cat: '労務・社労士', title: '労働者名簿', gen: async () => {
+      const sts = await sb('GET', 'staff', null, '?select=*&deleted_at=is.null&order=name.asc');
+      return { columns: ['氏名', '役割', '雇用区分', '入社日', '電話', '社会保険', '雇用保険', '備考'],
+        rows: sts.map(s => [s.name, s.role || '', s.employment_type || '', s.hire_date || '', s.phone || '', s.social_insurance || '未設定', s.employment_insurance || '未設定', s.memo || '']),
+        note: '労働者名簿の法定記載事項（生年月日・住所・従事する業務等）はスタッフ台帳の整備後に追記されます。' };
+    } },
+  { key: 'contract_template', cat: '労務・社労士', title: '雇用契約・労働条件通知書（テンプレート）', template: true,
+    gen: async () => ({ columns: ['項目', '記載内容'], rows: [
+      ['契約期間', '　'], ['就業場所', '館山ジビエセンター（千葉県館山市西長田1163-5）'], ['従事する業務', '獣肉の解体・精肉・加工・出荷、施設清掃 ほか'],
+      ['始業・終業時刻', '　'], ['休憩時間', '　'], ['休日', '　'], ['賃金（基本給/時給）', '　'], ['賃金締切・支払日', '　'],
+      ['社会保険・雇用保険', '　'], ['退職に関する事項', '　'],
+    ], note: '労働条件通知書の参考テンプレートです。必ず社労士確認のうえ使用してください。' }) },
+  { key: 'paid_leave', cat: '労務・社労士', title: '有給休暇管理表（様式）', template: true,
+    gen: async () => {
+      const sts = await sb('GET', 'staff', null, '?select=name,hire_date&deleted_at=is.null&is_active=eq.true&order=name.asc');
+      return { columns: ['氏名', '入社日', '基準日', '付与日数', '取得日数', '残日数', '取得日（記入）'],
+        rows: sts.map(s => [s.name, s.hire_date || '', '', '', '', '', '']),
+        note: '有給の付与・取得管理は今後の勤怠データ蓄積後に自動化予定。当面は本様式に記入してください。' };
+    } },
+  { key: 'insurance_status', cat: '労務・社労士', title: '社会保険・雇用保険加入状況一覧', gen: async () => {
+      const sts = await sb('GET', 'staff', null, '?select=*&deleted_at=is.null&order=name.asc');
+      return { columns: ['氏名', '雇用区分', '社会保険', '雇用保険', '入社日'],
+        rows: sts.map(s => [s.name, s.employment_type || '', s.social_insurance || '未設定', s.employment_insurance || '未設定', s.hire_date || '']) };
+    } },
+  // ── 経理・税理士 ──
+  { key: 'sales_list', cat: '経理・税理士', title: '売上一覧', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const orders = await sb('GET', 'orders', null, `?order_date=gte.${d1}&order_date=lte.${d2}&select=*&order=order_date.asc&limit=500`);
+      return { columns: ['受注日', '注文番号', '取引先', 'チャネル', '金額', 'ステータス'],
+        rows: orders.map(o => [o.order_date, o.order_code, o.customer_name || '', o.channel || '', '¥' + Number(o.total_amount || 0).toLocaleString(), o.status]),
+        note: '注文データから自動転記。店頭・イベント販売は加工処理の持ち出し/店頭販売記録を参照。' };
+    } },
+  { key: 'shipping_list', cat: '経理・税理士', title: '出荷一覧', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const ships = await sb('GET', 'shipments', null, `?shipment_date=gte.${d1}&shipment_date=lte.${d2}&select=*&order=shipment_date.asc&limit=500`);
+      const orders = await sb('GET', 'orders', null, '?select=id,order_code,customer_name,total_amount&limit=1000');
+      const om = {}; orders.forEach(o => om[o.id] = o);
+      return { columns: ['出荷日', '注文番号', '出荷先', '配達予定', '金額', 'ステータス'],
+        rows: ships.map(s => [s.shipment_date, om[s.order_id]?.order_code || '', om[s.order_id]?.customer_name || '', s.delivery_date || '', '¥' + Number(om[s.order_id]?.total_amount || 0).toLocaleString(), s.status]) };
+    } },
+  { key: 'invoice_list', cat: '経理・税理士', title: '請求書・納品書・領収書 発行一覧', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const docs = await sb('GET', 'documents', null, `?issue_date=gte.${d1}&issue_date=lte.${d2}&select=*&order=issue_date.asc&limit=500`);
+      return { columns: ['発行日', '種類', '番号', '取引先', '金額', '税額', '税区分', '支払方法', '請求ステータス'],
+        rows: docs.map(d => [d.issue_date, d.doc_type, d.doc_number, d.partner_name || '', '¥' + Number(d.total_amount || 0).toLocaleString(), '¥' + Number(d.tax_amount || 0).toLocaleString(), d.tax_category || '', d.payment_method || '', d.billing_status || d.status || '']),
+        note: '書類の発行は受発注管理（order-admin）から。税区分・支払方法・請求ステータスの管理カラムを追加済み。' };
+    } },
+  { key: 'supplies_list', cat: '経理・税理士', title: '資材在庫一覧', gen: async () => {
+      const sup = await sb('GET', 'supplies', null, '?select=*&deleted_at=is.null&order=name.asc');
+      return { columns: ['品名', '分類', '在庫数', '単位', '発注点', '仕入先'],
+        rows: sup.map(s => [s.name, s.category || '', s.stock_qty, s.unit || '', s.min_qty, s.supplier || '']) };
+    } },
+  { key: 'product_stock', cat: '経理・税理士', title: '製品在庫一覧（加工品）', gen: async () => {
+      const ps = await sb('GET', 'products', null, '?select=*&deleted_at=is.null&order=category.asc,name.asc');
+      return { columns: ['商品名', '区分', '在庫数', '単位', '販売価格'],
+        rows: ps.map(p => [p.name, p.category || '', p.stock_qty || 0, p.unit || '', p.price ? '¥' + Number(p.price).toLocaleString() : '']) };
+    } },
+  { key: 'month_end_inventory', cat: '経理・税理士', title: '月末棚卸表', gen: async () => {
+      const [invs, ps] = await Promise.all([
+        sb('GET', 'inventory', null, '?status=eq.在庫&deleted_at=is.null&select=*&limit=2000'),
+        sb('GET', 'products', null, '?select=*&deleted_at=is.null'),
+      ]);
+      const byPart = {};
+      invs.forEach(v => { const k = `${v.species || '-'} / ${v.part_name || '-'}`; (byPart[k] = byPart[k] || { n: 0, w: 0 }); byPart[k].n++; byPart[k].w += parseFloat(v.weight) || 0; });
+      return { columns: ['区分', '品目', '数量', '重量(kg)'],
+        rows: [
+          ...Object.entries(byPart).map(([k, v]) => ['精肉在庫', k, v.n + '点', v.w.toFixed(2)]),
+          ...ps.map(p => ['加工品在庫', p.name, (p.stock_qty || 0) + (p.unit || '個'), '']),
+        ], note: '現時点の在庫スナップショットです。月末時点で出力し承認してください。' };
+    } },
+  { key: 'loss_list', cat: '経理・税理士', title: '廃棄・ロス一覧', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const [invs, moves] = await Promise.all([
+        sb('GET', 'inventory', null, `?status=eq.廃棄&updated_at=gte.${d1}T00:00:00&updated_at=lte.${d2}T23:59:59&select=*&limit=500`),
+        sb('GET', 'product_movements', null, `?movement_type=eq.廃棄&created_at=gte.${d1}T00:00:00&created_at=lte.${d2}T23:59:59&select=*&limit=500`),
+      ]);
+      return { columns: ['日付', '区分', '品目', '数量/重量', '担当'],
+        rows: [
+          ...invs.map(v => [(v.updated_at || '').slice(0, 10), '精肉廃棄', `${v.ident_code} ${v.part_name || ''}`, (v.weight || '') + 'kg', v.operator || '']),
+          ...moves.map(v => [(v.created_at || '').slice(0, 10), '加工品廃棄', v.product_name, v.qty + '個', v.staff_name || '']),
+        ] };
+    } },
+  { key: 'cost_yield', cat: '経理・税理士', title: '個体別原価・歩留まり一覧', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const inds = await sb('GET', 'individuals', null, `?capture_date=gte.${d1}&capture_date=lte.${d2}&deleted_at=is.null&select=label_id,species,capture_date,weight_total,buyback_amount,yield_rate,meat_rank&order=capture_date.asc&limit=500`);
+      const invs = await sb('GET', 'inventory', null, '?select=individual_id,weight&deleted_at=is.null&limit=2000');
+      const w = {}; invs.forEach(v => { if (v.individual_id) w[v.individual_id] = (w[v.individual_id] || 0) + (parseFloat(v.weight) || 0); });
+      return { columns: ['個体番号', '種別', '受入日', '体重(kg)', '精肉重量(kg)', '歩留まり(%)', '肉ランク', '買取価格'],
+        rows: inds.map(i => {
+          const mw = w[i.label_id] || 0;
+          const y = i.yield_rate != null ? i.yield_rate : (i.weight_total > 0 && mw > 0 ? (mw / i.weight_total * 100) : null);
+          return [i.label_id, i.species || '', i.capture_date, i.weight_total || '', mw ? mw.toFixed(2) : '', y != null ? Number(y).toFixed(1) : '', i.meat_rank || '', i.buyback_amount != null ? '¥' + Number(i.buyback_amount).toLocaleString() : ''];
+        }),
+        note: '歩留まり=精肉重量/体重（精肉登録から自動計算）。肉ランク・買取価格は歩留まり買取ルール確定後に自動化予定。' };
+    } },
+  // ── 認証・監査対応 ──
+  { key: 'hunter_registry', cat: '認証・監査対応', title: '捕獲者台帳（国産ジビエ認証様式）', gen: async () => {
+      const hs = await sb('GET', 'hunters', null, '?select=*&deleted_at=is.null&order=registry_number.asc.nullslast&limit=500');
+      return { columns: ['番号', '登録年月日', '捕獲者氏名', '捕獲見込み場所', '住所', '連絡先', '確認書類', '銃', '備考'],
+        rows: hs.map(h => [h.registry_number || '-', h.registered_on || '', h.name, h.trap_area || '', h.address || '', h.phone || '', h.document_type || '', h.has_gun ? '○' : '', h.memo || '']) };
+    } },
+];
+
+/* ── 帳票エンジン ── */
+let docRecords = {};   // `${key}|${period}` → report_docs row
+let docCurrentDef = null;
+let docCurrentData = null;
+
+async function loadDocsHub() {
+  const mEl = document.getElementById('doc-month');
+  if (mEl && !mEl.value) mEl.value = new Date().toISOString().slice(0, 7);
+  try {
+    const rows = await sb('GET', 'report_docs', null, `?period=eq.${docMonth()}&select=*`);
+    docRecords = {};
+    rows.forEach(r => docRecords[r.doc_key + '|' + r.period] = r);
+  } catch (e) { docRecords = {}; }
+  renderDocsList();
+}
+
+function docStatusBadge(st) {
+  const m = { '承認済み': 'green', '確認待ち': 'gold', '差戻し': 'red', '作成済み': 'blue', '下書き': 'gray' };
+  return `<span class="badge badge-${m[st] || 'gray'}">${st || '未作成'}</span>`;
+}
+
+function renderDocsList() {
+  const list = document.getElementById('docs-list');
+  const cat = document.getElementById('doc-cat-filter').value;
+  const q = (document.getElementById('doc-search').value || '').trim();
+  const period = docMonth();
+  const defs = DOC_DEFS.filter(d => (!cat || d.cat === cat) && (!q || d.title.includes(q)));
+  const cats = [...new Set(defs.map(d => d.cat))];
+  list.innerHTML = cats.map(c => `
+    <div style="font-size:13px;color:var(--gold);font-weight:600;margin:14px 0 6px;">▌ ${c}</div>` +
+    defs.filter(d => d.cat === c).map(d => {
+      const rec = docRecords[d.key + '|' + period];
+      return `<div style="display:flex;gap:10px;align-items:center;padding:9px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:var(--surface);flex-wrap:wrap;">
+        <strong style="min-width:230px;">${d.title}</strong>
+        ${docStatusBadge(rec ? rec.status : null)}
+        ${rec && rec.approved_by ? `<span style="font-size:11px;color:var(--text2);">承認: ${esc2(rec.approved_by)}</span>` : ''}
+        ${rec && rec.status === '差戻し' && rec.reject_note ? `<span style="font-size:11px;color:var(--red);">差戻し理由: ${esc2(rec.reject_note)}</span>` : ''}
+        <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-sm btn-primary" onclick="docOpen('${d.key}')">プレビュー</button>
+          <button class="btn btn-sm" onclick="docOutput('${d.key}','print')">🖨 印刷/PDF</button>
+          <button class="btn btn-sm" onclick="docOutput('${d.key}','csv')">⬇ CSV</button>
+        </div>
+      </div>`;
+    }).join('')).join('') || '<div class="empty-state">該当する帳票がありません</div>';
+}
+
+async function docGenerate(key) {
+  const def = DOC_DEFS.find(d => d.key === key);
+  const data = await def.gen(docMonth());
+  return { def, data };
+}
+
+async function docEnsureRecord(def, statusIfNew) {
+  const period = docMonth();
+  const k = def.key + '|' + period;
+  if (!docRecords[k]) {
+    try {
+      const rows = await sb('POST', 'report_docs', {
+        doc_key: def.key, doc_title: def.title, category: def.cat, period,
+        status: statusIfNew || '作成済み', created_by: sessionStorage.getItem('tg_role_v1') === 'admin' ? '管理者' : 'スタッフ',
+      });
+      docRecords[k] = rows[0];
+    } catch (e) { /* 重複などは無視して再取得 */ await loadDocsHub(); }
+  }
+  return docRecords[k];
+}
+
+function docHtml(def, data, forPrint) {
+  const period = docMonth();
+  const rec = docRecords[def.key + '|' + period];
+  const head = `<h1 style="font-size:18px;margin-bottom:4px;">${def.title}</h1>
+    <p style="font-size:12px;margin-bottom:10px;">対象: ${period}　施設: 館山ジビエセンター（千葉県館山市西長田1163-5）　出力日: ${new Date().toLocaleDateString('ja-JP')}
+    ${rec ? `　状態: ${rec.status}${rec.approved_by ? '（承認: ' + rec.approved_by + '）' : ''}` : ''}</p>`;
+  const note = data.note ? `<p style="font-size:11px;color:#666;margin:8px 0;">※ ${data.note}</p>` : '';
+  const table = `<table style="border-collapse:collapse;width:100%;"><thead><tr>${data.columns.map(c => `<th style="border:1px solid #888;padding:4px 7px;font-size:11px;background:#f0f0f0;text-align:left;">${c}</th>`).join('')}</tr></thead>
+    <tbody>${(data.rows.length ? data.rows : [data.columns.map(() => '—')]).map(r => `<tr>${r.map(c => `<td style="border:1px solid #888;padding:4px 7px;font-size:11px;">${c == null ? '' : c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  const sign = forPrint ? `<p style="font-size:11px;margin-top:14px;">作成者: ＿＿＿＿＿＿　確認者: ＿＿＿＿＿＿　承認者: ＿＿＿＿＿＿</p>` : '';
+  return head + note + table + sign;
+}
+
+async function docOpen(key) {
+  const sec = document.getElementById('doc-preview-section');
+  sec.style.display = 'block';
+  document.getElementById('doc-preview-body').innerHTML = '<div class="loading"><span class="spin"></span>生成中...</div>';
+  try {
+    const { def, data } = await docGenerate(key);
+    docCurrentDef = def; docCurrentData = data;
+    await docEnsureRecord(def);
+    const rec = docRecords[def.key + '|' + docMonth()];
+    document.getElementById('doc-preview-body').innerHTML = docHtml(def, data, false);
+    // 承認フロー操作
+    const st = rec ? rec.status : '作成済み';
+    document.getElementById('doc-approve-bar').innerHTML = `
+      ${docStatusBadge(st)}
+      ${st !== '承認済み' ? `<button class="btn btn-sm" onclick="docSetStatus('確認待ち')">確認待ちにする</button>` : ''}
+      ${st !== '承認済み' ? `<button class="btn btn-sm btn-primary" onclick="docApprove()">✅ 承認（管理者）</button>` : ''}
+      ${st === '確認待ち' || st === '承認済み' ? `<button class="btn btn-sm btn-danger" onclick="docReject()">差戻し（管理者）</button>` : ''}
+      <span style="font-size:11px;color:var(--text2);">作成: ${rec ? fmtDt(rec.created_at) : '-'} / 出力回数: ${rec ? rec.output_count || 0 : 0}</span>`;
+    sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    document.getElementById('doc-preview-body').innerHTML = `<div class="empty-state" style="color:var(--red);">${esc2(sbSafeMsg(err))}</div>`;
+  }
+}
+
+async function docSetStatus(status, note) {
+  if (!docCurrentDef) return;
+  const rec = await docEnsureRecord(docCurrentDef);
+  try {
+    await sb('PATCH', 'report_docs', { status, reject_note: note || null, updated_at: new Date().toISOString(), ...(status === '承認済み' ? { approved_by: '管理者', approved_at: new Date().toISOString() } : {}) }, `?id=eq.${rec.id}`);
+    toast(`「${docCurrentDef.title}」を${status}にしました`);
+    await loadDocsHub();
+    docOpen(docCurrentDef.key);
+  } catch (e) { toast('状態の更新に失敗しました: ' + sbSafeMsg(e), 'error'); }
+}
+function docApprove() { if (requireAdmin('帳票の承認')) docSetStatus('承認済み'); }
+function docReject() {
+  if (!requireAdmin('帳票の差戻し')) return;
+  const note = prompt('差戻し理由を入力してください:');
+  if (note === null) return;
+  docSetStatus('差戻し', note);
+}
+
+async function docOutput(key, mode) {
+  try {
+    const { def, data } = await docGenerate(key);
+    docCurrentDef = def; docCurrentData = data;
+    const rec = await docEnsureRecord(def);
+    if (mode === 'print') {
+      const w = window.open('', '_blank');
+      if (!w) { toast('ポップアップがブロックされました', 'error'); return; }
+      w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${def.title} ${docMonth()}</title><style>body{font-family:'Noto Sans JP',sans-serif;padding:24px;color:#222;}</style></head><body>${docHtml(def, data, true)}<p style="font-size:10px;color:#999;">PDF保存: 印刷ダイアログで「PDFに保存」を選択</p></body></html>`);
+      w.document.close();
+      setTimeout(() => w.print(), 300);
+    } else {
+      downloadCSV(`${def.key}_${docMonth()}.csv`, data.columns, data.rows);
+      toast(`${def.title} をCSV出力しました`);
+    }
+    if (rec) {
+      sb('PATCH', 'report_docs', { output_count: (rec.output_count || 0) + 1, last_output_at: new Date().toISOString() }, `?id=eq.${rec.id}`).then(() => loadDocsHub()).catch(() => {});
+    }
+  } catch (err) { toast('出力に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+function downloadCSV(filename, columns, rows) {
+  const escCsv = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const csv = '﻿' + columns.map(escCsv).join(',') + '\n' + rows.map(r => r.map(escCsv).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = filename; a.click(); URL.revokeObjectURL(a.href);
+}
+
+/* ── 月次一括ZIP（無圧縮ZIPをJSで生成・外部ライブラリ不要） ── */
+function makeZip(files) { // files: [{name, data(Uint8Array)}]
+  const enc = new TextEncoder();
+  const crcTable = (() => { const t = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc32 = (d) => { let c = 0xFFFFFFFF; for (let i = 0; i < d.length; i++) c = crcTable[(c ^ d[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  const parts = []; const central = []; let offset = 0;
+  const u16 = n => new Uint8Array([n & 255, (n >> 8) & 255]);
+  const u32 = n => new Uint8Array([n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >>> 24) & 255]);
+  files.forEach(f => {
+    const nameB = enc.encode(f.name); const crc = crc32(f.data);
+    const local = [u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(0), u16(0), u32(crc), u32(f.data.length), u32(f.data.length), u16(nameB.length), u16(0), nameB, f.data];
+    central.push({ nameB, crc, size: f.data.length, offset });
+    local.forEach(p => { parts.push(p); offset += p.length; });
+  });
+  const cdStart = offset; let cdSize = 0;
+  central.forEach(c => {
+    const rec = [u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(0), u16(0), u32(c.crc), u32(c.size), u32(c.size), u16(c.nameB.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(c.offset), c.nameB];
+    rec.forEach(p => { parts.push(p); cdSize += p.length; });
+  });
+  parts.push(u32(0x06054b50), u16(0), u16(0), u16(central.length), u16(central.length), u32(cdSize), u32(cdStart), u16(0));
+  return new Blob(parts, { type: 'application/zip' });
+}
+
+async function docZipCategory(cat) {
+  toast(`${cat} の帳票を生成中...`, 'info');
+  const enc = new TextEncoder();
+  const files = [];
+  for (const def of DOC_DEFS.filter(d => d.cat === cat)) {
+    try {
+      const data = await def.gen(docMonth());
+      const escCsv = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+      const csv = '﻿' + data.columns.map(escCsv).join(',') + '\n' + data.rows.map(r => r.map(escCsv).join(',')).join('\n');
+      files.push({ name: `${docMonth()}_${def.title}.csv`, data: enc.encode(csv) });
+    } catch (e) { /* 生成できない帳票はスキップ */ }
+  }
+  if (!files.length) { toast('出力できる帳票がありませんでした', 'error'); return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(makeZip(files));
+  a.download = `${docMonth()}_${cat}_一括.zip`;
+  a.click(); URL.revokeObjectURL(a.href);
+  playFeedbackSound(true);
+  toast(`${cat} ${files.length}帳票をZIP出力しました`);
+}
+
+/* ── ダッシュボード「今日やること」 ── */
+async function loadTodayTodos() {
+  const box = document.getElementById('today-todos');
+  if (!box) return;
+  const items = [];
+  const add = (n, label, tab, warn) => { if (n > 0) items.push({ n, label, tab, warn }); };
+  try {
+    const { inds, processedSet } = await fetchAgingData();
+    let over = 0, wait = 0, intake = 0;
+    const today = new Date().toISOString().slice(0, 10);
+    inds.forEach(i => {
+      const st = agingStateOf(i, processedSet);
+      if (st === '熟成中' && agingDays(i.aging_started_at || i.capture_date, null) > 7) over++;
+      if (st === '精肉待ち') wait++;
+      if (st === '受入済') intake++;
+      if (i.capture_date === today) {}
+    });
+    add(over, '熟成の目安（7日）を超過', 'aging', true);
+    add(wait, '精肉待ちの個体', 'processing', false);
+    add(intake, '処理方針が未選択の個体', 'aging', false);
+  } catch (e) {}
+  try { const o = await sb('GET', 'orders', null, '?status=eq.確認済&select=id'); add(o.length, '出荷待ちの注文', 'shipping', false); } catch (e) {}
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${today}T00:00:00&select=room`);
+    const done = new Set(logs.map(l => l.room));
+    add(CLEAN_ROOMS.length - done.size, '未清掃のエリア（本日）', 'cleaning', true);
+    const tempDone = logs.some(l => l.room === '冷蔵・冷凍庫');
+    if (!tempDone) items.push({ n: 1, label: '冷蔵・冷凍庫の温度が未記録（本日）', tab: 'cleaning', warn: true });
+  } catch (e) {}
+  try { const s = await sb('GET', 'supplies', null, '?select=stock_qty,min_qty&deleted_at=is.null'); add(s.filter(x => Number(x.stock_qty) <= Number(x.min_qty)).length, '資材が発注点割れ', 'supplies', true); } catch (e) {}
+  try { const r = await sb('GET', 'report_docs', null, '?status=in.(確認待ち,差戻し)&select=id'); add(r.length, '書類が確認待ち・差戻し', 'docs', false); } catch (e) {}
+  if (!items.length) {
+    box.innerHTML = '<div style="padding:12px 14px;border:1px solid rgba(106,158,90,.4);border-radius:var(--radius);color:var(--green);">✅ 本日の要対応はありません</div>';
+    return;
+  }
+  box.innerHTML = items.map(i => `
+    <button onclick="document.querySelector('[data-tab=${i.tab}]').click()" style="display:flex;gap:10px;align-items:center;padding:12px 14px;border:1px solid ${i.warn ? 'rgba(200,80,80,.45)' : 'var(--border)'};border-radius:var(--radius);background:${i.warn ? 'rgba(200,80,80,.06)' : 'var(--surface)'};cursor:pointer;text-align:left;width:100%;color:var(--text);">
+      <span style="font-size:20px;font-weight:700;color:${i.warn ? 'var(--red)' : 'var(--gold)'};min-width:34px;text-align:center;">${i.n}</span>
+      <span style="font-size:14px;">${i.label}</span>
+      <span style="margin-left:auto;color:var(--text3);">›</span>
+    </button>`).join('');
+}
+
+/* ───────── マスタdatalist（捕獲者台帳・地区マスタから動的取得） ───────── */
+async function loadMasterDatalists() {
+  try {
+    const hs = await sb('GET', 'hunters', null, '?select=name,memo&deleted_at=is.null&order=name.asc&limit=500');
+    const active = hs.filter(h => !['逝去', '返納'].includes(h.memo)).map(h => h.name);
+    if (active.length) document.getElementById('dl-hunter').innerHTML = [...new Set(active)].map(n => `<option>${esc2(n)}</option>`).join('');
+  } catch (e) {}
+  try {
+    const as = await sb('GET', 'area_master', null, '?select=oaza&order=sort_order.asc&limit=300');
+    if (as.length) document.getElementById('dl-area').innerHTML = [...new Set(as.map(a => a.oaza).filter(Boolean))].map(a => `<option>${esc2(a)}</option>`).join('');
+  } catch (e) {}
 }
 
 /* ───────── 冷凍庫ロケーション（精肉モード連携） ───────── */
@@ -4473,6 +5332,11 @@ async function refreshNavBadges() {
     setBadge('nav-badge-supplies', low, true);
     setCard('dc-supply', low);
   } catch (e) { setCard('dc-supply', '-'); }
+  // 書類の確認待ち・差戻し
+  try {
+    const r = await sb('GET', 'report_docs', null, '?status=in.(確認待ち,差戻し)&select=id');
+    setBadge('nav-badge-docs', r.length, true);
+  } catch (e) {}
   // 本日の清掃実施部屋数
   try {
     const today = new Date().toISOString().slice(0, 10);
@@ -4487,6 +5351,9 @@ async function refreshNavBadges() {
 loadDashboard();
 refreshNavBadges();
 loadFreezerOptions();
+loadMasterDatalists();
+loadStaffNames();
+loadTodayTodos();
 </script>
 
 <script>
