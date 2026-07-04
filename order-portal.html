@@ -372,8 +372,6 @@ async function doLogin(){
     return;
   }
   // --- 通常ログイン ---
-  const name=document.getElementById('login-name').value.trim();
-  const pass=document.getElementById('login-pass').value.trim();
   const errEl=document.getElementById('login-error');
   errEl.textContent='';
   if(!name||!pass){errEl.textContent='お客様名とパスワードを入力してください';return}
