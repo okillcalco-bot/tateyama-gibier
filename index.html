@@ -391,6 +391,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <button class="tab-btn" data-tab="individuals">&#x1FAA4; 捕獲受入・個体<span class="nav-badge" id="nav-badge-intake"></span></button>
   <button class="tab-btn" data-tab="aging">&#x1F969; 熟成管理<span class="nav-badge" id="nav-badge-aging"></span></button>
   <button class="tab-btn" data-tab="processing">&#x1F52A; 精肉入力<span class="nav-badge" id="nav-badge-processing"></span></button>
+  <button class="tab-btn" data-tab="products">&#x1F6CD; 加工処理<span class="nav-badge" id="nav-badge-products"></span></button>
   <button class="tab-btn" data-tab="inventory">&#x1F4E6; 在庫一覧</button>
   <button class="tab-btn" data-tab="shipping">&#x1F4E4; 出荷処理<span class="nav-badge" id="nav-badge-shipping"></span></button>
   <button class="tab-btn" data-tab="trace">&#x1F50D; トレーサビリティ</button>
@@ -745,6 +746,70 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;">受け入れた個体ごとに「半身熟成（目安7日）」か「直接分割」を選びます。熟成日数は開始日から精肉日まで自動計算されます。</div>
       <div id="aging-stats" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;"></div>
       <div id="aging-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+  </div>
+
+  <!-- Products (加工処理・完成品在庫) -->
+  <div class="tab-panel" id="panel-products">
+    <div class="section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>加工処理・完成品在庫</span>
+        <button class="btn btn-primary" onclick="productOpenNew()">＋ 商品を追加</button>
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:12px;">精肉を加工して作った卸売・小売商品の完成個数をここで記録します（ホワイトボードの置き換え）。完成したら「＋完成」、イベント等へ持ち出したら「−持ち出し」。BASEネットショップの商品と対応しています。</div>
+      <div id="products-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">最近の動き（完成・持ち出し・販売）</div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>日時</th><th>商品</th><th>区分</th><th>数量</th><th>担当</th><th>原料コード</th><th>メモ</th></tr></thead>
+          <tbody id="product-moves-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Product Movement Modal -->
+  <div id="prodMoveModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:460px;margin:40px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);" id="prodMoveTitle">記録</div>
+        <button onclick="document.getElementById('prodMoveModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div id="prodMoveProduct" style="font-size:15px;font-weight:600;margin-bottom:12px;"></div>
+      <div class="form-group"><label>区分</label><select class="form-input" id="pmv-type"><option>完成</option><option>持ち出し</option><option>店頭販売</option><option>廃棄</option><option>棚卸調整</option></select></div>
+      <div class="form-group"><label>数量</label><input class="form-input" id="pmv-qty" type="number" min="1" value="1" style="font-size:20px;max-width:140px;" /></div>
+      <div class="form-group"><label>担当者</label><select class="form-input" id="pmv-staff"></select></div>
+      <div class="form-group" id="pmv-source-row"><label>原料に使った精肉の識別コード（任意・スキャン可）</label><input class="form-input" id="pmv-source" placeholder="例: TGC-08-T001-RO" /></div>
+      <div class="form-group"><label>メモ（持ち出し先など）</label><input class="form-input" id="pmv-note" placeholder="例: 道の駅イベント販売用" /></div>
+      <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;">
+        <button class="btn" onclick="document.getElementById('prodMoveModal').style.display='none'">キャンセル</button>
+        <button class="btn btn-primary" style="font-size:15px;padding:10px 24px;" onclick="productMoveSave()">記録する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Product Edit Modal -->
+  <div id="productModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:480px;margin:40px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);" id="productModalTitle">商品 新規登録</div>
+        <button onclick="document.getElementById('productModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="form-group" style="grid-column:1/-1"><label>商品名 *</label><input class="form-input" id="prd-f-name" /></div>
+        <div class="form-group"><label>区分</label><select class="form-input" id="prd-f-category"><option>小売</option><option>卸売</option></select></div>
+        <div class="form-group"><label>単位</label><input class="form-input" id="prd-f-unit" placeholder="個 / 袋" /></div>
+        <div class="form-group"><label>販売価格（円）</label><input class="form-input" id="prd-f-price" type="number" /></div>
+        <div class="form-group"><label>在庫数（棚卸）</label><input class="form-input" id="prd-f-stock_qty" type="number" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>BASE商品URL（連携用）</label><input class="form-input" id="prd-f-base_url" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>メモ</label><input class="form-input" id="prd-f-memo" /></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;">
+        <button class="btn" onclick="document.getElementById('productModal').style.display='none'">キャンセル</button>
+        <button class="btn btn-primary" onclick="productSave()">保存</button>
+      </div>
     </div>
   </div>
 
@@ -1255,6 +1320,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'processing') loadProcessingSetup();
     if (btn.dataset.tab === 'shipping') { loadShipping(); setTimeout(maintainShippingScannerFocus, 50); }
     if (btn.dataset.tab === 'punch') loadPunch();
+    if (btn.dataset.tab === 'products') loadProducts();
     if (btn.dataset.tab === 'aging') loadAging();
     if (btn.dataset.tab === 'hunters') loadHunters();
     if (btn.dataset.tab === 'staff') loadStaffPanel();
@@ -4541,6 +4607,140 @@ async function flagResolve(id) {
     await sb('PATCH', 'data_flags', { status: '対応済' }, '?id=eq.' + id);
     loadFlags();
   } catch (err) { toast('更新に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+/* ───────── 加工処理（完成品在庫・ホワイトボード置き換え） ───────── */
+let productsData = [];
+let productEditId = null;
+let prodMoveTarget = null;
+const PRODUCT_FIELDS = ['name', 'category', 'unit', 'price', 'stock_qty', 'base_url', 'memo'];
+
+async function loadProducts() {
+  const grid = document.getElementById('products-grid');
+  grid.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
+  try {
+    productsData = await sb('GET', 'products', null, '?select=*&deleted_at=is.null&order=category.asc,name.asc');
+  } catch (err) {
+    grid.innerHTML = `<div class="empty-state" style="color:var(--red);grid-column:1/-1;">${esc2(sbSafeMsg(err))}</div>`;
+    return;
+  }
+  if (!productsData.length) {
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;">商品が未登録です。「＋商品を追加」から登録してください。</div>';
+  } else {
+    grid.innerHTML = productsData.map(p => `
+      <div style="border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);padding:14px;">
+        <div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;">
+          <div style="font-weight:600;font-size:14px;line-height:1.4;">${esc2(p.name)}</div>
+          <span class="badge ${p.category === '卸売' ? 'badge-blue' : 'badge-gold'}">${esc2(p.category || '小売')}</span>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:6px;margin:8px 0;">
+          <span style="font-size:34px;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums;">${p.stock_qty != null ? p.stock_qty : 0}</span>
+          <span style="color:var(--text2);">${esc2(p.unit || '個')}</span>
+          ${p.price ? `<span style="margin-left:auto;font-size:12px;color:var(--text2);">¥${Number(p.price).toLocaleString()}</span>` : ''}
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" style="flex:1;" onclick="productMoveOpen('${p.id}','完成')">＋ 完成</button>
+          <button class="btn btn-sm" style="flex:1;" onclick="productMoveOpen('${p.id}','持ち出し')">− 持ち出し</button>
+          <button class="btn btn-sm" onclick="productEdit('${p.id}')">編集</button>
+        </div>
+      </div>`).join('');
+  }
+  loadProductMoves();
+}
+
+async function loadProductMoves() {
+  const body = document.getElementById('product-moves-body');
+  try {
+    const moves = await sb('GET', 'product_movements', null, '?select=*&order=created_at.desc&limit=30');
+    body.innerHTML = moves.length ? moves.map(m => `<tr>
+      <td>${fmtDt(m.created_at)}</td><td>${esc2(m.product_name || '-')}</td>
+      <td>${m.movement_type === '完成' ? '<span class="badge badge-green">完成</span>' : `<span class="badge badge-red">${esc2(m.movement_type)}</span>`}</td>
+      <td style="text-align:right;font-weight:600;">${m.movement_type === '完成' ? '+' : '−'}${Math.abs(m.qty)}</td>
+      <td>${esc2(m.staff_name || '-')}</td>
+      <td style="color:var(--gold);font-size:12px;">${esc2(m.source_ident_code || '')}</td>
+      <td style="font-size:12px;color:var(--text2);">${esc2(m.note || '')}</td>
+    </tr>`).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text3);">記録がありません</td></tr>';
+  } catch (e) { body.innerHTML = ''; }
+}
+
+function productMoveOpen(id, type) {
+  prodMoveTarget = productsData.find(p => String(p.id) === String(id));
+  if (!prodMoveTarget) return;
+  document.getElementById('prodMoveTitle').textContent = type === '完成' ? '＋ 完成の記録' : '− 持ち出し等の記録';
+  document.getElementById('prodMoveProduct').textContent = `${prodMoveTarget.name}（現在庫 ${prodMoveTarget.stock_qty || 0}${prodMoveTarget.unit || '個'}）`;
+  document.getElementById('pmv-type').value = type;
+  document.getElementById('pmv-qty').value = 1;
+  document.getElementById('pmv-source').value = '';
+  document.getElementById('pmv-note').value = '';
+  document.getElementById('pmv-source-row').style.display = type === '完成' ? 'block' : 'none';
+  document.getElementById('pmv-staff').innerHTML = '<option value="">担当者を選択...</option>' + PM_OPERATORS.map(n => `<option>${esc2(n)}</option>`).join('');
+  document.getElementById('pmv-type').onchange = function () {
+    document.getElementById('pmv-source-row').style.display = this.value === '完成' ? 'block' : 'none';
+  };
+  document.getElementById('prodMoveModal').style.display = 'block';
+}
+
+async function productMoveSave() {
+  const type = document.getElementById('pmv-type').value;
+  const qty = parseInt(document.getElementById('pmv-qty').value);
+  const staff = document.getElementById('pmv-staff').value;
+  if (!qty || qty < 1) { toast('数量を入力してください', 'error'); return; }
+  if (!staff) { toast('担当者を選択してください', 'error'); return; }
+  const cur = prodMoveTarget.stock_qty || 0;
+  const delta = type === '完成' ? qty : -qty;
+  const next = cur + delta;
+  if (next < 0 && type !== '棚卸調整') {
+    toast(`在庫が足りません（現在 ${cur}${prodMoveTarget.unit || '個'}）。棚卸調整を使う場合は管理者に依頼してください。`, 'error');
+    return;
+  }
+  try {
+    await sb('POST', 'product_movements', {
+      product_id: prodMoveTarget.id, product_name: prodMoveTarget.name,
+      movement_type: type, qty: qty, staff_name: staff,
+      source_ident_code: type === '完成' ? (document.getElementById('pmv-source').value.trim() || null) : null,
+      note: document.getElementById('pmv-note').value.trim() || null,
+    });
+    await sb('PATCH', 'products', { stock_qty: Math.max(0, next), updated_at: new Date().toISOString() }, `?id=eq.${prodMoveTarget.id}`);
+    playFeedbackSound(true);
+    toast(`${prodMoveTarget.name} ${type} ${qty}${prodMoveTarget.unit || '個'} を記録しました（在庫 ${Math.max(0, next)}）`);
+    document.getElementById('prodMoveModal').style.display = 'none';
+    loadProducts();
+  } catch (err) { playFeedbackSound(false); toast('記録に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+function productOpenNew() {
+  if (!requireAdmin('商品の新規登録')) return;
+  productEditId = null;
+  document.getElementById('productModalTitle').textContent = '商品 新規登録';
+  PRODUCT_FIELDS.forEach(f => document.getElementById('prd-f-' + f).value = f === 'category' ? '小売' : '');
+  document.getElementById('productModal').style.display = 'block';
+}
+
+function productEdit(id) {
+  if (!requireAdmin('商品情報の編集')) return;
+  const p = productsData.find(x => String(x.id) === String(id));
+  if (!p) return;
+  productEditId = id;
+  document.getElementById('productModalTitle').textContent = '商品情報編集';
+  PRODUCT_FIELDS.forEach(f => document.getElementById('prd-f-' + f).value = p[f] != null ? p[f] : '');
+  document.getElementById('productModal').style.display = 'block';
+}
+
+async function productSave() {
+  const payload = {};
+  PRODUCT_FIELDS.forEach(f => {
+    let v = document.getElementById('prd-f-' + f).value.trim();
+    if (f === 'price' || f === 'stock_qty') v = v === '' ? null : parseInt(v);
+    payload[f] = v === '' ? null : v;
+  });
+  if (!payload.name) { toast('商品名は必須です', 'error'); return; }
+  if (payload.stock_qty === null) payload.stock_qty = 0;
+  try {
+    if (productEditId) { await sb('PATCH', 'products', payload, '?id=eq.' + productEditId); toast(`商品「${payload.name}」を更新しました`); }
+    else { await sb('POST', 'products', payload); toast(`商品「${payload.name}」を登録しました`); }
+    document.getElementById('productModal').style.display = 'none';
+    loadProducts();
+  } catch (err) { toast('保存に失敗しました: ' + sbSafeMsg(err), 'error'); }
 }
 
 /* ───────── マスタdatalist（捕獲者台帳・地区マスタから動的取得） ───────── */

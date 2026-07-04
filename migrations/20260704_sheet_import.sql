@@ -41,3 +41,10 @@ exception when duplicate_object then null; end $$;
 -- ・テストデータ: 個体 TGC-TEST-01 / TGC-TEST-02、注文 TEST-001（練習用・削除可）
 -- 取込スクリプト: セッション内 parse_sheets.py（令和→西暦変換、午前/午後→24h変換、
 -- 捕獲場所を市/大字に分割、捕獲方法の表記統一: 括り→くくり罠 / 檻→箱罠 / 銃→銃猟）
+
+-- ── 加工処理（完成品在庫）2026-07-04 適用済み: processed_products ──
+-- products: 完成品マスタ（小売/卸売、BASE連携用のbase_item_id/base_url付き）
+-- product_movements: 完成/持ち出し/店頭販売/廃棄/棚卸調整のログ
+--   （source_ident_code で原料の精肉識別コードと紐付け＝トレーサビリティ）
+-- シード: BASEショップの食品系10商品（革製品は除外）
+-- スタッフ: 今泉貴雄・吉田友美 を追加
