@@ -2,19 +2,17 @@
 
 import { useTransition, useState } from "react";
 import { approveDraftAction, discardDraftAction } from "@/app/memos/actions";
+import type { ActionResult } from "@/lib/action-result";
 
 export function DraftActions({ draftId }: { draftId: string }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const run = (fn: (id: string) => Promise<void>) => {
+  const run = (fn: (id: string) => Promise<ActionResult>) => {
     setError(null);
     startTransition(async () => {
-      try {
-        await fn(draftId);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "エラーが発生しました");
-      }
+      const result = await fn(draftId);
+      if (!result.ok) setError(result.error);
     });
   };
 

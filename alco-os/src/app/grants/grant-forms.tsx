@@ -8,20 +8,21 @@ import {
   generateGrantDraftAction,
 } from "./actions";
 import { Card } from "@/components/ui";
+import type { ActionResult } from "@/lib/action-result";
 
 /** server action 実行の共通フック（エラー表示付き） */
 function useAction() {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const run = (fn: () => Promise<void>, onDone?: () => void) => {
+  const run = (fn: () => Promise<ActionResult>, onDone?: () => void) => {
     setError(null);
     startTransition(async () => {
-      try {
-        await fn();
-        onDone?.();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "エラーが発生しました");
+      const result = await fn();
+      if (!result.ok) {
+        setError(result.error);
+        return;
       }
+      onDone?.();
     });
   };
   return { isPending, error, run };
@@ -128,10 +129,13 @@ export function AddRequirementsForm({ grantProjectId }: { grantProjectId: string
   return (
     <form
       action={(formData) =>
-        run(async () => {
-          await addRequirements(grantProjectId, formData);
-          (document.getElementById("req-textarea") as HTMLTextAreaElement | null)!.value = "";
-        })
+        run(
+          () => addRequirements(grantProjectId, formData),
+          () => {
+            const textarea = document.getElementById("req-textarea") as HTMLTextAreaElement | null;
+            if (textarea) textarea.value = "";
+          },
+        )
       }
       className="mt-2 space-y-2"
     >

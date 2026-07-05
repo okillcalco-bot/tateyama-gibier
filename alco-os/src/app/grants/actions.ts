@@ -7,9 +7,10 @@ import { getCurrentUser } from "@/lib/auth";
 import { getProvider } from "@/ai/model-router";
 import { generateGrantDraft } from "@/ai/workflows/generate-grant-draft";
 import { writeAuditLog } from "@/domain/audit/audit-log-service";
+import { runAction, type ActionResult } from "@/lib/action-result";
 
 /** 補助金案件の新規登録 */
-export async function createGrantProject(formData: FormData) {
+async function do_createGrantProject(formData: FormData) {
   const supabase = await createSupabaseServerClient();
   const user = await getCurrentUser(supabase);
   if (!user) throw new Error("ログインが必要です");
@@ -39,7 +40,7 @@ export async function createGrantProject(formData: FormData) {
 }
 
 /** 要件の一括追加（1行1要件で貼り付け） */
-export async function addRequirements(grantProjectId: string, formData: FormData) {
+async function do_addRequirements(grantProjectId: string, formData: FormData) {
   const supabase = await createSupabaseServerClient();
   const user = await getCurrentUser(supabase);
   if (!user) throw new Error("ログインが必要です");
@@ -66,7 +67,7 @@ export async function addRequirements(grantProjectId: string, formData: FormData
 }
 
 /** 要件の充足状態トグル（null → 充足 → 未充足 → null） */
-export async function setRequirementMet(
+async function do_setRequirementMet(
   requirementId: string,
   grantProjectId: string,
   isMet: boolean | null,
@@ -85,7 +86,7 @@ export async function setRequirementMet(
  * DB上の案件・要件・経費のみを入力にする。生成物は generated_drafts に
  * draft として保存され、/drafts での承認後に grant_documents へ確定する。
  */
-export async function generateGrantDraftAction(grantProjectId: string) {
+async function do_generateGrantDraftAction(grantProjectId: string) {
   const supabase = await createSupabaseServerClient();
   const user = await getCurrentUser(supabase);
   if (!user) throw new Error("ログインが必要です");
@@ -133,4 +134,29 @@ export async function generateGrantDraftAction(grantProjectId: string) {
 
   revalidatePath(`/grants/${grantProjectId}`);
   revalidatePath("/drafts");
+}
+
+// ── 公開 server actions（エラーは ActionResult で返す） ──
+
+export async function createGrantProject(formData: FormData): Promise<ActionResult> {
+  return runAction(() => do_createGrantProject(formData));
+}
+
+export async function addRequirements(
+  grantProjectId: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  return runAction(() => do_addRequirements(grantProjectId, formData));
+}
+
+export async function setRequirementMet(
+  requirementId: string,
+  grantProjectId: string,
+  isMet: boolean | null,
+): Promise<ActionResult> {
+  return runAction(() => do_setRequirementMet(requirementId, grantProjectId, isMet));
+}
+
+export async function generateGrantDraftAction(grantProjectId: string): Promise<ActionResult> {
+  return runAction(() => do_generateGrantDraftAction(grantProjectId));
 }

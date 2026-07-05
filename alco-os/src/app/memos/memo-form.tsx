@@ -15,12 +15,12 @@ export function MemoForm() {
         action={(formData) => {
           setError(null);
           startTransition(async () => {
-            try {
-              await createAndClassifyMemo(formData);
-              (document.getElementById("memo-form") as HTMLFormElement | null)?.reset();
-            } catch (e) {
-              setError(e instanceof Error ? e.message : "エラーが発生しました");
+            const result = await createAndClassifyMemo(formData);
+            if (!result.ok) {
+              setError(result.error);
+              return;
             }
+            (document.getElementById("memo-form") as HTMLFormElement | null)?.reset();
           });
         }}
         id="memo-form"
