@@ -16,6 +16,11 @@ export const env = {
   anthropicApiKey: read(process.env.ANTHROPIC_API_KEY),
   /** 受信箱API（/api/inbox）の認証トークン。未設定なら受信箱は無効 */
   inboxToken: read(process.env.INBOX_TOKEN),
+  /** LINE Messaging API（/api/line）。チャネルシークレットは署名検証に必須 */
+  lineChannelSecret: read(process.env.LINE_CHANNEL_SECRET),
+  lineChannelAccessToken: read(process.env.LINE_CHANNEL_ACCESS_TOKEN),
+  /** 既存のGAS秘書システムへLINE webhookを転送する場合のURL（任意） */
+  gasWebhookUrl: read(process.env.GAS_WEBHOOK_URL),
 };
 
 /** Supabase が設定済みか（未設定ならセットアップ案内画面を出す） */
