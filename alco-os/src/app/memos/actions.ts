@@ -65,6 +65,50 @@ export async function createAndClassifyMemo(formData: FormData): Promise<ActionR
 }
 
 /**
+ * 未処理メモのAI分類（再実行）。
+ * 過去にAI分類が失敗して「未処理」のまま残ったメモに使う。
+ * 重複ドラフト防止のため status = new のメモのみ対象。
+ */
+export async function classifyMemoAction(memoId: string): Promise<ActionResult> {
+  return runAction(async () => {
+    const supabase = await createSupabaseServerClient();
+    const user = await getCurrentUser(supabase);
+    if (!user) throw new Error("ログインが必要です");
+
+    const db = new SupabaseDb(supabase);
+    const memo = await db.findById("voice_memos", memoId);
+    if (!memo) throw new Error("メモが見つかりません");
+    if (memo.status !== "new") {
+      throw new Error("このメモは分類済みです（重複防止のため再実行できません）");
+    }
+
+    await classifyVoiceMemo(
+      {
+        db,
+        provider: getProvider(),
+        organizationId: user.organizationId,
+        userId: user.userId,
+      },
+      {
+        title: (memo.title as string) ?? undefined,
+        raw_text: memo.raw_text as string,
+        source_type: memo.source_type as
+          | "voice_transcript"
+          | "text_memo"
+          | "meeting_note"
+          | "field_note",
+      },
+      { memoId },
+    );
+
+    await db.update("voice_memos", memoId, { status: "classified" });
+
+    revalidatePath("/memos");
+    revalidatePath("/drafts");
+  });
+}
+
+/**
  * ドラフト承認: 提案タスクの作成などの反映は draft-service が行う。
  * 承認は owner / manager のみ（RLS でも generated_drafts の update を制限済み）。
  */
