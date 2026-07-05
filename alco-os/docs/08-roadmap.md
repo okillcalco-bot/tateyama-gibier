@@ -28,8 +28,15 @@
 - [ ] Supabase Dashboard で代表のユーザーを作成 → ログイン確認
 - [ ] Vercel デプロイ（環境変数: NEXT_PUBLIC_SUPABASE_URL /
       NEXT_PUBLIC_SUPABASE_ANON_KEY / AI_PROVIDER / AI_DEFAULT_MODEL / ANTHROPIC_API_KEY）
+- [x] 本番AI稼働確認（anthropic / claude-sonnet-5 で分類成功。2026-07-05）
+- [x] タスクの完了・着手操作（/tasks に完了ボタン）
+- [x] 受信箱API（/api/inbox）— 外部テキストの取り込み + 自動AI分類。
+      INBOX_TOKEN + SUPABASE_SERVICE_ROLE_KEY で有効化
+- [ ] iPhone共有ショートカットの設定（受信箱APIへ送る。README参照）
+- [ ] LINE公式アカウント + Messaging API webhook → 受信箱への接続
+- [ ] メール転送（inbound email サービス → 受信箱）
 - [ ] Voice Memo の音声ファイルアップロード + 文字起こし連携
-- [ ] 運用開始（まずは代表のメモ運用から）
+- [x] 運用開始（代表 owner 登録・メモ→承認→タスクの一周を本番確認）
 
 ## Phase 3: 現場仕様に育てる — Opus
 
