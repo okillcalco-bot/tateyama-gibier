@@ -7,90 +7,103 @@ import { getCurrentUser, canApprove } from "@/lib/auth";
 import { getProvider } from "@/ai/model-router";
 import { classifyVoiceMemo } from "@/ai/workflows/classify-voice-memo";
 import { approveDraft, discardDraft } from "@/domain/drafts/draft-service";
+import { runAction, type ActionResult } from "@/lib/action-result";
 
 /**
  * 音声メモの登録とAI分類。
  * フロー: voice_memos に原文保存 → AI分類 → generated_drafts に保存（ここで止まる）。
  * タスク等への反映は /drafts での人間承認後のみ。
  */
-export async function createAndClassifyMemo(formData: FormData) {
-  const supabase = await createSupabaseServerClient();
-  const user = await getCurrentUser(supabase);
-  if (!user) throw new Error("ログインが必要です");
+export async function createAndClassifyMemo(formData: FormData): Promise<ActionResult> {
+  return runAction(async () => {
+    const supabase = await createSupabaseServerClient();
+    const user = await getCurrentUser(supabase);
+    if (!user) throw new Error("ログインが必要です");
 
-  const rawText = String(formData.get("raw_text") ?? "").trim();
-  const title = String(formData.get("title") ?? "").trim() || null;
-  const sourceType = String(formData.get("source_type") ?? "text_memo");
-  if (!rawText) throw new Error("メモ本文を入力してください");
+    const rawText = String(formData.get("raw_text") ?? "").trim();
+    const title = String(formData.get("title") ?? "").trim() || null;
+    const sourceType = String(formData.get("source_type") ?? "text_memo");
+    if (!rawText) throw new Error("メモ本文を入力してください");
 
-  const db = new SupabaseDb(supabase);
+    const db = new SupabaseDb(supabase);
 
-  // 1. 原文を保存（以後、原文は変更しない）
-  const memo = await db.insert("voice_memos", {
-    organization_id: user.organizationId,
-    title,
-    raw_text: rawText,
-    source_type: sourceType,
-    status: "new",
-    created_by: user.userId,
-  });
-
-  // 2. AI分類 → ドラフト保存（ai_runs 記録込み）
-  await classifyVoiceMemo(
-    {
-      db,
-      provider: getProvider(),
-      organizationId: user.organizationId,
-      userId: user.userId,
-    },
-    {
-      title: title ?? undefined,
+    // 1. 原文を保存（以後、原文は変更しない）
+    const memo = await db.insert("voice_memos", {
+      organization_id: user.organizationId,
+      title,
       raw_text: rawText,
-      source_type: sourceType as "voice_transcript" | "text_memo" | "meeting_note" | "field_note",
-    },
-    { memoId: memo.id as string },
-  );
+      source_type: sourceType,
+      status: "new",
+      created_by: user.userId,
+    });
 
-  await db.update("voice_memos", memo.id as string, { status: "classified" });
+    // 2. AI分類 → ドラフト保存（ai_runs 記録込み）
+    await classifyVoiceMemo(
+      {
+        db,
+        provider: getProvider(),
+        organizationId: user.organizationId,
+        userId: user.userId,
+      },
+      {
+        title: title ?? undefined,
+        raw_text: rawText,
+        source_type: sourceType as
+          | "voice_transcript"
+          | "text_memo"
+          | "meeting_note"
+          | "field_note",
+      },
+      { memoId: memo.id as string },
+    );
 
-  revalidatePath("/memos");
-  revalidatePath("/drafts");
+    await db.update("voice_memos", memo.id as string, { status: "classified" });
+
+    revalidatePath("/memos");
+    revalidatePath("/drafts");
+  });
 }
 
 /**
  * ドラフト承認: 提案タスクの作成などの反映は draft-service が行う。
  * 承認は owner / manager のみ（RLS でも generated_drafts の update を制限済み）。
  */
-export async function approveDraftAction(draftId: string) {
-  const supabase = await createSupabaseServerClient();
-  const user = await getCurrentUser(supabase);
-  if (!user) throw new Error("ログインが必要です");
-  if (!(await canApprove(supabase))) {
-    throw new Error("承認権限がありません（owner / manager のみ承認できます）");
-  }
+export async function approveDraftAction(draftId: string): Promise<ActionResult> {
+  return runAction(async () => {
+    const supabase = await createSupabaseServerClient();
+    const user = await getCurrentUser(supabase);
+    if (!user) throw new Error("ログインが必要です");
+    if (!(await canApprove(supabase))) {
+      throw new Error("承認権限がありません（owner / manager のみ承認できます）");
+    }
 
-  await approveDraft(new SupabaseDb(supabase), {
-    organizationId: user.organizationId,
-    actorId: user.userId,
-  }, draftId);
+    await approveDraft(
+      new SupabaseDb(supabase),
+      { organizationId: user.organizationId, actorId: user.userId },
+      draftId,
+    );
 
-  revalidatePath("/drafts");
-  revalidatePath("/tasks");
+    revalidatePath("/drafts");
+    revalidatePath("/tasks");
+  });
 }
 
 /** ドラフト破棄（owner / manager のみ） */
-export async function discardDraftAction(draftId: string) {
-  const supabase = await createSupabaseServerClient();
-  const user = await getCurrentUser(supabase);
-  if (!user) throw new Error("ログインが必要です");
-  if (!(await canApprove(supabase))) {
-    throw new Error("承認権限がありません（owner / manager のみ破棄できます）");
-  }
+export async function discardDraftAction(draftId: string): Promise<ActionResult> {
+  return runAction(async () => {
+    const supabase = await createSupabaseServerClient();
+    const user = await getCurrentUser(supabase);
+    if (!user) throw new Error("ログインが必要です");
+    if (!(await canApprove(supabase))) {
+      throw new Error("承認権限がありません（owner / manager のみ破棄できます）");
+    }
 
-  await discardDraft(new SupabaseDb(supabase), {
-    organizationId: user.organizationId,
-    actorId: user.userId,
-  }, draftId);
+    await discardDraft(
+      new SupabaseDb(supabase),
+      { organizationId: user.organizationId, actorId: user.userId },
+      draftId,
+    );
 
-  revalidatePath("/drafts");
+    revalidatePath("/drafts");
+  });
 }

@@ -8,19 +8,20 @@ import {
   generateNatureReportAction,
 } from "./actions";
 import { Card } from "@/components/ui";
+import type { ActionResult } from "@/lib/action-result";
 
 function useAction() {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const run = (fn: () => Promise<void>, onDone?: () => void) => {
+  const run = (fn: () => Promise<ActionResult>, onDone?: () => void) => {
     setError(null);
     startTransition(async () => {
-      try {
-        await fn();
-        onDone?.();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "エラーが発生しました");
+      const result = await fn();
+      if (!result.ok) {
+        setError(result.error);
+        return;
       }
+      onDone?.();
     });
   };
   return { isPending, error, run };
@@ -118,12 +119,14 @@ export function ObservationForm({ siteId }: { siteId: string }) {
     <form
       id="observation-form"
       action={(formData) =>
-        run(async () => {
-          await addObservation(siteId, formData);
-          (document.getElementById("observation-form") as HTMLFormElement | null)?.reset();
-          setGps(null);
-          setGpsStatus("");
-        })
+        run(
+          () => addObservation(siteId, formData),
+          () => {
+            (document.getElementById("observation-form") as HTMLFormElement | null)?.reset();
+            setGps(null);
+            setGpsStatus("");
+          },
+        )
       }
       className="space-y-2"
     >
@@ -180,10 +183,10 @@ export function ManagementActionForm({ siteId }: { siteId: string }) {
     <form
       id="action-form"
       action={(formData) =>
-        run(async () => {
-          await addManagementAction(siteId, formData);
-          (document.getElementById("action-form") as HTMLFormElement | null)?.reset();
-        })
+        run(
+          () => addManagementAction(siteId, formData),
+          () => (document.getElementById("action-form") as HTMLFormElement | null)?.reset(),
+        )
       }
       className="space-y-2"
     >

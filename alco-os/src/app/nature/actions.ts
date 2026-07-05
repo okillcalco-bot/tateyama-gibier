@@ -7,11 +7,12 @@ import { getCurrentUser } from "@/lib/auth";
 import { getProvider } from "@/ai/model-router";
 import { generateNatureReport } from "@/ai/workflows/generate-nature-report";
 import { writeAuditLog } from "@/domain/audit/audit-log-service";
+import { runAction, type ActionResult } from "@/lib/action-result";
 
 const STORAGE_BUCKET = "alco-os";
 
 /** 対象地の新規登録 */
-export async function createSite(formData: FormData) {
+async function do_createSite(formData: FormData) {
   const supabase = await createSupabaseServerClient();
   const user = await getCurrentUser(supabase);
   if (!user) throw new Error("ログインが必要です");
@@ -46,7 +47,7 @@ export async function createSite(formData: FormData) {
  * 写真は Storage（非公開バケット）へ保存し、files 台帳に記録して
  * observation.photo_file_id で紐付ける = 証跡の最小単位。
  */
-export async function addObservation(siteId: string, formData: FormData) {
+async function do_addObservation(siteId: string, formData: FormData) {
   const supabase = await createSupabaseServerClient();
   const user = await getCurrentUser(supabase);
   if (!user) throw new Error("ログインが必要です");
@@ -113,7 +114,7 @@ export async function addObservation(siteId: string, formData: FormData) {
 }
 
 /** 管理作業履歴の登録 */
-export async function addManagementAction(siteId: string, formData: FormData) {
+async function do_addManagementAction(siteId: string, formData: FormData) {
   const supabase = await createSupabaseServerClient();
   const user = await getCurrentUser(supabase);
   if (!user) throw new Error("ログインが必要です");
@@ -147,7 +148,7 @@ export async function addManagementAction(siteId: string, formData: FormData) {
  * DB上の観察記録・管理作業のみを入力とし、出力の証跡引用は
  * ワークフロー側のスキーマ検証で実在チェックされる（捏造IDは保存拒否）。
  */
-export async function generateNatureReportAction(siteId: string, clientPurpose: string) {
+async function do_generateNatureReportAction(siteId: string, clientPurpose: string) {
   const supabase = await createSupabaseServerClient();
   const user = await getCurrentUser(supabase);
   if (!user) throw new Error("ログインが必要です");
@@ -184,4 +185,28 @@ export async function generateNatureReportAction(siteId: string, clientPurpose: 
 
   revalidatePath(`/nature/${siteId}`);
   revalidatePath("/drafts");
+}
+
+// ── 公開 server actions（エラーは ActionResult で返す） ──
+
+export async function createSite(formData: FormData): Promise<ActionResult> {
+  return runAction(() => do_createSite(formData));
+}
+
+export async function addObservation(siteId: string, formData: FormData): Promise<ActionResult> {
+  return runAction(() => do_addObservation(siteId, formData));
+}
+
+export async function addManagementAction(
+  siteId: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  return runAction(() => do_addManagementAction(siteId, formData));
+}
+
+export async function generateNatureReportAction(
+  siteId: string,
+  clientPurpose: string,
+): Promise<ActionResult> {
+  return runAction(() => do_generateNatureReportAction(siteId, clientPurpose));
 }
