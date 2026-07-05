@@ -1,16 +1,9 @@
 import { isSupabaseConfigured } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { Card, PageHeader, SetupNotice, Badge, EmptyState } from "@/components/ui";
+import { PageHeader, SetupNotice, EmptyState } from "@/components/ui";
+import { TaskItem, type TaskRow } from "./task-item";
 
 export const dynamic = "force-dynamic";
-
-const PRIORITY_COLOR = { urgent: "red", high: "amber", normal: "gray", low: "gray" } as const;
-const STATUS_LABELS: Record<string, string> = {
-  open: "未着手",
-  in_progress: "対応中",
-  done: "完了",
-  cancelled: "中止",
-};
 
 export default async function TasksPage() {
   if (!isSupabaseConfigured()) {
@@ -23,40 +16,46 @@ export default async function TasksPage() {
   }
 
   const supabase = await createSupabaseServerClient();
-  const { data: tasks } = await supabase
-    .from("tasks")
-    .select("id, title, status, priority, due_date, module, created_at")
-    .is("deleted_at", null)
-    .in("status", ["open", "in_progress"])
-    .order("due_date", { ascending: true, nullsFirst: false })
-    .limit(100);
+  const [{ data: tasks }, { data: recentDone }] = await Promise.all([
+    supabase
+      .from("tasks")
+      .select("id, title, status, priority, due_date, module")
+      .is("deleted_at", null)
+      .in("status", ["open", "in_progress"])
+      .order("due_date", { ascending: true, nullsFirst: false })
+      .limit(100),
+    supabase
+      .from("tasks")
+      .select("id, title, updated_at")
+      .is("deleted_at", null)
+      .eq("status", "done")
+      .order("updated_at", { ascending: false })
+      .limit(5),
+  ]);
 
   return (
     <>
-      <PageHeader title="タスク" description="全モジュール横断のタスク一覧" />
+      <PageHeader title="タスク" description="◯をタップで完了" />
       <div className="space-y-2">
         {!tasks?.length ? (
           <EmptyState message="未処理のタスクはありません。音声メモの承認からタスクが作成されます。" />
         ) : (
-          tasks.map((task) => (
-            <Card key={task.id} className="flex items-center justify-between gap-2 py-3">
-              <div>
-                <p className="text-sm font-medium">{task.title}</p>
-                <p className="text-xs text-stone-400">
-                  {STATUS_LABELS[task.status] ?? task.status}
-                  {task.due_date ? ` ・期限 ${task.due_date}` : ""}
-                  {task.module ? ` ・${task.module}` : ""}
-                </p>
-              </div>
-              <Badge
-                color={PRIORITY_COLOR[task.priority as keyof typeof PRIORITY_COLOR] ?? "gray"}
-              >
-                {task.priority}
-              </Badge>
-            </Card>
-          ))
+          tasks.map((task) => <TaskItem key={task.id} task={task as TaskRow} />)
         )}
       </div>
+
+      {recentDone?.length ? (
+        <div className="mt-6">
+          <p className="mb-2 text-xs font-semibold text-stone-400">最近完了したタスク</p>
+          <ul className="space-y-1">
+            {recentDone.map((task) => (
+              <li key={task.id} className="text-sm text-stone-400 line-through">
+                {task.title}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </>
   );
 }

@@ -14,6 +14,8 @@ export const env = {
   aiProvider: read(process.env.AI_PROVIDER, "mock") || "mock",
   aiDefaultModel: read(process.env.AI_DEFAULT_MODEL),
   anthropicApiKey: read(process.env.ANTHROPIC_API_KEY),
+  /** 受信箱API（/api/inbox）の認証トークン。未設定なら受信箱は無効 */
+  inboxToken: read(process.env.INBOX_TOKEN),
 };
 
 /** Supabase が設定済みか（未設定ならセットアップ案内画面を出す） */
