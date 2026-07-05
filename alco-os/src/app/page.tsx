@@ -1,5 +1,6 @@
 import { isSupabaseConfigured } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth";
 import { Card, CardTitle, PageHeader, SetupNotice, Badge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,10 @@ export default async function DashboardPage() {
   }
 
   const supabase = await createSupabaseServerClient();
+  // 初回アクセス時にプロフィールを自動作成する（最初のユーザー = owner）。
+  // これを先に行わないと RLS により以降のクエリが空になる。
+  const user = await getCurrentUser(supabase);
+
   const [tasks, drafts, grants, deals, sites] = await Promise.all([
     supabase.from("v_open_tasks").select("*"),
     supabase.from("v_pending_drafts").select("*"),
@@ -36,7 +41,10 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="ダッシュボード" description="経営の視界を一画面に" />
+      <PageHeader
+        title="ダッシュボード"
+        description={user ? `経営の視界を一画面に ・${user.displayName} さん` : "経営の視界を一画面に"}
+      />
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Card>
           <CardTitle>未処理タスク</CardTitle>
