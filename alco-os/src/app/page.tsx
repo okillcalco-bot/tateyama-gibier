@@ -21,13 +21,17 @@ export default async function DashboardPage() {
   // これを先に行わないと RLS により以降のクエリが空になる。
   const user = await getCurrentUser(supabase);
 
-  const [tasks, drafts, grants, deals, sites] = await Promise.all([
-    supabase.from("v_open_tasks").select("*"),
-    supabase.from("v_pending_drafts").select("*"),
-    supabase.from("v_grant_pipeline").select("*"),
-    supabase.from("v_deal_pipeline").select("*"),
-    supabase.from("v_site_activity").select("*"),
-  ]);
+  const [tasks, drafts, grants, deals, sites, gibierIntake, gibierInventory, gibierSales] =
+    await Promise.all([
+      supabase.from("v_open_tasks").select("*"),
+      supabase.from("v_pending_drafts").select("*"),
+      supabase.from("v_grant_pipeline").select("*"),
+      supabase.from("v_deal_pipeline").select("*"),
+      supabase.from("v_site_activity").select("*"),
+      supabase.from("v_gibier_intake_monthly").select("*"),
+      supabase.from("v_gibier_inventory").select("*"),
+      supabase.from("v_gibier_sales_monthly").select("*"),
+    ]);
 
   const openTasks = (tasks.data ?? []).reduce(
     (sum, row) => sum + Number(row.open_count ?? 0) + Number(row.in_progress_count ?? 0),
@@ -38,6 +42,25 @@ export default async function DashboardPage() {
     (sum, row) => sum + Number(row.pending_count ?? 0),
     0,
   );
+
+  // ── ジビエ基幹 KPI（既存システムのデータを読み取り専用ビューで集計） ──
+  const thisMonth = `${new Date().toISOString().slice(0, 7)}-01`;
+  const intakeThisMonth = (gibierIntake.data ?? []).filter((row) => row.month === thisMonth);
+  const intakeHeads = intakeThisMonth.reduce((sum, row) => sum + Number(row.head_count ?? 0), 0);
+  const intakeTotalHeads = (gibierIntake.data ?? []).reduce(
+    (sum, row) => sum + Number(row.head_count ?? 0),
+    0,
+  );
+  const stockValue = (gibierInventory.data ?? []).reduce(
+    (sum, row) => sum + Number(row.stock_value ?? 0),
+    0,
+  );
+  const stockItems = (gibierInventory.data ?? []).filter(
+    (row) => Number(row.stock_qty ?? 0) > 0,
+  ).length;
+  const salesThisMonth = (gibierSales.data ?? [])
+    .filter((row) => row.month === thisMonth)
+    .reduce((sum, row) => sum + Number(row.total_sales ?? 0), 0);
 
   return (
     <>
@@ -84,10 +107,32 @@ export default async function DashboardPage() {
           </ul>
         </Card>
         <Card>
-          <CardTitle>ジビエ基幹（既存システム）</CardTitle>
-          <p className="text-sm text-stone-500">
-            捕獲頭数・在庫・受注などのジビエKPIは、既存ジビエ基幹システムとのDB統合後にここへ表示します
-            （docs/09-gibier-integration.md 参照）。
+          <CardTitle>ジビエ基幹（既存システム連携）</CardTitle>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div>
+              <p className="text-xs text-stone-400">今月の捕獲</p>
+              <p className="text-xl font-bold">{intakeHeads}頭</p>
+            </div>
+            <div>
+              <p className="text-xs text-stone-400">在庫金額</p>
+              <p className="text-xl font-bold">{stockValue.toLocaleString()}円</p>
+            </div>
+            <div>
+              <p className="text-xs text-stone-400">今月の売上</p>
+              <p className="text-xl font-bold">{salesThisMonth.toLocaleString()}円</p>
+            </div>
+          </div>
+          {intakeThisMonth.length > 0 ? (
+            <p className="mt-2 text-xs text-stone-500">
+              内訳:{" "}
+              {intakeThisMonth
+                .map((row) => `${row.species ?? "不明"} ${row.head_count}頭`)
+                .join(" ・")}
+            </p>
+          ) : null}
+          <p className="mt-1 text-xs text-stone-400">
+            累計 {intakeTotalHeads}頭 ・在庫あり商品 {stockItems}点
+            （個体台帳・完成品在庫・受注から自動集計）
           </p>
         </Card>
       </div>

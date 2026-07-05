@@ -2,6 +2,7 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Card, PageHeader, SetupNotice, Badge, EmptyState } from "@/components/ui";
 import { MemoForm } from "./memo-form";
+import { ReclassifyButton } from "./reclassify-button";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +70,7 @@ export default async function MemosPage() {
                     ) : null}
                   </div>
                 </div>
+                {memo.status === "new" ? <ReclassifyButton memoId={memo.id} /> : null}
               </Card>
             );
           })
