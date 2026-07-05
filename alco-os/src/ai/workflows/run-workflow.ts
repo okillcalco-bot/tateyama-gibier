@@ -74,7 +74,6 @@ export async function runWorkflow<TOutput>(
       user: params.user,
       model: config.model,
       maxTokens: config.maxTokens,
-      temperature: config.temperature,
     });
   } catch (error) {
     await ctx.db.insert("ai_runs", {
