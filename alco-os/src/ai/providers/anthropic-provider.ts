@@ -11,10 +11,11 @@ export class AnthropicProvider implements AiProvider {
   }
 
   async complete(req: CompletionRequest): Promise<CompletionResult> {
+    // temperature 等のサンプリングパラメータは最新モデル（claude-sonnet-5 /
+    // opus-4.7以降）で廃止されており、送ると 400 になるため指定しない
     const response = await this.client.messages.create({
       model: req.model,
       max_tokens: req.maxTokens ?? 4096,
-      temperature: req.temperature ?? 0.2,
       system: req.system,
       messages: [{ role: "user", content: req.user }],
     });

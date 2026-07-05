@@ -21,19 +21,19 @@ export type WorkflowName =
 interface ModelConfig {
   model: string;
   maxTokens: number;
-  temperature: number;
 }
 
 /**
  * ワークフローごとのモデル設定。
  * model を空にすると AI_DEFAULT_MODEL が使われる。
  * 例: 分類は軽量モデル、長文生成は上位モデル、のような使い分けをここで行う。
+ * ※ temperature 等のサンプリングパラメータは最新モデルで廃止のため設定しない。
  */
 const WORKFLOW_CONFIG: Record<WorkflowName, Partial<ModelConfig>> = {
-  classify_voice_memo: { temperature: 0.1, maxTokens: 2048 },
-  generate_grant_draft: { temperature: 0.3, maxTokens: 8192 },
-  generate_nature_report: { temperature: 0.3, maxTokens: 8192 },
-  summarize_meeting: { temperature: 0.2, maxTokens: 4096 },
+  classify_voice_memo: { maxTokens: 2048 },
+  generate_grant_draft: { maxTokens: 8192 },
+  generate_nature_report: { maxTokens: 8192 },
+  summarize_meeting: { maxTokens: 4096 },
 };
 
 export function resolveModelConfig(workflow: WorkflowName): ModelConfig {
@@ -47,7 +47,6 @@ export function resolveModelConfig(workflow: WorkflowName): ModelConfig {
   return {
     model: model || "mock-model",
     maxTokens: overrides.maxTokens ?? 4096,
-    temperature: overrides.temperature ?? 0.2,
   };
 }
 

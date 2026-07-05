@@ -11,7 +11,6 @@ export interface CompletionRequest {
   /** モデルID。model-router が解決する。プロバイダ側でのフォールバック禁止 */
   model: string;
   maxTokens?: number;
-  temperature?: number;
 }
 
 export interface CompletionResult {
