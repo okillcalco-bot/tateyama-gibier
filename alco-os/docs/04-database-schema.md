@@ -17,9 +17,10 @@
 | 0007_hr_documents.sql | sops, checklists, checklist_runs, knowledge_docs（既存の documents と衝突するため改名） |
 | 0008_dashboard_views.sql | v_open_tasks, v_pending_drafts, v_grant_pipeline, v_deal_pipeline, v_site_activity, v_ai_usage |
 | 0009_provisioning_and_approval.sql | デフォルト組織・ロール投入、provision_profile()（初回ログイン自動作成）、can_approve()、generated_drafts の update を owner/manager に限定 |
+| 0010_storage.sql | Storage 非公開バケット alco-os + RLS（メンバーのみ読み書き。delete 不可） |
 
-**適用状況**: 0001〜0009 は本番 Supabase プロジェクト（tateyama-gibier /
-clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（2026-07-04）。
+**適用状況**: 0001〜0010 は本番 Supabase プロジェクト（tateyama-gibier /
+clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（2026-07-05）。
 seed.sql（ダミーデータ）は本番には投入していない。
 
 ## テーブル設計の標準

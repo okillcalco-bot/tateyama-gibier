@@ -46,7 +46,8 @@
 
 - [x] middleware による未ログイン時の /login リダイレクトとセッションリフレッシュ（src/middleware.ts）
 - [x] 承認操作の owner / manager 限定（0009: RLS + server action の二重チェック）
-- [ ] Storage バケットのRLSポリシー定義（files テーブルと対で）
+- [x] Storage バケットのRLSポリシー定義（0010: 非公開バケット alco-os、
+      メンバーのみ読み書き、オブジェクト削除不可＝証跡保全）
 - [ ] レート制限（AI実行の暴走防止。ai_runs の集計で監視は可能）
 - [ ] 既存ジビエ基幹の allow_all RLS の段階的な厳格化（docs/09）
 - [ ] 本番の secretary_pages テーブルは RLS 無効（ジビエ基幹側の課題。

@@ -20,12 +20,15 @@
 - [x] プロフィール自動プロビジョニング（初回ログインで profiles + ロール自動作成。
       最初のユーザー = owner）
 - [x] 承認権限の絞り込み（owner / manager のみ。RLS + server action）
+- [x] Grants: 案件登録・要件チェックリスト（充足トグル）・申請書ドラフト生成
+      ボタン・承認センターでの本文プレビュー
+- [x] Nature: 対象地登録・観察記録のモバイル入力（写真アップロード+GPS取得）・
+      管理作業記録・レポートドラフト生成（証跡IDの実在チェックを保存前に強制）
+- [x] Storage 非公開バケット + RLS（0010。証跡写真はオブジェクト削除不可）
 - [ ] Supabase Dashboard で代表のユーザーを作成 → ログイン確認
 - [ ] Vercel デプロイ（環境変数: NEXT_PUBLIC_SUPABASE_URL /
       NEXT_PUBLIC_SUPABASE_ANON_KEY / AI_PROVIDER / AI_DEFAULT_MODEL / ANTHROPIC_API_KEY）
 - [ ] Voice Memo の音声ファイルアップロード + 文字起こし連携
-- [ ] Grants: 要件チェックリストUI・ドラフト生成ボタン・レビュー画面
-- [ ] Nature: 観察記録のモバイル入力フォーム（写真+GPS）・レポート生成UI
 - [ ] 運用開始（まずは代表のメモ運用から）
 
 ## Phase 3: 現場仕様に育てる — Opus

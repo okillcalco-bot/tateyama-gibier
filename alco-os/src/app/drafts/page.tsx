@@ -69,6 +69,30 @@ export default async function DraftsPage() {
                   <p className="mt-2 text-sm text-stone-600">{content.summary}</p>
                 ) : null}
 
+                {typeof content?.draft_text === "string" ||
+                typeof content?.draft_proposal_text === "string" ? (
+                  <details className="mt-2 rounded-lg bg-stone-50 p-2 text-sm">
+                    <summary className="cursor-pointer text-xs font-semibold text-stone-500">
+                      本文プレビュー
+                    </summary>
+                    <p className="mt-1 whitespace-pre-wrap text-stone-700">
+                      {String(content.draft_text ?? content.draft_proposal_text)}
+                    </p>
+                  </details>
+                ) : null}
+
+                {Array.isArray(content?.missing_information) &&
+                content.missing_information.length > 0 ? (
+                  <p className="mt-2 text-xs text-amber-700">
+                    要確認: {(content.missing_information as string[]).join(" / ")}
+                  </p>
+                ) : null}
+                {Array.isArray(content?.missing_evidence) && content.missing_evidence.length > 0 ? (
+                  <p className="mt-2 text-xs text-amber-700">
+                    証跡不足: {(content.missing_evidence as string[]).join(" / ")}
+                  </p>
+                ) : null}
+
                 {suggestedTasks.length > 0 ? (
                   <div className="mt-2 rounded-lg bg-stone-50 p-2">
                     <p className="text-xs font-semibold text-stone-500">承認で作成されるタスク</p>

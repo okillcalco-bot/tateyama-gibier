@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { isSupabaseConfigured } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Card, PageHeader, SetupNotice, Badge, EmptyState } from "@/components/ui";
+import { NewSiteForm } from "./nature-forms";
 
 export const dynamic = "force-dynamic";
 
@@ -30,27 +32,30 @@ export default async function NaturePage() {
   return (
     <>
       <PageHeader title="自然資本" description="対象地・観察記録・証跡・レポート" />
-      <div className="space-y-3">
+      <NewSiteForm />
+      <div className="mt-4 space-y-3">
         {!sites?.length ? (
-          <EmptyState message="対象地はまだ登録されていません。" />
+          <EmptyState message="対象地はまだ登録されていません。上のボタンから登録してください。" />
         ) : (
           sites.map((site) => {
             const oecm = OECM_LABELS[site.oecm_status ?? "none"] ?? OECM_LABELS.none;
             return (
-              <Card key={site.site_id}>
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-medium">{site.site_name}</p>
-                    <p className="mt-1 text-xs text-stone-400">
-                      観察記録 {site.observation_count} 件 ・管理作業 {site.action_count} 件
-                      {site.last_observed_at
-                        ? ` ・最終観察 ${String(site.last_observed_at).slice(0, 10)}`
-                        : ""}
-                    </p>
+              <Link key={site.site_id} href={`/nature/${site.site_id}`} className="block">
+                <Card className="hover:border-green-300">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium">{site.site_name}</p>
+                      <p className="mt-1 text-xs text-stone-400">
+                        観察記録 {site.observation_count} 件 ・管理作業 {site.action_count} 件
+                        {site.last_observed_at
+                          ? ` ・最終観察 ${String(site.last_observed_at).slice(0, 10)}`
+                          : ""}
+                      </p>
+                    </div>
+                    <Badge color={oecm.color}>{oecm.label}</Badge>
                   </div>
-                  <Badge color={oecm.color}>{oecm.label}</Badge>
-                </div>
-              </Card>
+                </Card>
+              </Link>
             );
           })
         )}
