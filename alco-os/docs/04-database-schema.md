@@ -19,9 +19,11 @@
 | 0009_provisioning_and_approval.sql | デフォルト組織・ロール投入、provision_profile()（初回ログイン自動作成）、can_approve()、generated_drafts の update を owner/manager に限定 |
 | 0010_storage.sql | Storage 非公開バケット alco-os + RLS（メンバーのみ読み書き。delete 不可） |
 | 0011_gibier_views.sql | ジビエ基幹KPIビュー（v_gibier_intake_monthly / v_gibier_inventory / v_gibier_sales_monthly / v_gibier_movements_monthly。既存テーブルへの読み取り専用） |
+| 0012_media.sql | media_projects（プレゼン資料 / YouTube動画の企画〜成果物。承認済み構成は approved_content に保存。素材は files を related_table='media_projects' で紐付け） |
 
-**適用状況**: 0001〜0011 は本番 Supabase プロジェクト（tateyama-gibier /
-clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（2026-07-05）。
+**適用状況**: 0001〜0012 は本番 Supabase プロジェクト（tateyama-gibier /
+clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（0001〜0011: 2026-07-05、
+0012: 2026-07-06）。
 seed.sql（ダミーデータ）は本番には投入していない。
 
 ## テーブル設計の標準
