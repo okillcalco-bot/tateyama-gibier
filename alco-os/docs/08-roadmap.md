@@ -34,12 +34,21 @@
       INBOX_TOKEN + SUPABASE_SERVICE_ROLE_KEY で有効化
 - [ ] iPhone共有ショートカットの設定（受信箱APIへ送る。README参照）
 - [ ] LINE公式アカウント + Messaging API webhook → 受信箱への接続
+      （/api/line 実装済み。LINE Developers 側の webhook URL 設定待ち）
 - [ ] メール転送（inbound email サービス → 受信箱）
 - [ ] Voice Memo の音声ファイルアップロード + 文字起こし連携
 - [x] 運用開始（代表 owner 登録・メモ→承認→タスクの一周を本番確認）
+- [x] メディアモジュール（0012）: プレゼン資料 = ブリーフ→AI構成→承認→PPTX
+      ダウンロード / YouTube動画 = ブリーフ→AI台本・メタデータ（タイトル案・
+      概要欄・タグ・チャプター・サムネ文言）→承認。素材割付は添付ファイル名の
+      実在チェック付き
 
 ## Phase 3: 現場仕様に育てる — Opus
 
+- メディア段階2: 動画の自動レンダリング（台本+素材→動画ファイル。TTS/字幕）と
+  YouTube Data API での自動アップロード（要 Google Cloud OAuth。
+  status: approved → rendering → uploaded → published、youtube_video_id に記録。
+  公開操作は人間承認後のみ）
 - 帳票・ラベル・CSV入出力の拡充
 - CRM: お礼メール下書き生成・BNI 1to1記録
 - Projects: ROKA専用テンプレ・見積比較

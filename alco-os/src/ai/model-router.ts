@@ -16,7 +16,9 @@ export type WorkflowName =
   | "classify_voice_memo"
   | "generate_grant_draft"
   | "generate_nature_report"
-  | "summarize_meeting";
+  | "summarize_meeting"
+  | "generate_presentation"
+  | "generate_video_plan";
 
 interface ModelConfig {
   model: string;
@@ -34,6 +36,8 @@ const WORKFLOW_CONFIG: Record<WorkflowName, Partial<ModelConfig>> = {
   generate_grant_draft: { maxTokens: 8192 },
   generate_nature_report: { maxTokens: 8192 },
   summarize_meeting: { maxTokens: 4096 },
+  generate_presentation: { maxTokens: 12288 },
+  generate_video_plan: { maxTokens: 12288 },
 };
 
 export function resolveModelConfig(workflow: WorkflowName): ModelConfig {

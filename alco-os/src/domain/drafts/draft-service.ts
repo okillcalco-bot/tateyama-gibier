@@ -80,6 +80,9 @@ async function applyDraft(db: DbPort, ctx: AuditContext, draft: Row): Promise<Ro
       return applyVoiceMemoResult(db, ctx, draft);
     case "grant_application":
       return applyGrantApplication(db, ctx, draft);
+    case "presentation_outline":
+    case "video_plan":
+      return applyMediaPlan(db, ctx, draft);
     case "nature_report":
       // レポートはドラフト承認のみで完結（提出用の確定文書化は将来 grant_documents 同様の仕組みで）
       return [];
@@ -115,6 +118,25 @@ async function applyVoiceMemoResult(db: DbPort, ctx: AuditContext, draft: Row): 
   }
 
   return created;
+}
+
+/** プレゼン構成 / 動画プラン → media_projects.approved_content に確定保存 */
+async function applyMediaPlan(db: DbPort, ctx: AuditContext, draft: Row): Promise<Row[]> {
+  if (draft.source_table !== "media_projects" || !draft.source_id) {
+    return [];
+  }
+  const project = await db.update("media_projects", draft.source_id as string, {
+    approved_content: draft.content,
+    status: "approved",
+  });
+  await writeAuditLog(db, ctx, {
+    action: "update",
+    tableName: "media_projects",
+    recordId: project.id as string,
+    after: project,
+    note: `構成承認（${draft.draft_type}）`,
+  });
+  return [project];
 }
 
 /** 補助金申請ドラフト → grant_documents に確定保存 */

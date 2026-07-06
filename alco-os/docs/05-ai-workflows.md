@@ -21,7 +21,12 @@
 | classify_voice_memo | メモ原文・種別 | voice_memo_result | tasks + voice_memos.status |
 | generate_grant_draft | 補助金名・要領原文・事実・経費 | grant_application | grant_documents |
 | generate_nature_report | サイト・観察・管理作業（実データ） | nature_report | （承認のみ。文書化は将来） |
+| generate_presentation | メディアブリーフ（ターゲット・時間・型・伝えたいこと・元資料・写真名） | presentation_outline | media_projects.approved_content（→ PPTXダウンロード） |
+| generate_video_plan | 同上（動画向け） | video_plan | media_projects.approved_content（台本・メタデータ確定） |
 | summarize_meeting | （プロンプト定義のみ。実装は次段） | meeting_minutes | - |
+
+メディア系は「添付した素材ファイル名以外の割付」をスキーマ検証
+（superRefine）で保存前に拒否する（nature_report の証跡実在チェックと同じ方式）。
 
 ## ワークフローを追加する手順（Opus向けチェックリスト）
 
@@ -47,8 +52,8 @@
 - 日常の機能追加・文言調整・保守: Opus（docs/07 参照）
 - アプリ実行時のモデルは AI_DEFAULT_MODEL 環境変数 + model-router で管理。
   コード中へのモデル名ハードコード禁止。
-- 分類系は低temperature・小maxTokens、長文生成系は高maxTokens を
-  WORKFLOW_CONFIG で使い分ける。
+- 分類系は小maxTokens、長文生成系は高maxTokens を WORKFLOW_CONFIG で使い分ける
+  （temperature は最新モデルで廃止されたため送らない）。
 
 ## データ取り扱いの注意
 

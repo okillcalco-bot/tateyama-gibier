@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { href: "/nature", label: "自然資本", icon: "🌱" },
   { href: "/crm", label: "CRM", icon: "🤝" },
   { href: "/projects", label: "プロジェクト", icon: "🏗" },
+  { href: "/media", label: "メディア", icon: "🎬" },
   { href: "/gibier", label: "ジビエ", icon: "🐗" },
 ];
 
