@@ -116,6 +116,34 @@ async function do_generateMediaPlan(projectId: string) {
   revalidatePath("/drafts");
 }
 
+/** YouTubeへ手動アップロード後の動画ID登録 + ステータス更新（uploaded / published） */
+async function do_registerYoutubeVideo(projectId: string, videoId: string, status: string) {
+  const supabase = await createSupabaseServerClient();
+  const user = await getCurrentUser(supabase);
+  if (!user) throw new Error("ログインが必要です");
+  if (!["uploaded", "published"].includes(status)) throw new Error(`不正なステータス: ${status}`);
+  const trimmed = videoId.trim();
+  if (!/^[\w-]{6,20}$/.test(trimmed)) throw new Error("YouTube動画IDの形式が不正です");
+
+  const db = new SupabaseDb(supabase);
+  const before = await db.findById("media_projects", projectId);
+  if (!before) throw new Error("案件が見つかりません");
+  const after = await db.update("media_projects", projectId, {
+    youtube_video_id: trimmed,
+    status,
+  });
+  await writeAuditLog(db, { organizationId: user.organizationId, actorId: user.userId }, {
+    action: "update",
+    tableName: "media_projects",
+    recordId: projectId,
+    before,
+    after,
+    note: `YouTube動画ID登録（${status}）`,
+  });
+  revalidatePath(`/media/${projectId}`);
+  revalidatePath("/media");
+}
+
 // ── 公開 server actions（エラーは ActionResult で返す） ──
 
 export async function createMediaProject(formData: FormData): Promise<ActionResult> {
@@ -124,4 +152,12 @@ export async function createMediaProject(formData: FormData): Promise<ActionResu
 
 export async function generateMediaPlanAction(projectId: string): Promise<ActionResult> {
   return runAction(() => do_generateMediaPlan(projectId));
+}
+
+export async function registerYoutubeVideoAction(
+  projectId: string,
+  videoId: string,
+  status: string,
+): Promise<ActionResult> {
+  return runAction(() => do_registerYoutubeVideo(projectId, videoId, status));
 }

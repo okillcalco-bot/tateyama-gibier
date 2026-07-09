@@ -20,6 +20,8 @@ const NAV_ITEMS = [
   { href: "/crm", label: "CRM", icon: "🤝" },
   { href: "/projects", label: "プロジェクト", icon: "🏗" },
   { href: "/media", label: "メディア", icon: "🎬" },
+  { href: "/hr", label: "勤怠・シフト", icon: "🕒" },
+  { href: "/orders", label: "受注", icon: "📦" },
   { href: "/gibier", label: "ジビエ", icon: "🐗" },
 ];
 
