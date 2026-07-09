@@ -20,10 +20,11 @@
 | 0010_storage.sql | Storage 非公開バケット alco-os + RLS（メンバーのみ読み書き。delete 不可） |
 | 0011_gibier_views.sql | ジビエ基幹KPIビュー（v_gibier_intake_monthly / v_gibier_inventory / v_gibier_sales_monthly / v_gibier_movements_monthly。既存テーブルへの読み取り専用） |
 | 0012_media.sql | media_projects（プレゼン資料 / YouTube動画の企画〜成果物。承認済み構成は approved_content に保存。素材は files を related_table='media_projects' で紐付け） |
+| 0013_workforce.sql | shift_patterns / shift_requests（HRMOS型シフト管理。予定は既存 shifts、実績は既存 attendance を使う — docs/09 Step 2.5） |
 
-**適用状況**: 0001〜0012 は本番 Supabase プロジェクト（tateyama-gibier /
+**適用状況**: 0001〜0013 は本番 Supabase プロジェクト（tateyama-gibier /
 clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（0001〜0011: 2026-07-05、
-0012: 2026-07-06）。
+0012〜0013: 2026-07-06〜09）。
 seed.sql（ダミーデータ）は本番には投入していない。
 
 ## テーブル設計の標準

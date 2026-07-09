@@ -3,6 +3,7 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Card, CardTitle, PageHeader, SetupNotice, Badge } from "@/components/ui";
 import { GenerateMediaButton } from "../media-forms";
+import { VideoRenderer, RegisterYoutubeForm, type VideoAsset } from "../media-video-tools";
 import {
   presentationOutputSchema,
   videoPlanOutputSchema,
@@ -27,7 +28,7 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
     supabase.from("media_projects").select("*").eq("id", id).maybeSingle(),
     supabase
       .from("files")
-      .select("id, filename, mime_type")
+      .select("id, filename, mime_type, bucket, path")
       .eq("related_table", "media_projects")
       .eq("related_id", id)
       .is("deleted_at", null),
@@ -35,6 +36,23 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
 
   if (!project) notFound();
   const isVideo = project.kind === "youtube_video";
+
+  // 動画レンダラー用の署名付きURL（ブラウザから素材を読むため。1時間有効）
+  const videoAssets: VideoAsset[] = [];
+  if (isVideo && project.approved_content && assets?.length) {
+    for (const asset of assets) {
+      const { data: signed } = await supabase.storage
+        .from(asset.bucket)
+        .createSignedUrl(asset.path, 3600);
+      if (signed?.signedUrl) {
+        videoAssets.push({
+          filename: asset.filename,
+          url: signed.signedUrl,
+          mimeType: asset.mime_type,
+        });
+      }
+    }
+  }
 
   return (
     <>
@@ -76,7 +94,12 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
 
         {project.approved_content ? (
           isVideo ? (
-            <VideoPlanView content={project.approved_content} />
+            <VideoPlanView
+              content={project.approved_content}
+              projectId={id}
+              assets={videoAssets}
+              youtubeVideoId={(project.youtube_video_id as string) ?? null}
+            />
           ) : (
             <PresentationView content={project.approved_content} projectId={id} />
           )
@@ -132,8 +155,18 @@ function PresentationView({ content, projectId }: { content: unknown; projectId:
   );
 }
 
-/** 確定済み動画プランの表示 */
-function VideoPlanView({ content }: { content: unknown }) {
+/** 確定済み動画プランの表示 + ブラウザ内レンダラー + YouTube登録 */
+function VideoPlanView({
+  content,
+  projectId,
+  assets,
+  youtubeVideoId,
+}: {
+  content: unknown;
+  projectId: string;
+  assets: VideoAsset[];
+  youtubeVideoId: string | null;
+}) {
   const parsed = videoPlanOutputSchema.safeParse(content);
   if (!parsed.success) return null;
   const plan = parsed.data;
@@ -199,10 +232,20 @@ function VideoPlanView({ content }: { content: unknown }) {
           不足素材・要撮影: {plan.missing_information.join(" / ")}
         </p>
       ) : null}
-      <p className="mt-3 text-xs text-stone-400">
-        動画の自動レンダリング・YouTube自動アップロードは段階2で追加予定
-        （この台本・メタデータのデータ構造はそのまま使えます）。
-      </p>
+
+      <div className="mt-4 border-t border-stone-200 pt-4">
+        <p className="mb-2 text-xs font-semibold text-stone-500">
+          🎬 動画の書き出し（台本どおりに素材＋字幕を合成 / 音声なし）
+        </p>
+        <VideoRenderer plan={plan} assets={assets} />
+      </div>
+
+      <div className="mt-4 border-t border-stone-200 pt-4">
+        <p className="mb-2 text-xs font-semibold text-stone-500">
+          📺 YouTubeにアップしたら動画IDを登録（自動アップロードは段階2）
+        </p>
+        <RegisterYoutubeForm projectId={projectId} currentVideoId={youtubeVideoId} />
+      </div>
     </Card>
   );
 }

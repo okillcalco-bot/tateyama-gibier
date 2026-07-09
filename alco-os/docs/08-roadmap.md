@@ -42,13 +42,26 @@
       ダウンロード / YouTube動画 = ブリーフ→AI台本・メタデータ（タイトル案・
       概要欄・タグ・チャプター・サムネ文言）→承認。素材割付は添付ファイル名の
       実在チェック付き
+- [x] 動画編集 段階1: ブラウザ内レンダラー（/media/[id]。承認済み台本＋素材を
+      Canvas+MediaRecorder で WebM 書き出し・字幕SRT・ナレーション原稿出力・
+      YouTube動画ID手動登録で uploaded/published へ）
+- [x] 勤怠・シフト（0013 / /hr。HRMOS勤怠のシフト管理を参考）: シフトパターン・
+      希望シフト収集・月間シフト表・打刻実績（punch.html の attendance）との
+      予実比較。予定は既存 shifts テーブルに書く（docs/09 Step 2.5）
+- [x] 受注管理（/orders。タノムを参考）: order-portal.html から入った注文の
+      ステータス管理（受注→確認済→発送済→納品完了）・顧客別/品目別集計・
+      CSVエクスポート
 
 ## Phase 3: 現場仕様に育てる — Opus
 
-- メディア段階2: 動画の自動レンダリング（台本+素材→動画ファイル。TTS/字幕）と
+- メディア段階2: 動画の高品質レンダリング（段階1のブラウザ版を ffmpeg /
+  Remotion 等のサーバーレンダラーに置換。TTSナレーション合成）と
   YouTube Data API での自動アップロード（要 Google Cloud OAuth。
-  status: approved → rendering → uploaded → published、youtube_video_id に記録。
-  公開操作は人間承認後のみ）
+  入力は video_plan の script 構造をそのまま使う。公開操作は人間承認後のみ）
+- 勤怠・シフト拡張: シフトの下書き→公開フロー、打刻修正申請、休暇管理、
+  給与計算用の月次集計エクスポート（staff.hourly_wage は既存テーブルにある）
+- 受注管理拡張（タノム寄せ）: 定番注文・締め時間・発注リマインド
+  （LINE通知は /api/line の基盤を流用）、納品書・請求書PDF
 - 帳票・ラベル・CSV入出力の拡充
 - CRM: お礼メール下書き生成・BNI 1to1記録
 - Projects: ROKA専用テンプレ・見積比較

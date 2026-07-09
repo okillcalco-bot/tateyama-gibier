@@ -22,6 +22,11 @@ export class SupabaseDb implements DbPort {
     return data as Row;
   }
 
+  async delete(table: string, id: string): Promise<void> {
+    const { error } = await this.client.from(table).delete().eq("id", id);
+    if (error) throw new Error(`delete(${table}) failed: ${error.message}`);
+  }
+
   async findById(table: string, id: string): Promise<Row | null> {
     const { data, error } = await this.client.from(table).select("*").eq("id", id).maybeSingle();
     if (error) throw new Error(`findById(${table}) failed: ${error.message}`);

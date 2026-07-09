@@ -14,6 +14,8 @@ export type Row = Record<string, unknown>;
 export interface DbPort {
   insert(table: string, row: Row): Promise<Row>;
   update(table: string, id: string, patch: Row): Promise<Row>;
+  /** 物理削除。ソフトデリート（deleted_at）を持つテーブルでは使わないこと */
+  delete(table: string, id: string): Promise<void>;
   findById(table: string, id: string): Promise<Row | null>;
   findMany(table: string, filter: Row, limit?: number): Promise<Row[]>;
 }

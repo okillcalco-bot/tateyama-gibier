@@ -26,6 +26,13 @@ export class InMemoryDb implements DbPort {
     return structuredClone(record);
   }
 
+  async delete(table: string, id: string): Promise<void> {
+    const rows = this.rows(table);
+    const index = rows.findIndex((r) => r.id === id);
+    if (index === -1) throw new Error(`not found: ${table}/${id}`);
+    rows.splice(index, 1);
+  }
+
   async findById(table: string, id: string): Promise<Row | null> {
     const record = this.rows(table).find((r) => r.id === id);
     return record ? structuredClone(record) : null;
