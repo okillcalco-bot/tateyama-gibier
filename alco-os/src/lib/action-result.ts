@@ -16,3 +16,14 @@ export async function runAction(fn: () => Promise<void>): Promise<ActionResult> 
     return { ok: false, error: e instanceof Error ? e.message : "エラーが発生しました" };
   }
 }
+
+/** 返り値（作成したレコードのIDなど）が必要な action 用 */
+export type ActionResultWith<T> = { ok: true; data: T } | { ok: false; error: string };
+
+export async function runActionWith<T>(fn: () => Promise<T>): Promise<ActionResultWith<T>> {
+  try {
+    return { ok: true, data: await fn() };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "エラーが発生しました" };
+  }
+}
