@@ -1,0 +1,10 @@
+{
+  "name": "oki-profile",
+  "private": true,
+  "scripts": {
+    "build": "node build.js"
+  },
+  "dependencies": {
+    "sharp": "^0.33.4"
+  }
+}

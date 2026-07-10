@@ -23,3 +23,10 @@ Dashboard のモジュールを持ち、ジビエ基幹を段階統合する。
 `alco-os/docs/07-opus-maintenance-guide.md` を先に読むこと。**
 
 統合方針: `alco-os/docs/09-gibier-integration.md`
+
+## 3. プロフィールサイト（`profile/`）
+
+沖浩志の個人プロフィール（1ページ静的サイト + 印刷PDF体裁）。
+原本は `profile/profile.json` のみ。`build.js` が `dist/` を生成し、
+Vercel（Root Directory: profile）でホスティング。DB・API接続なし。
+編集手順は `profile/README.md` を参照。
