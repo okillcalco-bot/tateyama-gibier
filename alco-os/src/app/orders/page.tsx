@@ -6,6 +6,9 @@ import { jstThisMonth } from "@/lib/jst";
 import { normalizeOrderStatus } from "@/domain/orders/order-service";
 import { Card, CardTitle, PageHeader, SetupNotice, Badge, EmptyState } from "@/components/ui";
 import { OrderStatusSelect } from "./order-forms";
+import { IssueDocumentForm, VoidDocumentButton, IssuerSettingsForm } from "./billing-forms";
+import { DOC_TYPES, type DocType } from "@/domain/billing/billing-service";
+import { loadIssuer } from "@/lib/issuer";
 
 export const dynamic = "force-dynamic";
 
@@ -71,6 +74,17 @@ export default async function OrdersPage({
     const key = item.order_id as string;
     itemsByOrder.set(key, [...(itemsByOrder.get(key) ?? []), item]);
   }
+
+  // 帳票（当月発行分）と発行者情報
+  const [{ data: billingDocs }, issuer] = await Promise.all([
+    supabase
+      .from("billing_documents")
+      .select("id, doc_type, doc_number, title, issue_date, customer_name, total, deleted_at")
+      .eq("month", month)
+      .order("doc_number"),
+    loadIssuer(supabase),
+  ]);
+  const billingRows = (billingDocs ?? []) as Row[];
 
   // 未完了（当月以外も含む）を先頭に出す — タノムの「新着注文」に相当
   const { data: openOrders } = await supabase
@@ -151,6 +165,7 @@ export default async function OrdersPage({
         {o.memo || o.notes ? (
           <p className="mt-1 text-xs text-stone-500">📝 {(o.memo ?? o.notes) as string}</p>
         ) : null}
+        <IssueDocumentForm orderId={o.id as string} />
       </Card>
     );
   };
@@ -197,6 +212,40 @@ export default async function OrdersPage({
         ) : (
           <EmptyState message="この月の注文はまだありません。" />
         )}
+
+        <Card>
+          <CardTitle>発行済み帳票（{monthNum}月・{billingRows.length}件）</CardTitle>
+          {billingRows.length ? (
+            <ul className="space-y-1 text-sm">
+              {billingRows.map((doc) => (
+                <li key={doc.id as string} className="flex flex-wrap items-center gap-2">
+                  <Badge color={doc.deleted_at ? "red" : "green"}>
+                    {DOC_TYPES[doc.doc_type as DocType]?.label ?? (doc.doc_type as string)}
+                  </Badge>
+                  <Link
+                    href={`/orders/documents/${doc.id}`}
+                    className={`text-green-700 underline ${doc.deleted_at ? "line-through opacity-60" : ""}`}
+                  >
+                    {doc.doc_number as string}
+                  </Link>
+                  <span className="text-stone-600">
+                    {(doc.customer_name as string) || ""} ¥{(Number(doc.total) || 0).toLocaleString()}
+                    <span className="ml-1 text-xs text-stone-400">{doc.issue_date as string}</span>
+                  </span>
+                  {!doc.deleted_at ? <VoidDocumentButton docId={doc.id as string} /> : (
+                    <span className="text-xs text-red-600">取消済</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-stone-400">
+              この月の帳票はまだありません。各注文の「🧾 帳票を発行」から作成できます。
+            </p>
+          )}
+        </Card>
+
+        <IssuerSettingsForm issuer={issuer} />
 
         {active.length ? (
           <div className="grid gap-4 md:grid-cols-2">
