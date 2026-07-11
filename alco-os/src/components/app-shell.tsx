@@ -25,6 +25,7 @@ const NAV_ITEMS = [
   { href: "/hr", label: "勤怠・シフト", icon: "🕒" },
   { href: "/orders", label: "受注", icon: "📦" },
   { href: "/gibier", label: "ジビエ", icon: "🐗" },
+  { href: "/manual", label: "使い方", icon: "📖" },
 ];
 
 // モバイル下部タブは主要5つに絞る（スタッフの日常導線を優先し ジビエ → 共有ボード）
