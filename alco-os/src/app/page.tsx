@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { isSupabaseConfigured } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
@@ -21,7 +22,7 @@ export default async function DashboardPage() {
   // これを先に行わないと RLS により以降のクエリが空になる。
   const user = await getCurrentUser(supabase);
 
-  const [tasks, drafts, grants, deals, sites, gibierIntake, gibierInventory, gibierSales] =
+  const [tasks, drafts, grants, deals, sites, gibierIntake, gibierInventory, gibierSales, board] =
     await Promise.all([
       supabase.from("v_open_tasks").select("*"),
       supabase.from("v_pending_drafts").select("*"),
@@ -31,6 +32,15 @@ export default async function DashboardPage() {
       supabase.from("v_gibier_intake_monthly").select("*"),
       supabase.from("v_gibier_inventory").select("*"),
       supabase.from("v_gibier_sales_monthly").select("*"),
+      supabase
+        .from("board_posts")
+        .select("id, title, body, tags, pinned, created_at")
+        .eq("audience", "staff")
+        .eq("status", "open")
+        .is("deleted_at", null)
+        .order("pinned", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(3),
     ]);
 
   const openTasks = (tasks.data ?? []).reduce(
@@ -91,6 +101,29 @@ export default async function DashboardPage() {
           </p>
         </Card>
       </div>
+
+      {(board.data ?? []).length ? (
+        <Card className="mt-4">
+          <div className="flex items-center justify-between">
+            <CardTitle>📋 共有ボード（最新）</CardTitle>
+            <Link href="/board" className="text-xs text-green-700 underline">
+              すべて見る →
+            </Link>
+          </div>
+          <ul className="divide-y divide-stone-100 text-sm">
+            {(board.data ?? []).map((post) => (
+              <li key={post.id} className="py-2">
+                {post.pinned ? "📌 " : ""}
+                {post.title ? <span className="font-medium">{post.title} — </span> : null}
+                <span className="text-stone-600">
+                  {String(post.body).slice(0, 60)}
+                  {String(post.body).length > 60 ? "…" : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <Card>

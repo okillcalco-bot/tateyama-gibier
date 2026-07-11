@@ -129,6 +129,25 @@ const DEFAULT_RESPONSES: Record<string, string> = {
     cta: "チャンネル登録と、館山ジビエセンターの商品ページへのアクセス",
     missing_information: ["解体工程の動画素材"],
   }),
+  generate_social_posts: JSON.stringify({
+    hp: {
+      title: "（モック）里山の恵みを食卓へ — 今週の館山ジビエセンター",
+      body: "（モック）ホームページ向けの丁寧な記事本文がここに生成されます。一次データに無い事実は書きません。",
+    },
+    instagram: {
+      caption: "（モック）Instagram向けキャプション。冒頭1行で惹きつけます🌿",
+      hashtags: ["ジビエ", "館山", "里山", "イノシシ", "猟師"],
+    },
+    facebook: {
+      post_text: "（モック）Facebook会社ページ向けの投稿文。個人の語り口を活かしつつ文脈を補います。",
+    },
+    youtube: {
+      title: "（モック）里山の恵みを食卓へ｜館山ジビエセンター",
+      description: "（モック）概要欄。内容要約と会社紹介、問い合わせ導線。",
+      tags: ["ジビエ", "館山"],
+    },
+    missing_information: ["開催日の確定情報"],
+  }),
   summarize_meeting: JSON.stringify({
     title: "打ち合わせ議事録（モック）",
     attendees: [],

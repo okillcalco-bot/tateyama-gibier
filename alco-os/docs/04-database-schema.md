@@ -22,10 +22,11 @@
 | 0012_media.sql | media_projects（プレゼン資料 / YouTube動画の企画〜成果物。承認済み構成は approved_content に保存。素材は files を related_table='media_projects' で紐付け） |
 | 0013_workforce.sql | shift_patterns / shift_requests（HRMOS型シフト管理。予定は既存 shifts、実績は既存 attendance を使う — docs/09 Step 2.5） |
 | 0014_billing.sql | billing_documents（請求書/納品書/領収書の台帳。月毎・種類毎に自動採番、発行時の明細・金額・発行者をスナップショット。発行者情報は既存 org_settings のキーを共用） |
+| 0015_boards_social.sql | board_posts（スタッフ/飲食店の共有ボード。辞書ベース自動タグ・宛先絞り込み・在庫スナップショット添付）、customer_levels（飲食店の信頼度 new/repeat/vip）、social_projects（投稿一括更新: 一次データ→チャンネル別原稿→承認→投稿管理） |
 
-**適用状況**: 0001〜0014 は本番 Supabase プロジェクト（tateyama-gibier /
+**適用状況**: 0001〜0015 は本番 Supabase プロジェクト（tateyama-gibier /
 clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（0001〜0011: 2026-07-05、
-0012〜0014: 2026-07-06〜10）。
+0012〜0015: 2026-07-06〜11）。
 seed.sql（ダミーデータ）は本番には投入していない。
 
 ## テーブル設計の標準

@@ -68,6 +68,13 @@ audit_logs 記録。
 - orders の status に新しい語彙を勝手に足さない（order-portal.html の
   バッジ表示が壊れる）。増やすときは order-portal 側と同時に変更する
 
+追加の共用ポイント（0014〜0015）:
+- 帳票の発行者情報は既存 `org_settings` のキー（org_name / org_postal /
+  org_address / org_phone / invoice_number）を共用し、org_bank_info を追加
+- スタッフの役割は既存 `staff.role` を共有ボードの宛先として使う（値の更新のみ）
+- 飲食店向けボード（/portal/board）は既存 `customers.portal_token` で認証する。
+  order-portal.html は変更していない（リンクを置くのは任意・既存側の作業）
+
 ## Step 3: 統一（権限・データモデル）
 
 - 既存テーブルに organization_id を追加（default で単一組織を埋める）

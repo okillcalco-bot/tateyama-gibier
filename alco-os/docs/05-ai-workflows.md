@@ -23,7 +23,11 @@
 | generate_nature_report | サイト・観察・管理作業（実データ） | nature_report | （承認のみ。文書化は将来） |
 | generate_presentation | メディアブリーフ（ターゲット・時間・型・伝えたいこと・元資料・写真名） | presentation_outline | media_projects.approved_content（→ PPTXダウンロード） |
 | generate_video_plan | 同上（動画向け） | video_plan | media_projects.approved_content（台本・メタデータ確定） |
+| generate_social_posts | 一次データ（メモ/FB/文字起こし）+ 対象チャンネル | social_posts | social_projects.approved_content（HP/Instagram/FB/YouTube別原稿） |
 | summarize_meeting | （プロンプト定義のみ。実装は次段） | meeting_minutes | - |
+
+共有ボードのタグ付けは AI ではなく辞書ベース（domain/board/board-service の
+TAG_RULES）。AI提案タグを足す場合も必ずドラフト承認フローを通すこと。
 
 メディア系は「添付した素材ファイル名以外の割付」をスキーマ検証
 （superRefine）で保存前に拒否する（nature_report の証跡実在チェックと同じ方式）。
