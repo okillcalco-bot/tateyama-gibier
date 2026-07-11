@@ -39,7 +39,8 @@
    pnpm typecheck && pnpm test
    ```
    UI変更時は `pnpm dev` で該当画面を目視確認（可能なら e2e 追加）
-3. 挙動が変わったら docs/ を更新
+3. 挙動が変わったら docs/ と、スタッフ用マニュアル
+   `src/app/manual/page.tsx`（/manual）を同じPRで更新
 4. 出力すべき報告: 変更概要 / 変更ファイル / 追加・更新テスト /
    追加マイグレーション / リスクとフォローアップ
 
