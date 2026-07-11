@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 
 const NAV_ITEMS = [
   { href: "/", label: "ホーム", icon: "🏠" },
+  { href: "/board", label: "共有ボード", icon: "📋" },
   { href: "/memos", label: "メモ", icon: "🎙" },
   { href: "/tasks", label: "タスク", icon: "✅" },
   { href: "/drafts", label: "承認", icon: "📝" },
@@ -20,19 +21,25 @@ const NAV_ITEMS = [
   { href: "/crm", label: "CRM", icon: "🤝" },
   { href: "/projects", label: "プロジェクト", icon: "🏗" },
   { href: "/media", label: "メディア", icon: "🎬" },
+  { href: "/social", label: "発信", icon: "📣" },
   { href: "/hr", label: "勤怠・シフト", icon: "🕒" },
   { href: "/orders", label: "受注", icon: "📦" },
   { href: "/gibier", label: "ジビエ", icon: "🐗" },
 ];
 
-// モバイル下部タブは主要5つに絞る
+// モバイル下部タブは主要5つに絞る（スタッフの日常導線を優先し ジビエ → 共有ボード）
 const MOBILE_NAV = NAV_ITEMS.filter((item) =>
-  ["/", "/memos", "/tasks", "/drafts", "/gibier"].includes(item.href),
+  ["/", "/board", "/memos", "/tasks", "/drafts"].includes(item.href),
 );
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+
+  // 飲食店向けページ（/portal）は社内ナビを出さない
+  if (pathname.startsWith("/portal")) {
+    return <main className="min-h-dvh">{children}</main>;
+  }
 
   return (
     <div className="min-h-dvh md:flex">

@@ -34,6 +34,11 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // 飲食店向けボードはトークン式（ログイン不要）。認証リダイレクトから除外
+  if (request.nextUrl.pathname.startsWith("/portal")) {
+    return response;
+  }
+
   const isLoginPage = request.nextUrl.pathname.startsWith("/login");
   if (!user && !isLoginPage) {
     const url = request.nextUrl.clone();
