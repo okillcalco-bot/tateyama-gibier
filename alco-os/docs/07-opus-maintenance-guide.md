@@ -5,6 +5,7 @@
 
 ## 作業前に必ず読む
 
+0. `docs/00-philosophy.md`（思想・優先順位。**最初に読む**）
 1. `CLAUDE.md`（ルール全体）
 2. `docs/02-architecture.md`（レイヤールール）
 3. `docs/03-domain-model.md`（不変条件）

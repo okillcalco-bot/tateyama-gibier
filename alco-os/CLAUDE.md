@@ -1,5 +1,11 @@
 # CLAUDE.md
 
+**Read `docs/00-philosophy.md` FIRST** — it defines the system's purpose
+(a regional OS for passing natural capital to the next generation), the AI's
+role (proposer — never approver or decision-maker), and the priority order
+when in doubt: ① keep field operations running → ② protect data →
+③ security → ④ maintainability → ⑤ AI quality → ⑥ UI → ⑦ new features.
+
 ## Project
 
 This directory is ALCO OS, an internal business operating system for Godo Kaisha ALCO
