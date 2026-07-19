@@ -148,6 +148,21 @@ const DEFAULT_RESPONSES: Record<string, string> = {
     },
     missing_information: ["開催日の確定情報"],
   }),
+  generate_advisor_brief: JSON.stringify({
+    issue_summary: "（モック）解体体験の参加費に係る消費税区分と、現金売上の記帳方法が論点。",
+    general_guidance:
+      "（モック）一般的には役務提供の対価は標準税率10%、食品の販売は軽減税率8%と整理されることが多い。ただし個別の取引実態により判断が分かれるため、最終判断は税理士への確認が必要。",
+    key_facts_needed: ["体験に食事・持ち帰り肉が含まれるか", "年間の現金売上規模"],
+    documents_to_prepare: ["料金表", "直近の売上記録（sales_slipsのCSV）"],
+    questions_for_expert: [
+      "解体体験（体験料+持ち帰り肉付き）の消費税区分はどうなりますか？",
+      "現金売上の記帳はALCO OSの伝票CSVで足りますか？",
+    ],
+    recommended_expert: "税理士",
+    urgency: "medium",
+    urgency_reason: "（モック）次回の申告時期までに整理すれば足りる想定。",
+    missing_information: ["体験プランの内容詳細"],
+  }),
   summarize_meeting: JSON.stringify({
     title: "打ち合わせ議事録（モック）",
     attendees: [],

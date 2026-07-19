@@ -24,6 +24,7 @@
 | generate_presentation | メディアブリーフ（ターゲット・時間・型・伝えたいこと・元資料・写真名） | presentation_outline | media_projects.approved_content（→ PPTXダウンロード） |
 | generate_video_plan | 同上（動画向け） | video_plan | media_projects.approved_content（台本・メタデータ確定） |
 | generate_social_posts | 一次データ（メモ/FB/文字起こし）+ 対象チャンネル | social_posts | social_projects.approved_content（HP/Instagram/FB/YouTube別原稿） |
+| generate_advisor_brief | 士業相談（分野+相談文） | advisor_brief | advisor_consultations.approved_content（論点整理・専門家への質問リスト。**法的助言ではない**） |
 | summarize_meeting | （プロンプト定義のみ。実装は次段） | meeting_minutes | - |
 
 共有ボードのタグ付けは AI ではなく辞書ベース（domain/board/board-service の
