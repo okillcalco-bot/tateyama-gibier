@@ -389,7 +389,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <button class="tab-btn" data-tab="punch">&#x23F1; 出退勤打刻</button>
   <a class="tab-btn" href="capture-form.html">&#x1F4DD; 捕獲票入力</a>
   <button class="tab-btn" data-tab="individuals">&#x1FAA4; 捕獲受入・個体<span class="nav-badge" id="nav-badge-intake"></span></button>
-  <button class="tab-btn" data-tab="aging">&#x1F969; 熟成管理<span class="nav-badge" id="nav-badge-aging"></span></button>
+  <button class="tab-btn" data-tab="aging" style="display:none;">&#x1F969; 熟成管理<span class="nav-badge" id="nav-badge-aging"></span></button>
   <button class="tab-btn" data-tab="processing">&#x1F52A; 精肉入力<span class="nav-badge" id="nav-badge-processing"></span></button>
   <button class="tab-btn" data-tab="products">&#x1F6CD; 加工処理<span class="nav-badge" id="nav-badge-products"></span></button>
   <button class="tab-btn" data-tab="inventory">&#x1F4E6; 在庫一覧</button>
@@ -422,7 +422,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div class="card"><div class="card-label">在庫点数</div><div class="card-value" id="dc-stock">-</div><div class="card-sub">在庫ステータス</div></div>
       <div class="card"><div class="card-label">在庫総重量</div><div class="card-value" id="dc-weight">-</div><div class="card-sub">kg</div></div>
       <div class="card"><div class="card-label">当月出荷数</div><div class="card-value" id="dc-shipped">-</div><div class="card-sub">今月実績</div></div>
-      <div class="card"><div class="card-label">熟成中</div><div class="card-value" id="dc-aging">-</div><div class="card-sub">半身熟成（目安7日）</div></div>
+      <div class="card" style="display:none;"><div class="card-label">熟成中</div><div class="card-value" id="dc-aging">-</div><div class="card-sub">半身熟成（目安7日）</div></div>
       <div class="card"><div class="card-label">本日の清掃</div><div class="card-value" id="dc-clean">-</div><div class="card-sub">実施部屋数</div></div>
       <div class="card"><div class="card-label">資材要発注</div><div class="card-value" id="dc-supply">-</div><div class="card-sub">発注点割れ</div></div>
     </div>
@@ -507,41 +507,21 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <!-- Processing -->
   <div class="tab-panel" id="panel-processing">
     <div class="section">
-      <div class="section-title">Step 1: 個体選択</div>
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>精肉する個体を選ぶ</span>
+        <button class="btn btn-primary" onclick="openProcessingMode()">🔪 精肉モードを開く</button>
+      </div>
+      <div style="padding:10px 12px;border:1px dashed var(--gold2);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.8;background:var(--surface2);margin-bottom:12px;">
+        部位・重量の登録は<strong style="color:var(--gold);">精肉モード</strong>で行います。下の一覧から個体の「🔪 精肉モードで開く」を押すと、その個体を選んだ状態で精肉モードが起動します。
+      </div>
       <div class="form-row">
         <div class="form-group"><label>個体番号で検索</label><input class="form-input" id="proc-search" placeholder="例: TGC-08-T001" /></div>
         <div class="form-group"><label>&nbsp;</label><button class="btn" onclick="searchIndividual()">検索</button></div>
-      </div>
-      <div id="proc-individual-info" style="display:none;margin-top:12px;padding:12px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border);">
-        <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;">
-          <div><span style="color:var(--text2);font-size:12px;">個体番号</span><br><strong id="proc-ind-label" style="color:var(--gold);font-size:16px;"></strong></div>
-          <div><span style="color:var(--text2);font-size:12px;">種別</span><br><strong id="proc-ind-species"></strong></div>
-          <div><span style="color:var(--text2);font-size:12px;">体重(kg)</span><br><strong id="proc-ind-weight"></strong></div>
-          <div><span style="color:var(--text2);font-size:12px;">捕獲日</span><br><strong id="proc-ind-date"></strong></div>
-          <div><span style="color:var(--text2);font-size:12px;">猟師</span><br><strong id="proc-ind-hunter"></strong></div>
-        </div>
       </div>
       <table id="proc-individual-table" style="margin-top:12px;">
         <thead><tr><th>個体番号</th><th>種別</th><th>体重(kg)</th><th>捕獲日</th><th>操作</th></tr></thead>
         <tbody id="proc-ind-body"></tbody>
       </table>
-    </div>
-    <div class="section" id="proc-step2" style="display:none;">
-      <div class="section-title">Step 2: 部位入力</div>
-      <div id="proc-parts"></div>
-      <button class="btn" onclick="addPartRow()" style="margin-top:8px;">+ 部位を追加</button>
-      <div class="yield-bar" id="proc-yield">
-        <div class="yield-bar-label">歩留まり</div>
-        <div class="yield-bar-track"><div class="yield-bar-fill" id="yield-fill" style="width:0%"></div></div>
-        <div class="yield-values"><span id="yield-parts">0 kg</span><span id="yield-pct">0%</span><span id="yield-total">/ 0 kg</span></div>
-      </div>
-    </div>
-    <div class="section" id="proc-step3" style="display:none;">
-      <div class="section-title">Step 3: 登録確認</div>
-      <div class="form-row">
-        <div class="form-group"><label>担当者名</label><input class="form-input" id="proc-operator" placeholder="担当者名" /></div>
-      </div>
-      <button class="btn btn-primary" onclick="submitProcessing()" id="proc-submit-btn">精肉データを登録</button>
     </div>
   </div>
 
@@ -1204,7 +1184,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <!-- Setup Screen -->
   <div id="pmSetup" class="pm-setup">
     <div class="pm-setup-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;"><span>🔪 精肉モード セットアップ</span>
-      <button onclick="connDiag()" style="font-size:12px;padding:5px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;">🔧 はかり・ラベラー接続診断</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="connDiag()" style="font-size:12px;padding:5px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;">🔧 はかり・ラベラー接続診断</button>
+        <button onclick="closeProcessingMode()" style="font-size:13px;font-weight:600;padding:5px 14px;border-radius:10px;border:1px solid var(--gold2);background:var(--surface);color:var(--gold);cursor:pointer;">← 業務メニューへ戻る</button>
+      </div>
     </div>
     <!-- Active Sessions -->
     <div id="pmSessionSection" style="display:none;margin-bottom:16px;">
@@ -1217,7 +1200,12 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="pm-op-grid" id="pmSetupOpGrid"></div>
     <!-- Individual -->
     <div style="font-size:13px;color:var(--text2);margin:16px 0 8px;font-weight:500;">精肉する個体を選択</div>
-    <input class="form-input" id="pmIndSearch" placeholder="個体番号で検索（例: TGC-08-T）" oninput="pmSearchIndividuals()" style="margin-bottom:10px;font-size:15px;padding:10px 14px;" />
+    <input class="form-input" id="pmIndSearch" placeholder="個体番号で検索（例: TGC-08-T）" oninput="pmSearchIndividuals()" style="margin-bottom:6px;font-size:15px;padding:10px 14px;" />
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;font-size:12px;">
+      <span style="color:var(--text3);align-self:center;">クイック:</span>
+      <button onclick="pmQuickSearch('TGC-TEST')" style="padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;font-size:12px;">🧪 テスト個体</button>
+      <button onclick="pmQuickSearch('')" style="padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;font-size:12px;">最近の搬入</button>
+    </div>
     <div class="pm-setup-ind-list" id="pmIndList">
       <div class="loading"><span class="spin"></span>搬入個体を読み込み中...</div>
     </div>
@@ -1800,7 +1788,7 @@ async function loadProcessingSetup() {
       <td>${speciesIcon(i.species)} ${i.species||'-'}</td>
       <td>${i.weight_total||'-'}</td>
       <td>${fmt(i.capture_date)}</td>
-      <td><button class="btn btn-sm" onclick="selectIndividual('${i.label_id}')">選択</button></td>
+      <td><button class="btn btn-sm" onclick="selectIndividual('${i.label_id}')">🔪 精肉モードで開く</button></td>
     </tr>`).join('');
   } catch(e) { toast('個体一覧読み込みエラー: ' + e.message, 'error'); }
 }
@@ -1817,179 +1805,30 @@ async function searchIndividual() {
       <td>${speciesIcon(i.species)} ${i.species||'-'}</td>
       <td>${i.weight_total||'-'}</td>
       <td>${fmt(i.capture_date)}</td>
-      <td><button class="btn btn-sm" onclick="selectIndividual('${i.label_id}')">選択</button></td>
+      <td><button class="btn btn-sm" onclick="selectIndividual('${i.label_id}')">🔪 精肉モードで開く</button></td>
     </tr>`).join('');
   } catch (err) {
     toast('検索エラー: ' + err.message, 'error');
   }
 }
 
+// 精肉入力タブの「選択」→ 精肉モードをその個体で起動（手入力フォームは廃止し精肉モードに統一）
 async function selectIndividual(labelId) {
-  try {
-    const inds = await sb('GET', 'individuals', null, `?label_id=eq.${encodeURIComponent(labelId)}&select=*`);
-    if (!inds.length) { toast('個体が見つかりません', 'error'); return; }
-    selectedIndividual = inds[0];
-    document.getElementById('proc-ind-label').textContent = selectedIndividual.label_id;
-    document.getElementById('proc-ind-species').textContent = selectedIndividual.species || '-';
-    document.getElementById('proc-ind-weight').textContent = selectedIndividual.weight_total || '-';
-    document.getElementById('proc-ind-date').textContent = fmt(selectedIndividual.capture_date);
-    document.getElementById('proc-ind-hunter').textContent = selectedIndividual.hunter_name || '-';
-    document.getElementById('proc-individual-info').style.display = 'block';
-    document.getElementById('proc-step2').style.display = 'block';
-    document.getElementById('proc-step3').style.display = 'block';
-    document.getElementById('proc-parts').innerHTML = '';
-    partCounter = 0;
-    addPartRow();
-    updateYield();
-  } catch (err) {
-    toast('個体データ取得エラー: ' + err.message, 'error');
+  openProcessingMode();
+  const inp = document.getElementById('pmIndSearch');
+  inp.value = labelId;
+  await pmSearchIndividuals();
+  // 作業者が選択済みならそのまま精肉画面へ。未選択なら作業者を選んでから個体をタップ
+  if (pmCurrentOperator) {
+    pmSelectIndividual(labelId);
+  } else {
+    toast('作業者を選んでから、個体をタップしてください');
   }
 }
 
-function getPartsForSpecies() {
-  if (!selectedIndividual) return [];
-  const sp = selectedIndividual.species;
-  return priceMaster.filter(p => p.species === sp && p.barcode_num);
-}
-
-function addPartRow() {
-  partCounter++;
-  const parts = getPartsForSpecies();
-  const container = document.getElementById('proc-parts');
-  const row = document.createElement('div');
-  row.className = 'part-row';
-  row.id = `part-row-${partCounter}`;
-  row.innerHTML = `
-    <div class="form-group"><label>部位</label><select class="form-input part-select" data-idx="${partCounter}" onchange="onPartChange(${partCounter})">
-      <option value="">選択...</option>
-      ${parts.map(p => `<option value="${p.id}" data-barcode="${p.barcode_num}" data-name="${p.part_name}" data-price="${p.price_standard||0}" data-premium="${p.price_premium||0}">${p.part_name} (${p.barcode_num})</option>`).join('')}
-    </select></div>
-    <div class="form-group"><label>重量(kg)</label><input type="number" class="form-input part-weight" step="0.01" min="0" oninput="updateYield()" /></div>
-    <div class="form-group"><label>等級</label><select class="form-input part-grade" onchange="onPartChange(${partCounter})">
-      <option value="上">上</option>
-      <option value="並">並</option>
-      <option value="食用不可">食用不可</option>
-    </select></div>
-    <div class="form-group"><label>単価</label><input type="number" class="form-input part-price" readonly tabindex="-1" /></div>
-    <button class="remove-part" onclick="removePartRow(${partCounter})" title="削除">&times;</button>
-  `;
-  container.appendChild(row);
-}
-
-function onPartChange(idx) {
-  const row = document.getElementById(`part-row-${idx}`);
-  if (!row) return;
-  const sel = row.querySelector('.part-select');
-  const grade = row.querySelector('.part-grade').value;
-  const priceInput = row.querySelector('.part-price');
-  const opt = sel.selectedOptions[0];
-  if (!opt || !opt.value) { priceInput.value = ''; return; }
-  // Determine price by grade
-  const pmId = opt.value;
-  const pm = priceMaster.find(p => p.id === pmId);
-  if (pm) {
-    if (grade === '上') priceInput.value = pm.price_premium || pm.price_standard || 0;
-    else if (grade === '並') priceInput.value = pm.price_standard || 0;
-    else priceInput.value = 0;
-  }
-}
-
-function removePartRow(idx) {
-  const row = document.getElementById(`part-row-${idx}`);
-  if (row) row.remove();
-  updateYield();
-}
-
-function updateYield() {
-  if (!selectedIndividual) return;
-  const total = parseFloat(selectedIndividual.weight_total) || 0;
-  const weights = [...document.querySelectorAll('.part-weight')].map(i => parseFloat(i.value) || 0);
-  const sum = weights.reduce((a, b) => a + b, 0);
-  const pct = total > 0 ? (sum / total * 100) : 0;
-  document.getElementById('yield-fill').style.width = Math.min(pct, 100) + '%';
-  document.getElementById('yield-parts').textContent = sum.toFixed(2) + ' kg';
-  document.getElementById('yield-pct').textContent = pct.toFixed(1) + '%';
-  document.getElementById('yield-total').textContent = '/ ' + total + ' kg';
-}
-
-async function submitProcessing() {
-  if (!selectedIndividual) { toast('個体を選択してください', 'error'); return; }
-  const operator = document.getElementById('proc-operator').value.trim();
-  if (!operator) { toast('担当者名を入力してください', 'error'); return; }
-
-  const rows = document.querySelectorAll('.part-row');
-  const parts = [];
-  for (const row of rows) {
-    const sel = row.querySelector('.part-select');
-    const opt = sel.selectedOptions[0];
-    if (!opt || !opt.value) continue;
-    const weight = parseFloat(row.querySelector('.part-weight').value);
-    if (!weight || weight <= 0) { toast('重量を正しく入力してください', 'error'); return; }
-    const grade = row.querySelector('.part-grade').value;
-    const price = parseInt(row.querySelector('.part-price').value) || 0;
-    const barcodeNum = opt.dataset.barcode;
-    const partName = opt.dataset.name;
-    const identCode = selectedIndividual.label_id + '-' + barcodeNum;
-    parts.push({ partName, barcodeNum, weight, grade, price, identCode });
-  }
-
-  if (!parts.length) { toast('部位を入力してください', 'error'); return; }
-
-  // Check for duplicate ident_codes
-  const codes = parts.map(p => p.identCode);
-  const dupes = codes.filter((c, i) => codes.indexOf(c) !== i);
-  if (dupes.length) {
-    toast('同じ部位コードが重複しています: ' + dupes.join(', '), 'error');
-    return;
-  }
-
-  document.getElementById('proc-submit-btn').disabled = true;
-
-  try {
-    // Insert inventory items
-    const invItems = parts.map(p => ({
-      individual_id: selectedIndividual.label_id,
-      part_name: p.partName,
-      barcode_num: p.barcodeNum,
-      ident_code: p.identCode,
-      weight: p.weight,
-      status: '在庫',
-      operator: operator,
-      grade: p.grade,
-      unit_price: p.price
-    }));
-    await sb('POST', 'inventory', invItems);
-
-    // Insert processing logs
-    const logs = parts.map(p => ({
-      parent_ident_code: selectedIndividual.label_id,
-      child_ident_code: p.identCode,
-      weight: p.weight,
-      operator: operator
-    }));
-    await sb('POST', 'processing_log', logs);
-
-    const totalW = parseFloat(selectedIndividual.weight_total) || 0;
-    const partsW = parts.reduce((s, p) => s + p.weight, 0);
-    const yieldPct = totalW > 0 ? (partsW / totalW * 100).toFixed(1) : '-';
-
-    toast(`${parts.length}部位を登録しました: ${parts.map(p => `${p.partName} ${p.weight}kg → ${p.identCode}`).join(' / ')} (歩留まり: ${yieldPct}%)`);
-    playFeedbackSound(true);
-
-    // Reset
-    selectedIndividual = null;
-    document.getElementById('proc-individual-info').style.display = 'none';
-    document.getElementById('proc-step2').style.display = 'none';
-    document.getElementById('proc-step3').style.display = 'none';
-    document.getElementById('proc-parts').innerHTML = '';
-    document.getElementById('proc-search').value = '';
-    loadProcessingSetup();
-  } catch (err) {
-    playFeedbackSound(false);
-    toast('精肉登録に失敗しました: ' + err.message, 'error');
-  } finally {
-    document.getElementById('proc-submit-btn').disabled = false;
-  }
+function pmQuickSearch(q) {
+  document.getElementById('pmIndSearch').value = q;
+  pmSearchIndividuals();
 }
 
 /* ===== Traceability ===== */
@@ -3056,6 +2895,12 @@ async function pmLoadRecentIndividuals() {
   try {
     const today = new Date().toISOString().split('T')[0];
     let inds = await sb('GET', 'individuals', null, `?select=label_id,species,weight_total,capture_date,hunter_name,quality,serial_number&deleted_at=is.null&order=serial_number.desc.nullslast,created_at.desc&limit=20`);
+    // テスト個体（通し番号なし）は上記20件に入らないため先頭に必ず表示する
+    try {
+      const tests = await sb('GET', 'individuals', null, `?label_id=ilike.TGC-TEST*&deleted_at=is.null&select=label_id,species,weight_total,capture_date,hunter_name,quality,serial_number`);
+      const seen = new Set(inds.map(i => i.label_id));
+      inds = [...tests.filter(t => !seen.has(t.label_id)), ...inds];
+    } catch (e) {}
     pmRenderIndList(inds);
   } catch(e) {
     list.innerHTML = '<div class="empty-state">読み込みエラー</div>';
@@ -5462,19 +5307,15 @@ async function loadTodayTodos() {
   const items = [];
   const add = (n, label, tab, warn) => { if (n > 0) items.push({ n, label, tab, warn }); };
   try {
+    // 熟成管理タブは休止中のため、精肉がまだの個体をまとめて精肉入力へ誘導（直近2週間の搬入のみ）
     const { inds, processedSet } = await fetchAgingData();
-    let over = 0, wait = 0, intake = 0;
-    const today = new Date().toISOString().slice(0, 10);
+    let wait = 0;
+    const cutoff = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
     inds.forEach(i => {
       const st = agingStateOf(i, processedSet);
-      if (st === '熟成中' && agingDays(i.aging_started_at || i.capture_date, null) > 7) over++;
-      if (st === '精肉待ち') wait++;
-      if (st === '受入済') intake++;
-      if (i.capture_date === today) {}
+      if (st !== '精肉済' && (i.capture_date || '') >= cutoff) wait++;
     });
-    add(over, '熟成の目安（7日）を超過', 'aging', true);
-    add(wait, '精肉待ちの個体', 'processing', false);
-    add(intake, '処理方針が未選択の個体', 'aging', false);
+    add(wait, '精肉がまだの個体（直近2週間）', 'processing', false);
   } catch (e) {}
   try { const o = await sb('GET', 'orders', null, '?status=eq.確認済&select=id'); add(o.length, '出荷待ちの注文', 'shipping', false); } catch (e) {}
   try {
