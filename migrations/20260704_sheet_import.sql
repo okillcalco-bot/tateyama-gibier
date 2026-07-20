@@ -68,3 +68,7 @@ exception when duplicate_object then null; end $$;
 -- staff_board: スタッフ掲示板（title/body/author/pinned、ソフトデリート）
 -- customers: signup_source（申込経路）/ order_method（希望注文方法）/ notify_method（案内方法）を追加
 -- シフト表は既存 shifts テーブル（旧シフトアプリ）をそのまま利用
+
+-- ── 二段階入力（捕獲者→スタッフ受入） 2026-07-20 適用済み: intake_status_two_stage_capture ──
+-- individuals.intake_status: 捕獲者フォーム(?hunter=)からの仮登録は '搬入待ち'（label_id=仮-xxx）
+-- スタッフが受入(capture-form.html?receive=id)で個体番号を付けると null に戻る

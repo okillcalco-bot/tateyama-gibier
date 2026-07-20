@@ -528,6 +528,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 
   <!-- Individuals -->
   <div class="tab-panel" id="panel-individuals">
+    <div id="pending-intake" style="display:none;margin-bottom:14px;"></div>
     <div class="section">
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
         <span>個体一覧</span>
@@ -3228,7 +3229,8 @@ async function pmLoadRecentIndividuals() {
   list.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
   try {
     const today = new Date().toISOString().split('T')[0];
-    let inds = await sb('GET', 'individuals', null, `?select=label_id,species,weight_total,capture_date,hunter_name,quality,serial_number&deleted_at=is.null&processing_done_at=is.null&order=serial_number.desc.nullslast,created_at.desc&limit=20`);
+    let inds = await sb('GET', 'individuals', null, `?select=label_id,species,weight_total,capture_date,hunter_name,quality,serial_number,intake_status&deleted_at=is.null&processing_done_at=is.null&order=serial_number.desc.nullslast,created_at.desc&limit=25`);
+    inds = inds.filter(i => i.intake_status !== '搬入待ち'); // 受入前の仮登録は精肉できない
     // テスト個体（通し番号なし）は上記20件に入らないため先頭に必ず表示する
     try {
       const tests = await sb('GET', 'individuals', null, `?label_id=ilike.TGC-TEST*&deleted_at=is.null&select=label_id,species,weight_total,capture_date,hunter_name,quality,serial_number`);
@@ -4126,7 +4128,29 @@ function indRender() {
   </tr>`).join('');
 }
 
+// 搬入待ち（捕獲者フォームからの仮登録）バナー
+async function loadPendingIntake() {
+  const box = document.getElementById('pending-intake');
+  if (!box) return;
+  try {
+    const rows = await sb('GET', 'individuals', null, '?intake_status=eq.搬入待ち&deleted_at=is.null&select=id,label_id,species,weight_total,capture_date,capture_time,capture_city,capture_area,hunter_name,capture_method&order=created_at.desc');
+    if (!rows.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    box.style.display = 'block';
+    box.innerHTML = `<div class="section" style="border:1px solid var(--gold2);background:rgba(200,164,90,.05);">
+      <div class="section-title">🚚 搬入待ち（捕獲者からの連絡） <span class="badge badge-red">${rows.length}件</span></div>
+      ${rows.map(r => `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);margin-bottom:8px;">
+        <div style="font-size:14px;line-height:1.7;">
+          <strong>${speciesIcon(r.species)} ${r.species || '獣種未定'} ${r.weight_total ? r.weight_total + 'kg' : ''}</strong>
+          <span style="color:var(--text2);"> / ${r.hunter_name || '捕獲者不明'} / ${fmt(r.capture_date)} ${r.capture_time || ''} / ${[r.capture_city, r.capture_area].filter(Boolean).join(' ') || '-'} / ${r.capture_method || '-'}</span>
+        </div>
+        <a class="btn btn-primary btn-sm" href="capture-form.html?receive=${r.id}">✅ 受入する（個体番号を付ける）</a>
+      </div>`).join('')}
+    </div>`;
+  } catch(e) { box.style.display = 'none'; }
+}
+
 async function indLoad() {
+  loadPendingIntake();
   const q = (document.getElementById('ind-search')?.value || '').trim();
   const sp = document.getElementById('ind-filter-species')?.value || '';
   const body = document.getElementById('ind-body');
@@ -4139,7 +4163,8 @@ async function indLoad() {
     if (sp) data = data.filter(i => i.species === sp);
     indCache.clear();
     data.forEach(i => indCache.set(i.label_id, i));
-    indAllData = data;
+    // 搬入待ち（仮登録）は上のバナーに出すため一覧からは除外
+    indAllData = data.filter(i => i.intake_status !== '搬入待ち');
     indRender();
   } catch(e) { body.innerHTML = '<tr><td colspan="11" style="color:var(--red);">読み込みエラー: ' + e.message + '</td></tr>'; }
 }

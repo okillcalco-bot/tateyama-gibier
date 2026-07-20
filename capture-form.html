@@ -1594,11 +1594,12 @@ async function handleSubmit() {
     // Use individual number fields
     const labelId = document.getElementById('indLabelId').value;
     const serial = parseInt(document.getElementById('indSerial').value) || 1;
-    if (!labelId) { alert('個体管理番号が生成されていません。種別と市町村を選択してください。'); btn.disabled=false; btn.textContent='登録する'; return; }
+    if (!labelId && !window.hunterMode) { alert('個体管理番号が生成されていません。種別と市町村を選択してください。'); btn.disabled=false; btn.textContent='登録する'; return; }
 
     const record = {
-      label_id: labelId,
-      serial_number: serial,
+      label_id: window.hunterMode ? ('仮-' + Date.now().toString(36).toUpperCase()) : labelId,
+      serial_number: window.hunterMode ? null : serial,
+      intake_status: window.hunterMode ? '搬入待ち' : (window.receiveMode ? null : undefined),
       species: state.species,
       sex: state.sex,
       weight_total: parseFloat(document.getElementById('weight').value) || null,
@@ -1632,7 +1633,7 @@ async function handleSubmit() {
     let saved;
     try {
       saved = await editMode && editRecordId
-        ? await (async function(){ const pb=Object.assign({},record); delete pb.label_id; delete pb.serial_number; const er=await sb('PATCH','individuals',pb,'?id=eq.'+editRecordId); return Array.isArray(er)?er[0]:er; })()
+        ? await (async function(){ const pb=Object.assign({},record); if(!window.receiveMode){ delete pb.label_id; delete pb.serial_number; } const er=await sb('PATCH','individuals',pb,'?id=eq.'+editRecordId); return Array.isArray(er)?er[0]:er; })()
         : await sb('POST', 'individuals', record);
       if (Array.isArray(saved)) saved = saved[0];
     } catch(e) {
@@ -1641,6 +1642,14 @@ async function handleSubmit() {
       saved = record;
     }
 
+    if (window.hunterMode) {
+      btn.disabled = false; btn.textContent = '登録する';
+      alert('送信しました。ありがとうございました！\nセンター受入時にスタッフが個体番号を付けます。');
+      resetForm();
+      const _h = new URLSearchParams(location.search).get('hunter');
+      if (_h) { const _el = document.getElementById('hunterName'); if (_el) _el.value = _h; }
+      return;
+    }
     // Skip counter increment when editing
     if (editMode) { cancelEditMode(); showPrintModal(record); loadTodayCount(); return; }
     // Advance localStorage counters
@@ -1759,9 +1768,10 @@ function resetForm() {
   document.querySelectorAll('[data-field="quality"] [data-val="良"]').forEach(b => b.classList.add('active'));
 
   // Clear inputs
-  ['weight','age','hunterName','hitLocation','bleedTime','receiveTime',
+  ['weight','age','hunterName','bleedTime','receiveTime',
    'transportStart','processTime','healthIssues','memo','recorder'].forEach(id => {
-    document.getElementById(id).value = '';
+    const el = document.getElementById(id);
+    if (el) el.value = '';
   });
   document.getElementById('captureArea').value = '';
   document.getElementById('captureOldTown').value = '';
@@ -1893,8 +1903,46 @@ document.getElementById('weight').addEventListener('focus', function() {
 <script>
 // 捕獲者ごとの共有リンク: capture-form.html?hunter=氏名 で名前が入った状態で開く
 (function(){
-  const h=new URLSearchParams(location.search).get('hunter');
-  if(h){ const el=document.getElementById('hunterName'); if(el && !el.value) el.value=h; }
+  const params = new URLSearchParams(location.search);
+  const h = params.get('hunter');
+  if (h) { const el = document.getElementById('hunterName'); if (el && !el.value) el.value = h; }
+
+  // ── 捕獲者入力モード（?hunter= 付き・スタッフ項目を隠して仮登録） ──
+  if (h !== null && !params.get('receive')) {
+    window.hunterMode = true;
+    const hide = el => { if (el) el.style.display = 'none'; };
+    hide(document.getElementById('indSerial')?.closest('.form-row'));
+    ['receiveTime', 'processTime'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) hide(el.closest('div[style*="flex:1"]') || el.closest('.form-row'));
+    });
+    ['has_fetus', 'processing_type', 'quality'].forEach(f => hide(document.querySelector('[data-field="' + f + '"]')?.closest('.form-row')));
+    hide(document.getElementById('recorder')?.closest('.form-row'));
+    document.querySelectorAll('button').forEach(b => { if (b.textContent.includes('既存データを修正')) hide(b); });
+    const bar = document.createElement('div');
+    bar.style.cssText = 'background:rgba(200,164,90,.15);border:1px solid var(--gold2);color:var(--gold);border-radius:8px;padding:10px 14px;margin:10px 12px;font-size:13.5px;line-height:1.7;';
+    bar.innerHTML = '🏹 <strong>捕獲者入力モード</strong> — わかるところだけ入れて「登録する」を押してください。個体番号・受入・検査の記録はセンターのスタッフが行います。';
+    const first = document.querySelector('.section');
+    if (first) first.parentNode.insertBefore(bar, first);
+  }
+
+  // ── 受入モード（スタッフ: 搬入待ちを開き、内容が入った状態で個体番号を付ける） ──
+  const rid = params.get('receive');
+  if (rid) {
+    (async () => {
+      try {
+        const rows = await sb('GET', 'individuals', null, '?id=eq.' + encodeURIComponent(rid) + '&select=*');
+        if (!rows.length) { alert('搬入待ちデータが見つかりません（すでに受入済みの可能性）'); return; }
+        window.receiveMode = true;
+        loadForEdit(rows[0]);
+        await refreshIndividualNumber(); // 個体番号を新規発番
+        const lbl = document.getElementById('editModeLabel');
+        if (lbl) lbl.textContent = '搬入待ちの受入: ' + (rows[0].hunter_name || '捕獲者不明') + ' さん / ' + (rows[0].species || '') + ' ' + (rows[0].weight_total || '?') + 'kg';
+        document.getElementById('submitBtn').textContent = '✅ 受入して登録する';
+        window.scrollTo(0, 0);
+      } catch (e) { alert('読み込みエラー: ' + e.message); }
+    })();
+  }
 })();
 </script>
 </body>
