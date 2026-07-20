@@ -497,6 +497,24 @@ textarea { min-height: 80px; resize: vertical; }
       <input type="hidden" id="captureOldTown" value="">
       <input type="hidden" id="captureArea" value="">
       <div class="form-row">
+        <label class="form-label">捕獲場所の地図（市役所票の×印用・任意）</label>
+        <div style="display:flex;gap:8px;margin-bottom:6px;">
+          <button type="button" class="now-btn" style="flex:1;" onclick="capMapLocate()">📍 現在地を記録</button>
+          <button type="button" class="now-btn" style="flex:1;" onclick="capMapToggle()">🗺 地図で指定</button>
+        </div>
+        <div id="capMapWrap" style="display:none;">
+          <div id="capMap" style="position:relative;width:100%;height:300px;overflow:hidden;border:1px solid var(--border2);border-radius:8px;background:#dde5dd;touch-action:none;cursor:crosshair;"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+            <div class="field-note" style="font-size:11px;color:var(--text2);">地図をタップすると赤✕が付きます（ドラッグで移動・出典: 国土地理院）</div>
+            <div style="display:flex;gap:6px;">
+              <button type="button" class="now-btn" onclick="capMapZoom(1)">＋</button>
+              <button type="button" class="now-btn" onclick="capMapZoom(-1)">－</button>
+            </div>
+          </div>
+        </div>
+        <div id="capMapStatus" class="field-note" style="font-size:11px;color:var(--gold);margin-top:4px;"></div>
+      </div>
+      <div class="form-row">
         <label class="form-label">捕獲者名</label>
         <input type="text" class="input" id="hunterName" placeholder="氏名" list="hunterList" autocomplete="off">
         <datalist id="hunterList">
@@ -1676,6 +1694,8 @@ async function handleSubmit() {
       bait_type: document.getElementById('baitType').value.trim() || null,
       disposal_method: document.getElementById('disposalMethod').value,
       finisher_name: document.getElementById('finisherName').value.trim() || null,
+      capture_lat: (window.mapState && mapState.marker) ? mapState.marker.lat : null,
+      capture_lng: (window.mapState && mapState.marker) ? mapState.marker.lng : null,
       hit_location: document.querySelector('[data-field="hit_location"] .toggle-btn.active')?.dataset.val || '',
       bleed_time: document.getElementById('bleedTime').value,
       receive_time: document.getElementById('receiveTime').value,
@@ -2008,6 +2028,11 @@ document.getElementById('weight').addEventListener('focus', function() {
           sv('trapNumber', r.trap_number); sv('baitType', r.bait_type);
           sv('disposalMethod', r.disposal_method); sv('finisherName', r.finisher_name);
           if (r.is_juvenile) { state.juvenile = '幼獣'; document.querySelectorAll('[data-field="juvenile"] .toggle-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.val === '幼獣'); }); }
+          if (r.capture_lat && r.capture_lng && window.mapState) {
+            mapState.marker = { lat: parseFloat(r.capture_lat), lng: parseFloat(r.capture_lng) };
+            mapState.lat = mapState.marker.lat; mapState.lng = mapState.marker.lng; mapState.z = 15;
+            capMapShow();
+          }
           if (r.trap_part) { state.trap_part = r.trap_part; document.querySelectorAll('[data-field="trap_part"] .toggle-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.val === r.trap_part); }); }
           updateMethodRows();
         })(rows[0]);
@@ -2032,6 +2057,86 @@ document.getElementById('weight').addEventListener('focus', function() {
       await cityFormPrint(rows[0]);
     } catch(e){ alert('読み込みエラー: ' + e.message); }
   })();
+})();
+
+// ── 捕獲場所ミニ地図（地理院タイル・外部ライブラリなし。保存は緯度経度のみ） ──
+window.mapState = { lat: 34.9966, lng: 139.8699, z: 14, marker: null };
+const _TZ = 256;
+function _lngX(lng, z){ return (lng + 180) / 360 * Math.pow(2, z); }
+function _latY(lat, z){ const r = lat * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, z); }
+function _xLng(x, z){ return x / Math.pow(2, z) * 360 - 180; }
+function _yLat(y, z){ const n = Math.PI - 2 * Math.PI * y / Math.pow(2, z); return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))); }
+function capMapRender(){
+  const box = document.getElementById('capMap');
+  if (!box || box.offsetParent === null) return;
+  const W = box.clientWidth, H = box.clientHeight, z = mapState.z;
+  const cx = _lngX(mapState.lng, z) * _TZ, cy = _latY(mapState.lat, z) * _TZ;
+  let html = '';
+  for (let tx = Math.floor((cx - W/2) / _TZ); tx <= Math.floor((cx + W/2) / _TZ); tx++)
+    for (let ty = Math.floor((cy - H/2) / _TZ); ty <= Math.floor((cy + H/2) / _TZ); ty++)
+      html += '<img src="https://cyberjapandata.gsi.go.jp/xyz/std/' + z + '/' + tx + '/' + ty + '.png" style="position:absolute;left:' + Math.round(tx*_TZ - (cx - W/2)) + 'px;top:' + Math.round(ty*_TZ - (cy - H/2)) + 'px;width:256px;height:256px;pointer-events:none;" draggable="false">';
+  if (mapState.marker) {
+    const mx = _lngX(mapState.marker.lng, z) * _TZ - (cx - W/2);
+    const my = _latY(mapState.marker.lat, z) * _TZ - (cy - H/2);
+    html += '<div style="position:absolute;left:' + (mx-13) + 'px;top:' + (my-17) + 'px;font-size:26px;font-weight:900;color:#e02020;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 5px #fff;pointer-events:none;">✕</div>';
+  }
+  box.innerHTML = html;
+}
+function capMapStatus(){
+  const el = document.getElementById('capMapStatus');
+  if (el) el.textContent = mapState.marker ? '✕ 記録済み（緯度 ' + mapState.marker.lat.toFixed(5) + ' / 経度 ' + mapState.marker.lng.toFixed(5) + '）' : '';
+}
+function capMapShow(){
+  const w = document.getElementById('capMapWrap');
+  if (w) { w.style.display = 'block'; setTimeout(capMapRender, 50); }
+  capMapStatus();
+}
+function capMapToggle(){
+  const w = document.getElementById('capMapWrap');
+  if (!w) return;
+  if (w.style.display === 'none') capMapShow(); else w.style.display = 'none';
+}
+function capMapZoom(d){
+  mapState.z = Math.min(17, Math.max(10, mapState.z + d));
+  capMapRender();
+}
+function capMapLocate(){
+  if (!navigator.geolocation) { alert('この端末では位置情報が使えません'); return; }
+  navigator.geolocation.getCurrentPosition(function(pos){
+    mapState.lat = pos.coords.latitude; mapState.lng = pos.coords.longitude; mapState.z = 16;
+    mapState.marker = { lat: mapState.lat, lng: mapState.lng };
+    capMapShow(); capMapRender(); capMapStatus();
+  }, function(){ alert('現在地を取得できませんでした。「🗺 地図で指定」でタップしてください'); }, { enableHighAccuracy: true, timeout: 8000 });
+}
+(function(){
+  const box = document.getElementById('capMap');
+  if (!box) return;
+  let drag = null;
+  box.addEventListener('pointerdown', function(e){ drag = { x: e.clientX, y: e.clientY, moved: false }; box.setPointerCapture(e.pointerId); });
+  box.addEventListener('pointermove', function(e){
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 5) drag.moved = true;
+    if (drag.moved) {
+      const z = mapState.z;
+      mapState.lng = _xLng(_lngX(mapState.lng, z) - dx / _TZ, z);
+      mapState.lat = _yLat(_latY(mapState.lat, z) - dy / _TZ, z);
+      drag.x = e.clientX; drag.y = e.clientY;
+      capMapRender();
+    }
+  });
+  box.addEventListener('pointerup', function(e){
+    if (drag && !drag.moved) {
+      const r = box.getBoundingClientRect(), z = mapState.z;
+      const cx = _lngX(mapState.lng, z) * _TZ, cy = _latY(mapState.lat, z) * _TZ;
+      mapState.marker = {
+        lng: _xLng((cx - r.width/2 + (e.clientX - r.left)) / _TZ, z),
+        lat: _yLat((cy - r.height/2 + (e.clientY - r.top)) / _TZ, z)
+      };
+      capMapRender(); capMapStatus();
+    }
+    drag = null;
+  });
 })();
 
 // ── 時刻入力の自動整形（745 / 0745 / 7:45 → 07:45） ──
@@ -2113,7 +2218,20 @@ async function cityFormPrint(rec){
     '<tr><th>止め刺し方法</th><td colspan="3">' + ck(fm === '銃') + ' 射殺（銃）　' + ck(fm !== '' && fm !== '銃') + ' 刺殺（竹槍・ナイフなど）　□ 既に死亡</td></tr>' +
     '<tr><th>その他<br>特記事項</th><td colspan="3" style="height:34px;">' + (rec.memo || '') + '</td></tr>' +
     '</table>' +
-    '<div class="no">（摘要）<br>1　捕獲1頭につき1枚提出すること<br>2　<b>捕獲後おおむね3日以内に提出すること</b>。ただし、土日および祝日を除く。<br>3　捕獲者及び止め刺し者は、館山市有害鳥獣捕獲員に限る。<br>4　<b>任意の地図に、捕獲場所を朱色×印にて記入すること（別紙添付）</b>。<br>5　市から貸与の箱わなで捕獲した場合、番号札（　）内の数字を記入すること。<br>6　餌の種類は、箱わなを使用して捕獲した場合に記入すること。<br>7　<b>添付品: 捕獲獣の尾（1頭分ずつ、ジップロックに封入して提出すること）</b></div>' +
+    (function(){
+      if (!rec.capture_lat || !rec.capture_lng) return '';
+      const z = 15, W = 640, H = 400;
+      const cx = _lngX(parseFloat(rec.capture_lng), z) * _TZ, cy = _latY(parseFloat(rec.capture_lat), z) * _TZ;
+      let tiles = '';
+      for (let tx = Math.floor((cx - W/2) / _TZ); tx <= Math.floor((cx + W/2) / _TZ); tx++)
+        for (let ty = Math.floor((cy - H/2) / _TZ); ty <= Math.floor((cy + H/2) / _TZ); ty++)
+          tiles += '<img src="https://cyberjapandata.gsi.go.jp/xyz/std/' + z + '/' + tx + '/' + ty + '.png" style="position:absolute;left:' + Math.round(tx*_TZ - (cx - W/2)) + 'px;top:' + Math.round(ty*_TZ - (cy - H/2)) + 'px;width:256px;height:256px;">';
+      return '<div style="margin-top:12px;page-break-inside:avoid;"><b>捕獲場所（朱色×印）</b>' +
+        '<div style="position:relative;width:' + W + 'px;height:' + H + 'px;overflow:hidden;border:1.5px solid #000;margin-top:4px;">' + tiles +
+        '<div style="position:absolute;left:' + (W/2-15) + 'px;top:' + (H/2-20) + 'px;font-size:30px;font-weight:900;color:#e02020;text-shadow:0 0 3px #fff,0 0 3px #fff;">✕</div></div>' +
+        '<div style="font-size:10px;">出典: 国土地理院（地理院タイル）　緯度 ' + parseFloat(rec.capture_lat).toFixed(5) + ' / 経度 ' + parseFloat(rec.capture_lng).toFixed(5) + '</div></div>';
+    })() +
+    '<div class="no">（摘要）<br>1　捕獲1頭につき1枚提出すること<br>2　<b>捕獲後おおむね3日以内に提出すること</b>。ただし、土日および祝日を除く。<br>3　捕獲者及び止め刺し者は、館山市有害鳥獣捕獲員に限る。<br>4　任意の地図に、捕獲場所を朱色×印にて記入すること（' + (rec.capture_lat ? '本票に地図を印字済み' : '別紙添付') + '）。<br>5　市から貸与の箱わなで捕獲した場合、番号札（　）内の数字を記入すること。<br>6　餌の種類は、箱わなを使用して捕獲した場合に記入すること。<br>7　<b>添付品: 捕獲獣の尾（1頭分ずつ、ジップロックに封入して提出すること）</b></div>' +
     '<table style="margin-top:8px;"><tr><td style="text-align:center;">館山有害鳥獣対策協議会</td><th style="width:70px;">確認</th><td style="width:120px;"></td></tr></table>' +
     '<script>setTimeout(function(){window.print();},400);<\/script></body></html>';
   const w = window.open('', '_blank');

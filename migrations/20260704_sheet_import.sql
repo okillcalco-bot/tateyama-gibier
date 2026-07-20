@@ -76,3 +76,6 @@ exception when duplicate_object then null; end $$;
 -- ── 市役所提出用捕獲票 2026-07-20 適用済み: city_capture_report_fields ──
 -- individuals: body_length_cm / is_juvenile / trap_part（くくり罠のかかった部位）/
 --   trap_set_date / trap_number（箱わな番号）/ bait_type / disposal_method / finisher_name
+
+-- ── 捕獲場所の地図 2026-07-20 適用済み: capture_location_latlng ──
+-- individuals: capture_lat / capture_lng（保存は数値のみ。地図は地理院タイルを表示時に参照）
