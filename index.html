@@ -1247,6 +1247,30 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 </div>
 </div><!-- /app-layout -->
 
+<!-- 解体所見モーダル（胎児の有無・内臓異常。解体を進めながらいつでも追記できる） -->
+<div class="modal" id="findingsModal" style="display:none;">
+  <div class="modal-content" style="max-width:480px;">
+    <div class="modal-title">🔬 解体所見 <span id="fnd-label" style="color:var(--gold);"></span></div>
+    <div style="font-size:12.5px;color:var(--text2);margin-bottom:12px;">解体を進めながらいつでも追記・修正できます（あとから直してOK）。</div>
+    <div class="form-group"><label>胎児の有無</label>
+      <select class="form-input" id="fnd-fetus"><option value="false">なし</option><option value="true">あり</option></select>
+    </div>
+    <div class="form-group"><label>内臓の異常（あれば）</label>
+      <textarea class="form-input" id="fnd-organ" rows="2" placeholder="例: 肝臓に白斑あり → 廃棄"></textarea>
+    </div>
+    <div class="form-group"><label>捕獲時・外観の異常（あれば）</label>
+      <input class="form-input" id="fnd-capture" placeholder="例: 左後脚に古傷" />
+    </div>
+    <div class="form-group"><label>解体メモ</label>
+      <textarea class="form-input" id="fnd-notes" rows="2" placeholder="例: 皮下脂肪厚め。半身は熟成庫へ"></textarea>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;">
+      <button class="btn" onclick="document.getElementById('findingsModal').style.display='none'">キャンセル</button>
+      <button class="btn btn-primary" onclick="findingsSave()">保存する</button>
+    </div>
+  </div>
+</div>
+
 <!-- Hidden Scale Input (HID receiver) -->
 <input id="scaleInput" style="opacity:0;position:fixed;top:-100px;left:-100px;" autocomplete="off" inputmode="none" />
 
@@ -1291,6 +1315,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div class="pm-header-left">
         <span class="pm-header-title">🔪</span>
         <button class="pm-ind-chip" id="pmCurrentInd" onclick="pmShowIndividualDetail()">個体選択中...</button>
+        <button onclick="pmIndividual && findingsOpen(pmIndividual.label_id)" style="font-size:11px;padding:3px 8px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;white-space:nowrap;" title="胎児の有無・内臓所見を記録">🔬 所見</button>
       </div>
       <div class="pm-header-ops" id="pmHeaderOps"></div>
       <div class="pm-header-right">
@@ -4094,6 +4119,7 @@ function indRender() {
     <td>${i.hunter_name || '-'}</td>
     <td>${i.quality || '-'}</td>
     <td style="white-space:nowrap;">
+      <button class="btn btn-sm" onclick="findingsOpen('${i.label_id}')" title="胎児の有無・内臓所見（解体中でも追記OK）">🔬 所見</button>
       <button class="btn btn-sm" onclick="indOpenEdit('${i.label_id}')">編集</button>
       <button class="btn btn-sm btn-danger" onclick="indDelete('${i.label_id}')">削除</button>
     </td>
@@ -5647,6 +5673,38 @@ async function docZipCategory(cat) {
   a.click(); URL.revokeObjectURL(a.href);
   playFeedbackSound(true);
   toast(`${cat} ${files.length}帳票をZIP出力しました`);
+}
+
+/* ───────── 解体所見（胎児の有無・内臓異常。スタッフが随時追記） ───────── */
+let findingsLabelId = null;
+async function findingsOpen(labelId) {
+  if (!labelId) { toast('個体が選択されていません', 'error'); return; }
+  try {
+    const inds = await sb('GET', 'individuals', null, `?label_id=eq.${encodeURIComponent(labelId)}&select=label_id,has_fetus,organ_anomalies,capture_anomalies,processing_notes`);
+    if (!inds.length) { toast('個体が見つかりません', 'error'); return; }
+    const i = inds[0];
+    findingsLabelId = labelId;
+    document.getElementById('fnd-label').textContent = labelId;
+    document.getElementById('fnd-fetus').value = i.has_fetus ? 'true' : 'false';
+    document.getElementById('fnd-organ').value = i.organ_anomalies || '';
+    document.getElementById('fnd-capture').value = i.capture_anomalies || '';
+    document.getElementById('fnd-notes').value = i.processing_notes || '';
+    document.getElementById('findingsModal').style.display = 'block';
+  } catch(e) { toast('読み込みエラー: ' + e.message, 'error'); }
+}
+async function findingsSave() {
+  if (!findingsLabelId) return;
+  try {
+    await sb('PATCH', 'individuals', {
+      has_fetus: document.getElementById('fnd-fetus').value === 'true',
+      organ_anomalies: document.getElementById('fnd-organ').value.trim() || null,
+      capture_anomalies: document.getElementById('fnd-capture').value.trim() || null,
+      processing_notes: document.getElementById('fnd-notes').value.trim() || null
+    }, `?label_id=eq.${encodeURIComponent(findingsLabelId)}`);
+    document.getElementById('findingsModal').style.display = 'none';
+    toast(`${findingsLabelId} の解体所見を保存しました`);
+    playFeedbackSound(true);
+  } catch(e) { toast('保存に失敗しました: ' + e.message, 'error'); }
 }
 
 /* ───────── シフト表（誰でもタップで記入） ───────── */
