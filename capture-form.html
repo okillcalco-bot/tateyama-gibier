@@ -432,11 +432,40 @@ textarea { min-height: 80px; resize: vertical; }
         <div style="flex:1;">
           <label class="form-label">捕獲時刻</label>
           <div class="time-wrap">
-            <input type="text" inputmode="numeric" class="input" id="captureTime" placeholder="HH:MM" maxlength="5">
-          <div class="field-note" style="font-size:11px;color:var(--text2);margin-top:4px;">※捕獲個体を初めて目視した時間</div>
+            <input type="text" inputmode="numeric" class="input" id="captureTime" placeholder="745 → 7:45" maxlength="5">
             <button type="button" class="now-btn" onclick="setNow('captureTime')">今</button>
           </div>
+          <div class="field-note" style="font-size:11px;color:var(--text2);margin-top:4px;">※捕獲個体を初めて目視した時間。「745」→自動で7:45になります</div>
         </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">成獣 / 幼獣</label>
+        <div class="toggle-group" data-field="juvenile">
+          <div class="toggle-btn active" data-val="成獣">成獣</div>
+          <div class="toggle-btn" data-val="幼獣">幼獣</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div style="display:flex;gap:10px;">
+          <div style="flex:1;">
+            <label class="form-label">体長（cm・市役所票用）</label>
+            <input type="number" class="input" id="bodyLength" placeholder="70" step="1" min="0" inputmode="numeric">
+          </div>
+          <div style="flex:1;">
+            <label class="form-label">処理方法（市役所票用）</label>
+            <select class="input" id="disposalMethod">
+              <option value="販売（館山ジビエセンター）">販売（館山ジビエセンター）</option>
+              <option value="焼却施設搬入">焼却施設搬入</option>
+              <option value="埋却">埋却</option>
+              <option value="自家消費">自家消費</option>
+              <option value="その他">その他</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">止め刺し者（捕獲者と別の場合のみ）</label>
+        <input type="text" class="input" id="finisherName" placeholder="空欄 = 捕獲者と同じ">
       </div>
       <div class="form-row">
         <label class="form-label">天気</label>
@@ -520,6 +549,32 @@ textarea { min-height: 80px; resize: vertical; }
           <div class="toggle-btn" data-val="その他">その他</div>
         </div>
       </div>
+      <div class="form-row" id="trapPartRow" style="display:none;">
+        <label class="form-label">わなにかかった部位（くくり罠）</label>
+        <div class="toggle-group" data-field="trap_part" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="toggle-btn" data-val="右前足">右前足</div>
+          <div class="toggle-btn" data-val="左前足">左前足</div>
+          <div class="toggle-btn" data-val="右後脚">右後脚</div>
+          <div class="toggle-btn" data-val="左後脚">左後脚</div>
+          <div class="toggle-btn" data-val="鼻" style="grid-column:1/-1;">鼻</div>
+        </div>
+      </div>
+      <div class="form-row" id="trapSetRow" style="display:none;">
+        <label class="form-label">わな設置日（市役所票用）</label>
+        <input type="date" class="input" id="trapSetDate">
+      </div>
+      <div class="form-row" id="boxTrapRow" style="display:none;">
+        <div style="display:flex;gap:10px;">
+          <div style="flex:1;">
+            <label class="form-label">箱わな番号（市貸与）</label>
+            <input type="text" class="input" id="trapNumber" placeholder="例: 3-12">
+          </div>
+          <div style="flex:1;">
+            <label class="form-label">餌の種類</label>
+            <input type="text" class="input" id="baitType" placeholder="例: 米ぬか">
+          </div>
+        </div>
+      </div>
       <div class="form-row">
         <label class="form-label">止めさし方法</label>
         <div class="toggle-group" data-field="finishing_method">
@@ -587,7 +642,8 @@ textarea { min-height: 80px; resize: vertical; }
           <div class="toggle-btn" data-val="その他">その他</div>
         </div>
       </div>
-      <!-- evisceration removed -->
+      <div class="form-row">
+        <label class="form-label">内臓摘出（山で内臓を出した場合は「あり」）</label>
         <div class="toggle-group" data-field="gutting">
           <div class="toggle-btn" data-val="あり">あり</div>
           <div class="toggle-btn" data-val="なし" >なし</div>
@@ -1003,7 +1059,7 @@ const MINAMIBOSO = {
 let editMode = false, editRecordId = null, editRecord = null;
 /* ── State ── */
 const state = {
-  species: '', sex: '', weather: '', capture_city: '', capture_method: '',
+  species: '', sex: '', weather: '', capture_city: '', capture_method: '', trap_part: '', juvenile: '成獣',
   finishing_method: '', cooling_method: '', gutting: '無',
   hunter_health: '', has_fetus: 'なし', processing_type: '分割', quality: '良',
   captureAnomalies: new Set(), organAnomalies: new Set()
@@ -1612,6 +1668,14 @@ async function handleSubmit() {
       hunter_name: document.getElementById('hunterName').value,
       capture_method: state.capture_method,
       finishing_method: state.finishing_method,
+      trap_part: state.trap_part || null,
+      is_juvenile: state.juvenile === '幼獣',
+      body_length_cm: parseFloat(document.getElementById('bodyLength').value) || null,
+      trap_set_date: document.getElementById('trapSetDate').value || null,
+      trap_number: document.getElementById('trapNumber').value.trim() || null,
+      bait_type: document.getElementById('baitType').value.trim() || null,
+      disposal_method: document.getElementById('disposalMethod').value,
+      finisher_name: document.getElementById('finisherName').value.trim() || null,
       hit_location: document.querySelector('[data-field="hit_location"] .toggle-btn.active')?.dataset.val || '',
       bleed_time: document.getElementById('bleedTime').value,
       receive_time: document.getElementById('receiveTime').value,
@@ -1644,7 +1708,9 @@ async function handleSubmit() {
 
     if (window.hunterMode) {
       btn.disabled = false; btn.textContent = '登録する';
-      alert('送信しました。ありがとうございました！\nセンター受入時にスタッフが個体番号を付けます。');
+      if (confirm('送信しました。ありがとうございました！\nセンター受入時にスタッフが個体番号を付けます。\n\n市役所提出用の「有害鳥獣捕獲票」を今すぐ表示・印刷しますか？（後からでも出せます）')) {
+        try { await cityFormPrint(record); } catch(_e) {}
+      }
       resetForm();
       const _h = new URLSearchParams(location.search).get('hunter');
       if (_h) { const _el = document.getElementById('hunterName'); if (_el) _el.value = _h; }
@@ -1935,6 +2001,16 @@ document.getElementById('weight').addEventListener('focus', function() {
         if (!rows.length) { alert('搬入待ちデータが見つかりません（すでに受入済みの可能性）'); return; }
         window.receiveMode = true;
         loadForEdit(rows[0]);
+        // 市役所票用の追加項目もプリフィル
+        (function(r){
+          const sv = function(id, v){ const el = document.getElementById(id); if (el && v != null) el.value = v; };
+          sv('bodyLength', r.body_length_cm); sv('trapSetDate', r.trap_set_date);
+          sv('trapNumber', r.trap_number); sv('baitType', r.bait_type);
+          sv('disposalMethod', r.disposal_method); sv('finisherName', r.finisher_name);
+          if (r.is_juvenile) { state.juvenile = '幼獣'; document.querySelectorAll('[data-field="juvenile"] .toggle-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.val === '幼獣'); }); }
+          if (r.trap_part) { state.trap_part = r.trap_part; document.querySelectorAll('[data-field="trap_part"] .toggle-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.val === r.trap_part); }); }
+          updateMethodRows();
+        })(rows[0]);
         await refreshIndividualNumber(); // 個体番号を新規発番
         const lbl = document.getElementById('editModeLabel');
         if (lbl) lbl.textContent = '搬入待ちの受入: ' + (rows[0].hunter_name || '捕獲者不明') + ' さん / ' + (rows[0].species || '') + ' ' + (rows[0].weight_total || '?') + 'kg';
@@ -1944,6 +2020,107 @@ document.getElementById('weight').addEventListener('focus', function() {
     })();
   }
 })();
+
+// ── スタッフ用: ?cityform=個体番号 で市役所票を直接表示 ──
+(function(){
+  const cf = new URLSearchParams(location.search).get('cityform');
+  if (!cf) return;
+  (async function(){
+    try {
+      const rows = await sb('GET','individuals',null,'?label_id=eq.' + encodeURIComponent(cf) + '&select=*');
+      if (!rows.length) { alert('個体が見つかりません: ' + cf); return; }
+      await cityFormPrint(rows[0]);
+    } catch(e){ alert('読み込みエラー: ' + e.message); }
+  })();
+})();
+
+// ── 時刻入力の自動整形（745 / 0745 / 7:45 → 07:45） ──
+['captureTime','bleedTime','receiveTime','transportStart','processTime'].forEach(function(id){
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('blur', function(){
+    let v = el.value.trim().replace(/[：]/g, ':');
+    if (!v) return;
+    let m = v.match(/^(\d{1,2}):(\d{1,2})$/);
+    if (!m) {
+      const d = v.replace(/\D/g, '');
+      if (d.length === 3) m = [null, d[0], d.slice(1)];
+      else if (d.length === 4) m = [null, d.slice(0,2), d.slice(2)];
+      else if (d.length <= 2 && d.length > 0) m = [null, d, '0'];
+      else return;
+    }
+    const h = parseInt(m[1]), mi = parseInt(m[2]);
+    if (isNaN(h) || isNaN(mi) || h > 23 || mi > 59) return;
+    el.value = String(h).padStart(2,'0') + ':' + String(mi).padStart(2,'0');
+    if (typeof checkBleedingToIntakeTime === 'function') checkBleedingToIntakeTime();
+  });
+});
+
+// ── 捕獲方法に応じた行の表示切替 ──
+function updateMethodRows(){
+  const m = state.capture_method;
+  const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
+  show('trapPartRow', m === 'くくり罠');
+  show('trapSetRow', m === 'くくり罠' || m === '箱罠');
+  show('boxTrapRow', m === '箱罠');
+  // 被弾部位は銃使用時のみ
+  const hitRow = document.querySelector('[data-field="hit_location"]');
+  if (hitRow) hitRow.closest('.form-row').style.display = (m === '銃猟' || state.finishing_method === '銃') ? '' : 'none';
+}
+['capture_method','finishing_method'].forEach(function(f){
+  const g = document.querySelector('[data-field="' + f + '"]');
+  if (g) g.addEventListener('click', function(){ setTimeout(updateMethodRows, 50); });
+});
+updateMethodRows();
+
+// ── 市役所提出用「有害鳥獣捕獲票」印刷（館山有害鳥獣対策協議会様式に準拠） ──
+async function cityFormPrint(rec){
+  let phone = '';
+  try {
+    const h = await sb('GET','hunters',null,'?name=eq.' + encodeURIComponent(rec.hunter_name || '') + '&select=phone&limit=1');
+    if (h.length) phone = h[0].phone || '';
+  } catch(e){}
+  const era = function(d){ if(!d) return ['　','　','　']; const p = String(d).split('-'); return [parseInt(p[0]) - 2018, parseInt(p[1]), parseInt(p[2])]; };
+  const cd = era(rec.capture_date), td = era(rec.trap_set_date);
+  const ck = function(cond){ return cond ? '■' : '□'; };
+  const speciesList = ['イノシシ','ニホンジカ','キョン','ハクビシン','アライグマ','アカゲザル','ニホンザル','タヌキ','ノウサギ'];
+  const spMatch = function(name){ return rec.species === name || (name === 'ニホンジカ' && rec.species === 'シカ'); };
+  const finisher = rec.finisher_name || rec.hunter_name || '';
+  const disposal = rec.disposal_method || '販売（館山ジビエセンター）';
+  const fm = rec.finishing_method || '';
+  const html = '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>有害鳥獣捕獲票</title><style>' +
+    'body{font-family:"Noto Sans JP","Hiragino Sans",sans-serif;color:#000;background:#fff;font-size:13px;margin:24px;}' +
+    'h1{font-size:18px;text-align:center;margin:0;}.sub{text-align:center;font-size:12px;margin-bottom:10px;}' +
+    'table{width:100%;border-collapse:collapse;}td,th{border:1.5px solid #000;padding:7px 9px;font-size:13px;text-align:left;vertical-align:middle;}' +
+    'th{width:120px;background:#f5f5f5;font-weight:600;text-align:center;}' +
+    '.no{font-size:11px;margin-top:10px;line-height:1.8;}.right{float:right;border:1.5px solid #000;padding:4px 10px;margin-bottom:6px;font-size:12px;}' +
+    '@media print{body{margin:10mm;}}</style></head><body>' +
+    '<div class="right">捕獲番号　　　　号<br><span style="font-size:10px;">（事務局で記入）</span></div>' +
+    '<h1>有害鳥獣捕獲票</h1><div class="sub">（イノシシ等獣類別捕獲用）</div>' +
+    '<table>' +
+    '<tr><th>箱わな番号<br>（摘要5）</th><td>' + (rec.trap_number || '　') + '　番</td><th>捕獲票提出者名</th><td>' + (rec.hunter_name || '') + '</td></tr>' +
+    '<tr><th>捕獲個体</th><td colspan="3">' + speciesList.map(function(n){ return ck(spMatch(n)) + ' ' + n; }).join('　') + '</td></tr>' +
+    '<tr><th>捕獲年月日</th><td colspan="3">令和 ' + cd[0] + ' 年 ' + cd[1] + ' 月 ' + cd[2] + ' 日</td></tr>' +
+    '<tr><th>捕獲場所</th><td colspan="3">（大字） ' + (rec.capture_area || '') + ' 　（小字）</td></tr>' +
+    '<tr><th>性別</th><td colspan="3">' + ck(rec.sex === 'オス') + ' オス（' + ck(rec.sex === 'オス' && rec.is_juvenile) + ' 幼）　' + ck(rec.sex === 'メス') + ' メス（' + ck(rec.sex === 'メス' && rec.is_juvenile) + ' 幼）　　胎児: ' + ck(rec.has_fetus === true) + ' 有　' + ck(rec.has_fetus !== true) + ' 無　□ 不明</td></tr>' +
+    '<tr><th>体長・体重</th><td colspan="3">' + (rec.body_length_cm || '　　') + ' cm　　' + (rec.weight_total || '　　') + ' kg</td></tr>' +
+    '<tr><th>捕獲方法</th><td colspan="3">' + ck(rec.capture_method === '銃猟') + ' 銃器　' + ck(rec.capture_method === 'くくり罠') + ' くくりわな　' + ck(rec.capture_method === '箱罠') + ' 箱わな　' + ck(rec.capture_method === 'その他') + ' その他（' + (rec.capture_method === 'くくり罠' && rec.trap_part ? 'かかった部位: ' + rec.trap_part : '') + '）</td></tr>' +
+    '<tr><th>餌の種類<br>（摘要5）</th><td colspan="3">' + (rec.bait_type || '') + '</td></tr>' +
+    '<tr><th>わな設置日</th><td colspan="3">令和 ' + td[0] + ' 年 ' + td[1] + ' 月 ' + td[2] + ' 日</td></tr>' +
+    '<tr><th>捕獲個体の<br>処理方法</th><td colspan="3">' + ck(disposal === '焼却施設搬入') + ' 焼却施設搬入　' + ck(disposal === '埋却') + ' 埋却　' + ck(disposal === '自家消費') + ' 自家消費　' + ck(disposal === 'その他') + ' その他<br>' + ck(disposal.indexOf('販売') === 0) + ' 販売（' + ck(disposal.indexOf('館山ジビエセンター') >= 0) + ' 館山ジビエセンター　□ ジビエ堂　□ ヴィルトファクトリー）</td></tr>' +
+    '<tr><th>捕獲者<br>（わな設置者）</th><td>氏名　' + (rec.hunter_name || '') + '</td><th style="width:90px;">電話番号</th><td>' + phone + '</td></tr>' +
+    '<tr><th>止め刺し者</th><td>氏名　' + finisher + '</td><th>電話番号</th><td>' + (rec.finisher_name ? '' : phone) + '</td></tr>' +
+    '<tr><th>止め刺し方法</th><td colspan="3">' + ck(fm === '銃') + ' 射殺（銃）　' + ck(fm !== '' && fm !== '銃') + ' 刺殺（竹槍・ナイフなど）　□ 既に死亡</td></tr>' +
+    '<tr><th>その他<br>特記事項</th><td colspan="3" style="height:34px;">' + (rec.memo || '') + '</td></tr>' +
+    '</table>' +
+    '<div class="no">（摘要）<br>1　捕獲1頭につき1枚提出すること<br>2　<b>捕獲後おおむね3日以内に提出すること</b>。ただし、土日および祝日を除く。<br>3　捕獲者及び止め刺し者は、館山市有害鳥獣捕獲員に限る。<br>4　<b>任意の地図に、捕獲場所を朱色×印にて記入すること（別紙添付）</b>。<br>5　市から貸与の箱わなで捕獲した場合、番号札（　）内の数字を記入すること。<br>6　餌の種類は、箱わなを使用して捕獲した場合に記入すること。<br>7　<b>添付品: 捕獲獣の尾（1頭分ずつ、ジップロックに封入して提出すること）</b></div>' +
+    '<table style="margin-top:8px;"><tr><td style="text-align:center;">館山有害鳥獣対策協議会</td><th style="width:70px;">確認</th><td style="width:120px;"></td></tr></table>' +
+    '<script>setTimeout(function(){window.print();},400);<\/script></body></html>';
+  const w = window.open('', '_blank');
+  if (!w) { alert('ポップアップがブロックされました。ブラウザの設定でこのサイトのポップアップを許可してください'); return; }
+  w.document.write(html);
+  w.document.close();
+}
 </script>
 </body>
 </html>

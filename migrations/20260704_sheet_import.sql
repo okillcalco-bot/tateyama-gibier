@@ -72,3 +72,7 @@ exception when duplicate_object then null; end $$;
 -- ── 二段階入力（捕獲者→スタッフ受入） 2026-07-20 適用済み: intake_status_two_stage_capture ──
 -- individuals.intake_status: 捕獲者フォーム(?hunter=)からの仮登録は '搬入待ち'（label_id=仮-xxx）
 -- スタッフが受入(capture-form.html?receive=id)で個体番号を付けると null に戻る
+
+-- ── 市役所提出用捕獲票 2026-07-20 適用済み: city_capture_report_fields ──
+-- individuals: body_length_cm / is_juvenile / trap_part（くくり罠のかかった部位）/
+--   trap_set_date / trap_number（箱わな番号）/ bait_type / disposal_method / finisher_name
