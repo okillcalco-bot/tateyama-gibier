@@ -63,3 +63,8 @@ exception when duplicate_object then null; end $$;
 -- individuals.processing_done_at: 精肉完了フラグ（部位登録なしでも完了にできる）
 -- inventory/processing_log: 識別コード・ロットコードのカタカナをローマ字化
 --   （CODE128バーコードは英数字のみのため。ア→A/ウ→U/キ→KI/シ→SHI/タ→TA/ハ→HA）
+
+-- ── シフト表・掲示板・新規顧客申込 2026-07-20 適用済み: staff_board_and_customer_signup ──
+-- staff_board: スタッフ掲示板（title/body/author/pinned、ソフトデリート）
+-- customers: signup_source（申込経路）/ order_method（希望注文方法）/ notify_method（案内方法）を追加
+-- シフト表は既存 shifts テーブル（旧シフトアプリ）をそのまま利用

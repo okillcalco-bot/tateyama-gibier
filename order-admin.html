@@ -9,11 +9,11 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
---bg:#0d0f0a;--surface:#141710;--surface2:#1c1f16;
---border:#2a2e22;--border2:#363b2a;
---gold:#c8a45a;--gold2:#a07e38;--gold-light:#e8c878;
---text:#e8e4d8;--text2:#8a8670;--text3:#5a5848;
---red:#c85050;--green:#6a9e5a;--blue:#5a8cd8;
+--bg:#f5f6f2;--surface:#ffffff;--surface2:#eff1ea;
+--border:#dfe3d6;--border2:#c7ccba;
+--gold:#8d6a1d;--gold2:#97772a;--gold-light:#6e5314;
+--text:#23271c;--text2:#626854;--text3:#9aa08c;
+--red:#b93d3d;--green:#3d7a34;--blue:#2f66b5;
 --radius:8px;
 }
 html{font-size:14px}
@@ -29,11 +29,11 @@ th{color:var(--text2);font-weight:500;font-size:.8rem;text-transform:uppercase;l
 td{font-size:.9rem}
 tr:hover{background:var(--surface2)}
 .badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:12px;letter-spacing:.5px;display:inline-block;white-space:nowrap}
-.badge-受注{background:rgba(240,192,64,.15);color:#f0c040;border:1px solid #f0c040}
-.badge-確認済{background:rgba(90,140,216,.15);color:#5a8cd8;border:1px solid #5a8cd8}
-.badge-発送済{background:rgba(200,164,90,.15);color:#c8a45a;border:1px solid #a07e38}
-.badge-納品完了{background:rgba(106,158,90,.15);color:#6a9e5a;border:1px solid #6a9e5a}
-.badge-キャンセル{background:rgba(200,80,80,.15);color:#c85050;border:1px solid #c85050}
+.badge-受注{background:rgba(240,192,64,.18);color:#8a6d10;border:1px solid #c9a52c}
+.badge-確認済{background:rgba(90,140,216,.15);color:#2f66b5;border:1px solid #2f66b5}
+.badge-発送済{background:rgba(200,164,90,.15);color:#8d6a1d;border:1px solid #97772a}
+.badge-納品完了{background:rgba(106,158,90,.15);color:#3d7a34;border:1px solid #3d7a34}
+.badge-キャンセル{background:rgba(200,80,80,.15);color:#b93d3d;border:1px solid #b93d3d}
 
 header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
 .header-left{display:flex;align-items:center;gap:16px}
@@ -41,7 +41,7 @@ header{background:var(--surface);border-bottom:1px solid var(--border);padding:1
 .header-nav{display:flex;gap:12px;font-size:.85rem}
 .header-right{display:flex;gap:8px;align-items:center}
 .btn{padding:8px 16px;border-radius:var(--radius);font-size:.85rem;font-weight:500;transition:all .2s}
-.btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#0d0f0a;font-weight:700}
+.btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#fff;font-weight:700}
 .btn-gold:hover{filter:brightness(1.1)}
 .btn-outline{border:1px solid var(--border2);color:var(--text2)}
 .btn-outline:hover{border-color:var(--gold2);color:var(--text)}
@@ -161,9 +161,9 @@ th,td{padding:8px 6px;font-size:.8rem}
   <div class="header-left">
     <h1>TGC 受発注管理</h1>
     <nav class="header-nav">
-      <a href="inventory.html">在庫管理</a>
-      <a href="capture.html">捕獲票</a>
-      <a href="portal.html">注文ポータル</a>
+      <a href="index.html" style="font-weight:700">&#x2190; 業務トップ</a>
+      <a href="index.html?tab=shipping">&#x1F4E4; 出荷処理（割当・スキャン）</a>
+      <a href="capture-form.html">捕獲票入力</a>
     </nav>
   </div>
   <div class="header-right">
@@ -172,6 +172,9 @@ th,td{padding:8px 6px;font-size:.8rem}
   </div>
 </header>
 
+<div style="background:var(--surface2);border-bottom:1px solid var(--border);padding:8px 24px;font-size:12.5px;color:var(--text2);line-height:1.8;">
+  注文の流れ: <strong>受注</strong>（ポータル/手入力）→「確認済にする」→ <a href="index.html?tab=shipping" style="font-weight:700">業務アプリの出荷処理タブ</a>でバーコード割当 → <strong>出荷確定</strong>すると自動で<strong>発送済</strong>に。ここでは注文の受付・確認・請求書類を扱います。
+</div>
 <div class="tabs">
   <div class="tab active" data-tab="orders" onclick="switchTab('orders')">&#x1f4cb; 注文一覧</div>
   <div class="tab" data-tab="shipping" onclick="switchTab('shipping')">&#x1f69a; 発送管理</div>
@@ -591,7 +594,7 @@ function renderShipping(){
       <div class="ship-card-items">${esc(summary)}</div>
       <div class="ship-actions">
         ${o.status==='受注'?`<button class="btn btn-blue btn-sm" onclick="changeStatus('${o.id}','確認済')">確認済にする</button>`:''}
-        ${o.status==='確認済'?`<button class="btn btn-green btn-sm" onclick="changeStatus('${o.id}','発送済')">&#x1f69a; 発送処理</button>`:''}
+        ${o.status==='確認済'?`<a class="btn btn-blue btn-sm" href="index.html?tab=shipping">&#x1F4E4; 出荷処理で割当</a> <button class="btn btn-green btn-sm" onclick="changeStatus('${o.id}','発送済')">&#x1f69a; 発送処理</button>`:''}
         <button class="btn btn-outline btn-sm" onclick="generateB2CSVFromOrders([allOrders.find(x=>x.id==='${o.id}')])">&#x1f4e6; 送り状CSV</button>
       </div>
     </div>`}).join('');

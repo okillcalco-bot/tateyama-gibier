@@ -2,7 +2,10 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="打刻">
 <title>出退勤打刻 | 館山ジビエセンター</title>
 <style>
 :root {
@@ -50,6 +53,7 @@ h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600;
 <div class="wrap">
   <div class="clock"><div class="time" id="clock-time">--:--</div><div class="date" id="clock-date"></div></div>
   <h1>🐗 館山ジビエセンター 出退勤打刻 — 自分の名前を押してください</h1>
+  <div id="today-shift" style="display:none;text-align:center;font-size:14px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:14px;line-height:1.8;"></div>
 
   <div class="names" id="names"></div>
 
@@ -238,6 +242,30 @@ loadNames();
 // タブレット常時表示: 復帰時と1時間ごとに名簿を再読込
 document.addEventListener('visibilitychange', () => { if (!document.hidden && !selected) loadNames(); });
 setInterval(() => { if (!selected) loadNames(); }, 3600000);
+</script>
+<script>
+// 画面スリープ防止（iOS16.4以降のSafari対応。ホーム画面追加からの起動で有効）
+let wakeLock=null;
+async function keepAwake(){ try{ if('wakeLock' in navigator){ wakeLock=await navigator.wakeLock.request('screen'); } }catch(e){} }
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') keepAwake(); });
+keepAwake();
+// 今日のシフトを表示
+(async()=>{
+  try{
+    const d=new Date();
+    const ymd=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const [shifts,staff]=await Promise.all([
+      sb('GET','shifts',null,`?date=eq.${ymd}&select=staff_id,shift_type`),
+      sb('GET','staff',null,'?select=id,name&deleted_at=is.null&is_active=eq.true')
+    ]);
+    if(!shifts.length) return;
+    const nm={}; staff.forEach(s=>nm[s.id]=s.name);
+    const g={}; shifts.forEach(s=>{ (g[s.shift_type]=g[s.shift_type]||[]).push(nm[s.staff_id]||'?'); });
+    const el=document.getElementById('today-shift');
+    el.innerHTML='📅 <strong>今日のシフト</strong>　'+Object.entries(g).map(([t,names])=>`${t}: ${names.join('・')}`).join('　/　');
+    el.style.display='block';
+  }catch(e){}
+})();
 </script>
 </body>
 </html>
