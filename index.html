@@ -4122,6 +4122,7 @@ function indRender() {
     <td>${i.quality || '-'}</td>
     <td style="white-space:nowrap;">
       <button class="btn btn-sm" onclick="findingsOpen('${i.label_id}')" title="胎児の有無・内臓所見（解体中でも追記OK）">🔬 所見</button>
+      <a class="btn btn-sm" href="capture-form.html?cityform=${encodeURIComponent(i.label_id)}" target="_blank" title="市役所提出用の有害鳥獣捕獲票を印刷">🏛 市役所票</a>
       <button class="btn btn-sm" onclick="indOpenEdit('${i.label_id}')">編集</button>
       <button class="btn btn-sm btn-danger" onclick="indDelete('${i.label_id}')">削除</button>
     </td>
