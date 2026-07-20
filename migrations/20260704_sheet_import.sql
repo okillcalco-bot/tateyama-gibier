@@ -58,3 +58,8 @@ exception when duplicate_object then null; end $$;
 -- ── 打刻体調チェック・送り状 2026-07-04 適用済み: punch_health_and_waybill ──
 -- attendance: health_in / health_out（出退勤時の体調。基本「異常なし」、異常時のみ内容記録）
 -- org_settings: org_phone / org_postal（送り状のご依頼主情報）
+
+-- ── 識別コードASCII化・精肉完了フラグ 2026-07-20 適用済み: ascii_ident_codes_and_processing_done ──
+-- individuals.processing_done_at: 精肉完了フラグ（部位登録なしでも完了にできる）
+-- inventory/processing_log: 識別コード・ロットコードのカタカナをローマ字化
+--   （CODE128バーコードは英数字のみのため。ア→A/ウ→U/キ→KI/シ→SHI/タ→TA/ハ→HA）
