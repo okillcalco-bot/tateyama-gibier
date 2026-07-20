@@ -374,19 +374,17 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <nav class="header-nav">
     <a href="capture-form.html">捕獲票入力</a>
     <a href="order-admin.html">受発注管理</a>
-    <a href="order-portal.html">注文ポータル</a>
   </nav>
-  <div class="header-barcode">
-    <label>バーコード:</label>
-    <input type="text" id="globalBarcode" placeholder="スキャンまたはコード入力..." />
-  </div>
 </div>
 
 <div class="app-layout">
 <nav class="sidenav" id="sidenav">
   <button class="tab-btn active" data-tab="dashboard">&#x1F4CA; ダッシュボード</button>
   <div class="nav-group">日々の業務</div>
+  <button class="tab-btn" data-tab="shifts">&#x1F4C5; シフト表</button>
+  <button class="tab-btn" data-tab="board">&#x1F4E3; 掲示板<span class="nav-badge" id="nav-badge-board"></span></button>
   <button class="tab-btn" data-tab="punch">&#x23F1; 出退勤打刻</button>
+  <button class="tab-btn" data-tab="cleaning">&#x1F9F9; 清掃記録(HACCP)<span class="nav-badge" id="nav-badge-cleaning"></span></button>
   <a class="tab-btn" href="capture-form.html">&#x1F4DD; 捕獲票入力</a>
   <button class="tab-btn" data-tab="individuals">&#x1FAA4; 捕獲受入・個体<span class="nav-badge" id="nav-badge-intake"></span></button>
   <button class="tab-btn" data-tab="aging" style="display:none;">&#x1F969; 熟成管理<span class="nav-badge" id="nav-badge-aging"></span></button>
@@ -396,15 +394,12 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <button class="tab-btn" data-tab="shipping">&#x1F4E4; 出荷処理<span class="nav-badge" id="nav-badge-shipping"></span></button>
   <button class="tab-btn" data-tab="trace">&#x1F50D; トレーサビリティ</button>
   <div class="nav-group">受発注</div>
-  <a class="tab-btn" href="order-admin.html">&#x1F4CB; 注文管理</a>
-  <a class="tab-btn" href="order-portal.html">&#x1F6D2; 顧客ポータル</a>
+  <a class="tab-btn" href="order-admin.html">&#x1F4CB; 受発注管理</a>
   <div class="nav-group">台帳（管理者のみ）</div>
   <button class="tab-btn" data-tab="hunters">&#x1F3F9; 捕獲者台帳</button>
   <button class="tab-btn" data-tab="customers">&#x1F3E2; 顧客台帳</button>
   <button class="tab-btn" data-tab="staff">&#x1F465; スタッフ管理</button>
   <button class="tab-btn" data-tab="supplies">&#x1F9F4; 資材在庫<span class="nav-badge" id="nav-badge-supplies"></span></button>
-  <div class="nav-group">施設・HACCP</div>
-  <button class="tab-btn" data-tab="cleaning">&#x1F9F9; 清掃記録<span class="nav-badge" id="nav-badge-cleaning"></span></button>
   <div class="nav-group">書類・帳票</div>
   <button class="tab-btn" data-tab="docs">&#x1F4C4; 書類・帳票<span class="nav-badge" id="nav-badge-docs"></span></button>
   <button class="tab-btn" data-tab="datamgmt">&#x1F5C4; データ管理</button>
@@ -713,6 +708,47 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   </div>
 
   <!-- Punch (出退勤打刻) -->
+  <!-- シフト表 -->
+  <div class="tab-panel" id="panel-shifts">
+    <div class="section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>📅 シフト表</span>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-sm" onclick="shiftWeekMove(-7)">← 前の週</button>
+          <strong id="shift-week-label" style="font-size:14px;"></strong>
+          <button class="btn btn-sm" onclick="shiftWeekMove(7)">次の週 →</button>
+          <button class="btn btn-sm" onclick="shiftWeekToday()">今週</button>
+          <button class="btn btn-sm" onclick="shiftExportICS()">📆 Googleカレンダー用に書き出し</button>
+        </div>
+      </div>
+      <div style="padding:8px 12px;border:1px dashed var(--border);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.8;background:var(--surface2);margin-bottom:10px;">
+        マスをタップするたびに <strong>出勤 → 早番 → 遅番 → 休み → （空欄）</strong> と切り替わります。誰でもその場で記入OK。
+        「📆 書き出し」でこの週のシフトをファイル保存し、Googleカレンダーの「設定 → インポート」で取り込めます。
+      </div>
+      <div style="overflow-x:auto;">
+        <table id="shift-table" style="min-width:760px;">
+          <thead id="shift-head"></thead>
+          <tbody id="shift-body"><tr><td class="empty-state" colspan="8">読み込み中...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 掲示板 -->
+  <div class="tab-panel" id="panel-board">
+    <div class="section">
+      <div class="section-title">📣 スタッフ掲示板</div>
+      <div id="board-summary" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">
+        <div class="form-group" style="margin:0;flex:2;min-width:220px;"><label>お知らせを書く</label><input class="form-input" id="board-title" placeholder="件名（例: 今週の予定 / 発注のお願い）" /></div>
+        <div class="form-group" style="margin:0;flex:1;min-width:140px;"><label>名前</label><select class="form-input" id="board-author"><option value="">選択...</option></select></div>
+        <button class="btn btn-primary" onclick="boardPost()">投稿</button>
+      </div>
+      <textarea class="form-input" id="board-body" rows="3" placeholder="本文（例: 金曜に○○食堂へ配達あり。真空パック袋の在庫が少ないので月曜に発注します）" style="width:100%;margin-top:-6px;margin-bottom:14px;"></textarea>
+      <div id="board-list"><div class="loading"><span class="spin"></span>読み込み中...</div></div>
+    </div>
+  </div>
+
   <div class="tab-panel" id="panel-punch">
     <div class="section">
       <div class="section-title">出退勤打刻</div>
@@ -1507,8 +1543,19 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'cleaning') loadCleaning();
     if (btn.dataset.tab === 'supplies') loadSupplies();
     if (btn.dataset.tab === 'datamgmt') loadDataMgmt();
+    if (btn.dataset.tab === 'shifts') loadShiftBoard();
+    if (btn.dataset.tab === 'board') loadBoard();
   });
 });
+
+/* ?tab=xxx で指定タブを直接開く（受発注管理からの誘導用） */
+(function() {
+  const t = new URLSearchParams(location.search).get('tab');
+  if (t) {
+    const btn = document.querySelector(`.tab-btn[data-tab="${t}"]`);
+    if (btn) setTimeout(() => btn.click(), 400);
+  }
+})();
 
 /* 出荷スキャン欄: スキャナーのEnterで読取登録 */
 document.getElementById('ship-scan-code').addEventListener('keydown', (e) => {
@@ -1661,9 +1708,11 @@ async function shipDirectConfirm() {
   }
 }
 
-/* ===== Barcode Scanner ===== */
+/* ===== Barcode Scanner =====
+   ヘッダーのバーコード欄は廃止（出荷処理タブのスキャン欄に統一）。
+   barcodeLookup はトレーサビリティ検索などから引き続き使用 */
 const barcodeInput = document.getElementById('globalBarcode');
-barcodeInput.addEventListener('keydown', async (e) => {
+if (barcodeInput) barcodeInput.addEventListener('keydown', async (e) => {
   if (e.key === 'Enter') {
     const code = barcodeInput.value.trim();
     if (!code) return;
@@ -3135,6 +3184,7 @@ function openProcessingMode() {
   checkBpacStatus();
   pmRenderSetupOps();
   pmLoadRecentIndividuals();
+  scaleTryAutoConnect(); // 前回許可済みのはかりへダイアログなしで自動接続
 }
 
 function closeProcessingMode() {
@@ -3539,31 +3589,8 @@ async function scaleConnect() {
     }
 
     // SJ-15KAWP-BT: 2400baud, 7bit, Even parity, 1stop (RsKey設定に合わせる)
-    await serialPort.open({ baudRate, dataBits: 7, stopBits: 1, parity: 'even' });
-
-    serialActive = true;
-    btn.textContent = '⚖️ はかり接続中';
-    btn.style.color = 'var(--green)';
-    btn.style.borderColor = 'var(--green)';
-    toast('はかり接続しました', 'success');
-
-    // 受信ループ
-    const decoder = new TextDecoderStream();
-    serialPort.readable.pipeTo(decoder.writable);
-    serialReader = decoder.readable.getReader();
-
-    let lineBuf = '';
-    while (serialActive) {
-      const { value, done } = await serialReader.read();
-      if (done) break;
-      lineBuf += value;
-      let nl;
-      while ((nl = lineBuf.indexOf('\n')) !== -1) {
-        const line = lineBuf.slice(0, nl).trim();
-        lineBuf = lineBuf.slice(nl + 1);
-        scaleHandleLine(line);
-      }
-    }
+    localStorage.setItem('tgc_scale_baud', String(baudRate)); // 次回の自動再接続用に記憶
+    await scaleOpenAndRead(baudRate);
   } catch(err) {
     serialActive = false;
     serialPort = null; serialReader = null;
@@ -3572,6 +3599,59 @@ async function scaleConnect() {
     btn.style.borderColor = 'var(--border)';
     toast('はかり接続エラー: ' + err.name + ' / ' + err.message, 'error');
   }
+}
+
+// ポートを開いて受信ループ（手動接続・自動再接続の共通処理）
+async function scaleOpenAndRead(baudRate) {
+  const btn = document.getElementById('scaleConnBtn');
+  await serialPort.open({ baudRate, dataBits: 7, stopBits: 1, parity: 'even' });
+
+  serialActive = true;
+  btn.textContent = '⚖️ はかり接続中';
+  btn.style.color = 'var(--green)';
+  btn.style.borderColor = 'var(--green)';
+  toast('はかり接続しました', 'success');
+
+  // 受信ループ
+  const decoder = new TextDecoderStream();
+  serialPort.readable.pipeTo(decoder.writable);
+  serialReader = decoder.readable.getReader();
+
+  let lineBuf = '';
+  while (serialActive) {
+    const { value, done } = await serialReader.read();
+    if (done) break;
+    lineBuf += value;
+    let nl;
+    while ((nl = lineBuf.indexOf('\n')) !== -1) {
+      const line = lineBuf.slice(0, nl).trim();
+      lineBuf = lineBuf.slice(nl + 1);
+      scaleHandleLine(line);
+    }
+  }
+}
+
+// 自動再接続: 一度「はかり未接続→ポート選択」で許可したポートは、
+// 次回からダイアログなしで再接続できる（電源の入れ直し・ブラウザ再起動後もOK）
+async function scaleTryAutoConnect() {
+  if (serialActive || !('serial' in navigator)) return;
+  const baud = parseInt(localStorage.getItem('tgc_scale_baud') || '');
+  if (!baud) return;
+  try {
+    const ports = await navigator.serial.getPorts();
+    if (!ports.length) return;
+    serialPort = ports[0];
+    await scaleOpenAndRead(baud);
+  } catch(e) {
+    serialActive = false;
+    serialPort = null; serialReader = null;
+    const btn = document.getElementById('scaleConnBtn');
+    if (btn) { btn.textContent = '⚖️ はかり未接続'; btn.style.color = 'var(--text2)'; btn.style.borderColor = 'var(--border)'; }
+  }
+}
+// はかりのUSBが挿さった/電源が入った瞬間にも自動再接続
+if ('serial' in navigator) {
+  navigator.serial.addEventListener('connect', () => setTimeout(scaleTryAutoConnect, 800));
 }
 
 function scaleHandleLine(line) {
@@ -5569,6 +5649,160 @@ async function docZipCategory(cat) {
   toast(`${cat} ${files.length}帳票をZIP出力しました`);
 }
 
+/* ───────── シフト表（誰でもタップで記入） ───────── */
+let shiftWeekStart = null;
+const SHIFT_TYPES = ['出勤', '早番', '遅番', '休み'];
+const SHIFT_COLORS = { '出勤': '#5a8cd8', '早番': '#6a9e5a', '遅番': '#c8a45a', '休み': '#c85050' };
+let shiftStaffList = [];
+let shiftMap = {}; // 'staffId|YYYY-MM-DD' → { id, shift_type }
+
+function ymdLocal(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function shiftMonday(d) { const x = new Date(d); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); x.setHours(0, 0, 0, 0); return x; }
+function shiftWeekMove(n) { shiftWeekStart.setDate(shiftWeekStart.getDate() + n); loadShiftBoard(); }
+function shiftWeekToday() { shiftWeekStart = shiftMonday(new Date()); loadShiftBoard(); }
+
+async function loadShiftBoard() {
+  if (!shiftWeekStart) shiftWeekStart = shiftMonday(new Date());
+  const days = [...Array(7)].map((_, i) => { const d = new Date(shiftWeekStart); d.setDate(d.getDate() + i); return d; });
+  document.getElementById('shift-week-label').textContent = `${days[0].getMonth() + 1}/${days[0].getDate()} 〜 ${days[6].getMonth() + 1}/${days[6].getDate()}`;
+  const youbi = ['月', '火', '水', '木', '金', '土', '日'];
+  const todayStr = ymdLocal(new Date());
+  document.getElementById('shift-head').innerHTML = '<tr><th>スタッフ</th>' + days.map((d, i) =>
+    `<th style="text-align:center;${i >= 5 ? 'color:var(--red);' : ''}${ymdLocal(d) === todayStr ? 'background:rgba(200,164,90,.12);' : ''}">${d.getMonth() + 1}/${d.getDate()}<br>${youbi[i]}</th>`).join('') + '</tr>';
+  try {
+    const [staff, shifts] = await Promise.all([
+      sb('GET', 'staff', null, '?is_active=eq.true&deleted_at=is.null&select=id,name&order=name.asc'),
+      sb('GET', 'shifts', null, `?date=gte.${ymdLocal(days[0])}&date=lte.${ymdLocal(days[6])}&select=id,staff_id,date,shift_type`)
+    ]);
+    shiftStaffList = staff;
+    shiftMap = {};
+    shifts.forEach(s => shiftMap[s.staff_id + '|' + s.date] = { id: s.id, shift_type: s.shift_type });
+    document.getElementById('shift-body').innerHTML = staff.map(st => '<tr><td style="font-weight:600;white-space:nowrap;">' + st.name + '</td>' + days.map(d => {
+      const key = st.id + '|' + ymdLocal(d);
+      const cur = shiftMap[key];
+      const col = cur ? (SHIFT_COLORS[cur.shift_type] || '#8a8670') : '';
+      return `<td style="text-align:center;cursor:pointer;user-select:none;padding:6px 4px;" onclick="shiftCellTap('${st.id}','${ymdLocal(d)}')">
+        <span style="display:inline-block;min-width:46px;padding:5px 6px;border-radius:8px;font-size:13px;font-weight:600;${cur ? `color:#fff;background:${col};` : 'color:var(--text3);border:1px dashed var(--border);'}">${cur ? cur.shift_type : '＋'}</span>
+      </td>`;
+    }).join('') + '</tr>').join('') || '<tr><td colspan="8" class="empty-state">スタッフがいません</td></tr>';
+  } catch (e) {
+    document.getElementById('shift-body').innerHTML = `<tr><td colspan="8" class="empty-state">読み込みエラー: ${e.message}</td></tr>`;
+  }
+}
+
+async function shiftCellTap(staffId, date) {
+  const key = staffId + '|' + date;
+  const cur = shiftMap[key];
+  const idx = cur ? SHIFT_TYPES.indexOf(cur.shift_type) : -1;
+  const next = idx + 1 < SHIFT_TYPES.length ? SHIFT_TYPES[idx + 1] : null; // 休みの次は空欄（削除）
+  try {
+    if (!cur) {
+      const r = await sb('POST', 'shifts', { staff_id: staffId, date: date, shift_type: next });
+      shiftMap[key] = { id: r[0].id, shift_type: next };
+    } else if (next) {
+      await sb('PATCH', 'shifts', { shift_type: next, updated_at: new Date().toISOString() }, `?id=eq.${cur.id}`);
+      shiftMap[key].shift_type = next;
+    } else {
+      await sb('DELETE', 'shifts', null, `?id=eq.${cur.id}`);
+      delete shiftMap[key];
+    }
+    loadShiftBoard();
+  } catch (e) { toast('シフト保存エラー: ' + e.message, 'error'); }
+}
+
+// Googleカレンダー取り込み用 .ics 書き出し（表示中の週）
+function shiftExportICS() {
+  const nameById = {};
+  shiftStaffList.forEach(s => nameById[s.id] = s.name);
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//TGC//shift//JA'];
+  let n = 0;
+  Object.entries(shiftMap).forEach(([key, v]) => {
+    const [sid, date] = key.split('|');
+    if (v.shift_type === '休み') return;
+    const d = date.replace(/-/g, '');
+    const nx = new Date(date); nx.setDate(nx.getDate() + 1);
+    lines.push('BEGIN:VEVENT', `UID:tgc-${sid}-${d}@tateyama-gibier`,
+      `DTSTART;VALUE=DATE:${d}`, `DTEND;VALUE=DATE:${ymdLocal(nx).replace(/-/g, '')}`,
+      `SUMMARY:${nameById[sid] || ''} ${v.shift_type}`, 'END:VEVENT');
+    n++;
+  });
+  lines.push('END:VCALENDAR');
+  if (!n) { toast('この週にシフトがまだ入っていません', 'error'); return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([lines.join('\r\n')], { type: 'text/calendar' }));
+  a.download = `shift-${ymdLocal(shiftWeekStart)}.ics`;
+  a.click();
+  toast(`${n}件を書き出しました。Googleカレンダーの「設定 → インポート」で取り込めます`);
+}
+
+/* ───────── スタッフ掲示板 ───────── */
+async function loadBoard() {
+  try {
+    const staff = await sb('GET', 'staff', null, '?is_active=eq.true&deleted_at=is.null&select=name&order=name.asc');
+    const sel = document.getElementById('board-author');
+    if (sel && sel.options.length <= 1) sel.innerHTML = '<option value="">選択...</option>' + staff.map(s => `<option>${s.name}</option>`).join('');
+  } catch (e) {}
+  // サマリー: 出荷待ち・発注状況・今週のシフト
+  try {
+    const mon = shiftMonday(new Date()); const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+    const [orders, sup, shifts] = await Promise.all([
+      sb('GET', 'orders', null, '?status=eq.確認済&select=id,customer_name'),
+      sb('GET', 'supplies', null, '?select=name,stock_qty,min_qty&deleted_at=is.null'),
+      sb('GET', 'shifts', null, `?date=gte.${ymdLocal(mon)}&date=lte.${ymdLocal(sun)}&select=id`)
+    ]);
+    const low = sup.filter(s => Number(s.stock_qty) <= Number(s.min_qty));
+    const chip = (t, warn) => `<span style="padding:6px 12px;border-radius:14px;font-size:13px;background:${warn ? 'rgba(200,80,80,.08)' : 'var(--surface2)'};border:1px solid ${warn ? 'rgba(200,80,80,.4)' : 'var(--border)'};color:${warn ? 'var(--red)' : 'var(--text)'};">${t}</span>`;
+    document.getElementById('board-summary').innerHTML =
+      chip(`📤 出荷待ち ${orders.length}件` + (orders.length ? `（${orders.map(o => o.customer_name || '-').slice(0, 3).join('・')}${orders.length > 3 ? ' ほか' : ''}）` : ''), orders.length > 0) +
+      chip(`🧴 発注が必要な資材 ${low.length}件` + (low.length ? `（${low.map(s => s.name).slice(0, 3).join('・')}${low.length > 3 ? ' ほか' : ''}）` : ''), low.length > 0) +
+      chip(`📅 今週のシフト登録 ${shifts.length}件`, false);
+  } catch (e) {}
+  // 投稿一覧
+  try {
+    const posts = await sb('GET', 'staff_board', null, '?deleted_at=is.null&select=*&order=pinned.desc,created_at.desc&limit=50');
+    const box = document.getElementById('board-list');
+    if (!posts.length) { box.innerHTML = '<div class="empty-state">まだ投稿はありません。上の欄から最初のお知らせを書いてみてください</div>'; return; }
+    box.innerHTML = posts.map(p => `<div style="padding:12px 14px;border:1px solid ${p.pinned ? 'var(--gold2)' : 'var(--border)'};border-radius:var(--radius);margin-bottom:8px;background:${p.pinned ? 'rgba(200,164,90,.06)' : 'var(--surface)'};">
+      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;">
+        <strong>${p.pinned ? '📌 ' : ''}${esc2(p.title || '（無題）')}</strong>
+        <span style="font-size:12px;color:var(--text2);display:flex;gap:6px;align-items:center;">${esc2(p.author || '-')} / ${new Date(p.created_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+          <button class="btn btn-sm" onclick="boardPin('${p.id}', ${p.pinned ? 'false' : 'true'})">${p.pinned ? '📌 解除' : '📌 固定'}</button>
+          <button class="btn btn-sm" onclick="boardDelete('${p.id}')">削除</button></span>
+      </div>
+      <div style="font-size:14px;line-height:1.7;margin-top:4px;white-space:pre-wrap;">${esc2(p.body)}</div>
+    </div>`).join('');
+  } catch (e) {
+    document.getElementById('board-list').innerHTML = `<div class="empty-state">読み込みエラー: ${e.message}</div>`;
+  }
+}
+
+async function boardPost() {
+  const title = document.getElementById('board-title').value.trim();
+  const body = document.getElementById('board-body').value.trim();
+  const author = document.getElementById('board-author').value;
+  if (!body) { toast('本文を入力してください', 'error'); return; }
+  if (!author) { toast('名前を選択してください', 'error'); return; }
+  try {
+    await sb('POST', 'staff_board', { title: title || null, body, author });
+    document.getElementById('board-title').value = '';
+    document.getElementById('board-body').value = '';
+    toast('投稿しました');
+    loadBoard();
+  } catch (e) { toast('投稿に失敗しました: ' + e.message, 'error'); }
+}
+
+async function boardPin(id, pin) {
+  try { await sb('PATCH', 'staff_board', { pinned: pin }, `?id=eq.${id}`); loadBoard(); }
+  catch (e) { toast('更新に失敗しました: ' + e.message, 'error'); }
+}
+
+async function boardDelete(id) {
+  if (!requireAdmin('掲示板の投稿削除')) return;
+  if (!confirm('この投稿を削除しますか？')) return;
+  try { await sb('PATCH', 'staff_board', { deleted_at: new Date().toISOString() }, `?id=eq.${id}`); loadBoard(); }
+  catch (e) { toast('削除に失敗しました: ' + e.message, 'error'); }
+}
+
 /* ── ダッシュボード「今日やること」 ── */
 async function loadTodayTodos() {
   const box = document.getElementById('today-todos');
@@ -5618,7 +5852,7 @@ async function loadCustomersReg() {
   const body = document.getElementById('cust-body');
   body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
   try {
-    customersRegData = await sb('GET', 'customers', null, '?select=id,code,name,kana,honorific,phone,email,address,building,price_rank,is_active,notes&order=kana.asc.nullslast&limit=2000');
+    customersRegData = await sb('GET', 'customers', null, '?select=id,code,name,kana,honorific,phone,email,address,building,price_rank,is_active,notes,signup_source,order_method,notify_method&order=kana.asc.nullslast&limit=2000');
   } catch (err) {
     body.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);">${esc2(sbSafeMsg(err))}</td></tr>`;
     return;
@@ -5638,12 +5872,25 @@ function renderCustomersReg() {
     <td style="white-space:nowrap;">${esc2(c.phone || '-')}</td>
     <td style="font-size:12px;">${esc2(c.address || '')}${c.building ? ' ' + esc2(c.building) : ''}</td>
     <td>${esc2(c.price_rank || 'standard')}</td>
-    <td>${c.is_active === false ? '無効' : '有効'}</td>
+    <td>${c.is_active === false ? (c.signup_source === 'signup-form' ? '<span class="badge badge-red">申込・未承認</span>' : '無効') : '有効'}</td>
     <td style="white-space:nowrap;">
+      ${c.is_active === false && c.signup_source === 'signup-form' ? `<button class="btn btn-sm btn-primary" onclick="custApprove('${c.id}')">✅ 承認</button> ` : ''}
       <button class="btn btn-sm" onclick="custRegEdit('${c.id}')">編集</button>
       <button class="btn btn-sm" onclick="waybillOpenFromCustomer('${c.id}')">🚚 送り状</button>
     </td>
   </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text3);">該当なし</td></tr>';
+}
+
+async function custApprove(id) {
+  if (!requireAdmin('新規顧客の承認')) return;
+  const c = customersRegData.find(x => String(x.id) === String(id));
+  if (!c) return;
+  if (!confirm(`「${c.name}」を承認して取引を開始しますか？\n承認後、注文ポータルのURLとパスワードを先方に案内してください。`)) return;
+  try {
+    await sb('PATCH', 'customers', { is_active: true }, `?id=eq.${id}`);
+    toast(`${c.name} を承認しました。顧客の「編集」からポータルのパスワードを設定して案内してください`);
+    loadCustomersReg();
+  } catch(e) { toast('承認に失敗しました: ' + e.message, 'error'); }
 }
 
 function custRegOpenNew() {

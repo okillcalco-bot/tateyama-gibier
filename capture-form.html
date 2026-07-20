@@ -1890,5 +1890,12 @@ document.getElementById('weight').addEventListener('focus', function() {
   this.select();
 });
 </script>
+<script>
+// 捕獲者ごとの共有リンク: capture-form.html?hunter=氏名 で名前が入った状態で開く
+(function(){
+  const h=new URLSearchParams(location.search).get('hunter');
+  if(h){ const el=document.getElementById('hunterName'); if(el && !el.value) el.value=h; }
+})();
+</script>
 </body>
 </html>

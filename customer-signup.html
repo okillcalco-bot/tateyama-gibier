@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>お取引申込 | 館山ジビエセンター</title>
+<style>
+:root {
+  --bg: #f5f6f2; --surface: #ffffff; --surface2: #eff1ea;
+  --border: #dfe3d6; --gold: #8d6a1d; --gold2: #97772a;
+  --text: #23271c; --text2: #626854; --text3: #9aa08c;
+  --red: #b93d3d; --green: #3d7a34; --radius: 10px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: var(--text); font-size: 16px; line-height: 1.7; }
+.wrap { max-width: 640px; margin: 0 auto; padding: 24px 16px 80px; }
+h1 { font-size: 20px; color: var(--gold); margin-bottom: 4px; }
+.sub { font-size: 13.5px; color: var(--text2); margin-bottom: 20px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 16px; margin-bottom: 16px; }
+.card h2 { font-size: 15px; color: var(--gold); margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+label { display: block; font-size: 13px; color: var(--text2); margin: 12px 0 4px; font-weight: 600; }
+label .req { color: var(--red); font-size: 11px; margin-left: 4px; }
+input, select, textarea { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 16px; font-family: inherit; background: #fff; color: var(--text); }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--gold2); }
+.btn { display: block; width: 100%; padding: 16px; border: none; border-radius: var(--radius); background: linear-gradient(135deg, var(--gold), var(--gold2)); color: #fff; font-size: 17px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.btn:disabled { opacity: .5; }
+.note { font-size: 12.5px; color: var(--text2); background: var(--surface2); border-radius: 8px; padding: 10px 12px; margin-top: 14px; line-height: 1.8; }
+#done { display: none; text-align: center; padding: 40px 16px; }
+#done .big { font-size: 48px; }
+#err { display: none; color: var(--red); font-size: 14px; margin-top: 10px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="form-area">
+    <h1>🐗 館山ジビエセンター お取引申込</h1>
+    <div class="sub">飲食店様・小売店様向けの新規登録フォームです。ご記入いただくと、担当者が確認のうえ、ご注文用ページ（注文ポータル）のご案内をお送りします。</div>
+
+    <div class="card">
+      <h2>お店の情報</h2>
+      <label>店名<span class="req">必須</span></label>
+      <input id="f-name" placeholder="例: 山海亭">
+      <label>店名かな</label>
+      <input id="f-kana" placeholder="例: さんかいてい">
+      <label>会社名（あれば）</label>
+      <input id="f-company" placeholder="例: 株式会社〇〇">
+      <label>ご担当者名<span class="req">必須</span></label>
+      <input id="f-contact" placeholder="例: 山田 太郎">
+    </div>
+
+    <div class="card">
+      <h2>連絡先・お届け先</h2>
+      <label>電話番号<span class="req">必須</span></label>
+      <input id="f-phone" type="tel" placeholder="例: 0470-00-0000">
+      <label>メールアドレス</label>
+      <input id="f-email" type="email" placeholder="例: info@example.com">
+      <label>お届け先住所<span class="req">必須</span></label>
+      <input id="f-address" placeholder="例: 千葉県館山市〇〇 1-2-3">
+      <label>建物名・部屋番号</label>
+      <input id="f-building" placeholder="例: 〇〇ビル1F">
+      <label>希望のお届け時間帯</label>
+      <select id="f-timezone">
+        <option value="0000">指定なし</option>
+        <option value="0812">午前中</option>
+        <option value="1416">14〜16時</option>
+        <option value="1618">16〜18時</option>
+        <option value="1820">18〜20時</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <h2>ご注文・ご案内の方法</h2>
+      <label>ご注文はどの方法が便利ですか？</label>
+      <select id="f-order-method">
+        <option value="注文ポータル">注文ポータル（Webから24時間・おすすめ）</option>
+        <option value="LINE">LINE</option>
+        <option value="電話">電話</option>
+        <option value="FAX">FAX</option>
+      </select>
+      <label>入荷情報・商品案内の受け取り方法</label>
+      <select id="f-notify-method">
+        <option value="LINE">LINE</option>
+        <option value="メール">メール</option>
+        <option value="不要">案内は不要</option>
+      </select>
+      <label>ご要望・よく使う部位など（任意）</label>
+      <textarea id="f-notes" rows="3" placeholder="例: イノシシのロースを週1で2kgほど使いたい。骨付きも興味あり。"></textarea>
+    </div>
+
+    <button class="btn" id="submit-btn" onclick="submitSignup()">申込を送信する</button>
+    <div id="err"></div>
+    <div class="note">
+      送信後、担当者が内容を確認してご連絡します（通常1〜2営業日）。承認が完了すると、注文ポータルのログイン情報をお送りします。ポータルでは在庫を見ながら24時間いつでも注文でき、入荷のお知らせも受け取れます。
+    </div>
+  </div>
+
+  <div id="done">
+    <div class="big">✅</div>
+    <h1>申込を受け付けました</h1>
+    <div class="sub" style="margin-top:8px;">ご記入ありがとうございます。担当者が確認のうえ、ご連絡いたします。<br>お急ぎの場合はお電話ください。</div>
+  </div>
+</div>
+
+<script>
+const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+async function sb(method, table, body, query = '') {
+  const res = await fetch(`${SB_URL}/rest/v1/${table}${query}`, {
+    method,
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const t = await res.text();
+  return t ? JSON.parse(t) : [];
+}
+const v = id => document.getElementById(id).value.trim();
+async function submitSignup() {
+  const err = document.getElementById('err');
+  err.style.display = 'none';
+  if (!v('f-name') || !v('f-contact') || !v('f-phone') || !v('f-address')) {
+    err.textContent = '「必須」の項目（店名・ご担当者名・電話番号・住所）を入力してください';
+    err.style.display = 'block';
+    return;
+  }
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true; btn.textContent = '送信中...';
+  try {
+    await sb('POST', 'customers', {
+      code: 'S' + Date.now().toString(36).toUpperCase(),
+      name: v('f-name'), kana: v('f-kana') || null,
+      company1: v('f-company') || null,
+      contact_name: v('f-contact'), phone: v('f-phone'), email: v('f-email') || null,
+      address: v('f-address'), building: v('f-building') || null,
+      default_time_zone: document.getElementById('f-timezone').value,
+      order_method: document.getElementById('f-order-method').value,
+      notify_method: document.getElementById('f-notify-method').value,
+      notes: v('f-notes') || null,
+      is_active: false,
+      signup_source: 'signup-form'
+    });
+    document.getElementById('form-area').style.display = 'none';
+    document.getElementById('done').style.display = 'block';
+    window.scrollTo(0, 0);
+  } catch (e) {
+    err.textContent = '送信に失敗しました。電波の良い場所でもう一度お試しください';
+    err.style.display = 'block';
+    btn.disabled = false; btn.textContent = '申込を送信する';
+  }
+}
+</script>
+</body>
+</html>
