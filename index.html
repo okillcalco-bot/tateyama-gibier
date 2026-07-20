@@ -518,6 +518,12 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="form-group"><label>個体番号で検索</label><input class="form-input" id="proc-search" placeholder="例: TGC-08-T001" /></div>
         <div class="form-group"><label>&nbsp;</label><button class="btn" onclick="searchIndividual()">検索</button></div>
       </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;">
+        <button class="btn btn-sm btn-primary" id="proc-view-todo" onclick="procSetView('todo')">未処理</button>
+        <button class="btn btn-sm" id="proc-view-done" onclick="procSetView('done')">✔ 完了済み</button>
+        <span style="flex:1;"></span>
+        <button class="btn btn-sm" onclick="procBulkDone()" style="color:var(--text2);">⚡ 過去分をまとめて完了にする</button>
+      </div>
       <table id="proc-individual-table" style="margin-top:12px;">
         <thead><tr><th>個体番号</th><th>種別</th><th>体重(kg)</th><th>捕獲日</th><th>操作</th></tr></thead>
         <tbody id="proc-ind-body"></tbody>
@@ -1155,7 +1161,15 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <!-- Shipping -->
   <div class="tab-panel" id="panel-shipping">
     <div class="section" id="ship-workbench">
-      <div class="section-title">バーコード出荷スキャン</div>
+      <div class="section-title">バーコード出荷スキャン（注文あり）</div>
+      <div style="padding:10px 12px;border:1px dashed var(--gold2);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.9;background:var(--surface2);margin-bottom:10px;">
+        📖 <strong style="color:var(--gold);">やり方</strong><br>
+        ① 下の<strong>出荷待ち注文一覧</strong>から、出したい注文の「<strong>📌 この注文に割当</strong>」を押す（お店を選ぶイメージ）<br>
+        ② 出す商品のラベルの<strong>バーコードをハンディスキャナで読む</strong>（ピッ）→ 自動でその注文の行に割り当たります<br>
+        ③ 全部の行が割当できたら、注文の「<strong>出荷確定</strong>」を押して完了<br>
+        ・スキャナが無いときは、ラベルの識別コード（例: TGC-08-KI018-RO）を入力欄に打って「読取登録」でも同じです<br>
+        ・違う商品を読むと「種が違う」「部位が違う」と理由が出ます。そのまま正しいラベルを読み直せばOK
+      </div>
       <div id="ship-selected-order" style="margin-bottom:10px;padding:10px 14px;border-radius:var(--radius);border:1px dashed var(--border);background:var(--surface2);font-size:14px;color:var(--text2);">
         出庫先の注文が未選択です。下の注文一覧から「📌 この注文に割当」を押してください。
       </div>
@@ -1168,6 +1182,27 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
       <div id="ship-scan-result" style="display:none;margin-top:12px;padding:12px 14px;border-radius:var(--radius);font-size:14px;line-height:1.6;"></div>
     </div>
+
+    <div class="section" id="ship-direct">
+      <div class="section-title">⚡ 注文なし出荷（直販・突然の来店）</div>
+      <div style="padding:10px 12px;border:1px dashed var(--border);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.9;background:var(--surface2);margin-bottom:10px;">
+        事前注文のないお客さんに出すとき: ① 出す商品のラベルを<strong>先にスキャン</strong>（何個でもOK）→ ② <strong>誰に出したか</strong>をお店検索か手入力でメモ → ③「出荷確定」。在庫が出荷済みになり、注文記録も自動で残ります。
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;">
+        <input class="form-input" id="ship-direct-code" placeholder="商品バーコードをスキャン（識別コード）" autocomplete="off" style="flex:1;min-width:240px;font-size:18px;padding:12px 14px;" />
+        <button class="btn" onclick="shipDirectScan()" style="font-size:16px;padding:12px 22px;">＋ 追加</button>
+      </div>
+      <div id="ship-direct-list" style="margin-top:10px;"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
+        <div class="form-group" style="margin:0;flex:1;min-width:220px;"><label>出荷先（お店名を検索 or そのまま入力）</label>
+          <input class="form-input" id="ship-direct-cust" list="shipCustDatalist" placeholder="例: 山海亭 / 一般のお客様" autocomplete="off" />
+          <datalist id="shipCustDatalist"></datalist>
+        </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:180px;"><label>メモ（任意）</label><input class="form-input" id="ship-direct-memo" placeholder="現金払い、後日請求 など" /></div>
+        <button class="btn btn-primary" id="ship-direct-confirm" onclick="shipDirectConfirm()" style="font-size:16px;padding:12px 24px;" disabled>出荷確定</button>
+      </div>
+    </div>
+
     <div class="section">
       <div class="section-title">出荷待ち注文一覧</div>
       <div id="ship-orders"><div class="loading"><span class="spin"></span>読み込み中...</div></div>
@@ -1483,6 +1518,149 @@ document.getElementById('ship-scan-code').addEventListener('keydown', (e) => {
   }
 });
 
+/* ── 注文なし出荷（直販・突然の来店） ── */
+let shipDirectItems = [];
+document.getElementById('ship-direct-code').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); shipDirectScan(); }
+});
+document.getElementById('ship-direct-cust').addEventListener('input', shipDirectUpdateConfirm);
+
+function shipDirectUpdateConfirm() {
+  const btn = document.getElementById('ship-direct-confirm');
+  if (btn) btn.disabled = !(shipDirectItems.length && document.getElementById('ship-direct-cust').value.trim());
+}
+
+function shipDirectRender() {
+  const box = document.getElementById('ship-direct-list');
+  if (!shipDirectItems.length) {
+    box.innerHTML = '';
+  } else {
+    box.innerHTML = `<table><thead><tr><th>識別コード</th><th>種別</th><th>部位</th><th>重量(kg)</th><th></th></tr></thead><tbody>` +
+      shipDirectItems.map((it, idx) => `<tr>
+        <td style="color:var(--gold);font-weight:600;">${it.ident_code}</td>
+        <td>${speciesIcon(it.species)} ${it.species || '-'}</td>
+        <td>${it.part_name || '-'}</td>
+        <td>${it.weight || '-'}</td>
+        <td><button class="btn btn-sm" onclick="shipDirectRemove(${idx})">✕ 外す</button></td>
+      </tr>`).join('') +
+      `</tbody></table>
+      <div style="margin-top:6px;font-size:13px;color:var(--text2);">合計 <strong>${shipDirectItems.length}点 / ${shipDirectItems.reduce((s,i)=>s+(parseFloat(i.weight)||0),0).toFixed(2)}kg</strong></div>`;
+  }
+  shipDirectUpdateConfirm();
+}
+
+function shipDirectRemove(idx) {
+  shipDirectItems.splice(idx, 1);
+  shipDirectRender();
+}
+
+async function shipDirectScan() {
+  const input = document.getElementById('ship-direct-code');
+  const code = (input.value || '').trim();
+  input.value = '';
+  input.focus();
+  if (!code) return;
+  if (shipDirectItems.some(i => i.ident_code === code)) {
+    toast(`「${code}」はすでにリストに入っています`, 'error');
+    playFeedbackSound(false);
+    return;
+  }
+  try {
+    const invs = await sb('GET', 'inventory', null, `?ident_code=eq.${encodeURIComponent(code)}&deleted_at=is.null&select=id,ident_code,part_name,weight,species,individual_id,status`);
+    if (!invs.length) {
+      toast(`在庫に「${code}」が見つかりません。ラベルの識別コードを確認してください`, 'error');
+      playFeedbackSound(false);
+      return;
+    }
+    const inv = invs[0];
+    if (inv.status !== '在庫') {
+      toast(`「${code}」はステータスが「${inv.status}」のため出せません（在庫のみ出荷できます）`, 'error');
+      playFeedbackSound(false);
+      return;
+    }
+    if (!inv.species && inv.individual_id) {
+      try {
+        const inds = await sb('GET', 'individuals', null, `?label_id=eq.${encodeURIComponent(inv.individual_id)}&select=species`);
+        if (inds.length) inv.species = inds[0].species || '';
+      } catch(e) {}
+    }
+    shipDirectItems.push(inv);
+    shipDirectRender();
+    playFeedbackSound(true);
+    toast(`追加: ${inv.ident_code}（${inv.part_name || '-'} ${inv.weight || '?'}kg）`);
+  } catch(e) {
+    toast('読み取りエラー: ' + e.message, 'error');
+    playFeedbackSound(false);
+  }
+}
+
+async function shipDirectConfirm() {
+  const custName = document.getElementById('ship-direct-cust').value.trim();
+  const memo = document.getElementById('ship-direct-memo').value.trim();
+  const operator = document.getElementById('ship-operator') ? document.getElementById('ship-operator').value : '';
+  if (!shipDirectItems.length) { toast('先に商品をスキャンしてください', 'error'); return; }
+  if (!custName) { toast('出荷先（お店名など）を入力してください', 'error'); return; }
+  const totalW = shipDirectItems.reduce((s,i)=>s+(parseFloat(i.weight)||0),0);
+  if (!confirm(`注文なし出荷を確定しますか？\n\n出荷先: ${custName}\n商品: ${shipDirectItems.length}点 / ${totalW.toFixed(2)}kg\n${shipDirectItems.map(i=>`・${i.ident_code}（${i.part_name||'-'}）`).join('\n')}\n\n在庫が「出荷済」になります。`)) return;
+
+  const btn = document.getElementById('ship-direct-confirm');
+  btn.disabled = true;
+  try {
+    // 顧客台帳に完全一致があれば紐付ける
+    let customerId = null;
+    try {
+      const custs = await sb('GET', 'customers', null, `?name=eq.${encodeURIComponent(custName)}&select=id&limit=2`);
+      if (custs.length === 1) customerId = custs[0].id;
+    } catch(e) {}
+
+    const now = new Date();
+    const orderCode = 'DIR-' + now.toISOString().slice(0,10).replace(/-/g,'') + '-' + now.toTimeString().slice(0,8).replace(/:/g,'');
+    const orderBody = {
+      order_code: orderCode,
+      customer_name: custName,
+      delivery_name: custName,
+      order_date: now.toISOString().slice(0,10),
+      delivery_date: now.toISOString().slice(0,10),
+      status: '出荷済',
+      channel: '直販（注文なし）',
+      notes: [memo, operator ? `担当:${operator}` : ''].filter(Boolean).join(' / ') || null
+    };
+    if (customerId) orderBody.customer_id = customerId;
+    const created = await sb('POST', 'orders', orderBody);
+    const orderId = created[0].id;
+
+    await sb('POST', 'order_items', shipDirectItems.map(i => ({
+      order_id: orderId,
+      inventory_id: i.id,
+      part_name: i.part_name || '-',
+      species: i.species || null,
+      weight: parseFloat(i.weight) || null,
+      weight_kg: parseFloat(i.weight) || null
+    })));
+
+    const shipBody = { order_id: orderId, shipment_date: now.toISOString().slice(0,10), status: '出荷済', notes: `直販（注文なし） ${custName}${operator ? ' 担当:'+operator : ''}` };
+    if (customerId) shipBody.customer_id = customerId;
+    await sb('POST', 'shipments', shipBody);
+
+    for (const i of shipDirectItems) {
+      await sb('PATCH', 'inventory', { status: '出荷済', updated_at: now.toISOString() }, `?id=eq.${i.id}`);
+    }
+
+    playFeedbackSound(true);
+    toast(`直販出荷を記録しました: ${custName} へ ${shipDirectItems.length}点（${orderCode}）`);
+    shipDirectItems = [];
+    shipDirectRender();
+    document.getElementById('ship-direct-cust').value = '';
+    document.getElementById('ship-direct-memo').value = '';
+    loadDashboard();
+  } catch(e) {
+    playFeedbackSound(false);
+    toast('直販出荷の記録に失敗しました: ' + e.message, 'error');
+  } finally {
+    shipDirectUpdateConfirm();
+  }
+}
+
 /* ===== Barcode Scanner ===== */
 const barcodeInput = document.getElementById('globalBarcode');
 barcodeInput.addEventListener('keydown', async (e) => {
@@ -1764,49 +1942,97 @@ async function changeStatus(id, code) {
 }
 
 /* ===== Processing ===== */
+let procView = 'todo'; // 'todo'=未処理 / 'done'=完了済み
+function procSetView(v) {
+  procView = v;
+  document.getElementById('proc-view-todo').classList.toggle('btn-primary', v === 'todo');
+  document.getElementById('proc-view-done').classList.toggle('btn-primary', v === 'done');
+  loadProcessingSetup();
+}
+
+function procRowHtml(i, done, hasInv) {
+  const doneBadge = done ? ' <span class="badge badge-green">精肉済</span>' : '';
+  const btns = done
+    ? `<button class="btn btn-sm" onclick="selectIndividual('${i.label_id}')">🔪 追加登録</button>` +
+      (hasInv ? '' : ` <button class="btn btn-sm" onclick="procMarkUndone('${i.label_id}')">↩ 未処理に戻す</button>`)
+    : `<button class="btn btn-sm" onclick="selectIndividual('${i.label_id}')">🔪 精肉モードで開く</button>
+       <button class="btn btn-sm" onclick="procMarkDone('${i.label_id}')" style="color:var(--green);">✔ 完了にする</button>`;
+  return `<tr>
+    <td style="color:var(--gold);font-weight:600">${i.label_id}${doneBadge}</td>
+    <td>${speciesIcon(i.species)} ${i.species||'-'}</td>
+    <td>${i.weight_total||'-'}</td>
+    <td>${fmt(i.capture_date)}</td>
+    <td>${btns}</td>
+  </tr>`;
+}
+
 async function loadProcessingSetup() {
   try {
     priceMaster = await sb('GET', 'price_master', null, '?select=*');
   } catch(e) {
     toast('価格マスタ読み込みエラー', 'error');
   }
-  // Load individuals not yet in inventory (unprocessed)
   try {
     const [inds, invIds] = await Promise.all([
-      sb('GET', 'individuals', null, '?select=label_id,species,weight_total,capture_date,hunter_name&order=created_at.desc&limit=50'),
-      sb('GET', 'inventory', null, '?select=individual_id')
+      sb('GET', 'individuals', null, '?select=label_id,species,weight_total,capture_date,hunter_name,processing_done_at&deleted_at=is.null&order=created_at.desc&limit=400'),
+      sb('GET', 'inventory', null, '?select=individual_id&deleted_at=is.null')
     ]);
-    const processed = new Set(invIds.map(i => i.individual_id));
-    const unprocessed = inds.filter(i => !processed.has(i.label_id));
+    const withInv = new Set(invIds.map(i => i.individual_id));
+    const isDone = i => !!i.processing_done_at || withInv.has(i.label_id);
+    const list = inds.filter(i => procView === 'done' ? isDone(i) : !isDone(i));
     const body = document.getElementById('proc-ind-body');
-    if (!unprocessed.length) {
-      body.innerHTML = '<tr><td colspan="5" class="empty-state">未処理の個体はありません</td></tr>';
+    if (!list.length) {
+      body.innerHTML = `<tr><td colspan="5" class="empty-state">${procView === 'done' ? '完了済みの個体はありません' : '未処理の個体はありません'}</td></tr>`;
       return;
     }
-    body.innerHTML = unprocessed.map(i => `<tr>
-      <td style="color:var(--gold);font-weight:600">${i.label_id}</td>
-      <td>${speciesIcon(i.species)} ${i.species||'-'}</td>
-      <td>${i.weight_total||'-'}</td>
-      <td>${fmt(i.capture_date)}</td>
-      <td><button class="btn btn-sm" onclick="selectIndividual('${i.label_id}')">🔪 精肉モードで開く</button></td>
-    </tr>`).join('');
+    body.innerHTML = list.map(i => procRowHtml(i, isDone(i), withInv.has(i.label_id))).join('');
   } catch(e) { toast('個体一覧読み込みエラー: ' + e.message, 'error'); }
+}
+
+async function procMarkDone(labelId) {
+  if (!confirm(`${labelId} を「精肉完了」にしますか？\n（部位の登録なしで完了扱いになり、未処理一覧から消えます。「完了済み」タブからいつでも戻せます）`)) return;
+  try {
+    await sb('PATCH', 'individuals', { processing_done_at: new Date().toISOString() }, `?label_id=eq.${encodeURIComponent(labelId)}`);
+    toast(`${labelId} を精肉完了にしました`);
+    loadProcessingSetup();
+  } catch(e) { toast('更新に失敗しました: ' + e.message, 'error'); }
+}
+
+async function procMarkUndone(labelId) {
+  try {
+    await sb('PATCH', 'individuals', { processing_done_at: null }, `?label_id=eq.${encodeURIComponent(labelId)}`);
+    toast(`${labelId} を未処理に戻しました`);
+    loadProcessingSetup();
+  } catch(e) { toast('更新に失敗しました: ' + e.message, 'error'); }
+}
+
+async function procBulkDone() {
+  if (!requireAdmin('過去分の一括完了')) return;
+  const d = prompt('この日付より前に捕獲された個体を、まとめて「精肉完了」にします。\n日付を入力してください（例: 2026-07-01）');
+  if (!d) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d.trim())) { toast('日付は 2026-07-01 の形式で入力してください', 'error'); return; }
+  try {
+    const targets = await sb('GET', 'individuals', null, `?capture_date=lt.${d.trim()}&processing_done_at=is.null&deleted_at=is.null&select=label_id`);
+    if (!targets.length) { toast('対象の個体はありませんでした'); return; }
+    if (!confirm(`${d} より前に捕獲された ${targets.length}頭 を「精肉完了」にします。よろしいですか？`)) return;
+    await sb('PATCH', 'individuals', { processing_done_at: new Date().toISOString() }, `?capture_date=lt.${d.trim()}&processing_done_at=is.null&deleted_at=is.null`);
+    toast(`${targets.length}頭を精肉完了にしました`);
+    loadProcessingSetup();
+  } catch(e) { toast('一括更新に失敗しました: ' + e.message, 'error'); }
 }
 
 async function searchIndividual() {
   const q = document.getElementById('proc-search').value.trim();
   if (!q) return;
   try {
-    const inds = await sb('GET', 'individuals', null, `?label_id=ilike.*${encodeURIComponent(q)}*&select=label_id,species,weight_total,capture_date,hunter_name&limit=10`);
+    const [inds, invIds] = await Promise.all([
+      sb('GET', 'individuals', null, `?label_id=ilike.*${encodeURIComponent(q)}*&deleted_at=is.null&select=label_id,species,weight_total,capture_date,hunter_name,processing_done_at&limit=20`),
+      sb('GET', 'inventory', null, '?select=individual_id&deleted_at=is.null')
+    ]);
     const body = document.getElementById('proc-ind-body');
     if (!inds.length) { body.innerHTML = '<tr><td colspan="5" class="empty-state">見つかりません</td></tr>'; return; }
-    body.innerHTML = inds.map(i => `<tr>
-      <td style="color:var(--gold);font-weight:600">${i.label_id}</td>
-      <td>${speciesIcon(i.species)} ${i.species||'-'}</td>
-      <td>${i.weight_total||'-'}</td>
-      <td>${fmt(i.capture_date)}</td>
-      <td><button class="btn btn-sm" onclick="selectIndividual('${i.label_id}')">🔪 精肉モードで開く</button></td>
-    </tr>`).join('');
+    const withInv = new Set(invIds.map(i => i.individual_id));
+    body.innerHTML = inds.map(i => procRowHtml(i, !!i.processing_done_at || withInv.has(i.label_id), withInv.has(i.label_id))).join('');
   } catch (err) {
     toast('検索エラー: ' + err.message, 'error');
   }
@@ -2017,6 +2243,12 @@ function shipSelectOrder(orderId) {
 async function loadShipping() {
   const container = document.getElementById('ship-orders');
   container.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
+  // 直販の出荷先候補（顧客台帳の名前だけ）
+  try {
+    const custs = await sb('GET', 'customers', null, '?select=name&order=name.asc&limit=300');
+    const dl = document.getElementById('shipCustDatalist');
+    if (dl) dl.innerHTML = custs.map(c => `<option value="${(c.name||'').replace(/"/g,'&quot;')}">`).join('');
+  } catch(e) {}
   try {
     const orders = await sb('GET', 'orders', null, `?status=eq.確認済&select=*&order=delivery_date.asc`);
     if (!orders.length) {
@@ -2039,8 +2271,8 @@ async function loadShipping() {
       html += `<div class="order-card" id="order-${order.id}">
         <div class="order-card-header">
           <div>
-            <div class="order-code">${shipOrderLabel(order)}</div>
-            <div class="order-meta">${order.customer_name || '-'} / 配達予定: ${fmt(order.delivery_date)} / ${order.channel || '-'}</div>
+            <div class="order-code">🏪 ${order.customer_name || '出荷先未設定'} <span style="font-size:12px;color:var(--text2);font-weight:400;">${shipOrderLabel(order)}</span></div>
+            <div class="order-meta">配達予定: ${fmt(order.delivery_date)} / ${order.channel || '-'}</div>
             <div class="order-meta" style="margin-top:4px;">割当 <strong>${assignedCount} / ${items.length}行</strong> ・ 必要重量合計 <strong>${totalWeight.toFixed(1)}kg</strong> ${statusHtml}</div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;">
@@ -2448,6 +2680,11 @@ const RETAIL_PRESETS = {
 };
 const RETAIL_PART_IDS = ['pp-ro', 'pp-ba', 'pp-kr', 'pp-mo', 'pp-sn'];
 const PM_PARTS = [
+  { id:'pp-ed',  part_name:'枝肉（全体）',     barcode_num:'ED' },
+  { id:'pp-edu', part_name:'枝肉（上）',       barcode_num:'EDU' },
+  { id:'pp-edn', part_name:'枝肉（中）',       barcode_num:'EDN' },
+  { id:'pp-eds', part_name:'枝肉（下）',       barcode_num:'EDS' },
+  { divider: true },
   { id:'pp-ro',  part_name:'ロース',           barcode_num:'RO' },
   { id:'pp-hi',  part_name:'ヒレ',             barcode_num:'HI' },
   { id:'pp-ba',  part_name:'バラ',             barcode_num:'BA' },
@@ -2762,6 +2999,27 @@ async function pmShowIndividualDetail() {
 // ラベルファイルはこのパスに配置: C:\TGC\labels\TGC_inventory_label.lbx
 const PM_LABEL_TEMPLATE = 'C:\\TGC\\labels\\TGC_inventory_label.lbx';
 
+// ── 識別コードのASCII化 ──
+// CODE128バーコードは英数字しか表現できないため、個体番号のカタカナ（獣種頭文字:
+// ア=アナグマ / ウ / キ=キョン / シ=シカ / タ=タヌキ / ハ=ハクビシン 等）をローマ字に変換する
+const KANA_ROMAJI = {
+  'ア':'A','イ':'I','ウ':'U','エ':'E','オ':'O','カ':'KA','キ':'KI','ク':'KU','ケ':'KE','コ':'KO',
+  'サ':'SA','シ':'SHI','ス':'SU','セ':'SE','ソ':'SO','タ':'TA','チ':'CHI','ツ':'TSU','テ':'TE','ト':'TO',
+  'ナ':'NA','ニ':'NI','ヌ':'NU','ネ':'NE','ノ':'NO','ハ':'HA','ヒ':'HI','フ':'FU','ヘ':'HE','ホ':'HO',
+  'マ':'MA','ミ':'MI','ム':'MU','メ':'ME','モ':'MO','ヤ':'YA','ユ':'YU','ヨ':'YO',
+  'ラ':'RA','リ':'RI','ル':'RU','レ':'RE','ロ':'RO','ワ':'WA','ヲ':'WO','ン':'N',
+  'ガ':'GA','ギ':'GI','グ':'GU','ゲ':'GE','ゴ':'GO','ザ':'ZA','ジ':'JI','ズ':'ZU','ゼ':'ZE','ゾ':'ZO',
+  'ダ':'DA','ヂ':'DI','ヅ':'DU','デ':'DE','ド':'DO','バ':'BA','ビ':'BI','ブ':'BU','ベ':'BE','ボ':'BO',
+  'パ':'PA','ピ':'PI','プ':'PU','ペ':'PE','ポ':'PO','ャ':'YA','ュ':'YU','ョ':'YO','ッ':'',
+};
+function asciiLabel(s) {
+  return String(s || '').split('').map(ch => {
+    const code = ch.charCodeAt(0);
+    if (code >= 32 && code <= 126) return ch;
+    return KANA_ROMAJI[ch] !== undefined ? KANA_ROMAJI[ch] : 'X';
+  }).join('');
+}
+
 // ── ロットコード生成 ──
 function generateLotCode(individualCode, partName, seq) {
   const partAbbr = {
@@ -2770,12 +3028,13 @@ function generateLotCode(individualCode, partName, seq) {
     'カタ（ウデ）':'KA','カタ':'KA','ネック':'NE','スネ':'SU',
     'ミンチ用':'MI','ミンチ肉':'MI','ペットフード用':'PE','ペットフード':'PE','骨':'HO',
     '味肉用':'AJ','スライス用':'SL','唐揚げ用':'KG','チチカブ':'CB',
+    '枝肉（全体）':'ED','枝肉（上）':'EDU','枝肉（中）':'EDN','枝肉（下）':'EDS',
     'タン':'TN','ハツ':'HT','フワ':'FW','レバー':'LV','マメ':'MM',
     'ガツ':'GT','ショウチョウ':'SC','ダイチョウ':'DC','ホーデン':'HD','コブクロ':'KB',
     '赤つなぎセット':'AK','タン（舌）':'TN','ハツ（心臓）':'HT','レバ（肝臓）':'LV',
     'フワ（肺）':'FW','マメ（腎臓）':'MM','チレ（脾臓）':'CR'
   };
-  const indNum = individualCode ? individualCode.split('-').pop() : '000';
+  const indNum = individualCode ? asciiLabel(individualCode.split('-').pop()) : '000';
   const abbr = partAbbr[partName] || 'XX';
   const date = new Date().toISOString().split('T')[0].replace(/-/g,'');
   return `${indNum}-${abbr}-${date}-${String(seq).padStart(3,'0')}`;
@@ -2894,7 +3153,7 @@ async function pmLoadRecentIndividuals() {
   list.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
   try {
     const today = new Date().toISOString().split('T')[0];
-    let inds = await sb('GET', 'individuals', null, `?select=label_id,species,weight_total,capture_date,hunter_name,quality,serial_number&deleted_at=is.null&order=serial_number.desc.nullslast,created_at.desc&limit=20`);
+    let inds = await sb('GET', 'individuals', null, `?select=label_id,species,weight_total,capture_date,hunter_name,quality,serial_number&deleted_at=is.null&processing_done_at=is.null&order=serial_number.desc.nullslast,created_at.desc&limit=20`);
     // テスト個体（通し番号なし）は上記20件に入らないため先頭に必ず表示する
     try {
       const tests = await sb('GET', 'individuals', null, `?label_id=ilike.TGC-TEST*&deleted_at=is.null&select=label_id,species,weight_total,capture_date,hunter_name,quality,serial_number`);
@@ -3358,7 +3617,7 @@ function pmDoPrint(weight_kg) {
   const existing  = pmCompletedParts.filter(c => c.part_name.includes(pmSelectedPart.part_name)).length;
   const seq       = existing + 1;
   const lotCode   = generateLotCode(pmIndividual.label_id, pmSelectedPart.part_name, seq);
-  const identCode = pmIndividual.label_id + '-' + pmSelectedPart.barcode_num + (seq > 1 ? '-' + seq : '');
+  const identCode = asciiLabel(pmIndividual.label_id) + '-' + pmSelectedPart.barcode_num + (seq > 1 ? '-' + seq : '');
   const baseName  = pmSelectedPart.part_name;
   const fullPart  = (pmBoneIn ? '骨付き ' : '') + baseName + (pmGrade !== '並' ? ' [' + pmGrade + ']' : '') + (pmRetail ? ' [小売]' : '');
   const lw        = (pmRetail && PM_RETAIL_WEIGHTS[baseName]) ? PM_RETAIL_WEIGHTS[baseName] : weight_kg;
@@ -3438,7 +3697,7 @@ async function pmOnWeightReceived(weight_kg) {
     const existingToday = pmCompletedParts.filter(c => c.part_name.includes(pmSelectedPart.part_name)).length;
     const seq = existingToday + 1;
     const lotCode = generateLotCode(pmIndividual.label_id, pmSelectedPart.part_name, seq);
-    const identCode = pmIndividual.label_id + '-' + pmSelectedPart.barcode_num + (seq > 1 ? '-' + seq : '');
+    const identCode = asciiLabel(pmIndividual.label_id) + '-' + pmSelectedPart.barcode_num + (seq > 1 ? '-' + seq : '');
     const baseName = pmSelectedPart.part_name;
     const fullPartName = (pmBoneIn ? '骨付き ' : '') + baseName + (pmGrade !== '並' ? ' [' + pmGrade + ']' : '') + (pmRetail ? ' [小売]' : '');
     const basePart = pmSelectedPart.part_name;
@@ -3481,6 +3740,14 @@ async function pmOnWeightReceived(weight_kg) {
       grade: pmGrade,
       bone_in: pmBoneIn
     });
+
+    // 5.5 ラベル未印刷なら自動で印刷（はかりの「プリント」ボタン経由の登録でも同時に印刷する）
+    if (!pmLastLabelPrinted) {
+      try {
+        pmPrintLabel(weight_kg, lotCode, identCode, fullPartName, labelWeight);
+        pmLastLabelPrinted = true;
+      } catch(e) {}
+    }
 
     // 6. UI更新（直前登録カード + 具体的なtoast + 成功音）
     pmRenderParts();
@@ -3672,6 +3939,7 @@ async function pmFinishIndividual() {
     // Update individual quality or add a note that processing is complete
     await sb('PATCH', 'individuals', {
       processing_type: '処理済',
+      processing_done_at: new Date().toISOString(),
       memo: (pmIndividual.memo ? pmIndividual.memo + '\n' : '') + `精肉完了: ${new Date().toLocaleDateString('ja-JP')} ${pmCompletedParts.length}部位 担当:${pmCurrentOperator}`
     }, `?label_id=eq.${encodeURIComponent(pmIndividual.label_id)}`);
 
@@ -4111,6 +4379,7 @@ function agingDays(from, to) {
 }
 
 function agingStateOf(ind, processedSet) {
+  if (ind.processing_done_at) return '精肉済';
   if (processedSet.has(ind.label_id)) return '精肉済';
   if (ind.aging_method === '熟成' && !ind.aging_ended_at) return '熟成中';
   if (ind.aging_method) return '精肉待ち';
@@ -4118,7 +4387,7 @@ function agingStateOf(ind, processedSet) {
 }
 
 async function fetchAgingData() {
-  const inds = await sb('GET', 'individuals', null, '?select=label_id,species,weight_total,capture_date,hunter_name,aging_method,aging_started_at,aging_ended_at,created_at&deleted_at=is.null&order=capture_date.desc&limit=300');
+  const inds = await sb('GET', 'individuals', null, '?select=label_id,species,weight_total,capture_date,hunter_name,aging_method,aging_started_at,aging_ended_at,created_at,processing_done_at&deleted_at=is.null&order=capture_date.desc&limit=300');
   let processedSet = new Set();
   let firstInvMap = {};
   try {
