@@ -55,20 +55,22 @@ input, select { width: 100%; padding: 11px; border: 1px solid var(--border); bor
       ① 下から<strong>道の駅を選ぶ</strong> → 今の店頭在庫と納品方法が見えます<br>
       ② 商品を並べたら「<strong>🚚 納品を記録</strong>」→ 持って行った数を入れて登録<br>
       ③ 売上メールは毎晩自動で取り込まれます（販売数を手で入れたいときだけ「🧾 販売報告」）<br>
-      ・在庫の数字が実際と違ったら、業務アプリの加工処理タブで数字をタップして直せます
+      ・「🏭 センター」を選ぶと、完成品の追加や在庫数の修正もここからできます<br>
+      ・在庫の数字が実際と違ったら、数字をタップしてそのまま直せます
     </div>
   </div>
 
   <div class="chips" id="chips"></div>
 
   <div id="outlet-area" style="display:none;">
-    <div class="card">
+    <div class="card" id="notes-card">
       <h2>🚛 <span id="o-name"></span> の納品方法 <span class="editlink" onclick="editNotes()">✎ 編集</span></h2>
       <div class="notes" id="o-notes">（まだ登録されていません。「✎ 編集」から納品手順を書けます）</div>
     </div>
     <div class="btnrow">
-      <button class="bigbtn b1" onclick="openForm('納品')">🚚 納品を記録</button>
-      <button class="bigbtn b2" onclick="openForm('店頭販売')">🧾 販売報告</button>
+      <button class="bigbtn b1" id="btn-nohin" onclick="openForm('納品')">🚚 納品を記録</button>
+      <button class="bigbtn b1" id="btn-kansei" style="display:none;" onclick="openForm('完成')">🏭 完成を記録</button>
+      <button class="bigbtn b2" id="btn-hanbai" onclick="openForm('店頭販売')">🧾 販売報告</button>
     </div>
     <div class="card" id="form-area">
       <h2 id="form-title"></h2>
@@ -83,7 +85,7 @@ input, select { width: 100%; padding: 11px; border: 1px solid var(--border); bor
     </div>
     <div class="card">
       <h2>📦 <span id="o-name2"></span> の店頭在庫</h2>
-      <table><thead><tr><th>商品</th><th class="num">店頭</th><th class="num">センター</th></tr></thead>
+      <table><thead><tr><th>商品</th><th class="num" id="stock-col-label">店頭</th><th class="num" id="center-col">センター</th></tr></thead>
       <tbody id="stock-body"><tr><td colspan="3">読み込み中...</td></tr></tbody></table>
     </div>
   </div>
@@ -109,6 +111,7 @@ function toast(m) {
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 let outlets = [], products = [], stockMap = {}, current = null, formType = '納品';
+let storeMode = null; // 納品先セルフ入力モード（?store=トークン）
 
 async function load() {
   const [o, p, m] = await Promise.all([
@@ -122,23 +125,64 @@ async function load() {
     const d = x.movement_type === '納品' ? x.qty : x.movement_type === '棚卸調整' ? x.qty : -x.qty;
     stockMap[k] = (stockMap[k] || 0) + d;
   });
-  document.getElementById('chips').innerHTML = outlets.map((x, i) =>
-    `<button class="chip ${current === x.name ? 'on' : ''}" onclick="pick('${esc(x.name)}')">${esc(x.name)}</button>`).join('');
+  const chipsEl = document.getElementById('chips');
+  chipsEl.style.display = storeMode ? 'none' : 'flex';
+  chipsEl.innerHTML = storeMode ? '' :
+    `<button class="chip ${current === '__center__' ? 'on' : ''}" onclick="pick('__center__')">🏭 センター</button>` +
+    outlets.map(x => `<button class="chip ${current === x.name ? 'on' : ''}" onclick="pick('${esc(x.name)}')">${esc(x.name)}</button>`).join('');
   if (current) renderOutlet();
 }
 
 function pick(name) { current = name; document.getElementById('form-area').style.display = 'none'; load(); document.getElementById('outlet-area').style.display = 'block'; }
 
 function renderOutlet() {
-  const o = outlets.find(x => x.name === current);
-  if (!o) return;
-  document.getElementById('o-name').textContent = o.name;
-  document.getElementById('o-name2').textContent = o.name;
-  document.getElementById('o-notes').textContent = o.delivery_notes || '（まだ登録されていません。「✎ 編集」から納品手順を書けます）';
+  const isCenter = current === '__center__';
+  const o = isCenter ? null : outlets.find(x => x.name === current);
+  if (!isCenter && !o) return;
+  document.getElementById('o-name').textContent = isCenter ? 'センター' : o.name;
+  document.getElementById('o-name2').textContent = isCenter ? 'センター（加工場）' : o.name;
+  document.getElementById('notes-card').style.display = (isCenter || storeMode) ? 'none' : 'block';
+  if (!isCenter && o) document.getElementById('o-notes').textContent = o.delivery_notes || '（まだ登録されていません。「✎ 編集」から納品手順を書けます）';
+  // ボタン構成: センター=完成記録+在庫修正案内 / 通常=納品+販売報告 / 店舗モード=販売報告のみ
+  document.getElementById('btn-nohin').style.display = (isCenter || storeMode) ? 'none' : 'block';
+  document.getElementById('btn-kansei').style.display = isCenter ? 'block' : 'none';
+  document.getElementById('btn-hanbai').style.display = isCenter ? 'none' : 'block';
+  // 在庫表
+  document.getElementById('center-col').style.display = storeMode ? 'none' : '';
+  document.getElementById('stock-col-label').textContent = isCenter ? 'センター在庫' : '店頭';
   document.getElementById('stock-body').innerHTML = products.map(p => {
-    const q = stockMap[p.id + '|' + o.name] || 0;
-    return `<tr><td>${esc(p.name)}</td><td class="num" style="${q < 0 ? 'color:var(--red);' : q === 0 ? 'color:var(--text3);font-weight:400;' : ''}">${q}</td><td class="num" style="font-weight:400;color:var(--text2);">${p.stock_qty || 0}</td></tr>`;
+    const q = isCenter ? (p.stock_qty || 0) : (stockMap[p.id + '|' + o.name] || 0);
+    const editable = !storeMode;
+    const tap = editable ? `style="cursor:pointer;text-decoration:underline dotted var(--text3);" onclick="stockEdit('${p.id}', ${isCenter ? 'null' : `'${esc(o.name)}'`})"` : '';
+    return `<tr><td>${esc(p.name)}</td><td class="num" ${tap}>${q}</td>` +
+      (storeMode ? '' : `<td class="num" style="font-weight:400;color:var(--text2);">${isCenter ? '' : (p.stock_qty || 0)}</td>`) + `</tr>`;
   }).join('');
+}
+
+// 数字をタップして在庫を直接修正（差分は棚卸調整として記録）
+async function stockEdit(productId, outletName) {
+  const p = products.find(x => String(x.id) === String(productId));
+  if (!p) return;
+  const cur = outletName ? (stockMap[productId + '|' + outletName] || 0) : (p.stock_qty || 0);
+  const v = prompt(`${p.name}\n${outletName || 'センター'} の在庫数（現在 ${cur}）`, String(cur));
+  if (v === null) return;
+  const next = parseInt(v);
+  if (isNaN(next) || next < 0) { toast('0以上の数字を入力してください'); return; }
+  if (next === cur) return;
+  try {
+    const rec = { product_id: productId, product_name: p.name, movement_type: '棚卸調整', qty: next - cur, staff_name: '手入力', note: `手入力: ${cur} → ${next}` };
+    if (outletName) rec.destination = outletName;
+    await sb('POST', 'product_movements', rec);
+    if (!outletName) {
+      await sb('PATCH', 'products', { stock_qty: next, updated_at: new Date().toISOString() }, `?id=eq.${productId}`);
+      try {
+        const pr = await sb('GET', 'products', null, `?id=eq.${productId}&select=base_item_id`);
+        if (pr.length && pr[0].base_item_id) await sb('POST', 'rpc/base_update_stock', { p_item_id: pr[0].base_item_id, p_stock: next });
+      } catch (e) {}
+    }
+    toast(`${p.name}: ${cur} → ${next}`);
+    load();
+  } catch (e) { toast('更新に失敗しました'); }
 }
 
 async function editNotes() {
@@ -155,13 +199,17 @@ async function editNotes() {
 
 async function openForm(type) {
   formType = type;
-  document.getElementById('form-title').textContent = type === '納品' ? `🚚 ${current} へ納品` : `🧾 ${current} の販売報告`;
-  document.getElementById('f-qty-label').textContent = type === '納品' ? '納品する数量' : '売れた数量';
+  document.getElementById('form-title').textContent =
+    type === '納品' ? `🚚 ${current} へ納品` : type === '完成' ? '🏭 完成品をセンター在庫に追加' : `🧾 ${current === '__center__' ? 'センター' : current} の販売報告`;
+  document.getElementById('f-qty-label').textContent = type === '納品' ? '納品する数量' : type === '完成' ? 'できた数量' : '売れた数量';
   document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
   document.getElementById('f-products').innerHTML = products.map(p =>
     `<div class="qtyrow"><span>${esc(p.name)}<br><small>センター在庫 ${p.stock_qty || 0}</small></span>
      <input type="number" min="0" inputmode="numeric" placeholder="0" data-pid="${p.id}" class="f-qty"></div>`).join('');
   document.getElementById('form-area').style.display = 'block';
+  document.getElementById('f-staff').style.display = storeMode ? 'none' : '';
+  const staffLabel = [...document.querySelectorAll('#form-area label')].find(l => l.textContent === '担当者');
+  if (staffLabel) staffLabel.style.display = storeMode ? 'none' : '';
   const sel = document.getElementById('f-staff');
   if (sel.options.length <= 1) {
     try {
@@ -174,7 +222,7 @@ async function openForm(type) {
 
 async function saveForm() {
   const date = document.getElementById('f-date').value;
-  const staff = document.getElementById('f-staff').value;
+  const staff = storeMode ? window.__storeStaff : document.getElementById('f-staff').value;
   if (!staff) { toast('担当者を選択してください'); return; }
   const rows = [...document.querySelectorAll('.f-qty')].map(el => ({ pid: el.dataset.pid, qty: parseInt(el.value) || 0 })).filter(r => r.qty > 0);
   if (!rows.length) { toast('数量を入力してください'); return; }
@@ -182,16 +230,21 @@ async function saveForm() {
   if (formType === '納品') {
     for (const r of rows) if ((byId[r.pid].stock_qty || 0) < r.qty) { toast(`「${byId[r.pid].name}」のセンター在庫が足りません`); return; }
   }
-  if (!confirm(`${current} / ${date}\n` + rows.map(r => `・${byId[r.pid].name} × ${r.qty}`).join('\n') + `\n\nこの内容で${formType === '納品' ? '納品' : '販売報告'}を記録しますか？`)) return;
+  const typeLabel = formType === '納品' ? '納品' : formType === '完成' ? '完成' : '販売報告';
+  const place = current === '__center__' ? 'センター' : current;
+  if (!confirm(`${place} / ${date}\n` + rows.map(r => `・${byId[r.pid].name} × ${r.qty}`).join('\n') + `\n\nこの内容で${typeLabel}を記録しますか？`)) return;
   const btn = document.getElementById('f-save'); btn.disabled = true;
   try {
     await sb('POST', 'product_movements', rows.map(r => ({
       product_id: r.pid, product_name: byId[r.pid].name, movement_type: formType, qty: r.qty,
-      staff_name: staff, destination: current, created_at: date + 'T12:00:00+09:00'
+      staff_name: staff, destination: (formType === '完成' || current === '__center__') ? null : current,
+      created_at: date + 'T12:00:00+09:00'
     })));
-    if (formType === '納品') {
+    if (formType === '納品' || formType === '完成') {
       for (const r of rows) {
-        const nq = Math.max(0, (byId[r.pid].stock_qty || 0) - r.qty);
+        const nq = formType === '完成'
+          ? (byId[r.pid].stock_qty || 0) + r.qty
+          : Math.max(0, (byId[r.pid].stock_qty || 0) - r.qty);
         await sb('PATCH', 'products', { stock_qty: nq, updated_at: new Date().toISOString() }, `?id=eq.${r.pid}`);
         // BASE連携（対応付け済み商品のみ・失敗しても止めない）
         try {
@@ -200,14 +253,32 @@ async function saveForm() {
         } catch (e) {}
       }
     }
-    toast(`${formType === '納品' ? '納品' : '販売報告'} ${rows.length}品目を記録しました`);
+    toast(`${typeLabel} ${rows.length}品目を記録しました`);
     document.getElementById('form-area').style.display = 'none';
     load();
   } catch (e) { toast('記録に失敗しました'); }
   btn.disabled = false;
 }
 
-load();
+// 納品先セルフ入力モード: outlet.html?store=<トークン> でその店専用（販売報告のみ）
+(async function(){
+  const tk = new URLSearchParams(location.search).get('store');
+  if (!tk) { load(); return; }
+  try {
+    const rows = await sb('GET', 'retail_outlets', null, `?portal_token=eq.${encodeURIComponent(tk)}&is_active=eq.true&deleted_at=is.null&select=id,name`);
+    if (!rows.length) { document.querySelector('.wrap').innerHTML = '<h1>リンクが無効です</h1><p style="text-align:center;color:var(--text2);">お手数ですが館山ジビエセンターへご連絡ください。</p>'; return; }
+    storeMode = rows[0];
+    document.querySelector('h1').textContent = '🏪 ' + storeMode.name + ' 様 販売報告';
+    document.querySelector('.sub').textContent = '館山ジビエセンター';
+    document.querySelector('.card .memo').innerHTML =
+      '① 閉店後に「<strong>🧾 販売報告</strong>」を押す<br>② 今日売れた商品の数を入れて「記録する」<br>③ 在庫が少なくなったら自動でこちらから補充のご連絡をします。いつもありがとうございます！';
+    // 担当者は店舗名固定
+    window.__storeStaff = storeMode.name + '(店舗入力)';
+    await load();
+    pick(storeMode.name);
+  } catch(e) { toast('読み込みエラー'); }
+})();
+if (!new URLSearchParams(location.search).get('store')) load();
 </script>
 </body>
 </html>
