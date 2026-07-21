@@ -79,3 +79,7 @@ exception when duplicate_object then null; end $$;
 
 -- ── 捕獲場所の地図 2026-07-20 適用済み: capture_location_latlng ──
 -- individuals: capture_lat / capture_lng（保存は数値のみ。地図は地理院タイルを表示時に参照）
+
+-- ── 道の駅の店頭在庫 2026-07-20 適用済み: retail_outlets_consignment ──
+-- retail_outlets: 委託販売先マスタ（グリーンファーム館山/とみうら・枇杷倶楽部/富楽里とみやま を初期投入、メール保持）
+-- product_movements.destination: 納品先。店頭在庫 = 納品合計 − 店頭販売等の合計

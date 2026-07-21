@@ -799,12 +799,54 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div id="products-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;"></div>
     </div>
     <div class="section">
-      <div class="section-title">最近の動き（完成・持ち出し・販売）</div>
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>🏪 道の駅の店頭在庫（納品・販売報告）</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" onclick="outletMoveOpen('納品')">🚚 納品を記録</button>
+          <button class="btn btn-sm" onclick="outletMoveOpen('店頭販売')">🧾 販売報告を入力</button>
+          <button class="btn btn-sm" onclick="outletAdd()" style="color:var(--text2);">＋ 道の駅を追加</button>
+        </div>
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;">
+        納品したら「🚚 納品を記録」（スマホからOK・センター在庫から差し引き）。メールで来る販売数は「🧾 販売報告」で入力すると店頭在庫が減ります。
+      </div>
+      <div style="overflow-x:auto;">
+        <table id="outlet-stock-table">
+          <thead id="outlet-stock-head"></thead>
+          <tbody id="outlet-stock-body"><tr><td class="empty-state">読み込み中...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">最近の動き（完成・持ち出し・納品・販売）</div>
       <div style="overflow-x:auto;">
         <table>
           <thead><tr><th>日時</th><th>商品</th><th>区分</th><th>数量</th><th>担当</th><th>原料コード</th><th>メモ</th></tr></thead>
           <tbody id="product-moves-body"></tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 道の駅 納品・販売報告モーダル -->
+  <div id="outletMoveModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:520px;margin:30px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:22px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);" id="outletMoveTitle">納品を記録</div>
+        <button onclick="document.getElementById('outletMoveModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div class="form-group"><label>道の駅</label><select class="form-input" id="om-outlet" style="font-size:16px;"></select></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div class="form-group" style="flex:1;min-width:140px;"><label>日付</label><input class="form-input" id="om-date" type="date" /></div>
+        <div class="form-group" style="flex:1;min-width:140px;"><label>担当者</label><select class="form-input" id="om-staff"></select></div>
+      </div>
+      <div class="form-group"><label id="om-qty-label">商品ごとの数量</label>
+        <div id="om-products" style="display:flex;flex-direction:column;gap:6px;"></div>
+      </div>
+      <div class="form-group"><label>メモ（任意）</label><input class="form-input" id="om-note" placeholder="例: 週末分" /></div>
+      <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">
+        <button class="btn" onclick="document.getElementById('outletMoveModal').style.display='none'">キャンセル</button>
+        <button class="btn btn-primary" style="font-size:15px;padding:10px 24px;" onclick="outletMoveSave()">記録する</button>
       </div>
     </div>
   </div>
@@ -5127,6 +5169,7 @@ let prodMoveTarget = null;
 const PRODUCT_FIELDS = ['name', 'category', 'unit', 'price', 'stock_qty', 'base_url', 'memo'];
 
 async function loadProducts() {
+  loadOutletStock();
   const grid = document.getElementById('products-grid');
   grid.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
   try {
@@ -5165,7 +5208,7 @@ async function loadProductMoves() {
     const moves = await sb('GET', 'product_movements', null, '?select=*&order=created_at.desc&limit=30');
     body.innerHTML = moves.length ? moves.map(m => `<tr>
       <td>${fmtDt(m.created_at)}</td><td>${esc2(m.product_name || '-')}</td>
-      <td>${m.movement_type === '完成' ? '<span class="badge badge-green">完成</span>' : `<span class="badge badge-red">${esc2(m.movement_type)}</span>`}</td>
+      <td>${m.movement_type === '完成' ? '<span class="badge badge-green">完成</span>' : m.movement_type === '納品' ? '<span class="badge badge-blue">納品</span>' : `<span class="badge badge-red">${esc2(m.movement_type)}</span>`}${m.destination ? ` <span style="font-size:11px;color:var(--text2);">→ ${esc2(m.destination)}</span>` : ''}</td>
       <td style="text-align:right;font-weight:600;">${m.movement_type === '完成' ? '+' : '−'}${Math.abs(m.qty)}</td>
       <td>${esc2(m.staff_name || '-')}</td>
       <td style="color:var(--gold);font-size:12px;">${esc2(m.source_ident_code || '')}</td>
@@ -5217,6 +5260,117 @@ async function productMoveSave() {
     document.getElementById('prodMoveModal').style.display = 'none';
     loadProducts();
   } catch (err) { playFeedbackSound(false); toast('記録に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+/* ── 道の駅の店頭在庫（納品・販売報告） ── */
+let outletList = [];
+let outletRetailProducts = [];
+let outletStockMap = {}; // 'productId|outletName' → qty
+
+async function loadOutletStock() {
+  const head = document.getElementById('outlet-stock-head');
+  const body = document.getElementById('outlet-stock-body');
+  if (!head || !body) return;
+  try {
+    const [outlets, prods, moves] = await Promise.all([
+      sb('GET', 'retail_outlets', null, '?is_active=eq.true&deleted_at=is.null&select=id,name,email&order=sort_order.asc.nullslast,name.asc'),
+      sb('GET', 'products', null, '?deleted_at=is.null&category=eq.小売&select=id,name,unit,stock_qty&order=name.asc'),
+      sb('GET', 'product_movements', null, '?destination=not.is.null&select=product_id,movement_type,qty,destination&limit=3000')
+    ]);
+    outletList = outlets;
+    outletRetailProducts = prods;
+    outletStockMap = {};
+    moves.forEach(m => {
+      const key = m.product_id + '|' + m.destination;
+      const d = m.movement_type === '納品' ? m.qty : -m.qty;
+      outletStockMap[key] = (outletStockMap[key] || 0) + d;
+    });
+    if (!outlets.length) { body.innerHTML = '<tr><td class="empty-state">道の駅が未登録です</td></tr>'; return; }
+    head.innerHTML = '<tr><th>商品</th><th style="text-align:right;">センター在庫</th>' +
+      outlets.map(o => `<th style="text-align:right;">${esc2(o.name)}</th>`).join('') + '</tr>';
+    body.innerHTML = prods.map(p => '<tr><td style="font-weight:600;">' + esc2(p.name) + '</td>' +
+      `<td style="text-align:right;">${p.stock_qty || 0}${p.unit || ''}</td>` +
+      outlets.map(o => {
+        const q = outletStockMap[p.id + '|' + o.name] || 0;
+        return `<td style="text-align:right;${q < 0 ? 'color:var(--red);font-weight:700;' : q === 0 ? 'color:var(--text3);' : 'font-weight:600;'}">${q}</td>`;
+      }).join('') + '</tr>').join('') || '<tr><td class="empty-state">小売商品がありません</td></tr>';
+  } catch (e) {
+    body.innerHTML = `<tr><td class="empty-state">読み込みエラー: ${e.message}</td></tr>`;
+  }
+}
+
+let outletMoveType = '納品';
+function outletMoveOpen(type) {
+  outletMoveType = type;
+  document.getElementById('outletMoveTitle').textContent = type === '納品' ? '🚚 納品を記録' : '🧾 販売報告を入力（メールの販売数）';
+  document.getElementById('om-qty-label').textContent = type === '納品' ? '納品する数量（商品ごと）' : '売れた数量（商品ごと）';
+  document.getElementById('om-outlet').innerHTML = outletList.map(o => `<option>${esc2(o.name)}</option>`).join('');
+  document.getElementById('om-date').value = new Date().toISOString().slice(0, 10);
+  const staffSel = document.getElementById('om-staff');
+  staffSel.innerHTML = '<option value="">選択...</option>';
+  sb('GET', 'staff', null, '?is_active=eq.true&deleted_at=is.null&select=name&order=name.asc')
+    .then(list => { staffSel.innerHTML = '<option value="">選択...</option>' + list.map(s => `<option>${esc2(s.name)}</option>`).join(''); })
+    .catch(() => {});
+  document.getElementById('om-products').innerHTML = outletRetailProducts.map(p =>
+    `<div style="display:flex;align-items:center;gap:8px;">
+      <span style="flex:1;font-size:14px;">${esc2(p.name)}</span>
+      <span style="font-size:11px;color:var(--text3);">在庫${p.stock_qty || 0}</span>
+      <input class="form-input om-qty" data-pid="${p.id}" type="number" min="0" inputmode="numeric" placeholder="0" style="width:90px;font-size:18px;text-align:right;" />
+    </div>`).join('') || '<div class="empty-state">小売商品がありません</div>';
+  document.getElementById('om-note').value = '';
+  document.getElementById('outletMoveModal').style.display = 'block';
+}
+
+async function outletMoveSave() {
+  const outlet = document.getElementById('om-outlet').value;
+  const date = document.getElementById('om-date').value;
+  const staff = document.getElementById('om-staff').value;
+  const note = document.getElementById('om-note').value.trim() || null;
+  if (!outlet) { toast('道の駅を選択してください', 'error'); return; }
+  if (!staff) { toast('担当者を選択してください', 'error'); return; }
+  const rows = [...document.querySelectorAll('.om-qty')].map(el => ({ pid: el.dataset.pid, qty: parseInt(el.value) || 0 })).filter(r => r.qty > 0);
+  if (!rows.length) { toast('数量を1つ以上入力してください', 'error'); return; }
+  const prodById = {}; outletRetailProducts.forEach(p => prodById[p.id] = p);
+  // 納品はセンター在庫の残数チェック
+  if (outletMoveType === '納品') {
+    for (const r of rows) {
+      if ((prodById[r.pid].stock_qty || 0) < r.qty) {
+        toast(`「${prodById[r.pid].name}」のセンター在庫が足りません（在庫 ${prodById[r.pid].stock_qty || 0}）`, 'error');
+        return;
+      }
+    }
+  }
+  const lines = rows.map(r => `・${prodById[r.pid].name} × ${r.qty}`).join('\n');
+  if (!confirm(`${outletMoveType === '納品' ? '納品' : '販売報告'}を記録しますか？\n\n${outlet} / ${date}\n${lines}`)) return;
+  try {
+    const ts = date + 'T12:00:00+09:00';
+    await sb('POST', 'product_movements', rows.map(r => ({
+      product_id: r.pid, product_name: prodById[r.pid].name,
+      movement_type: outletMoveType, qty: r.qty, staff_name: staff,
+      destination: outlet, note: note, created_at: ts
+    })));
+    if (outletMoveType === '納品') {
+      for (const r of rows) {
+        await sb('PATCH', 'products', { stock_qty: Math.max(0, (prodById[r.pid].stock_qty || 0) - r.qty), updated_at: new Date().toISOString() }, `?id=eq.${r.pid}`);
+      }
+    }
+    playFeedbackSound(true);
+    toast(`${outlet} への${outletMoveType === '納品' ? '納品' : '販売報告'} ${rows.length}品目を記録しました`);
+    document.getElementById('outletMoveModal').style.display = 'none';
+    loadProducts();
+  } catch (e) { playFeedbackSound(false); toast('記録に失敗しました: ' + sbSafeMsg(e), 'error'); }
+}
+
+async function outletAdd() {
+  if (!requireAdmin('道の駅の追加')) return;
+  const name = prompt('追加する道の駅・販売店の名前');
+  if (!name || !name.trim()) return;
+  const email = prompt('販売数メールの送信元アドレス（わからなければ空欄でOK）') || null;
+  try {
+    await sb('POST', 'retail_outlets', { name: name.trim(), email: email && email.trim() ? email.trim() : null, sort_order: (outletList.length || 0) + 1 });
+    toast(`${name.trim()} を追加しました`);
+    loadOutletStock();
+  } catch (e) { toast('追加に失敗しました: ' + sbSafeMsg(e), 'error'); }
 }
 
 function productOpenNew() {
