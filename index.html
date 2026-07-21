@@ -5209,7 +5209,7 @@ async function loadProductMoves() {
     body.innerHTML = moves.length ? moves.map(m => `<tr>
       <td>${fmtDt(m.created_at)}</td><td>${esc2(m.product_name || '-')}</td>
       <td>${m.movement_type === '完成' ? '<span class="badge badge-green">完成</span>' : m.movement_type === '納品' ? '<span class="badge badge-blue">納品</span>' : `<span class="badge badge-red">${esc2(m.movement_type)}</span>`}${m.destination ? ` <span style="font-size:11px;color:var(--text2);">→ ${esc2(m.destination)}</span>` : ''}</td>
-      <td style="text-align:right;font-weight:600;">${m.movement_type === '完成' ? '+' : '−'}${Math.abs(m.qty)}</td>
+      <td style="text-align:right;font-weight:600;">${m.movement_type === '完成' || (m.movement_type === '棚卸調整' && m.qty >= 0) ? '+' : '−'}${Math.abs(m.qty)}</td>
       <td>${esc2(m.staff_name || '-')}</td>
       <td style="color:var(--gold);font-size:12px;">${esc2(m.source_ident_code || '')}</td>
       <td style="font-size:12px;color:var(--text2);">${esc2(m.note || '')}</td>
@@ -5282,21 +5282,53 @@ async function loadOutletStock() {
     outletStockMap = {};
     moves.forEach(m => {
       const key = m.product_id + '|' + m.destination;
-      const d = m.movement_type === '納品' ? m.qty : -m.qty;
+      const d = m.movement_type === '納品' ? m.qty : m.movement_type === '棚卸調整' ? m.qty : -m.qty;
       outletStockMap[key] = (outletStockMap[key] || 0) + d;
     });
     if (!outlets.length) { body.innerHTML = '<tr><td class="empty-state">道の駅が未登録です</td></tr>'; return; }
     head.innerHTML = '<tr><th>商品</th><th style="text-align:right;">センター在庫</th>' +
       outlets.map(o => `<th style="text-align:right;">${esc2(o.name)}</th>`).join('') + '</tr>';
     body.innerHTML = prods.map(p => '<tr><td style="font-weight:600;">' + esc2(p.name) + '</td>' +
-      `<td style="text-align:right;">${p.stock_qty || 0}${p.unit || ''}</td>` +
+      `<td style="text-align:right;cursor:pointer;text-decoration:underline dotted var(--text3);" title="タップして数を直接入力" onclick="outletStockEdit('${p.id}', null)">${p.stock_qty || 0}${p.unit || ''}</td>` +
       outlets.map(o => {
         const q = outletStockMap[p.id + '|' + o.name] || 0;
-        return `<td style="text-align:right;${q < 0 ? 'color:var(--red);font-weight:700;' : q === 0 ? 'color:var(--text3);' : 'font-weight:600;'}">${q}</td>`;
+        return `<td style="text-align:right;cursor:pointer;text-decoration:underline dotted var(--text3);${q < 0 ? 'color:var(--red);font-weight:700;' : q === 0 ? 'color:var(--text3);' : 'font-weight:600;'}" title="タップして数を直接入力" onclick="outletStockEdit('${p.id}', '${esc2(o.name)}')">${q}</td>`;
       }).join('') + '</tr>').join('') || '<tr><td class="empty-state">小売商品がありません</td></tr>';
   } catch (e) {
     body.innerHTML = `<tr><td class="empty-state">読み込みエラー: ${e.message}</td></tr>`;
   }
+}
+
+// セルをタップして在庫数を直接入力（差分は棚卸調整として記録される）
+async function outletStockEdit(productId, outletName) {
+  const p = outletRetailProducts.find(x => String(x.id) === String(productId));
+  if (!p) return;
+  const cur = outletName ? (outletStockMap[productId + '|' + outletName] || 0) : (p.stock_qty || 0);
+  const place = outletName || 'センター';
+  const input = prompt(`${p.name}\n${place} の在庫数を入力してください（現在 ${cur}${p.unit || ''}）`, String(cur));
+  if (input === null) return;
+  const next = parseInt(input);
+  if (isNaN(next) || next < 0) { toast('0以上の数字を入力してください', 'error'); return; }
+  const delta = next - cur;
+  if (delta === 0) return;
+  try {
+    if (outletName) {
+      await sb('POST', 'product_movements', {
+        product_id: productId, product_name: p.name,
+        movement_type: '棚卸調整', qty: delta, staff_name: '手入力',
+        destination: outletName, note: `手入力: ${cur} → ${next}`
+      });
+    } else {
+      await sb('POST', 'product_movements', {
+        product_id: productId, product_name: p.name,
+        movement_type: '棚卸調整', qty: delta, staff_name: '手入力',
+        note: `手入力: ${cur} → ${next}`
+      });
+      await sb('PATCH', 'products', { stock_qty: next, updated_at: new Date().toISOString() }, `?id=eq.${productId}`);
+    }
+    toast(`${p.name} / ${place}: ${cur} → ${next} に更新しました`);
+    loadProducts();
+  } catch (e) { toast('更新に失敗しました: ' + sbSafeMsg(e), 'error'); }
 }
 
 let outletMoveType = '納品';
