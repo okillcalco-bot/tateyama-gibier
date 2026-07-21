@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BASE連携 | 館山ジビエセンター</title>
+<style>
+body { font-family: 'Noto Sans JP', sans-serif; background: #f5f6f2; color: #23271c; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+.box { background: #fff; border: 1px solid #dfe3d6; border-radius: 12px; padding: 36px 30px; max-width: 420px; text-align: center; }
+.big { font-size: 44px; margin-bottom: 10px; }
+h1 { font-size: 18px; color: #8d6a1d; margin: 0 0 10px; }
+p { font-size: 14px; line-height: 1.8; color: #626854; }
+a { color: #8d6a1d; font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="big" id="icon">⏳</div>
+  <h1 id="title">BASEと接続しています...</h1>
+  <p id="msg">そのままお待ちください</p>
+  <p id="back" style="display:none;"><a href="index.html">→ 業務トップへ戻る</a></p>
+</div>
+<script>
+const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+(async () => {
+  const icon = document.getElementById('icon'), title = document.getElementById('title'), msg = document.getElementById('msg');
+  const code = new URLSearchParams(location.search).get('code');
+  if (!code) {
+    icon.textContent = '⚠️'; title.textContent = '認可コードがありません';
+    msg.textContent = 'BASEの認可画面からこのページに戻ってくる必要があります。業務アプリの「⚙ BASE連携」からやり直してください。';
+    document.getElementById('back').style.display = 'block';
+    return;
+  }
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/rpc/base_exchange`, {
+      method: 'POST',
+      headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_code: code })
+    });
+    const j = await res.json();
+    if (j && j.ok) {
+      icon.textContent = '✅'; title.textContent = 'BASEと接続しました';
+      msg.textContent = '在庫の自動連携が使えるようになりました。業務アプリに戻って「⚙ BASE連携」から商品の対応付けをしてください。';
+    } else {
+      icon.textContent = '❌'; title.textContent = '接続に失敗しました';
+      msg.textContent = 'もう一度お試しください。詳細: ' + JSON.stringify(j).slice(0, 200);
+    }
+  } catch (e) {
+    icon.textContent = '❌'; title.textContent = '通信エラー';
+    msg.textContent = String(e).slice(0, 200);
+  }
+  document.getElementById('back').style.display = 'block';
+})();
+</script>
+</body>
+</html>

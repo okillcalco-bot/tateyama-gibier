@@ -83,3 +83,8 @@ exception when duplicate_object then null; end $$;
 -- ── 道の駅の店頭在庫 2026-07-20 適用済み: retail_outlets_consignment ──
 -- retail_outlets: 委託販売先マスタ（グリーンファーム館山/とみうら・枇杷倶楽部/富楽里とみやま を初期投入、メール保持）
 -- product_movements.destination: 納品先。店頭在庫 = 納品合計 − 店頭販売等の合計
+
+-- ── BASE連携 2026-07-20 適用済み: base_tokens_secure / base_api_functions ──
+-- base_config(認証情報)/base_tokens(トークン): RLS有効・ポリシーなし = anonから読めない
+-- DB内関数(security definer): base_exchange/base_status/base_items/base_update_stock
+--   http拡張でBASE APIを呼ぶ。センター在庫変更時に products.base_item_id 対応品を自動更新

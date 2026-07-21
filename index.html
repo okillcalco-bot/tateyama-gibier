@@ -805,6 +805,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <button class="btn btn-primary btn-sm" onclick="outletMoveOpen('納品')">🚚 納品を記録</button>
           <button class="btn btn-sm" onclick="outletMoveOpen('店頭販売')">🧾 販売報告を入力</button>
           <button class="btn btn-sm" onclick="outletAdd()" style="color:var(--text2);">＋ 道の駅を追加</button>
+          <button class="btn btn-sm" onclick="baseOpen()" style="color:var(--text2);">⚙ BASE連携</button>
         </div>
       </div>
       <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;">
@@ -824,6 +825,25 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <thead><tr><th>日時</th><th>商品</th><th>区分</th><th>数量</th><th>担当</th><th>原料コード</th><th>メモ</th></tr></thead>
           <tbody id="product-moves-body"></tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- BASE連携モーダル -->
+  <div id="baseModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:560px;margin:30px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:22px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);">⚙ BASEネットショップ連携</div>
+        <button onclick="document.getElementById('baseModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div id="base-status" style="padding:10px 12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface2);font-size:14px;margin-bottom:12px;">確認中...</div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;">
+        商品の対応付けをすると、センター在庫が変わるたびにBASEの在庫数も自動で更新されます。
+      </div>
+      <div id="base-mapping" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+        <button class="btn" onclick="baseSaveMapping()">対応付けを保存</button>
+        <button class="btn btn-primary" onclick="baseSyncAll()">🔄 全在庫をBASEへ一括同期</button>
       </div>
     </div>
   </div>
@@ -5255,6 +5275,7 @@ async function productMoveSave() {
       note: document.getElementById('pmv-note').value.trim() || null,
     });
     await sb('PATCH', 'products', { stock_qty: Math.max(0, next), updated_at: new Date().toISOString() }, `?id=eq.${prodMoveTarget.id}`);
+    baseSyncStock(prodMoveTarget.id, Math.max(0, next));
     playFeedbackSound(true);
     toast(`${prodMoveTarget.name} ${type} ${qty}${prodMoveTarget.unit || '個'} を記録しました（在庫 ${Math.max(0, next)}）`);
     document.getElementById('prodMoveModal').style.display = 'none';
@@ -5325,10 +5346,95 @@ async function outletStockEdit(productId, outletName) {
         note: `手入力: ${cur} → ${next}`
       });
       await sb('PATCH', 'products', { stock_qty: next, updated_at: new Date().toISOString() }, `?id=eq.${productId}`);
+      baseSyncStock(productId, next);
     }
     toast(`${p.name} / ${place}: ${cur} → ${next} に更新しました`);
     loadProducts();
   } catch (e) { toast('更新に失敗しました: ' + sbSafeMsg(e), 'error'); }
+}
+
+/* ── BASE連携（在庫の自動同期） ── */
+const BASE_AUTH_URL = 'https://api.thebase.in/1/oauth/authorize?response_type=code&client_id=8116b0b027b7fb5d56b2db7da3ee20ba&redirect_uri=' + encodeURIComponent('https://tateyama-gibier.vercel.app/base-callback.html') + '&scope=' + encodeURIComponent('read_items write_items');
+let baseItemsCache = [];
+
+async function baseRpc(fn, args) {
+  return await sb('POST', 'rpc/' + fn, args || {});
+}
+
+// センター在庫が変わったらBASEへ反映（対応付け済み商品のみ・失敗しても業務は止めない）
+async function baseSyncStock(productId, newStock) {
+  try {
+    const prods = await sb('GET', 'products', null, `?id=eq.${productId}&select=base_item_id,name`);
+    if (!prods.length || !prods[0].base_item_id) return;
+    const r = await baseRpc('base_update_stock', { p_item_id: prods[0].base_item_id, p_stock: newStock });
+    if (r && r.error) console.warn('BASE同期失敗', r);
+    else toast(`🛒 BASEの在庫も更新: ${prods[0].name} → ${newStock}`);
+  } catch (e) { console.warn('BASE同期エラー', e); }
+}
+
+async function baseOpen() {
+  if (!requireAdmin('BASE連携の設定')) return;
+  document.getElementById('baseModal').style.display = 'block';
+  const st = document.getElementById('base-status');
+  st.innerHTML = '確認中...';
+  let connected = false;
+  try { const r = await baseRpc('base_status'); connected = !!(r && r.connected); } catch (e) {}
+  st.innerHTML = connected
+    ? '✅ <strong>BASEと接続済み</strong>（在庫の自動更新が有効です）'
+    : `❌ 未接続です → <a href="${BASE_AUTH_URL}" style="font-weight:700;">BASEにログインして「許可」を押す</a>（1回だけ）`;
+  const box = document.getElementById('base-mapping');
+  if (!connected) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="loading"><span class="spin"></span>BASEの商品を読み込み中...</div>';
+  try {
+    const [r, prods] = await Promise.all([
+      baseRpc('base_items'),
+      sb('GET', 'products', null, '?deleted_at=is.null&select=id,name,base_item_id&order=name.asc')
+    ]);
+    baseItemsCache = (r && r.items) ? r.items : [];
+    if (!baseItemsCache.length) { box.innerHTML = '<div class="empty-state">BASE側に商品がありません</div>'; return; }
+    const norm = s => String(s || '').replace(/[\s()（）ｇg]/g, '');
+    box.innerHTML = prods.map(p => {
+      const opts = baseItemsCache.map(it => {
+        const sel = String(p.base_item_id) === String(it.item_id) ? 'selected' : '';
+        return `<option value="${it.item_id}" ${sel}>${esc2(it.title)}（在庫${it.stock}）</option>`;
+      }).join('');
+      // 未対応なら名前の類似で自動候補
+      let auto = '';
+      if (!p.base_item_id) {
+        const hit = baseItemsCache.find(it => norm(it.title).includes(norm(p.name).slice(0, 6)) || norm(p.name).includes(norm(it.title).slice(0, 6)));
+        if (hit) auto = String(hit.item_id);
+      }
+      return `<div style="display:flex;align-items:center;gap:8px;">
+        <span style="flex:1;font-size:13px;">${esc2(p.name)}</span>
+        <select class="form-input base-map" data-pid="${p.id}" style="flex:1;font-size:12px;">
+          <option value="">— BASEと連携しない —</option>${opts}
+        </select>
+      </div>`.replace(`value="${auto}" `, auto ? `value="${auto}" selected ` : `value="${auto}" `);
+    }).join('');
+  } catch (e) { box.innerHTML = `<div class="empty-state">読み込みエラー: ${e.message}</div>`; }
+}
+
+async function baseSaveMapping() {
+  const rows = [...document.querySelectorAll('.base-map')];
+  try {
+    for (const el of rows) {
+      await sb('PATCH', 'products', { base_item_id: el.value || null }, `?id=eq.${el.dataset.pid}`);
+    }
+    toast('対応付けを保存しました');
+  } catch (e) { toast('保存に失敗しました: ' + sbSafeMsg(e), 'error'); }
+}
+
+async function baseSyncAll() {
+  if (!confirm('対応付け済みの全商品の在庫数を、センター在庫の値でBASEに上書きします。よろしいですか？')) return;
+  try {
+    const prods = await sb('GET', 'products', null, '?deleted_at=is.null&base_item_id=not.is.null&select=id,name,stock_qty,base_item_id');
+    let ok = 0, ng = 0;
+    for (const p of prods) {
+      const r = await baseRpc('base_update_stock', { p_item_id: p.base_item_id, p_stock: p.stock_qty || 0 });
+      if (r && r.error) ng++; else ok++;
+    }
+    toast(`BASE一括同期: 成功 ${ok}件${ng ? ` / 失敗 ${ng}件` : ''}`);
+  } catch (e) { toast('一括同期に失敗しました: ' + sbSafeMsg(e), 'error'); }
 }
 
 let outletMoveType = '納品';
@@ -5383,7 +5489,9 @@ async function outletMoveSave() {
     })));
     if (outletMoveType === '納品') {
       for (const r of rows) {
-        await sb('PATCH', 'products', { stock_qty: Math.max(0, (prodById[r.pid].stock_qty || 0) - r.qty), updated_at: new Date().toISOString() }, `?id=eq.${r.pid}`);
+        const newQty = Math.max(0, (prodById[r.pid].stock_qty || 0) - r.qty);
+        await sb('PATCH', 'products', { stock_qty: newQty, updated_at: new Date().toISOString() }, `?id=eq.${r.pid}`);
+        baseSyncStock(r.pid, newQty);
       }
     }
     playFeedbackSound(true);
