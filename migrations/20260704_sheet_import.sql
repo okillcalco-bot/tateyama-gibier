@@ -88,3 +88,6 @@ exception when duplicate_object then null; end $$;
 -- base_config(認証情報)/base_tokens(トークン): RLS有効・ポリシーなし = anonから読めない
 -- DB内関数(security definer): base_exchange/base_status/base_items/base_update_stock
 --   http拡張でBASE APIを呼ぶ。センター在庫変更時に products.base_item_id 対応品を自動更新
+
+-- ── 納品スマホページ 2026-07-20 適用済み: outlet_delivery_notes ──
+-- retail_outlets.delivery_notes: 道の駅ごとの納品方法メモ（outlet.htmlに表示・管理者が編集）
