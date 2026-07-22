@@ -325,6 +325,28 @@ textarea { min-height: 80px; resize: vertical; }
   }
 }
 
+/* 市役所票 印刷ビュー（ポップアップ不要・同一ページ内で表示して印刷） */
+#cityFormOverlay { display: none; position: fixed; inset: 0; background: #fff; z-index: 9999; overflow: auto; -webkit-overflow-scrolling: touch; }
+#cityFormOverlay .cf-bar { position: sticky; top: 0; z-index: 2; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: #23271c; padding: 10px 14px; }
+#cityFormOverlay .cf-bar button { border: none; border-radius: 10px; padding: 11px 18px; font-size: 15px; font-weight: 700; cursor: pointer; }
+#cityFormOverlay .cf-print { background: #c9a13b; color: #1c1f16; }
+#cityFormOverlay .cf-close { background: #3a3f31; color: #fff; }
+#cityFormOverlay .cf-hint { color: #cfd3c4; font-size: 11.5px; line-height: 1.5; }
+#cityFormOverlay .cf-sheet { font-family: "Noto Sans JP", "Hiragino Sans", sans-serif; color: #000; background: #fff; font-size: 13px; padding: 20px 16px 80px; max-width: 820px; margin: 0 auto; }
+#cityFormOverlay .cf-sheet h1 { font-size: 18px; text-align: center; margin: 0; color: #000; }
+#cityFormOverlay .cf-sheet .sub { text-align: center; font-size: 12px; margin-bottom: 10px; }
+#cityFormOverlay .cf-sheet table { width: 100%; border-collapse: collapse; }
+#cityFormOverlay .cf-sheet td, #cityFormOverlay .cf-sheet th { border: 1.5px solid #000; padding: 7px 9px; font-size: 13px; text-align: left; vertical-align: middle; background: #fff; color: #000; }
+#cityFormOverlay .cf-sheet th { width: 120px; background: #f5f5f5; font-weight: 600; text-align: center; }
+#cityFormOverlay .cf-sheet .no { font-size: 11px; margin-top: 10px; line-height: 1.8; }
+#cityFormOverlay .cf-sheet .right { float: right; border: 1.5px solid #000; padding: 4px 10px; margin-bottom: 6px; font-size: 12px; }
+@media print {
+  body.cityform-open > *:not(#cityFormOverlay) { display: none !important; }
+  body.cityform-open #cityFormOverlay { display: block !important; position: static; overflow: visible; }
+  body.cityform-open #cityFormOverlay .cf-bar { display: none !important; }
+  body.cityform-open #cityFormOverlay .cf-sheet { max-width: none; padding: 0; }
+}
+
 /* Animations */
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .section { animation: fadeIn 0.3s ease; }
@@ -2179,6 +2201,30 @@ function updateMethodRows(){
 updateMethodRows();
 
 // ── 市役所提出用「有害鳥獣捕獲票」印刷（館山有害鳥獣対策協議会様式に準拠） ──
+// ポップアップは使わず、同一ページ内の印刷ビューに表示する（ブロッカー対策・iPhone対応）
+function cityFormShow(inner){
+  let ov = document.getElementById('cityFormOverlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'cityFormOverlay';
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML =
+    '<div class="cf-bar">' +
+      '<button type="button" class="cf-print" onclick="window.print()">🖨 印刷 / PDF保存</button>' +
+      '<button type="button" class="cf-close" onclick="cityFormClose()">✕ 閉じる</button>' +
+      '<span class="cf-hint">iPhoneは印刷画面でピンチアウトするとPDF保存できます。地図が表示されてから印刷してください。</span>' +
+    '</div>' +
+    '<div class="cf-sheet">' + inner + '</div>';
+  ov.style.display = 'block';
+  ov.scrollTop = 0;
+  document.body.classList.add('cityform-open');
+}
+function cityFormClose(){
+  const ov = document.getElementById('cityFormOverlay');
+  if (ov) ov.style.display = 'none';
+  document.body.classList.remove('cityform-open');
+}
 async function cityFormPrint(rec){
   let phone = '';
   try {
@@ -2193,13 +2239,7 @@ async function cityFormPrint(rec){
   const finisher = rec.finisher_name || rec.hunter_name || '';
   const disposal = rec.disposal_method || '販売（館山ジビエセンター）';
   const fm = rec.finishing_method || '';
-  const html = '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>有害鳥獣捕獲票</title><style>' +
-    'body{font-family:"Noto Sans JP","Hiragino Sans",sans-serif;color:#000;background:#fff;font-size:13px;margin:24px;}' +
-    'h1{font-size:18px;text-align:center;margin:0;}.sub{text-align:center;font-size:12px;margin-bottom:10px;}' +
-    'table{width:100%;border-collapse:collapse;}td,th{border:1.5px solid #000;padding:7px 9px;font-size:13px;text-align:left;vertical-align:middle;}' +
-    'th{width:120px;background:#f5f5f5;font-weight:600;text-align:center;}' +
-    '.no{font-size:11px;margin-top:10px;line-height:1.8;}.right{float:right;border:1.5px solid #000;padding:4px 10px;margin-bottom:6px;font-size:12px;}' +
-    '@media print{body{margin:10mm;}}</style></head><body>' +
+  const html =
     '<div class="right">捕獲番号　　　　号<br><span style="font-size:10px;">（事務局で記入）</span></div>' +
     '<h1>有害鳥獣捕獲票</h1><div class="sub">（イノシシ等獣類別捕獲用）</div>' +
     '<table>' +
@@ -2232,12 +2272,8 @@ async function cityFormPrint(rec){
         '<div style="font-size:10px;">出典: 国土地理院（地理院タイル）　緯度 ' + parseFloat(rec.capture_lat).toFixed(5) + ' / 経度 ' + parseFloat(rec.capture_lng).toFixed(5) + '</div></div>';
     })() +
     '<div class="no">（摘要）<br>1　捕獲1頭につき1枚提出すること<br>2　<b>捕獲後おおむね3日以内に提出すること</b>。ただし、土日および祝日を除く。<br>3　捕獲者及び止め刺し者は、館山市有害鳥獣捕獲員に限る。<br>4　任意の地図に、捕獲場所を朱色×印にて記入すること（' + (rec.capture_lat ? '本票に地図を印字済み' : '別紙添付') + '）。<br>5　市から貸与の箱わなで捕獲した場合、番号札（　）内の数字を記入すること。<br>6　餌の種類は、箱わなを使用して捕獲した場合に記入すること。<br>7　<b>添付品: 捕獲獣の尾（1頭分ずつ、ジップロックに封入して提出すること）</b></div>' +
-    '<table style="margin-top:8px;"><tr><td style="text-align:center;">館山有害鳥獣対策協議会</td><th style="width:70px;">確認</th><td style="width:120px;"></td></tr></table>' +
-    '<script>setTimeout(function(){window.print();},400);<\/script></body></html>';
-  const w = window.open('', '_blank');
-  if (!w) { alert('ポップアップがブロックされました。ブラウザの設定でこのサイトのポップアップを許可してください'); return; }
-  w.document.write(html);
-  w.document.close();
+    '<table style="margin-top:8px;"><tr><td style="text-align:center;">館山有害鳥獣対策協議会</td><th style="width:70px;">確認</th><td style="width:120px;"></td></tr></table>';
+  cityFormShow(html);
 }
 </script>
 </body>
