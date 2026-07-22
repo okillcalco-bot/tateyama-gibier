@@ -5462,7 +5462,7 @@ async function outletStockEdit(productId, outletName) {
 }
 
 /* ── BASE連携（在庫の自動同期） ── */
-const BASE_AUTH_URL = 'https://api.thebase.in/1/oauth/authorize?response_type=code&client_id=8116b0b027b7fb5d56b2db7da3ee20ba&redirect_uri=' + encodeURIComponent('https://tateyama-gibier.vercel.app/base-callback.html') + '&scope=' + encodeURIComponent('read_items write_items read_orders write_orders');
+const BASE_AUTH_URL = 'https://api.thebase.in/1/oauth/authorize?response_type=code&client_id=10a608e44c3a04c60d4fe74e6dbffeeb&redirect_uri=' + encodeURIComponent('https://tateyama-gibier.vercel.app/base-callback.html') + '&scope=' + encodeURIComponent('read_items write_items read_orders write_orders');
 let baseItemsCache = [];
 
 async function baseRpc(fn, args) {
