@@ -91,3 +91,7 @@ exception when duplicate_object then null; end $$;
 
 -- ── 納品スマホページ 2026-07-20 適用済み: outlet_delivery_notes ──
 -- retail_outlets.delivery_notes: 道の駅ごとの納品方法メモ（outlet.htmlに表示・管理者が編集）
+
+-- ── BASE注文連携 2026-07-21 適用済み: base_orders_functions ──
+-- base_orders/base_order_detail/base_dispatch: 注文一覧・明細取得と発送済み更新
+-- （BASEアプリ側で read_orders / write_orders スコープの追加と再認可が必要）
