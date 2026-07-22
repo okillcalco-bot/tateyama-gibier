@@ -1681,8 +1681,9 @@ async function loadBaseOrders() {
     const keys = list.map(o => 'BASE-' + o.unique_key);
     const done = await sb('GET', 'orders', null, `?order_code=in.(${keys.map(k => '"' + k + '"').join(',')})&select=order_code`);
     const doneSet = new Set(done.map(d => d.order_code));
-    const pending = list.filter(o => !doneSet.has('BASE-' + o.unique_key)).slice(0, 8);
-    if (!pending.length) { box.innerHTML = '<div class="empty-state">未処理のBASE注文はありません（最近20件はすべて発送処理済み）</div>'; return; }
+    // BASE側の「未対応」(dispatch_status=ordered) かつ アプリ未処理のものだけ表示
+    const pending = list.filter(o => o.dispatch_status === 'ordered' && !doneSet.has('BASE-' + o.unique_key)).slice(0, 8);
+    if (!pending.length) { box.innerHTML = '<div class="empty-state">未発送のBASE注文はありません 🎉</div>'; return; }
     let html = '';
     for (const o of pending) {
       let d = null;
@@ -6314,7 +6315,7 @@ async function loadTodayTodos() {
       const keys = list.map(o => 'BASE-' + o.unique_key);
       const done = await sb('GET', 'orders', null, `?order_code=in.(${keys.map(k => '"' + k + '"').join(',')})&select=order_code`);
       const doneSet = new Set(done.map(d => d.order_code));
-      add(list.filter(o => !doneSet.has('BASE-' + o.unique_key)).length, '🛒 BASEの注文（発送処理へ）', 'shipping', true);
+      add(list.filter(o => o.dispatch_status === 'ordered' && !doneSet.has('BASE-' + o.unique_key)).length, '🛒 BASEの注文（発送処理へ）', 'shipping', true);
     }
   } catch (e) {}
   try {
