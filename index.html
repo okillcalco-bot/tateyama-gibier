@@ -1303,6 +1303,14 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
     </div>
 
+    <div class="section" id="ship-base">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>🛒 BASEネットショップの注文</span>
+        <button class="btn btn-sm" onclick="loadBaseOrders()">🔄 更新</button>
+      </div>
+      <div id="base-orders"><div class="empty-state" style="font-size:13px;">読み込み中...</div></div>
+    </div>
+
     <div class="section">
       <div class="section-title">出荷待ち注文一覧</div>
       <div id="ship-orders"><div class="loading"><span class="spin"></span>読み込み中...</div></div>
@@ -1622,7 +1630,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'inventory') loadInventory();
     if (btn.dataset.tab === 'individuals') indLoad();
     if (btn.dataset.tab === 'processing') loadProcessingSetup();
-    if (btn.dataset.tab === 'shipping') { loadShipping(); setTimeout(maintainShippingScannerFocus, 50); }
+    if (btn.dataset.tab === 'shipping') { loadShipping(); loadBaseOrders(); setTimeout(maintainShippingScannerFocus, 50); }
     if (btn.dataset.tab === 'punch') loadPunch();
     if (btn.dataset.tab === 'products') loadProducts();
     if (btn.dataset.tab === 'aging') loadAging();
@@ -1653,6 +1661,105 @@ document.getElementById('ship-scan-code').addEventListener('keydown', (e) => {
     handleShippingScan();
   }
 });
+
+/* ── BASEネットショップの注文（表示と発送処理） ── */
+let baseOrderCache = {}; // unique_key → detail
+
+async function loadBaseOrders() {
+  const box = document.getElementById('base-orders');
+  if (!box) return;
+  box.innerHTML = '<div class="loading"><span class="spin"></span>BASEに問い合わせ中...</div>';
+  try {
+    const r = await sb('POST', 'rpc/base_orders', { p_limit: 20 });
+    if (r && r.error === 'not_connected') {
+      box.innerHTML = '<div class="empty-state" style="font-size:13px;">BASE未接続です。加工処理タブの「⚙ BASE連携」から接続してください。</div>';
+      return;
+    }
+    const list = (r && r.orders) ? r.orders : [];
+    if (!list.length) { box.innerHTML = '<div class="empty-state">注文はありません</div>'; return; }
+    // ローカル処理済み（orders.order_code = BASE-キー）を除外
+    const keys = list.map(o => 'BASE-' + o.unique_key);
+    const done = await sb('GET', 'orders', null, `?order_code=in.(${keys.map(k => '"' + k + '"').join(',')})&select=order_code`);
+    const doneSet = new Set(done.map(d => d.order_code));
+    const pending = list.filter(o => !doneSet.has('BASE-' + o.unique_key)).slice(0, 8);
+    if (!pending.length) { box.innerHTML = '<div class="empty-state">未処理のBASE注文はありません（最近20件はすべて発送処理済み）</div>'; return; }
+    let html = '';
+    for (const o of pending) {
+      let d = null;
+      try { d = await sb('POST', 'rpc/base_order_detail', { p_key: o.unique_key }); } catch (e) {}
+      const od = d && d.order ? d.order : null;
+      if (od) baseOrderCache[o.unique_key] = od;
+      const items = od && od.order_items ? od.order_items.filter(i => i.status !== 'cancelled') : [];
+      const buyer = od ? `${od.last_name || ''} ${od.first_name || ''}`.trim() : '';
+      const when = new Date((o.ordered || 0) * 1000).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const allDispatched = items.length > 0 && items.every(i => i.status === 'dispatched');
+      html += `<div class="order-card">
+        <div class="order-card-header">
+          <div>
+            <div class="order-code">🛒 ${esc2(buyer || 'BASE注文')} <span style="font-size:12px;color:var(--text2);font-weight:400;">${when} / ${o.unique_key}</span></div>
+            <div class="order-meta">${items.map(i => `${esc2(i.title)} × ${i.amount}`).join(' / ') || '明細取得中'} ${od && od.total ? ` / 合計 ¥${Number(od.total).toLocaleString()}` : ''} ${allDispatched ? '<span class="badge badge-blue">BASE上は発送済み</span>' : '<span class="badge badge-red">未発送</span>'}</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="baseOrderShip('${o.unique_key}')">📦 発送処理（在庫を引く）</button>
+        </div>
+      </div>`;
+    }
+    box.innerHTML = html;
+  } catch (e) {
+    box.innerHTML = `<div class="empty-state" style="font-size:13px;">BASE注文の取得に失敗しました。BASEアプリの権限に「注文情報を見る」が入っているか確認してください（${esc2(String(e.message).slice(0, 120))}）</div>`;
+  }
+}
+
+async function baseOrderShip(key) {
+  const od = baseOrderCache[key];
+  if (!od) { toast('明細が取得できていません。🔄 更新を押してください', 'error'); return; }
+  const items = (od.order_items || []).filter(i => i.status !== 'cancelled');
+  const buyer = `${od.last_name || ''} ${od.first_name || ''}`.trim() || 'BASE購入者';
+  if (!confirm(`BASE注文の発送処理をしますか？\n\n購入者: ${buyer}\n${items.map(i => `・${i.title} × ${i.amount}`).join('\n')}\n\n・センター在庫から自動で差し引きます\n・BASE側も「発送済み」に更新します（購入者に発送メールが届きます）`)) return;
+  try {
+    const prods = await sb('GET', 'products', null, '?deleted_at=is.null&select=id,name,stock_qty,base_item_id');
+    const byBaseId = {};
+    prods.forEach(p => { if (p.base_item_id) byBaseId[String(p.base_item_id)] = p; });
+    // ローカル注文記録
+    const created = await sb('POST', 'orders', {
+      order_code: 'BASE-' + key, customer_name: buyer + '（BASE）',
+      order_date: new Date((od.ordered || Date.now() / 1000) * 1000).toISOString().slice(0, 10),
+      status: '出荷済', channel: 'BASEネットショップ', total_amount: parseInt(od.total) || null
+    });
+    const orderId = created[0].id;
+    const unmatched = [];
+    for (const it of items) {
+      const p = byBaseId[String(it.item_id)];
+      await sb('POST', 'order_items', {
+        order_id: orderId, part_name: it.title, weight: null,
+        unit_price: parseInt(it.price) || null, amount: (parseInt(it.price) || 0) * (it.amount || 1),
+        product_id: p ? p.id : null
+      });
+      if (p) {
+        const nq = Math.max(0, (p.stock_qty || 0) - (it.amount || 1));
+        await sb('POST', 'product_movements', {
+          product_id: p.id, product_name: p.name, movement_type: '店頭販売', qty: it.amount || 1,
+          staff_name: 'BASE連携', destination: 'BASEネットショップ', note: 'BASE注文 ' + key
+        });
+        await sb('PATCH', 'products', { stock_qty: nq, updated_at: new Date().toISOString() }, `?id=eq.${p.id}`);
+        p.stock_qty = nq;
+        baseSyncStock(p.id, nq);
+      } else {
+        unmatched.push(it.title);
+      }
+      // BASE側を発送済みに（write_orders権限がある場合）
+      if (it.status !== 'dispatched' && it.order_item_id) {
+        try { await sb('POST', 'rpc/base_dispatch', { p_order_item_id: String(it.order_item_id) }); } catch (e) {}
+      }
+    }
+    await sb('POST', 'shipments', { order_id: orderId, shipment_date: new Date().toISOString().slice(0, 10), status: '出荷済', notes: 'BASE注文 ' + key });
+    playFeedbackSound(true);
+    toast(`BASE注文の発送処理が完了しました（${items.length}品目）` + (unmatched.length ? `\n⚠ 在庫と対応付けなし: ${unmatched.join('・')}（⚙BASE連携で対応付けを確認）` : ''));
+    loadBaseOrders();
+  } catch (e) {
+    playFeedbackSound(false);
+    toast('発送処理に失敗しました: ' + sbSafeMsg(e), 'error');
+  }
+}
 
 /* ── 注文なし出荷（直販・突然の来店） ── */
 let shipDirectItems = [];
@@ -6200,6 +6307,16 @@ async function loadTodayTodos() {
     add(wait, '精肉がまだの個体（直近2週間）', 'processing', false);
   } catch (e) {}
   try { const o = await sb('GET', 'orders', null, '?status=eq.確認済&select=id'); add(o.length, '出荷待ちの注文', 'shipping', false); } catch (e) {}
+  try {
+    const r = await sb('POST', 'rpc/base_orders', { p_limit: 20 });
+    const list = (r && r.orders) ? r.orders : [];
+    if (list.length) {
+      const keys = list.map(o => 'BASE-' + o.unique_key);
+      const done = await sb('GET', 'orders', null, `?order_code=in.(${keys.map(k => '"' + k + '"').join(',')})&select=order_code`);
+      const doneSet = new Set(done.map(d => d.order_code));
+      add(list.filter(o => !doneSet.has('BASE-' + o.unique_key)).length, '🛒 BASEの注文（発送処理へ）', 'shipping', true);
+    }
+  } catch (e) {}
   try {
     const today = new Date().toISOString().slice(0, 10);
     const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${today}T00:00:00&select=room`);
