@@ -60,6 +60,11 @@ input, select { width: 100%; padding: 11px; border: 1px solid var(--border); bor
     </div>
   </div>
 
+  <div class="card" id="sales-card" style="display:none;">
+    <h2>📈 売れゆき（直近7日間）</h2>
+    <div id="sales-body" class="memo">読み込み中...</div>
+  </div>
+
   <div class="chips" id="chips"></div>
 
   <div id="outlet-area" style="display:none;">
@@ -116,7 +121,7 @@ let storeMode = null; // 納品先セルフ入力モード（?store=トークン
 async function load() {
   const [o, p, m] = await Promise.all([
     sb('GET', 'retail_outlets', null, '?is_active=eq.true&deleted_at=is.null&select=id,name,delivery_notes&order=sort_order.asc.nullslast,name.asc'),
-    sb('GET', 'products', null, '?deleted_at=is.null&category=eq.小売&select=id,name,unit,stock_qty&order=name.asc'),
+    sb('GET', 'products', null, '?deleted_at=is.null&category=eq.小売&select=id,name,unit,stock_qty,price&order=name.asc'),
     sb('GET', 'product_movements', null, '?destination=not.is.null&select=product_id,movement_type,qty,destination&limit=3000')
   ]);
   outlets = o; products = p; stockMap = {};
@@ -131,6 +136,57 @@ async function load() {
     `<button class="chip ${current === '__center__' ? 'on' : ''}" onclick="pick('__center__')">🏭 センター</button>` +
     outlets.map(x => `<button class="chip ${current === x.name ? 'on' : ''}" onclick="pick('${esc(x.name)}')">${esc(x.name)}</button>`).join('');
   if (current) renderOutlet();
+  if (!storeMode) loadSalesSummary();
+}
+
+// ── 売れゆきサマリー（在庫チェック前の参考・やる気用） ──
+async function loadSalesSummary() {
+  const card = document.getElementById('sales-card');
+  const body = document.getElementById('sales-body');
+  if (!card) return;
+  card.style.display = 'block';
+  try {
+    const since = new Date(Date.now() - 14 * 86400000).toISOString();
+    const sales = await sb('GET', 'product_movements', null,
+      `?movement_type=eq.店頭販売&created_at=gte.${since}&select=product_id,qty,destination,created_at&limit=2000`);
+    const weekAgo = Date.now() - 7 * 86400000;
+    const priceById = {}, nameById = {};
+    products.forEach(p => { priceById[p.id] = p.price || 0; nameById[p.id] = p.name; });
+    let thisW = 0, lastW = 0, thisYen = 0;
+    const byProd = {}, byStore = {};
+    sales.forEach(m => {
+      const t = new Date(m.created_at).getTime();
+      if (t >= weekAgo) {
+        thisW += m.qty;
+        thisYen += m.qty * (priceById[m.product_id] || 0);
+        byProd[m.product_id] = (byProd[m.product_id] || 0) + m.qty;
+        if (m.destination) byStore[m.destination] = (byStore[m.destination] || 0) + m.qty;
+      } else {
+        lastW += m.qty;
+      }
+    });
+    if (!thisW && !lastW) {
+      body.innerHTML = 'まだ販売データがありません。売上メールの自動取込が動き始めると、ここに売れゆきが出ます。';
+      return;
+    }
+    const diff = thisW - lastW;
+    const diffTxt = lastW === 0 ? '' :
+      diff > 0 ? ` <span style="color:var(--green);font-weight:700;">▲ 先週より +${diff}袋</span>` :
+      diff < 0 ? ` <span style="color:var(--red);font-weight:700;">▼ 先週より ${diff}袋</span>` :
+      ' <span style="color:var(--text3);">（先週と同じ）</span>';
+    const top3 = Object.entries(byProd).sort((a, b) => b[1] - a[1]).slice(0, 3)
+      .map(([pid, q], i) => `${['🥇','🥈','🥉'][i]} ${esc((nameById[pid] || '?').replace(/^(イノシシ|味付け肉|味付けミンチ|イノシシジャーキー)\s*/, ''))} <strong>${q}</strong>`)
+      .join('　');
+    const stores = Object.entries(byStore).sort((a, b) => b[1] - a[1])
+      .map(([n, q]) => `${esc(n)} <strong>${q}</strong>`).join('　/　');
+    body.innerHTML =
+      `<div style="font-size:15px;">今週 <strong style="font-size:19px;color:var(--gold);">${thisW}袋</strong>` +
+      (thisYen ? `（約 <strong>¥${thisYen.toLocaleString()}</strong>）` : '') + `売れました！${diffTxt}</div>` +
+      (top3 ? `<div style="margin-top:4px;">売れ筋: ${top3}</div>` : '') +
+      (stores ? `<div style="margin-top:2px;font-size:12px;color:var(--text2);">店別: ${stores}</div>` : '');
+  } catch (e) {
+    card.style.display = 'none';
+  }
 }
 
 function pick(name) { current = name; document.getElementById('form-area').style.display = 'none'; load(); document.getElementById('outlet-area').style.display = 'block'; }
