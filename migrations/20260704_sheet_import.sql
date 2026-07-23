@@ -95,3 +95,13 @@ exception when duplicate_object then null; end $$;
 -- ── BASE注文連携 2026-07-21 適用済み: base_orders_functions ──
 -- base_orders/base_order_detail/base_dispatch: 注文一覧・明細取得と発送済み更新
 -- （BASEアプリ側で read_orders / write_orders スコープの追加と再認可が必要）
+
+-- ─────────────────────────────────────────────
+-- 2026-07-23 適用済み: base_dispatch_tracking_and_order_items_fk
+-- （mcp経由でDBに直接適用済み。記録用）
+-- 1) order_items.product_id の FK (→price_master) を撤廃。
+--    BASE注文の発送処理では products.id を入れるため2つの参照先が混在しており、
+--    既存データで product_id を使う行は0件だったため制約を外した。
+-- 2) base_dispatch(p_order_item_id) を base_dispatch(p_order_item_id, p_tracking default null) に差替え。
+--    送り状番号があれば BASE の orders/edit_status に tracking_number として送信。
+--    伝票番号付きで失敗した場合は発送済み更新のみ再試行（tracking_skipped:true を返す）。
