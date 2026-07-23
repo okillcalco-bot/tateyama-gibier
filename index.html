@@ -1682,15 +1682,20 @@ async function loadBaseOrders() {
     const done = await sb('GET', 'orders', null, `?order_code=in.(${keys.map(k => '"' + k + '"').join(',')})&select=order_code`);
     const doneSet = new Set(done.map(d => d.order_code));
     // BASE側の「未対応」(dispatch_status=ordered) かつ アプリ未処理のものだけ表示
-    const pending = list.filter(o => o.dispatch_status === 'ordered' && !doneSet.has('BASE-' + o.unique_key)).slice(0, 8);
-    if (!pending.length) { box.innerHTML = '<div class="empty-state">未発送のBASE注文はありません 🎉</div>'; return; }
+    const candidates = list.filter(o => o.dispatch_status === 'ordered' && !doneSet.has('BASE-' + o.unique_key)).slice(0, 15);
+    if (!candidates.length) { box.innerHTML = '<div class="empty-state">未発送のBASE注文はありません 🎉</div>'; return; }
+    // 革製品はジビエセンターの管轄外なので、革製品だけの注文は表示しない
+    const isLeather = t => /革|レザー/.test(String(t || ''));
     let html = '';
-    for (const o of pending) {
+    let shown = 0;
+    for (const o of candidates) {
+      if (shown >= 8) break;
       let d = null;
       try { d = await sb('POST', 'rpc/base_order_detail', { p_key: o.unique_key }); } catch (e) {}
       const od = d && d.order ? d.order : null;
       if (od) baseOrderCache[o.unique_key] = od;
       const items = od && od.order_items ? od.order_items.filter(i => i.status !== 'cancelled') : [];
+      if (items.length && items.every(i => isLeather(i.title))) continue;
       const buyer = od ? `${od.last_name || ''} ${od.first_name || ''}`.trim() : '';
       const when = new Date((o.ordered || 0) * 1000).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
       const allDispatched = items.length > 0 && items.every(i => i.status === 'dispatched');
@@ -1700,10 +1705,15 @@ async function loadBaseOrders() {
             <div class="order-code">🛒 ${esc2(buyer || 'BASE注文')} <span style="font-size:12px;color:var(--text2);font-weight:400;">${when} / ${o.unique_key}</span></div>
             <div class="order-meta">${items.map(i => `${esc2(i.title)} × ${i.amount}`).join(' / ') || '明細取得中'} ${od && od.total ? ` / 合計 ¥${Number(od.total).toLocaleString()}` : ''} ${allDispatched ? '<span class="badge badge-blue">BASE上は発送済み</span>' : '<span class="badge badge-red">未発送</span>'}</div>
           </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+          <input class="input" id="base-track-${o.unique_key}" placeholder="送り状番号（任意）" style="flex:1;min-width:170px;max-width:260px;">
           <button class="btn btn-primary btn-sm" onclick="baseOrderShip('${o.unique_key}')">📦 発送処理（在庫を引く）</button>
         </div>
       </div>`;
+      shown++;
     }
+    if (!shown) { box.innerHTML = '<div class="empty-state">未発送のBASE注文はありません 🎉（革製品のみの注文は管轄外のため表示していません）</div>'; return; }
     box.innerHTML = html;
   } catch (e) {
     box.innerHTML = `<div class="empty-state" style="font-size:13px;">BASE注文の取得に失敗しました。BASEアプリの権限に「注文情報を見る」が入っているか確認してください（${esc2(String(e.message).slice(0, 120))}）</div>`;
@@ -1715,7 +1725,9 @@ async function baseOrderShip(key) {
   if (!od) { toast('明細が取得できていません。🔄 更新を押してください', 'error'); return; }
   const items = (od.order_items || []).filter(i => i.status !== 'cancelled');
   const buyer = `${od.last_name || ''} ${od.first_name || ''}`.trim() || 'BASE購入者';
-  if (!confirm(`BASE注文の発送処理をしますか？\n\n購入者: ${buyer}\n${items.map(i => `・${i.title} × ${i.amount}`).join('\n')}\n\n・センター在庫から自動で差し引きます\n・BASE側も「発送済み」に更新します（購入者に発送メールが届きます）`)) return;
+  const trackEl = document.getElementById('base-track-' + key);
+  const trackNo = trackEl ? trackEl.value.trim() : '';
+  if (!confirm(`BASE注文の発送処理をしますか？\n\n購入者: ${buyer}\n${items.map(i => `・${i.title} × ${i.amount}`).join('\n')}\n送り状番号: ${trackNo || '（未入力）'}\n\n・センター在庫から自動で差し引きます\n・BASE側も「発送済み」に更新します（購入者に発送メールが届きます）`)) return;
   try {
     const prods = await sb('GET', 'products', null, '?deleted_at=is.null&select=id,name,stock_qty,base_item_id');
     const byBaseId = {};
@@ -1724,7 +1736,8 @@ async function baseOrderShip(key) {
     const created = await sb('POST', 'orders', {
       order_code: 'BASE-' + key, customer_name: buyer + '（BASE）',
       order_date: new Date((od.ordered || Date.now() / 1000) * 1000).toISOString().slice(0, 10),
-      status: '出荷済', channel: 'BASEネットショップ', total_amount: parseInt(od.total) || null
+      status: '発送済', channel: 'BASEネットショップ', total_amount: parseInt(od.total) || null,
+      notes: trackNo ? '送り状番号: ' + trackNo : null
     });
     const orderId = created[0].id;
     const unmatched = [];
@@ -1747,12 +1760,12 @@ async function baseOrderShip(key) {
       } else {
         unmatched.push(it.title);
       }
-      // BASE側を発送済みに（write_orders権限がある場合）
+      // BASE側を発送済みに（write_orders権限がある場合。送り状番号も一緒に送る）
       if (it.status !== 'dispatched' && it.order_item_id) {
-        try { await sb('POST', 'rpc/base_dispatch', { p_order_item_id: String(it.order_item_id) }); } catch (e) {}
+        try { await sb('POST', 'rpc/base_dispatch', { p_order_item_id: String(it.order_item_id), p_tracking: trackNo || null }); } catch (e) {}
       }
     }
-    await sb('POST', 'shipments', { order_id: orderId, shipment_date: new Date().toISOString().slice(0, 10), status: '出荷済', notes: 'BASE注文 ' + key });
+    await sb('POST', 'shipments', { order_id: orderId, shipment_date: new Date().toISOString().slice(0, 10), status: '出荷済', notes: 'BASE注文 ' + key + (trackNo ? ' / 送り状番号: ' + trackNo : '') });
     playFeedbackSound(true);
     toast(`BASE注文の発送処理が完了しました（${items.length}品目）` + (unmatched.length ? `\n⚠ 在庫と対応付けなし: ${unmatched.join('・')}（⚙BASE連携で対応付けを確認）` : ''));
     loadBaseOrders();
@@ -1865,7 +1878,7 @@ async function shipDirectConfirm() {
       delivery_name: custName,
       order_date: now.toISOString().slice(0,10),
       delivery_date: now.toISOString().slice(0,10),
-      status: '出荷済',
+      status: '発送済',
       channel: '直販（注文なし）',
       notes: [memo, operator ? `担当:${operator}` : ''].filter(Boolean).join(' / ') || null
     };
@@ -4590,7 +4603,8 @@ const MIGRATION_HINT = 'このモジュール用のテーブルがまだDBにあ
 
 function sbSafeMsg(err) {
   const m = String(err && err.message || err);
-  if (m.includes('does not exist') || m.includes('PGRST') || m.includes('relation') || m.includes('column')) return MIGRATION_HINT;
+  // テーブル自体が無いときだけ移行ヒントを出す（制約違反などの実エラーは隠さない）
+  if (m.includes('PGRST205') || m.includes('schema cache') || (m.includes('relation') && m.includes('does not exist'))) return MIGRATION_HINT;
   return m;
 }
 
