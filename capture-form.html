@@ -825,7 +825,28 @@ textarea { min-height: 80px; resize: vertical; }
     <div class="modal-body">
       <div class="print-labels" id="printLabels"></div>
       <button class="print-btn" onclick="window.print()">&#x1F5A8;&#xFE0F; ラベルを印刷</button>
+      <button class="new-btn" onclick="printModalCityForm()">🏛 市役所票を表示・印刷（任意）</button>
       <button class="new-btn" onclick="closePrintModal();resetForm();">新規入力に戻る</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hunter Done Modal（捕獲者モード送信完了。市役所票は任意で出す） -->
+<div class="modal-overlay" id="hunterDoneModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>✅ 送信しました</h3>
+      <div class="modal-close" onclick="hunterDoneClose()">&times;</div>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:14px;line-height:1.8;">ありがとうございました！<br>センター受入時にスタッフが個体番号を付けます。</p>
+      <p style="font-size:13px;color:var(--text2);line-height:1.8;margin-top:10px;">市役所提出用の「有害鳥獣捕獲票」は<b>どちらでも出せます</b>：</p>
+      <ul style="font-size:13px;color:var(--text2);line-height:1.8;margin:6px 0 12px 18px;">
+        <li>いま自分で出す（体重・体長が未入力なら空欄のまま印字されます）</li>
+        <li>ジビエセンターで<b>体重測定後</b>にスタッフが出す（おすすめ）</li>
+      </ul>
+      <button class="print-btn" onclick="hunterDoneCityForm()">🏛 市役所票をいま表示・印刷する</button>
+      <button class="new-btn" onclick="hunterDoneClose()">閉じる（センターにおまかせ）</button>
     </div>
   </div>
 </div>
@@ -1750,12 +1771,11 @@ async function handleSubmit() {
 
     if (window.hunterMode) {
       btn.disabled = false; btn.textContent = '登録する';
-      if (confirm('送信しました。ありがとうございました！\nセンター受入時にスタッフが個体番号を付けます。\n\n市役所提出用の「有害鳥獣捕獲票」を今すぐ表示・印刷しますか？（後からでも出せます）')) {
-        try { await cityFormPrint(record); } catch(_e) {}
-      }
+      window._hunterDoneRecord = record;
       resetForm();
       const _h = new URLSearchParams(location.search).get('hunter');
       if (_h) { const _el = document.getElementById('hunterName'); if (_el) _el.value = _h; }
+      document.getElementById('hunterDoneModal').classList.add('show');
       return;
     }
     // Skip counter increment when editing
@@ -1827,7 +1847,19 @@ window.addEventListener('offline', () => {
 });
 
 /* ── Print modal ── */
+function hunterDoneClose(){
+  document.getElementById('hunterDoneModal').classList.remove('show');
+}
+async function hunterDoneCityForm(){
+  hunterDoneClose();
+  try { await cityFormPrint(window._hunterDoneRecord || {}); } catch(_e){ alert('市役所票の表示に失敗しました: ' + _e.message); }
+}
+async function printModalCityForm(){
+  if (!window._lastPrintRecord) { alert('直前の登録データが見つかりません'); return; }
+  try { await cityFormPrint(window._lastPrintRecord); } catch(_e){ alert('市役所票の表示に失敗しました: ' + _e.message); }
+}
 function showPrintModal(record) {
+  window._lastPrintRecord = record;
   const labels = document.getElementById('printLabels');
   labels.innerHTML = `
     <div class="label-card">
