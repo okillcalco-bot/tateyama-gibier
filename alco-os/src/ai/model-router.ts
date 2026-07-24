@@ -20,7 +20,8 @@ export type WorkflowName =
   | "generate_presentation"
   | "generate_video_plan"
   | "generate_social_posts"
-  | "generate_advisor_brief";
+  | "generate_advisor_brief"
+  | "parse_field_note";
 
 interface ModelConfig {
   model: string;
@@ -42,6 +43,7 @@ const WORKFLOW_CONFIG: Record<WorkflowName, Partial<ModelConfig>> = {
   generate_video_plan: { maxTokens: 12288 },
   generate_social_posts: { maxTokens: 8192 },
   generate_advisor_brief: { maxTokens: 8192 },
+  parse_field_note: { maxTokens: 4096 },
 };
 
 export function resolveModelConfig(workflow: WorkflowName): ModelConfig {

@@ -148,6 +148,28 @@ const DEFAULT_RESPONSES: Record<string, string> = {
     },
     missing_information: ["開催日の確定情報"],
   }),
+  parse_field_note: JSON.stringify({
+    observations: [
+      {
+        species_candidates: ["ニホンアカガエル", "ヤマアカガエル"],
+        taxon_group: "両生類",
+        count: 3,
+        evidence_type: "sighting",
+        habitat_note: "（モック）湿地北側の浅い水たまり",
+        raw_phrase: "湿地の北側でアカガエルの卵塊3つ",
+        identification_certainty: "ai_only",
+        needs_expert_review: true,
+      },
+    ],
+    resource_notes: [
+      { target: "竹林", metric: "枯死率", value: "約7割", raw_phrase: "モウソウチク枯死7割" },
+    ],
+    management_notes: ["（モック）南側の草刈りを実施"],
+    sensitivity_flag: false,
+    sensitivity_reason: "",
+    missing_information: ["正確な観察時刻"],
+    summary: "（モック）湿地でアカガエル類の卵塊を確認。竹林の枯死が進行。",
+  }),
   generate_advisor_brief: JSON.stringify({
     issue_summary: "（モック）解体体験の参加費に係る消費税区分と、現金売上の記帳方法が論点。",
     general_guidance:
