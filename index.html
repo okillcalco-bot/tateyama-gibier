@@ -1119,6 +1119,20 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
       <div id="docs-list"></div>
     </div>
+    <div class="section">
+      <div class="section-title">🏛 市役所提出（指定管理 業務報告書）</div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;line-height:1.7;">
+        毎月の「TGC業務報告書」を提出様式そのままのExcelで生成します。<b>業務日誌（出勤人数・受入頭数）と清掃記録はアプリのデータから自動転記</b>。点検保守は「○（異常なし）」で埋めるので、異常があった日はExcel上で△✕に直してください。<b>打合せ記録簿</b>は農水産課からの議事録メール、<b>収支状況</b>は千葉トラスト会計の月次メールを見ながらExcel上で仕上げてください。年度業務報告書は4月〜3月の月次報告書の綴りです（下の年度まとめで数字を確認できます）。
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
+        <div class="form-group" style="margin:0;"><label>対象月</label><input class="form-input" id="city-report-month" type="month" style="max-width:170px;"></div>
+        <button class="btn" onclick="cityReportPreview()">📋 データ集計プレビュー</button>
+        <button class="btn btn-primary" onclick="cityReportExcel()">⬇ 月次業務報告書（Excel）</button>
+        <div class="form-group" style="margin:0;"><label>年度</label><select class="form-input" id="city-report-fy" style="max-width:160px;"></select></div>
+        <button class="btn" onclick="cityReportFiscal()">📊 年度まとめ</button>
+      </div>
+      <div id="city-report-out" style="overflow-x:auto;"></div>
+    </div>
     <div class="section" id="doc-preview-section" style="display:none;">
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
         <span>プレビュー</span>
@@ -6116,6 +6130,226 @@ async function docZipCategory(cat) {
   a.click(); URL.revokeObjectURL(a.href);
   playFeedbackSound(true);
   toast(`${cat} ${files.length}帳票をZIP出力しました`);
+}
+
+/* ───────── 市役所提出（指定管理 業務報告書） ───────── */
+const CITY_INITIALS = { '大和田': '大', '大橋': '橋', '名取': '名' };
+function cityInitial(name) {
+  if (!name) return '';
+  for (const k in CITY_INITIALS) if (String(name).startsWith(k)) return CITY_INITIALS[k];
+  return String(name).trim().charAt(0);
+}
+function cityColLetter(n) { let s = ''; while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); } return s; }
+function cityReportMonthVal() {
+  const el = document.getElementById('city-report-month');
+  if (el && el.value) return el.value;
+  const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+(function initCityReport() {
+  const mEl = document.getElementById('city-report-month');
+  if (mEl && !mEl.value) mEl.value = cityReportMonthVal();
+  const fyEl = document.getElementById('city-report-fy');
+  if (fyEl) {
+    const now = new Date();
+    const curFy = now.getMonth() + 1 >= 4 ? now.getFullYear() : now.getFullYear() - 1;
+    let opts = '';
+    for (let y = 2025; y <= curFy; y++) opts += `<option value="${y}" ${y === curFy ? 'selected' : ''}>令和${y - 2018}年度</option>`;
+    fyEl.innerHTML = opts;
+  }
+})();
+
+async function cityReportData(month) {
+  const [y, m] = month.split('-').map(Number);
+  const days = new Date(y, m, 0).getDate();
+  const start = `${month}-01`;
+  const endEx = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+  const [att, inds, cleans] = await Promise.all([
+    sb('GET', 'attendance', null, `?work_date=gte.${start}&work_date=lt.${endEx}&select=work_date,staff_id,clock_in`),
+    sb('GET', 'individuals', null, `?capture_date=gte.${start}&capture_date=lt.${endEx}&select=capture_date,intake_status`),
+    sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${start}T00:00:00&cleaned_at=lt.${endEx}T00:00:00&select=room,staff_name,cleaned_at&limit=2000`)
+  ]);
+  const attByDay = {}, indByDay = {}, cleanByDay = {};
+  att.forEach(a => { if (!a.clock_in) return; (attByDay[a.work_date] = attByDay[a.work_date] || new Set()).add(a.staff_id); });
+  inds.forEach(i => { if (i.intake_status === '搬入待ち') return; indByDay[i.capture_date] = (indByDay[i.capture_date] || 0) + 1; });
+  cleans.forEach(c => { const d = String(c.cleaned_at).slice(0, 10); (cleanByDay[d] = cleanByDay[d] || {})[c.room] = cityInitial(c.staff_name); });
+  return { y, m, days, month, attByDay, indByDay, cleanByDay };
+}
+
+async function cityReportPreview() {
+  const month = cityReportMonthVal();
+  const out = document.getElementById('city-report-out');
+  out.innerHTML = '<div class="loading"><span class="spin"></span>集計中...</div>';
+  try {
+    const d = await cityReportData(month);
+    let rows = '', sumInd = 0, workDays = 0;
+    for (let day = 1; day <= d.days; day++) {
+      const ds = `${month}-${String(day).padStart(2, '0')}`;
+      const staff = (d.attByDay[ds] || new Set()).size;
+      const heads = d.indByDay[ds] || 0;
+      const cl = d.cleanByDay[ds] || {};
+      sumInd += heads; if (staff > 0) workDays++;
+      rows += `<tr><td>${day}</td><td>${'日月火水木金土'[new Date(d.y, d.m - 1, day).getDay()]}</td><td>${staff || ''}</td><td>${heads || ''}</td><td>${esc2(cl['解体室'] || '')}</td><td>${esc2(cl['精肉室'] || '')}</td></tr>`;
+    }
+    out.innerHTML = `<div style="font-size:13px;margin-bottom:6px;">令和${d.y - 2018}年${d.m}月: 受入 <b>${sumInd}頭</b> / 出勤記録のある日 <b>${workDays}日</b>　※受入は捕獲日ベース・搬入待ちは除外</div>
+      <table><thead><tr><th>日</th><th>曜</th><th>出勤人数</th><th>受入頭数</th><th>清掃(解体側)</th><th>清掃(カット側)</th></tr></thead><tbody>${rows}</tbody></table>`;
+  } catch (e) { out.innerHTML = '<div class="empty-state">集計に失敗しました: ' + esc2(e.message) + '</div>'; }
+}
+
+/* ZIP解凍（xlsxテンプレート用。DEFLATEはブラウザ内蔵のDecompressionStreamで展開） */
+async function cityUnzip(buf) {
+  const dv = new DataView(buf), u8 = new Uint8Array(buf);
+  let eocd = -1;
+  for (let i = buf.byteLength - 22; i >= 0; i--) { if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; } }
+  if (eocd < 0) throw new Error('ZIP形式ではありません');
+  const count = dv.getUint16(eocd + 10, true);
+  let off = dv.getUint32(eocd + 16, true);
+  const entries = [];
+  for (let n = 0; n < count; n++) {
+    const method = dv.getUint16(off + 10, true);
+    const compSize = dv.getUint32(off + 20, true);
+    const nameLen = dv.getUint16(off + 28, true), extraLen = dv.getUint16(off + 30, true), cmtLen = dv.getUint16(off + 32, true);
+    const lho = dv.getUint32(off + 42, true);
+    const name = new TextDecoder().decode(u8.subarray(off + 46, off + 46 + nameLen));
+    const lnl = dv.getUint16(lho + 26, true), lel = dv.getUint16(lho + 28, true);
+    const dataStart = lho + 30 + lnl + lel;
+    entries.push({ name, method, comp: u8.slice(dataStart, dataStart + compSize) });
+    off += 46 + nameLen + extraLen + cmtLen;
+  }
+  const files = {};
+  for (const e of entries) {
+    if (e.method === 0) files[e.name] = e.comp;
+    else files[e.name] = new Uint8Array(await new Response(new Blob([e.comp]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+  }
+  return files;
+}
+
+async function cityReportExcel() {
+  const month = cityReportMonthVal();
+  toast('業務報告書を生成中...', 'info');
+  try {
+    const [tplRes, d] = await Promise.all([fetch('tgc-report-template.xlsx?v=' + Date.now()), cityReportData(month)]);
+    if (!tplRes.ok) throw new Error('テンプレートを取得できませんでした（デプロイ直後は1分ほど待って再試行）');
+    const files = await cityUnzip(await tplRes.arrayBuffer());
+    const dec = new TextDecoder(), enc = new TextEncoder();
+    // シート名 → xmlパスの対応をworkbook.xmlから取得（属性の並び順に依存しない）
+    const attrOf = (tag, name) => { const m = tag.match(new RegExp('(?:^|\\s)' + name + '="([^"]*)"')); return m ? m[1] : null; };
+    const relMap = {};
+    (dec.decode(files['xl/_rels/workbook.xml.rels']).match(/<Relationship\b[^>]*>/g) || []).forEach(tag => {
+      const id = attrOf(tag, 'Id'), t = attrOf(tag, 'Target');
+      if (id && t) relMap[id] = 'xl/' + t.replace(/^\//, '').replace(/^xl\//, '');
+    });
+    const sheetPath = {};
+    (dec.decode(files['xl/workbook.xml']).match(/<sheet\b[^>]*>/g) || []).forEach(tag => {
+      const name = attrOf(tag, 'name'), rid = attrOf(tag, 'r:id');
+      if (name && rid && relMap[rid]) sheetPath[name] = relMap[rid];
+    });
+    const xml = {};
+    for (const nm of ['表紙', '目次', '1業務日誌', '2点検保守等実施記録', '3清掃記録', '6収支状況']) {
+      if (!sheetPath[nm]) throw new Error('テンプレートにシートがありません: ' + nm);
+      xml[nm] = dec.decode(files[sheetPath[nm]]);
+    }
+    const xEsc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    function patch(sheet, ref, opts) {
+      const re = new RegExp('<c r="' + ref + '"([^>]*?)(?:/>|>[\\s\\S]*?</c>)');
+      const m = xml[sheet].match(re);
+      if (!m) return;
+      const attrs = m[1].replace(/\s+t="[^"]*"/, '');
+      let cell;
+      if (opts.blank) cell = '<c r="' + ref + '"' + attrs + '/>';
+      else if (opts.num !== undefined) cell = '<c r="' + ref + '"' + attrs + '><v>' + opts.num + '</v></c>';
+      else cell = '<c r="' + ref + '"' + attrs + ' t="inlineStr"><is><t xml:space="preserve">' + xEsc(opts.str) + '</t></is></c>';
+      xml[sheet] = xml[sheet].slice(0, m.index) + cell + xml[sheet].slice(m.index + m[0].length);
+    }
+    const era = `令和${d.y - 2018}年${d.m}月`;
+    patch('表紙', 'B13', { str: `（${era}）` });
+    patch('目次', 'C15', { str: `収支（${era}分）` });
+    // 1業務日誌
+    patch('1業務日誌', 'E1', { str: era });
+    const serial = (y, m, day) => Math.round((Date.UTC(y, m - 1, day) - Date.UTC(1899, 11, 30)) / 864e5);
+    for (let r = 3; r <= 33; r++) {
+      const day = r - 2;
+      if (day <= d.days) {
+        const ds = `${month}-${String(day).padStart(2, '0')}`;
+        patch('1業務日誌', 'A' + r, { num: serial(d.y, d.m, day) });
+        patch('1業務日誌', 'C' + r, { num: (d.attByDay[ds] || new Set()).size });
+        patch('1業務日誌', 'D' + r, { num: d.indByDay[ds] || 0 });
+        patch('1業務日誌', 'E' + r, { str: ' ' });
+      } else {
+        ['A', 'B', 'C', 'D', 'E'].forEach(c => patch('1業務日誌', c + r, { blank: true }));
+      }
+    }
+    // 2点検保守（設備行を○で埋め、月の日数を超える列は空欄。温度・特記はExcel上で記入）
+    patch('2点検保守等実施記録', 'AG1', { str: era });
+    const CHECK_ROWS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33];
+    for (const r of CHECK_ROWS) {
+      for (let day = 1; day <= 30; day++) {
+        const col = cityColLetter(2 + day);
+        patch('2点検保守等実施記録', col + r, day <= d.days ? { str: '○' } : { blank: true });
+      }
+    }
+    // 3清掃記録（アプリの清掃記録から担当者イニシャルを転記）
+    patch('3清掃記録', 'AG1', { str: era });
+    const dailyRows = { 4: '解体室', 6: '解体室', 8: '解体室', 10: '精肉室', 12: '精肉室' };
+    const weeklyRows = { 5: '解体室', 7: '解体室', 9: '解体室', 11: '精肉室', 13: '精肉室' };
+    for (let day = 1; day <= 31; day++) {
+      const col = cityColLetter(2 + day);
+      const ds = `${month}-${String(day).padStart(2, '0')}`;
+      const cl = day <= d.days ? (d.cleanByDay[ds] || {}) : null;
+      patch('3清掃記録', col + '3', (cl && cl['施設外周']) ? { str: cl['施設外周'] } : { blank: true });
+      for (const r in dailyRows) patch('3清掃記録', col + r, (cl && cl[dailyRows[r]]) ? { str: cl[dailyRows[r]] } : { blank: true });
+      const isSat = day <= d.days && new Date(d.y, d.m - 1, day).getDay() === 6;
+      for (const r in weeklyRows) patch('3清掃記録', col + r, (isSat && cl && cl[weeklyRows[r]]) ? { str: cl[weeklyRows[r]] } : { blank: true });
+    }
+    // 6収支状況（数字は会計事務所の月次メールを基にExcel上で記入）
+    const fy = d.m >= 4 ? d.y : d.y - 1;
+    patch('6収支状況', 'A1', { str: `令和${fy - 2018}年度` });
+    patch('6収支状況', 'B1', { str: `${d.m}月` });
+    // 再パックしてダウンロード
+    const outFiles = Object.keys(files).map(name => {
+      const patched = Object.keys(sheetPath).find(nm => sheetPath[nm] === name && xml[nm]);
+      return { name, data: patched ? enc.encode(xml[patched]) : files[name] };
+    });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(makeZip(outFiles));
+    a.download = `TGC業務報告書_令和${d.y - 2018}年${d.m}月.xlsx`;
+    a.click(); URL.revokeObjectURL(a.href);
+    playFeedbackSound(true);
+    toast(`業務報告書（${era}）を生成しました。打合せ記録・収支・温度記録はExcel上で仕上げてください`);
+  } catch (e) {
+    playFeedbackSound(false);
+    toast('生成に失敗しました: ' + e.message, 'error');
+  }
+}
+
+async function cityReportFiscal() {
+  const fy = parseInt(document.getElementById('city-report-fy').value);
+  const out = document.getElementById('city-report-out');
+  out.innerHTML = '<div class="loading"><span class="spin"></span>年度集計中...</div>';
+  try {
+    const start = `${fy}-04-01`, endEx = `${fy + 1}-04-01`;
+    const [att, inds] = await Promise.all([
+      sb('GET', 'attendance', null, `?work_date=gte.${start}&work_date=lt.${endEx}&select=work_date,staff_id,clock_in&limit=5000`),
+      sb('GET', 'individuals', null, `?capture_date=gte.${start}&capture_date=lt.${endEx}&select=capture_date,species,intake_status&limit=5000`)
+    ]);
+    const byM = {};
+    const key = ds => ds ? ds.slice(0, 7) : null;
+    att.forEach(a => { if (!a.clock_in) return; const k = key(a.work_date); if (!k) return; byM[k] = byM[k] || { att: {}, heads: 0, boar: 0, deer: 0 }; (byM[k].att[a.work_date] = byM[k].att[a.work_date] || new Set()).add(a.staff_id); });
+    inds.forEach(i => { if (i.intake_status === '搬入待ち') return; const k = key(i.capture_date); if (!k) return; byM[k] = byM[k] || { att: {}, heads: 0, boar: 0, deer: 0 }; byM[k].heads++; if (i.species === 'イノシシ') byM[k].boar++; else if (i.species === 'シカ') byM[k].deer++; });
+    let rows = '', tHeads = 0, tBoar = 0, tDeer = 0, tDays = 0, tNobe = 0;
+    for (let i = 0; i < 12; i++) {
+      const y = i < 9 ? fy : fy + 1, m = i < 9 ? i + 4 : i - 8;
+      const k = `${y}-${String(m).padStart(2, '0')}`;
+      const d = byM[k] || { att: {}, heads: 0, boar: 0, deer: 0 };
+      const workDays = Object.keys(d.att).length;
+      const nobe = Object.values(d.att).reduce((s, set) => s + set.size, 0);
+      tHeads += d.heads; tBoar += d.boar; tDeer += d.deer; tDays += workDays; tNobe += nobe;
+      rows += `<tr><td>${m}月</td><td>${d.heads || ''}</td><td>${d.boar || ''}</td><td>${d.deer || ''}</td><td>${workDays || ''}</td><td>${nobe || ''}</td></tr>`;
+    }
+    out.innerHTML = `<div style="font-size:13px;margin-bottom:6px;">令和${fy - 2018}年度まとめ（${fy}/4〜${fy + 1}/3）　※年度業務報告書は各月の月次報告書を綴って提出します</div>
+      <table><thead><tr><th>月</th><th>受入頭数</th><th>うちイノシシ</th><th>うちシカ</th><th>出勤記録日数</th><th>のべ出勤</th></tr></thead>
+      <tbody>${rows}<tr style="font-weight:700;"><td>合計</td><td>${tHeads}</td><td>${tBoar}</td><td>${tDeer}</td><td>${tDays}</td><td>${tNobe}</td></tr></tbody></table>`;
+  } catch (e) { out.innerHTML = '<div class="empty-state">年度集計に失敗しました: ' + esc2(e.message) + '</div>'; }
 }
 
 /* ───────── 解体所見（胎児の有無・内臓異常。スタッフが随時追記） ───────── */
