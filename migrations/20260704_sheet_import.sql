@@ -111,3 +111,8 @@ exception when duplicate_object then null; end $$;
 -- retail_outlets に commission_pct（販売手数料%）を追加。
 -- 各店舗の delivery_notes に納品商品・設定価格・バーコード運用を記録
 -- （グリーンファーム29%、枇杷倶楽部・富楽里・おふくろ・あわ海月堂20%）。
+
+-- ─────────────────────────────────────────────
+-- 2026-07-24 適用済み: individuals_radiation_test
+-- individuals に radiation_test_date / radiation_result_date / radiation_result を追加。
+-- 検査表速報（手書き原本の写真）から57個体分の検査日=判明日を反映（T176-T201, M077-M105）。
