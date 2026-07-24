@@ -11,11 +11,20 @@ import { writeAuditLog, type AuditContext } from "@/domain/audit/audit-log-servi
  */
 
 export const DOC_TYPES = {
-  invoice: { label: "請求書", prefix: "INV" },
+  quote: { label: "見積書", prefix: "QT" },
   delivery_note: { label: "納品書", prefix: "DN" },
+  invoice: { label: "請求書", prefix: "INV" },
   receipt: { label: "領収書", prefix: "RC" },
 } as const;
 export type DocType = keyof typeof DOC_TYPES;
+
+/** Misoca流の変換先（見積→納品/請求、納品→請求、請求→領収） */
+export const CONVERT_TARGETS: Record<DocType, DocType[]> = {
+  quote: ["delivery_note", "invoice"],
+  delivery_note: ["invoice"],
+  invoice: ["receipt"],
+  receipt: [],
+};
 
 export interface Issuer {
   name: string;
@@ -74,50 +83,87 @@ export async function issueDocument(
 
   const total =
     Number(order.total_amount) || items.reduce((sum, item) => sum + item.amount, 0);
-  const taxRate = input.taxRate ?? 8;
-  const taxAmount = includedTax(total, taxRate);
+
+  return insertDocument(db, ctx, {
+    docType: input.docType,
+    orderId: input.orderId,
+    title: input.title,
+    issueDate: input.issueDate,
+    dueDate: input.dueDate,
+    taxRate: input.taxRate ?? 8,
+    note: input.note,
+    customerName: (order.customer_name as string) || "",
+    customerAddress:
+      [order.delivery_postal, order.delivery_address, order.delivery_building]
+        .filter(Boolean)
+        .join(" ") || null,
+    items,
+    total,
+    issuer: input.issuer,
+  });
+}
+
+/** 帳票の共通発行処理（採番・スナップショット・監査ログ） */
+async function insertDocument(
+  db: DbPort,
+  ctx: AuditContext,
+  params: {
+    docType: DocType;
+    orderId?: string | null;
+    sourceDocumentId?: string | null;
+    source?: string;
+    title?: string;
+    issueDate: string;
+    dueDate?: string | null;
+    taxRate: number;
+    note?: string;
+    customerName: string;
+    customerAddress?: string | null;
+    items: DocumentItem[];
+    total: number;
+    issuer: Issuer | Row;
+  },
+): Promise<Row> {
+  const taxAmount = includedTax(params.total, params.taxRate);
 
   // 月ごと・種類ごとの自動採番
-  const month = input.issueDate.slice(0, 7);
+  const month = params.issueDate.slice(0, 7);
   const sameMonth = await db.findMany(
     "billing_documents",
-    { organization_id: ctx.organizationId, doc_type: input.docType, month },
+    { organization_id: ctx.organizationId, doc_type: params.docType, month },
     1000,
   );
   const seq = sameMonth.reduce((max, doc) => Math.max(max, Number(doc.seq) || 0), 0) + 1;
-  const docNumber = `${DOC_TYPES[input.docType].prefix}-${month.replace("-", "")}-${String(seq).padStart(3, "0")}`;
+  const docNumber = `${DOC_TYPES[params.docType].prefix}-${month.replace("-", "")}-${String(seq).padStart(3, "0")}`;
 
-  const customerName = (order.customer_name as string) || "";
   const title =
-    input.title?.trim() ||
-    `${docNumber}_${customerName || "帳票"}_${DOC_TYPES[input.docType].label}`;
-
+    params.title?.trim() ||
+    `${docNumber}_${params.customerName || "帳票"}_${DOC_TYPES[params.docType].label}`;
   const defaultNote =
-    input.docType === "receipt" ? "但し ジビエ肉代として、上記正に領収いたしました" : "";
+    params.docType === "receipt" ? "但し ジビエ肉代として、上記正に領収いたしました" : "";
 
   const doc = await db.insert("billing_documents", {
     organization_id: ctx.organizationId,
-    order_id: input.orderId,
-    doc_type: input.docType,
+    order_id: params.orderId ?? null,
+    source_document_id: params.sourceDocumentId ?? null,
+    source: params.source ?? "alco",
+    doc_type: params.docType,
     month,
     seq,
     doc_number: docNumber,
     title,
-    issue_date: input.issueDate,
-    due_date: input.dueDate || null,
-    customer_name: customerName,
-    customer_address:
-      [order.delivery_postal, order.delivery_address, order.delivery_building]
-        .filter(Boolean)
-        .join(" ") || null,
+    issue_date: params.issueDate,
+    due_date: params.dueDate || null,
+    customer_name: params.customerName,
+    customer_address: params.customerAddress || null,
     honorific: "様",
-    items,
-    subtotal: total - taxAmount,
-    tax_rate: taxRate,
+    items: params.items,
+    subtotal: params.total - taxAmount,
+    tax_rate: params.taxRate,
     tax_amount: taxAmount,
-    total,
-    note: input.note?.trim() || defaultNote || null,
-    issuer: input.issuer,
+    total: params.total,
+    note: params.note?.trim() || defaultNote || null,
+    issuer: params.issuer,
     created_by: ctx.actorId,
   });
 
@@ -126,10 +172,101 @@ export async function issueDocument(
     tableName: "billing_documents",
     recordId: doc.id as string,
     after: doc,
-    note: `${DOC_TYPES[input.docType].label}発行 ${docNumber}（${customerName}）`,
+    note: `${DOC_TYPES[params.docType].label}発行 ${docNumber}（${params.customerName}）`,
   });
 
   return doc;
+}
+
+export interface ManualItemInput {
+  name: string;
+  quantity: string;
+  unitPrice: number | null;
+  amount: number;
+}
+
+export interface ManualDocumentInput {
+  docType: DocType;
+  title?: string;
+  issueDate: string;
+  dueDate?: string | null; // 請求書=支払期限 / 見積書=有効期限
+  taxRate?: number;
+  note?: string;
+  customerName: string;
+  customerAddress?: string;
+  items: ManualItemInput[];
+  issuer: Issuer;
+}
+
+/** 注文に紐づかない自由入力の帳票発行（Misoca型。見積書はこちらのみ） */
+export async function issueManualDocument(
+  db: DbPort,
+  ctx: AuditContext,
+  input: ManualDocumentInput,
+): Promise<Row> {
+  if (!DOC_TYPES[input.docType]) throw new Error(`不正な帳票種別です: ${input.docType}`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.issueDate)) throw new Error("発行日を入力してください");
+  if (!input.customerName.trim()) throw new Error("宛名を入力してください");
+
+  const items: DocumentItem[] = input.items
+    .filter((item) => item.name.trim() && Number.isFinite(item.amount))
+    .map((item) => ({
+      name: item.name.trim(),
+      quantity: item.quantity.trim() || "1",
+      unit_price: item.unitPrice,
+      amount: Math.round(item.amount),
+    }));
+  if (!items.length) throw new Error("明細を1行以上入力してください");
+  const total = items.reduce((sum, item) => sum + item.amount, 0);
+  if (total <= 0) throw new Error("合計金額が0円です。明細の金額を確認してください");
+
+  return insertDocument(db, ctx, {
+    docType: input.docType,
+    title: input.title,
+    issueDate: input.issueDate,
+    dueDate: input.dueDate,
+    taxRate: input.taxRate ?? 8,
+    note: input.note,
+    customerName: input.customerName.trim(),
+    customerAddress: input.customerAddress?.trim() || null,
+    items,
+    total,
+    issuer: input.issuer,
+  });
+}
+
+/** 書類変換（Misoca流: 見積→納品/請求、納品→請求、請求→領収）。明細・宛名を引き継ぐ */
+export async function convertDocument(
+  db: DbPort,
+  ctx: AuditContext,
+  sourceDocId: string,
+  targetType: DocType,
+  issueDate: string,
+): Promise<Row> {
+  const source = await db.findById("billing_documents", sourceDocId);
+  if (!source) throw new Error(`変換元の帳票が見つかりません: ${sourceDocId}`);
+  if (source.deleted_at) throw new Error("取消済みの帳票は変換できません");
+  const allowed = CONVERT_TARGETS[source.doc_type as DocType] ?? [];
+  if (!allowed.includes(targetType)) {
+    throw new Error(
+      `${DOC_TYPES[source.doc_type as DocType]?.label}から${DOC_TYPES[targetType]?.label}への変換はできません`,
+    );
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(issueDate)) throw new Error("発行日を入力してください");
+
+  return insertDocument(db, ctx, {
+    docType: targetType,
+    orderId: (source.order_id as string) ?? null,
+    sourceDocumentId: sourceDocId,
+    issueDate,
+    taxRate: Number(source.tax_rate) || 8,
+    note: targetType === "receipt" ? undefined : (source.note as string) ?? undefined,
+    customerName: (source.customer_name as string) ?? "",
+    customerAddress: (source.customer_address as string) ?? null,
+    items: (source.items as DocumentItem[]) ?? [],
+    total: Number(source.total) || 0,
+    issuer: (source.issuer as Row) ?? {},
+  });
 }
 
 /** 発行済み帳票の取消（ソフトデリート。番号は欠番として残す＝再利用しない） */

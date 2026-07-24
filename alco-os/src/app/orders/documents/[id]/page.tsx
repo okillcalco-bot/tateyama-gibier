@@ -96,6 +96,7 @@ export default async function BillingDocumentPage({
             <p>No. {doc.doc_number as string}</p>
             <p>発行日: {doc.issue_date as string}</p>
             {docType === "invoice" && doc.due_date ? <p>お支払期限: {doc.due_date as string}</p> : null}
+            {docType === "quote" && doc.due_date ? <p>お見積有効期限: {doc.due_date as string}</p> : null}
           </div>
         </div>
 
@@ -114,7 +115,9 @@ export default async function BillingDocumentPage({
             <p className="mb-2 text-sm">
               {docType === "invoice"
                 ? "下記のとおりご請求申し上げます。"
-                : "下記のとおり納品いたしました。"}
+                : docType === "quote"
+                  ? "下記のとおりお見積り申し上げます。"
+                  : "下記のとおり納品いたしました。"}
             </p>
             <p className="mb-3 text-lg font-bold">
               合計金額　{yen(Number(doc.total))} <span className="text-xs font-normal">（税込）</span>

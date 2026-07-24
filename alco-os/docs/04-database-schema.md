@@ -24,10 +24,11 @@
 | 0014_billing.sql | billing_documents（請求書/納品書/領収書の台帳。月毎・種類毎に自動採番、発行時の明細・金額・発行者をスナップショット。発行者情報は既存 org_settings のキーを共用） |
 | 0015_boards_social.sql | board_posts（スタッフ/飲食店の共有ボード。辞書ベース自動タグ・宛先絞り込み・在庫スナップショット添付）、customer_levels（飲食店の信頼度 new/repeat/vip）、social_projects（投稿一括更新: 一次データ→チャンネル別原稿→承認→投稿管理） |
 | 0016_ledger_advisor.sql | sales_slips（売上伝票。手売り/解体体験等の月毎自動採番 SL-YYYYMM-###、取消=欠番）、advisor_consultations（士業相談の一次整理。AI出力は法的助言ではない） |
+| 0017_billing_center.sql | billing_documents 拡張（追加のみ）: source_document_id（見積→納品→請求→領収の変換系譜）、source（alco / misoca）。見積書 doc_type='quote'（QT採番）追加 |
 
-**適用状況**: 0001〜0016 は本番 Supabase プロジェクト（tateyama-gibier /
+**適用状況**: 0001〜0017 は本番 Supabase プロジェクト（tateyama-gibier /
 clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（0001〜0011: 2026-07-05、
-0012〜0016: 2026-07-06〜12）。
+0012〜0017: 2026-07-06〜13）。
 seed.sql（ダミーデータ）は本番には投入していない。
 
 ## テーブル設計の標準
