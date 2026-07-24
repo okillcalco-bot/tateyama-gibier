@@ -8,6 +8,7 @@ import {
   type SlipCategory,
   type PaymentMethod,
 } from "@/domain/ledger/ledger-service";
+import { buildGibierCatalog } from "@/domain/billing/gibier-catalog";
 import { createSalesSlipAction, voidSalesSlipAction } from "./actions";
 
 const inputClass = "w-full rounded-lg border border-stone-300 px-3 py-3 text-base";
@@ -16,13 +17,34 @@ const inputClass = "w-full rounded-lg border border-stone-300 px-3 py-3 text-bas
  * 売上伝票のクイック入力。現場スタッフがスマホ片手で使う前提:
  * 大きなタップ対象・種別と支払はボタン選択・最少入力（種別/品目/金額）。
  */
-export function NewSalesSlipForm({ staffNames }: { staffNames: string[] }) {
+export function NewSalesSlipForm({
+  staffNames,
+  products,
+  priceMaster,
+}: {
+  staffNames: string[];
+  products: Record<string, unknown>[];
+  priceMaster: Record<string, unknown>[];
+}) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [category, setCategory] = useState<SlipCategory>("retail");
   const [payment, setPayment] = useState<PaymentMethod>("cash");
+  const [item, setItem] = useState("");
+  const [amount, setAmount] = useState("");
+  const [productId, setProductId] = useState("");
   const today = new Date().toLocaleDateString("sv-SE");
+
+  // ジビエ在庫管理システムの品目カタログ（店頭手売りは標準価格）
+  const catalog = buildGibierCatalog(products, priceMaster, "standard");
+  const pickCatalogItem = (key: string) => {
+    const entry = catalog.find((c) => c.key === key);
+    if (!entry) return;
+    setItem(entry.kind === "part" ? `${entry.name}（kg数を数量に）` : entry.name);
+    setAmount(entry.kind === "product" && entry.price ? String(entry.price) : "");
+    setProductId(entry.productId ?? "");
+  };
 
   const chip = (active: boolean) =>
     `min-h-12 rounded-xl border px-3 py-2 text-sm font-semibold ${
@@ -65,9 +87,45 @@ export function NewSalesSlipForm({ staffNames }: { staffNames: string[] }) {
           </div>
         </div>
 
+        <input type="hidden" name="product_id" value={productId} />
+        {catalog.length ? (
+          <select
+            value=""
+            onChange={(e) => {
+              if (e.target.value) pickCatalogItem(e.target.value);
+            }}
+            className={inputClass}
+          >
+            <option value="">🐗 在庫から品目を選ぶ（任意・価格自動入力）</option>
+            <optgroup label="完成品（在庫あり）">
+              {catalog
+                .filter((c) => c.kind === "product" && (c.stockQty ?? 0) > 0)
+                .map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.name} ｜ 在庫{c.stockQty}
+                    {c.unit} ｜ ¥{c.price.toLocaleString()}
+                  </option>
+                ))}
+            </optgroup>
+            <optgroup label="部位単価（kg）">
+              {catalog
+                .filter((c) => c.kind === "part")
+                .map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.name} ｜ ¥{c.price.toLocaleString()}/kg
+                  </option>
+                ))}
+            </optgroup>
+          </select>
+        ) : null}
         <input
           name="item"
           required
+          value={item}
+          onChange={(e) => {
+            setItem(e.target.value);
+            setProductId(""); // 手入力に変えたら在庫との紐づけは外す
+          }}
           placeholder="品目・内容（例: イノシシロース 300g / 体験2名）"
           className={inputClass}
         />
@@ -78,6 +136,8 @@ export function NewSalesSlipForm({ staffNames }: { staffNames: string[] }) {
             inputMode="numeric"
             min="1"
             required
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
             placeholder="金額（税込・円）"
             className={inputClass + " text-lg font-bold"}
           />

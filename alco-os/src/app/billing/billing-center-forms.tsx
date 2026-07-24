@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui";
 import { DOC_TYPES, CONVERT_TARGETS, type DocType } from "@/domain/billing/billing-service";
+import { buildGibierCatalog, type PriceRank } from "@/domain/billing/gibier-catalog";
 import {
   createManualDocumentAction,
   convertDocumentAction,
@@ -27,10 +28,19 @@ export interface CustomerOption {
   id: string;
   name: string;
   address: string;
+  priceRank: string;
 }
 
 /** Misoca型の新規帳票フォーム（見積・納品・請求・領収を1画面で） */
-export function NewDocumentForm({ customers }: { customers: CustomerOption[] }) {
+export function NewDocumentForm({
+  customers,
+  products,
+  priceMaster,
+}: {
+  customers: CustomerOption[];
+  products: Record<string, unknown>[];
+  priceMaster: Record<string, unknown>[];
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -38,8 +48,27 @@ export function NewDocumentForm({ customers }: { customers: CustomerOption[] }) 
   const [docType, setDocType] = useState<DocType>("quote");
   const [customerName, setCustomerName] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
+  const [priceRank, setPriceRank] = useState<PriceRank>("standard");
   const [rows, setRows] = useState<ItemRow[]>([emptyRow(), emptyRow(), emptyRow()]);
   const today = new Date().toLocaleDateString("sv-SE");
+
+  // ジビエ在庫管理システムの品目カタログ（顧客の価格ランクで単価が変わる）
+  const catalog = buildGibierCatalog(products, priceMaster, priceRank);
+  const addCatalogItem = (key: string) => {
+    const item = catalog.find((c) => c.key === key);
+    if (!item) return;
+    const newRow: ItemRow = {
+      name: item.name,
+      qty: item.kind === "product" ? "1" : "",
+      price: item.price ? String(item.price) : "",
+      amount: item.kind === "product" && item.price ? String(item.price) : "",
+    };
+    setRows((prev) => {
+      const emptyIndex = prev.findIndex((r) => !r.name && !r.amount);
+      if (emptyIndex >= 0) return prev.map((r, i) => (i === emptyIndex ? newRow : r));
+      return [...prev, newRow];
+    });
+  };
 
   const setRow = (i: number, patch: Partial<ItemRow>) => {
     setRows((prev) =>
@@ -111,6 +140,11 @@ export function NewDocumentForm({ customers }: { customers: CustomerOption[] }) 
               if (c) {
                 setCustomerName(c.name);
                 setCustomerAddress(c.address);
+                setPriceRank(
+                  (["standard", "premium", "wholesale"].includes(c.priceRank)
+                    ? c.priceRank
+                    : "standard") as PriceRank,
+                );
               }
             }}
           >
@@ -137,6 +171,44 @@ export function NewDocumentForm({ customers }: { customers: CustomerOption[] }) 
           placeholder="宛先住所（任意）"
           className={inputClass}
         />
+
+        {catalog.length ? (
+          <div>
+            <p className="mb-1 text-xs font-semibold text-stone-500">
+              🐗 ジビエ在庫から品目を追加（単価は顧客ランク
+              {priceRank === "premium" ? "・特別" : priceRank === "wholesale" ? "・卸" : "・標準"}
+              を自動適用）
+            </p>
+            <select
+              value=""
+              onChange={(e) => {
+                if (e.target.value) addCatalogItem(e.target.value);
+              }}
+              className={inputClass}
+            >
+              <option value="">選んで明細に追加…</option>
+              <optgroup label="完成品（在庫あり）">
+                {catalog
+                  .filter((c) => c.kind === "product" && (c.stockQty ?? 0) > 0)
+                  .map((c) => (
+                    <option key={c.key} value={c.key}>
+                      {c.name} ｜ 在庫{c.stockQty}
+                      {c.unit} ｜ ¥{c.price.toLocaleString()}
+                    </option>
+                  ))}
+              </optgroup>
+              <optgroup label="部位単価（kg・数量を入力）">
+                {catalog
+                  .filter((c) => c.kind === "part")
+                  .map((c) => (
+                    <option key={c.key} value={c.key}>
+                      {c.name} ｜ ¥{c.price.toLocaleString()}/kg
+                    </option>
+                  ))}
+              </optgroup>
+            </select>
+          </div>
+        ) : null}
 
         <div>
           <p className="mb-1 text-xs font-semibold text-stone-500">明細</p>

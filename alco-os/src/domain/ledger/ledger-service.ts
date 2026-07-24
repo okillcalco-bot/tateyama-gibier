@@ -36,6 +36,8 @@ export interface NewSalesSlip {
   paymentMethod: PaymentMethod;
   staffName?: string;
   note?: string;
+  /** 既存ジビエ在庫管理の products.id（品目ピッカーから選んだ場合のトレース用） */
+  productId?: string | null;
 }
 
 export async function createSalesSlip(
@@ -76,6 +78,7 @@ export async function createSalesSlip(
     payment_method: input.paymentMethod,
     staff_name: input.staffName?.trim() || null,
     note: input.note?.trim() || null,
+    product_id: input.productId || null,
     created_by: ctx.actorId,
   });
 

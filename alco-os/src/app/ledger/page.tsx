@@ -47,20 +47,34 @@ export default async function LedgerPage({
   const supabase = await createSupabaseServerClient();
   await getCurrentUser(supabase);
 
-  const [{ data: slips }, { data: staff }] = await Promise.all([
-    supabase
-      .from("sales_slips")
-      .select("*")
-      .eq("month", month)
-      .order("seq", { ascending: false })
-      .limit(500),
-    supabase
-      .from("staff")
-      .select("name")
-      .eq("is_active", true)
-      .is("deleted_at", null)
-      .order("name"),
-  ]);
+  const [{ data: slips }, { data: staff }, { data: products }, { data: priceMaster }] =
+    await Promise.all([
+      supabase
+        .from("sales_slips")
+        .select("*")
+        .eq("month", month)
+        .order("seq", { ascending: false })
+        .limit(500),
+      supabase
+        .from("staff")
+        .select("name")
+        .eq("is_active", true)
+        .is("deleted_at", null)
+        .order("name"),
+      supabase
+        .from("products")
+        .select("id, name, unit, price, stock_qty, deleted_at")
+        .is("deleted_at", null)
+        .order("category")
+        .order("name")
+        .limit(300),
+      supabase
+        .from("price_master")
+        .select("id, species, part_name, price_standard, price_premium, price_wholesale")
+        .order("species")
+        .order("part_name")
+        .limit(300),
+    ]);
   const slipRows = (slips ?? []) as Row[];
   const active = slipRows.filter((s) => !s.deleted_at);
 
@@ -82,7 +96,11 @@ export default async function LedgerPage({
         description="手売り・解体体験など、領収書不要の売上をその場で記録。領収書が必要なら受注管理の帳票発行へ。"
       />
       <div className="space-y-4">
-        <NewSalesSlipForm staffNames={(staff ?? []).map((s) => s.name as string)} />
+        <NewSalesSlipForm
+          staffNames={(staff ?? []).map((s) => s.name as string)}
+          products={(products ?? []) as Record<string, unknown>[]}
+          priceMaster={(priceMaster ?? []) as Record<string, unknown>[]}
+        />
 
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-stone-700">
@@ -146,6 +164,7 @@ export default async function LedgerPage({
                     {SLIP_CATEGORIES[s.category as SlipCategory] ?? (s.category as string)}
                   </Badge>
                   <span className={s.deleted_at ? "line-through opacity-60" : ""}>
+                    {s.product_id ? "🐗" : ""}
                     {s.sale_date as string} {s.item as string}
                     {s.quantity ? ` ×${s.quantity}` : ""} —{" "}
                     <strong>¥{Number(s.amount).toLocaleString()}</strong>（

@@ -34,6 +34,7 @@ export async function createSalesSlipAction(formData: FormData): Promise<ActionR
       paymentMethod: String(formData.get("payment_method") ?? "cash") as PaymentMethod,
       staffName: String(formData.get("staff_name") ?? ""),
       note: String(formData.get("note") ?? ""),
+      productId: String(formData.get("product_id") ?? "") || null,
     });
     revalidatePath("/ledger");
   });
