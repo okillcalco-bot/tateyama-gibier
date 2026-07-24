@@ -105,3 +105,9 @@ exception when duplicate_object then null; end $$;
 -- 2) base_dispatch(p_order_item_id) を base_dispatch(p_order_item_id, p_tracking default null) に差替え。
 --    送り状番号があれば BASE の orders/edit_status に tracking_number として送信。
 --    伝票番号付きで失敗した場合は発送済み更新のみ再試行（tracking_skipped:true を返す）。
+
+-- ─────────────────────────────────────────────
+-- 2026-07-24 適用済み: retail_outlets_commission
+-- retail_outlets に commission_pct（販売手数料%）を追加。
+-- 各店舗の delivery_notes に納品商品・設定価格・バーコード運用を記録
+-- （グリーンファーム29%、枇杷倶楽部・富楽里・おふくろ・あわ海月堂20%）。
