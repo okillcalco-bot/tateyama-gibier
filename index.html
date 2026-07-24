@@ -6166,12 +6166,13 @@ async function cityReportData(month) {
   const endEx = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
   const [att, inds, cleans] = await Promise.all([
     sb('GET', 'attendance', null, `?work_date=gte.${start}&work_date=lt.${endEx}&select=work_date,staff_id,clock_in`),
-    sb('GET', 'individuals', null, `?capture_date=gte.${start}&capture_date=lt.${endEx}&select=capture_date,intake_status`),
+    sb('GET', 'individuals', null, `?capture_date=gte.${start}&capture_date=lt.${endEx}&species=eq.イノシシ&select=capture_date,intake_status,label_id`),
     sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${start}T00:00:00&cleaned_at=lt.${endEx}T00:00:00&select=room,staff_name,cleaned_at&limit=2000`)
   ]);
   const attByDay = {}, indByDay = {}, cleanByDay = {};
   att.forEach(a => { if (!a.clock_in) return; (attByDay[a.work_date] = attByDay[a.work_date] || new Set()).add(a.staff_id); });
-  inds.forEach(i => { if (i.intake_status === '搬入待ち') return; indByDay[i.capture_date] = (indByDay[i.capture_date] || 0) + 1; });
+  // 市役所報告書の受入頭数はイノシシのみ。搬入待ち・テストデータは除外
+  inds.forEach(i => { if (i.intake_status === '搬入待ち' || /^仮-|TEST/.test(i.label_id || '')) return; indByDay[i.capture_date] = (indByDay[i.capture_date] || 0) + 1; });
   cleans.forEach(c => { const d = String(c.cleaned_at).slice(0, 10); (cleanByDay[d] = cleanByDay[d] || {})[c.room] = cityInitial(c.staff_name); });
   return { y, m, days, month, attByDay, indByDay, cleanByDay };
 }
@@ -6191,7 +6192,7 @@ async function cityReportPreview() {
       sumInd += heads; if (staff > 0) workDays++;
       rows += `<tr><td>${day}</td><td>${'日月火水木金土'[new Date(d.y, d.m - 1, day).getDay()]}</td><td>${staff || ''}</td><td>${heads || ''}</td><td>${esc2(cl['解体室'] || '')}</td><td>${esc2(cl['精肉室'] || '')}</td></tr>`;
     }
-    out.innerHTML = `<div style="font-size:13px;margin-bottom:6px;">令和${d.y - 2018}年${d.m}月: 受入 <b>${sumInd}頭</b> / 出勤記録のある日 <b>${workDays}日</b>　※受入は捕獲日ベース・搬入待ちは除外</div>
+    out.innerHTML = `<div style="font-size:13px;margin-bottom:6px;">令和${d.y - 2018}年${d.m}月: 受入（イノシシ） <b>${sumInd}頭</b> / 出勤記録のある日 <b>${workDays}日</b>　※イノシシのみ・捕獲日ベース・搬入待ちとテストは除外</div>
       <table><thead><tr><th>日</th><th>曜</th><th>出勤人数</th><th>受入頭数</th><th>清掃(解体側)</th><th>清掃(カット側)</th></tr></thead><tbody>${rows}</tbody></table>`;
   } catch (e) { out.innerHTML = '<div class="empty-state">集計に失敗しました: ' + esc2(e.message) + '</div>'; }
 }
@@ -6330,12 +6331,12 @@ async function cityReportFiscal() {
     const start = `${fy}-04-01`, endEx = `${fy + 1}-04-01`;
     const [att, inds] = await Promise.all([
       sb('GET', 'attendance', null, `?work_date=gte.${start}&work_date=lt.${endEx}&select=work_date,staff_id,clock_in&limit=5000`),
-      sb('GET', 'individuals', null, `?capture_date=gte.${start}&capture_date=lt.${endEx}&select=capture_date,species,intake_status&limit=5000`)
+      sb('GET', 'individuals', null, `?capture_date=gte.${start}&capture_date=lt.${endEx}&select=capture_date,species,intake_status,label_id&limit=5000`)
     ]);
     const byM = {};
     const key = ds => ds ? ds.slice(0, 7) : null;
     att.forEach(a => { if (!a.clock_in) return; const k = key(a.work_date); if (!k) return; byM[k] = byM[k] || { att: {}, heads: 0, boar: 0, deer: 0 }; (byM[k].att[a.work_date] = byM[k].att[a.work_date] || new Set()).add(a.staff_id); });
-    inds.forEach(i => { if (i.intake_status === '搬入待ち') return; const k = key(i.capture_date); if (!k) return; byM[k] = byM[k] || { att: {}, heads: 0, boar: 0, deer: 0 }; byM[k].heads++; if (i.species === 'イノシシ') byM[k].boar++; else if (i.species === 'シカ') byM[k].deer++; });
+    inds.forEach(i => { if (i.intake_status === '搬入待ち' || /^仮-|TEST/.test(i.label_id || '')) return; const k = key(i.capture_date); if (!k) return; byM[k] = byM[k] || { att: {}, heads: 0, boar: 0, deer: 0 }; byM[k].heads++; if (i.species === 'イノシシ') byM[k].boar++; else if (i.species === 'シカ') byM[k].deer++; });
     let rows = '', tHeads = 0, tBoar = 0, tDeer = 0, tDays = 0, tNobe = 0;
     for (let i = 0; i < 12; i++) {
       const y = i < 9 ? fy : fy + 1, m = i < 9 ? i + 4 : i - 8;
