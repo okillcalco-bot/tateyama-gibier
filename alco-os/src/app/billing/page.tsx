@@ -67,15 +67,29 @@ export default async function BillingCenterPage({
     .order("seq", { ascending: false })
     .limit(300);
   if (typeFilter) query = query.eq("doc_type", typeFilter);
-  const [{ data: docs }, { data: customers }] = await Promise.all([
-    query,
-    supabase
-      .from("customers")
-      .select("id, name, address, building")
-      .eq("is_active", true)
-      .order("name")
-      .limit(200),
-  ]);
+  const [{ data: docs }, { data: customers }, { data: products }, { data: priceMaster }] =
+    await Promise.all([
+      query,
+      supabase
+        .from("customers")
+        .select("id, name, address, building, price_rank")
+        .eq("is_active", true)
+        .order("name")
+        .limit(200),
+      supabase
+        .from("products")
+        .select("id, name, unit, price, stock_qty, deleted_at")
+        .is("deleted_at", null)
+        .order("category")
+        .order("name")
+        .limit(300),
+      supabase
+        .from("price_master")
+        .select("id, species, part_name, price_standard, price_premium, price_wholesale")
+        .order("species")
+        .order("part_name")
+        .limit(300),
+    ]);
   const docRows = (docs ?? []) as Row[];
   const active = docRows.filter((d) => !d.deleted_at);
   const totalByType = new Map<string, number>();
@@ -98,7 +112,10 @@ export default async function BillingCenterPage({
             id: c.id as string,
             name: c.name as string,
             address: [c.address, c.building].filter(Boolean).join(" "),
+            priceRank: (c.price_rank as string) || "standard",
           }))}
+          products={(products ?? []) as Record<string, unknown>[]}
+          priceMaster={(priceMaster ?? []) as Record<string, unknown>[]}
         />
 
         <MisocaImportForm />

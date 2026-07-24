@@ -68,7 +68,13 @@ audit_logs 記録。
 - orders の status に新しい語彙を勝手に足さない（order-portal.html の
   バッジ表示が壊れる）。増やすときは order-portal 側と同時に変更する
 
-追加の共用ポイント（0014〜0015）:
+追加の共用ポイント（0014〜0018）:
+- 帳票センター（/billing）と売上伝票（/ledger）の品目ピッカーは
+  既存 `products`（完成品・在庫数）と `price_master`（部位単価3ランク）を
+  **読み取り専用**で参照する。顧客の `price_rank` で単価を自動適用
+- sales_slips.product_id で products への汎用参照（FKなし）を持つ。
+  **在庫数量の増減は既存システム（product_movements）が正。
+  ALCO OS から products.stock_qty を書き換えないこと**（二重減算防止）
 - 帳票の発行者情報は既存 `org_settings` のキー（org_name / org_postal /
   org_address / org_phone / invoice_number）を共用し、org_bank_info を追加
 - スタッフの役割は既存 `staff.role` を共有ボードの宛先として使う（値の更新のみ）
