@@ -25,6 +25,7 @@
 | generate_video_plan | 同上（動画向け） | video_plan | media_projects.approved_content（台本・メタデータ確定） |
 | generate_social_posts | 一次データ（メモ/FB/文字起こし）+ 対象チャンネル | social_posts | social_projects.approved_content（HP/Instagram/FB/YouTube別原稿） |
 | generate_advisor_brief | 士業相談（分野+相談文） | advisor_brief | advisor_consultations.approved_content（論点整理・専門家への質問リスト。**法的助言ではない**） |
+| parse_field_note | 現場メモ（音声文字起こし・走り書き） | field_note_result | （承認のみ。観察記録の確定は人が /nature/quick で行う）**種を確定しない・危険語はサーバー側でも保護側に倒す** — docs/10 |
 | summarize_meeting | （プロンプト定義のみ。実装は次段） | meeting_minutes | - |
 
 共有ボードのタグ付けは AI ではなく辞書ベース（domain/board/board-service の

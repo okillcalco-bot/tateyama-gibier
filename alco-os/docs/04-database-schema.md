@@ -26,10 +26,11 @@
 | 0016_ledger_advisor.sql | sales_slips（売上伝票。手売り/解体体験等の月毎自動採番 SL-YYYYMM-###、取消=欠番）、advisor_consultations（士業相談の一次整理。AI出力は法的助言ではない） |
 | 0017_billing_center.sql | billing_documents 拡張（追加のみ）: source_document_id（見積→納品→請求→領収の変換系譜）、source（alco / misoca）。見積書 doc_type='quote'（QT採番）追加 |
 | 0018_gibier_link.sql | sales_slips.product_id（既存 products への汎用参照）。帳票・伝票の品目ピッカーは products / price_master を読み取り専用参照（在庫増減は既存システムが正） |
+| 0019_satoyama_os.sql | 里山OS: taxa（希少度）/ evidence / ecological_interactions（※既存CRM interactions と衝突のため改名）/ survey_campaigns / survey_tasks + biodiversity_observations 拡張（source_type・evidence_type・confidence_*・review_*・visibility_level・ai_suggestion・sensitivity）+ mask_coordinate() + v_public_observations |
 
-**適用状況**: 0001〜0018 は本番 Supabase プロジェクト（tateyama-gibier /
+**適用状況**: 0001〜0019 は本番 Supabase プロジェクト（tateyama-gibier /
 clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（0001〜0011: 2026-07-05、
-0012〜0018: 2026-07-06〜13）。
+0012〜0019: 2026-07-06〜14）。
 seed.sql（ダミーデータ）は本番には投入していない。
 
 ## テーブル設計の標準

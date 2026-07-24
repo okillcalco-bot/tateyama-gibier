@@ -32,6 +32,20 @@ export default async function NaturePage() {
   return (
     <>
       <PageHeader title="自然資本" description="対象地・観察記録・証跡・レポート" />
+      <div className="mb-3 flex flex-wrap gap-2">
+        <Link
+          href="/nature/quick"
+          className="min-h-12 flex-1 rounded-xl bg-green-700 px-4 py-3 text-center text-base font-bold text-white"
+        >
+          🔭 かんたん投稿（現場から記録）
+        </Link>
+        <Link
+          href="/nature/gaps"
+          className="min-h-12 flex-1 rounded-xl border border-green-700 px-4 py-3 text-center text-base font-bold text-green-700"
+        >
+          📊 調査ギャップ・進捗
+        </Link>
+      </div>
       <NewSiteForm />
       <div className="mt-4 space-y-3">
         {!sites?.length ? (
