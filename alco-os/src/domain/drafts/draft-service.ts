@@ -85,6 +85,8 @@ async function applyDraft(db: DbPort, ctx: AuditContext, draft: Row): Promise<Ro
       return applyMediaPlan(db, ctx, draft);
     case "social_posts":
       return applySocialPosts(db, ctx, draft);
+    case "advisor_brief":
+      return applyAdvisorBrief(db, ctx, draft);
     case "nature_report":
       // レポートはドラフト承認のみで完結（提出用の確定文書化は将来 grant_documents 同様の仕組みで）
       return [];
@@ -139,6 +141,25 @@ async function applyMediaPlan(db: DbPort, ctx: AuditContext, draft: Row): Promis
     note: `構成承認（${draft.draft_type}）`,
   });
   return [project];
+}
+
+/** 士業相談の整理結果 → advisor_consultations.approved_content に確定保存 */
+async function applyAdvisorBrief(db: DbPort, ctx: AuditContext, draft: Row): Promise<Row[]> {
+  if (draft.source_table !== "advisor_consultations" || !draft.source_id) {
+    return [];
+  }
+  const consultation = await db.update("advisor_consultations", draft.source_id as string, {
+    approved_content: draft.content,
+    status: "approved",
+  });
+  await writeAuditLog(db, ctx, {
+    action: "update",
+    tableName: "advisor_consultations",
+    recordId: consultation.id as string,
+    after: consultation,
+    note: "相談整理を承認",
+  });
+  return [consultation];
 }
 
 /** 投稿原稿（各チャンネル向け）→ social_projects.approved_content に確定保存 */

@@ -68,6 +68,8 @@ AIは提案者であり、判断者・承認者ではない。迷ったときの
 | `/orders` 内 帳票 | 請求書/納品書/領収書（0014 billing_documents）。月毎種類毎自動採番 INV/DN/RC-YYYYMM-001、発行時スナップショット、取消=欠番、内税逆算8/10/0%。印刷ページ=/orders/documents/[id] |
 | `/media` | プレゼン（承認後PPTX: /api/media/[id]/pptx、pptxgenjs）/ YouTube動画プラン（台本・メタデータ + ブラウザ内WebM書き出し + SRT + 動画ID手動登録） |
 | `/social` | 投稿一括更新。一次データ → HP/Instagram/FB/YouTube向け原稿AI生成 → 承認 → コピー投稿 + 投稿済み管理 |
+| `/ledger` | 売上伝票（手売り/解体体験/イベント。SL-YYYYMM-###自動採番、取消=欠番、月次集計、税理士用CSV=/api/ledger/csv） |
+| `/advisor` | 士業相談（税務/労務/法務/知財/行政の一次整理AI。法的助言ではない。承認→相談文コピー→専門家回答を記録） |
 | `/manual` | スタッフ用マニュアル（静的。機能変更時に必ず更新） |
 | `/api/inbox` | 汎用受信箱（INBOX_TOKEN認証。iPhoneショートカット等から） |
 | `/api/line` | LINE Webhook（HMAC署名検証、既存GAS秘書へ転送共存、テキストをメモ化）※環境変数設定待ち |
@@ -75,7 +77,8 @@ AIは提案者であり、判断者・承認者ではない。迷ったときの
 ## AIワークフロー（src/ai/。追加手順は docs/05）
 
 classify_voice_memo / generate_grant_draft / generate_nature_report /
-generate_presentation / generate_video_plan / generate_social_posts。
+generate_presentation / generate_video_plan / generate_social_posts /
+generate_advisor_brief。
 共通ランナー runWorkflow が Zod検証・ai_runs記録・draft保存を強制。
 実在チェック（写真名・証跡ID・依頼チャンネル）は superRefine で保存前拒否。
 MockProvider は `[workflow:名前]` マーカーで応答を返す（テスト・キー無し開発用）。
@@ -99,9 +102,10 @@ LINE_CHANNEL_ACCESS_TOKEN / GAS_WEBHOOK_URL
 
 ## DBマイグレーション状態
 
-0001〜0015 本番適用済み（core / voice_memo / grants / nature / crm / projects /
+0001〜0016 本番適用済み（core / voice_memo / grants / nature / crm / projects /
 hr_documents(※documentsは既存衝突のため knowledge_docs) / dashboard_views /
-provisioning / storage / gibier_views / media / workforce / billing / boards_social）。
+provisioning / storage / gibier_views / media / workforce / billing /
+boards_social / ledger_advisor）。
 
 ## 未完・段階2（docs/08 Phase 2-3 参照）
 
