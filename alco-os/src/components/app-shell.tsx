@@ -40,8 +40,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
-  // 飲食店向けページ（/portal）は社内ナビを出さない
-  if (pathname.startsWith("/portal")) {
+  // 公開ページ（飲食店ボード・応援ページ）は社内ナビを出さない
+  if (pathname.startsWith("/portal") || pathname.startsWith("/support")) {
     return <main className="min-h-dvh">{children}</main>;
   }
 

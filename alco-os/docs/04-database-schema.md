@@ -28,9 +28,11 @@
 | 0018_gibier_link.sql | sales_slips.product_id（既存 products への汎用参照）。帳票・伝票の品目ピッカーは products / price_master を読み取り専用参照（在庫増減は既存システムが正） |
 | 0019_satoyama_os.sql | 里山OS: taxa（希少度）/ evidence / ecological_interactions（※既存CRM interactions と衝突のため改名）/ survey_campaigns / survey_tasks + biodiversity_observations 拡張（source_type・evidence_type・confidence_*・review_*・visibility_level・ai_suggestion・sensitivity）+ mask_coordinate() + v_public_observations |
 
-**適用状況**: 0001〜0019 は本番 Supabase プロジェクト（tateyama-gibier /
+| 0020_quests_support.sql | 調査クエスト & 応援: survey_tasks 拡張（目標件数・進捗・資金・公開スラッグ）、supporters / support_pledges（入金確認で資金計上）/ quest_payouts（調査謝金）/ achievement_grants + 公開ビュー v_public_quests（restricted は含めない） |
+
+**適用状況**: 0001〜0020 は本番 Supabase プロジェクト（tateyama-gibier /
 clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（0001〜0011: 2026-07-05、
-0012〜0019: 2026-07-06〜14）。
+0012〜0020: 2026-07-06〜15）。
 seed.sql（ダミーデータ）は本番には投入していない。
 
 ## テーブル設計の標準

@@ -21,6 +21,13 @@ export const env = {
   lineChannelAccessToken: read(process.env.LINE_CHANNEL_ACCESS_TOKEN),
   /** 既存のGAS秘書システムへLINE webhookを転送する場合のURL（任意） */
   gasWebhookUrl: read(process.env.GAS_WEBHOOK_URL),
+  /** 公開URL（応援リンクの生成に使う。Vercelが自動で入れる本番ドメイン） */
+  siteUrl: read(
+    process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.VERCEL_PROJECT_PRODUCTION_URL
+        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+        : ""),
+  ),
 };
 
 /** Supabase が設定済みか（未設定ならセットアップ案内画面を出す） */

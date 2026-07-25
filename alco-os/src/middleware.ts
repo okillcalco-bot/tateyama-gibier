@@ -34,8 +34,11 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // 飲食店向けボードはトークン式（ログイン不要）。認証リダイレクトから除外
-  if (request.nextUrl.pathname.startsWith("/portal")) {
+  // 公開ページ（飲食店ボード=トークン式 / 応援ページ）は認証リダイレクトから除外
+  if (
+    request.nextUrl.pathname.startsWith("/portal") ||
+    request.nextUrl.pathname.startsWith("/support")
+  ) {
     return response;
   }
 
