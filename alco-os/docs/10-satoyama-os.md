@@ -53,12 +53,49 @@ management_actions）を土台に拡張している。
 - AI出力は `generated_drafts` に入り、承認センターを通るまで観察記録にならない
 - AIが生成した調査タスクは `survey_tasks.approved_by` が入るまで公開しない
 
+## クエスト & 応援（0020）— 「応援が地域の仕事になる」循環
+
+```
+外部の応援（支援金） → クエストの資金 → 調査の実施（地域の調査員へ謝金）
+      ↑                                              ↓
+   成果報告・進捗メーター・称号  ←  観察記録・ギャップが埋まる
+```
+
+| 対象 | 実装 |
+|---|---|
+| クエスト | `survey_tasks` を拡張（target_count / progress_count / funding_goal_yen / funded_yen / paid_out_yen / reward_title / public_slug / published_at / story） |
+| 応援 | `supporters` + `support_pledges`（pledged → confirmed で初めて資金に計上） |
+| 地域の仕事 | `quest_payouts`（調査員への謝金・交通費。**入金確認額を超える支払いは不可**） |
+| 称号 | `achievements.ts`（定義）+ `achievement_grants`（付与記録） |
+| 社内画面 | `/nature/gaps`（クエストボード: 地域レベル・進捗バー・応援メーター・入金確認・支払い記録） |
+| 公開画面 | `/support/[slug]`（ログイン不要。応援フォーム・進捗・使いみち・応援者一覧） |
+
+### ゲーミフィケーションの制約（設計書10章。破らないこと）
+
+- **希少種クエストは公開・募集・応援の対象にしない**。`publishQuest()` が
+  `restricted=true` を拒否し、公開ビュー `v_public_quests` にも含めない（二重の防御）
+- 公開ページに**位置情報を一切出さない**（クエストは分類群・季節までしか持たない）
+- 称号は投稿数で付けない。季節の継続・証拠の多様性・レビュー承認率で判定する
+  （希少種の発見を報酬対象にしない = 乱獲・位置暴露の誘発を防ぐ）
+- 個人ランキングを画面に出さない。**地域レベル（communityLevel）と共同達成**を前面に置く
+
+### お金の不変条件（funding-service）
+
+- `pledged`（表明）は資金に数えない。`confirmed`（入金確認）で初めて `funded_yen` に加算
+- `paid_out_yen + 新規支払い <= funded_yen`（超過は例外で拒否）
+- 支払い済みを下回る応援取消・返金は拒否
+- 金額の増減はすべて `audit_logs` に残す（削除しない）
+- 決済プロバイダ（Stripe等）連携は**段階2**。現状は振込・現地払いを人が確認する運用
+
 ## 未実装（設計書のロードマップ。Opusで段階実装）
 
 - Phase 2: 竹林・堅果・胃内容物の専門調査票、捕獲記録（`capture_records` / `specimen_records`）、調査キャンペーンUI
 - Phase 3: 食物網ビュー（`ecological_interactions` は器のみ実装済み）、実績・称号、知識スコア
 - Phase 4: 気象・ドローン・センサーカメラ統合、予測モデル
 - Phase 5: 3D/デジタルツイン、バーチャルツアー、TNFD活用
+- 応援まわり段階2: Stripe等のオンライン決済（webhookで自動 confirm）、
+  領収書の自動発行（/billing の billing_documents を流用）、
+  応援者へのメール成果報告、企業協賛プラン、図鑑カード（種ごとの解明度可視化）
 
 追加時の注意:
 - 位置に関わる新機能は必ず geo-masking を通す。テスト（tests/domain/satoyama.test.ts）を必ず追加する
