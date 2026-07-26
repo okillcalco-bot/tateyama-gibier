@@ -157,6 +157,6 @@ satoyama_os / quests_support）。詳細と適用日は docs/04-database-schema.
 
 1. `alco-os/CLAUDE.md` と `docs/07` を読む
 2. 変更は小さく。domain経由・監査ログ・承認フローを迂回しない
-3. `pnpm typecheck && pnpm test`（現在234件）→ `pnpm build`
+3. `pnpm typecheck && pnpm test`（現在240件）→ `pnpm build`
 4. docs/ と /manual を更新 → PR（main直pushしない）
 5. 報告: 変更概要 / ファイル / テスト / マイグレーション / リスク

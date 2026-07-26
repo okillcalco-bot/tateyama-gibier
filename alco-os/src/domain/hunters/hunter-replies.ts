@@ -56,26 +56,64 @@ export function cityFormReadyReply(url: string): string {
   ].join("\n");
 }
 
-/** そろったが写真がまだのとき */
-export function cityFormReadyButPhotosReply(url: string, missingLabels: string[]): string {
+/** そろったが写真の枚数が足りないとき */
+export function cityFormReadyButPhotosReply(url: string, photoCount: number): string {
   return [
     "捕獲票ができました。",
+    "こちらから印刷／PDF保存できます。",
     url,
     "（30日間有効です）",
     "",
-    `写真がまだ届いていません：${missingLabels.join("・")}`,
+    photoCount === 0
+      ? "写真がまだ届いていません。尻尾を切る前と切った後の2枚をお願いします。"
+      : `写真は${photoCount}枚届いています。尻尾を切る前と切った後の2枚をお願いします。`,
     "お手すきのときに送ってください。",
   ].join("\n");
 }
 
-export function captureReportPhotoSavedReply(): string {
+/** 体重が既に記録済みのときに、聞き直さずに知らせる */
+export function weightAlreadyRecordedReply(description: string): string {
   return [
-    "写真を受け取りました。",
-    "尻尾を切る前・切った後の2枚をお願いします。まだの分はそのまま送ってください。",
-    "内容は、先ほどの型に記入して1回で送っていただけると助かります。",
+    `体重は ${description} で記録済みです。`,
+    "変更が必要なときは、そのままメッセージを送ってください。担当者が確認します。",
+  ].join("\n");
+}
+
+/** 必要な内容がそろっている報告に、あとから文章が届いたとき */
+export function reportAlreadyCompleteReply(url: string): string {
+  const lines = ["メッセージを受け取りました。", "内容はすでに受け付けています。"];
+  if (url) {
+    lines.push("");
+    lines.push("捕獲票はこちらから印刷／PDF保存できます。");
+    lines.push(url);
+  }
+  lines.push("");
+  lines.push("追加や訂正があれば、担当者が確認しますのでそのままお送りください。");
+  return lines.join("\n");
+}
+
+/**
+ * 写真を受け取ったときの返事。
+ *
+ * 捕獲者には**枚数**で伝える。種別（尻尾を切る前／後）の仕分けは職員の作業なので、
+ * 届いているのに「まだ足りない」と催促しない。
+ */
+export function captureReportPhotoSavedReply(photoCount: number): string {
+  if (photoCount >= REQUIRED_PHOTO_COUNT) {
+    return [
+      `写真${photoCount}枚を受け取りました。ありがとうございます。`,
+      "内容は、先ほどの型に記入して1回で送っていただけると助かります。",
+    ].join("\n");
+  }
+  return [
+    `写真${photoCount}枚を受け取りました。`,
+    "尻尾を切る前と切った後の2枚をお願いします。もう1枚、そのまま送ってください。",
     ACK_TEXT,
   ].join("\n");
 }
+
+/** 捕獲者に必要な写真の枚数（種別の仕分けは職員が行う） */
+export const REQUIRED_PHOTO_COUNT = 2;
 
 export function captureReportLocationSavedReply(): string {
   return ["場所を受け取りました。", ACK_TEXT].join("\n");
