@@ -4,7 +4,14 @@ import { Card, PageHeader, SetupNotice, EmptyState } from "@/components/ui";
 import { HUNTER_LINK_STATUS_LABELS } from "@/domain/hunters/hunter-link-service";
 import { CHANNEL_LABELS } from "@/lib/line/channels";
 import { buildThread } from "@/domain/hunters/hunter-chat-service";
-import { ReplyForm, UnblockLinkForm, VerifyLinkForm, type HunterOption } from "./line-forms";
+import { STAFF_GROUP_STATUS_LABELS } from "@/domain/hunters/staff-group-service";
+import {
+  ReplyForm,
+  StaffGroupForm,
+  UnblockLinkForm,
+  VerifyLinkForm,
+  type HunterOption,
+} from "./line-forms";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +34,16 @@ interface LinkRow {
   line_display_name: string | null;
   status: string;
   created_at: string;
+}
+
+interface StaffGroupRow {
+  id: string;
+  label: string | null;
+  line_group_id: string;
+  notify_delivery: boolean;
+  status: string;
+  last_notified_at: string | null;
+  notify_count: number;
 }
 
 interface ChannelRow {
@@ -87,8 +104,15 @@ export default async function LinePage() {
 
   const supabase = await createSupabaseServerClient();
 
-  const [linksResult, messagesResult, huntersResult, channelsResult, outboundResult, profilesResult] =
-    await Promise.all([
+  const [
+    linksResult,
+    messagesResult,
+    huntersResult,
+    channelsResult,
+    outboundResult,
+    profilesResult,
+    groupsResult,
+  ] = await Promise.all([
     supabase
       .from("hunter_line_links")
       .select("id, hunter_id, line_display_name, status, created_at")
@@ -117,6 +141,11 @@ export default async function LinePage() {
       .order("sent_at", { ascending: false })
       .limit(100),
     supabase.from("profiles").select("id, display_name").limit(200),
+    supabase
+      .from("line_staff_groups")
+      .select("id, label, line_group_id, notify_delivery, status, last_notified_at, notify_count")
+      .order("created_at", { ascending: false })
+      .limit(20),
   ]);
 
   const links = (linksResult.data ?? []) as LinkRow[];
@@ -124,6 +153,7 @@ export default async function LinePage() {
   const hunters = (huntersResult.data ?? []) as HunterOption[];
   const channels = (channelsResult.data ?? []) as ChannelRow[];
   const outbound = (outboundResult.data ?? []) as OutboundRow[];
+  const staffGroups = (groupsResult.data ?? []) as StaffGroupRow[];
   const staffNameById = new Map(
     ((profilesResult.data ?? []) as { id: string; display_name: string }[]).map((p) => [
       p.id,
@@ -309,6 +339,54 @@ export default async function LinePage() {
             お名前の登録と「受け取らない」の設定は、承認権限のある人だけが行えます。
           </p>
         </Card>
+
+        {/* スタッフグループへの搬入連絡の通知（0028） */}
+        <section>
+          <h2 className="mb-2 text-lg font-bold text-stone-800">
+            搬入連絡をスタッフのグループに通知する
+          </h2>
+          <p className="mb-2 text-base text-stone-600">
+            捕獲者LINEをスタッフのグループに招待し、グループで「登録」と送ると、
+            搬入連絡がそのグループに届くようになります。
+          </p>
+          <p className="mb-2 rounded-xl bg-amber-50 p-3 text-base text-amber-900">
+            ⚠ グループに流すのは「誰から・いつ」だけです。
+            買取金額・口座・捕獲場所は流しません。グループの参加者にはご注意ください。
+          </p>
+          {staffGroups.length === 0 ? (
+            <EmptyState message="まだグループに招待されていません。LINEのグループに捕獲者LINEを招待してください。" />
+          ) : (
+            <div className="space-y-3">
+              {staffGroups.map((group) => (
+                <Card key={group.id}>
+                  <StatusLine
+                    mark={group.notify_delivery ? "✓" : "－"}
+                    text={
+                      STAFF_GROUP_STATUS_LABELS[
+                        group.status as keyof typeof STAFF_GROUP_STATUS_LABELS
+                      ] ?? group.status
+                    }
+                  />
+                  <p className="mt-1 text-base font-bold text-stone-800">
+                    {group.label || "（名前なし）"}
+                  </p>
+                  <p className="text-sm text-stone-500">
+                    通知した回数：{group.notify_count}回
+                    {group.last_notified_at
+                      ? ` ／ 最後の通知：${formatDateTime(group.last_notified_at)}`
+                      : ""}
+                  </p>
+                  <StaffGroupForm
+                    groupId={group.id}
+                    label={group.label ?? ""}
+                    notifyDelivery={group.notify_delivery}
+                    status={group.status}
+                  />
+                </Card>
+              ))}
+            </div>
+          )}
+        </section>
 
         {/* 設定の確認用。LINE Developers で Bot User ID が見つからないときはここを見る */}
         <section>

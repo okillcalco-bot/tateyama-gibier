@@ -131,7 +131,7 @@ satoyama_os / quests_support）。詳細と適用日は docs/04-database-schema.
 
 0021〜0023 は PR #52 で main にマージ済み（**本番DBへの適用は沖代表の承認後**）。
 0021〜0026 は本番適用済み（PR #52 / #53）。ジビエ基幹側の `20260726_hunters_rls_hardening.sql` も適用済み。
-**0027 は未適用**（捕獲票のセルフDL: share_token / get_capture_form_by_token / capture_place）。
+0027 も本番適用済み。**0028 は未適用**（搬入連絡のスタッフグループ通知）。
 
 ## 未完・段階2（docs/08 Phase 2-3 参照）
 
@@ -157,6 +157,6 @@ satoyama_os / quests_support）。詳細と適用日は docs/04-database-schema.
 
 1. `alco-os/CLAUDE.md` と `docs/07` を読む
 2. 変更は小さく。domain経由・監査ログ・承認フローを迂回しない
-3. `pnpm typecheck && pnpm test`（現在240件）→ `pnpm build`
+3. `pnpm typecheck && pnpm test`（現在255件）→ `pnpm build`
 4. docs/ と /manual を更新 → PR（main直pushしない）
 5. 報告: 変更概要 / ファイル / テスト / マイグレーション / リスク

@@ -355,3 +355,22 @@ describe("本番で見つかった不具合の再現", () => {
     expect((db.tables.get("capture_reports") ?? [])[0].share_token).toBe(token);
   });
 });
+
+describe("グループからのメッセージは業務処理しない（0028）", () => {
+  let db: InMemoryDb;
+
+  beforeEach(async () => {
+    db = await setup();
+  });
+
+  it("グループ発言で捕獲者の紐付けや報告を作らない", async () => {
+    // webhook 側でグループを分岐するため、ドメインには userId 無しで届く想定
+    const outcome = await intakeHunterEvent(
+      { db, organizationId: ORG, siteUrl: SITE },
+      event({ lineUserId: null, text: "おつかれさまです" }),
+    );
+    expect(outcome.kind).toBe("skipped");
+    expect(db.tables.get("capture_reports")).toBeUndefined();
+    expect((db.tables.get("line_inbound_messages") ?? []).length).toBe(0);
+  });
+});

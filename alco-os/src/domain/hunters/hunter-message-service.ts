@@ -112,6 +112,8 @@ export type HunterIntakeOutcome =
       reply: string;
       /** 返信に付ける選択肢（LINEのクイックリプライ）。1タップで答えられる */
       choices?: { label: string; text: string }[];
+      /** 照合済みの捕獲者名。スタッフグループへの通知に使う（未照合なら null） */
+      hunterName?: string | null;
     };
 
 export interface HunterClassifyResult {
@@ -685,6 +687,7 @@ export async function intakeHunterEvent(
       menuIntent,
       captureReportId,
       reply: ACK_TEXT,
+      hunterName: hunterName ?? null,
     };
   }
 
@@ -708,6 +711,7 @@ export async function intakeHunterEvent(
     captureReportId,
     reply,
     choices,
+    hunterName: hunterName ?? null,
   };
 }
 
