@@ -30,9 +30,16 @@
 
 | 0020_quests_support.sql | 調査クエスト & 応援: survey_tasks 拡張（目標件数・進捗・資金・公開スラッグ）、supporters / support_pledges（入金確認で資金計上）/ quest_payouts（調査謝金）/ achievement_grants + 公開ビュー v_public_quests（restricted は含めない） |
 
+| 0021_hunter_line.sql | 捕獲者LINE連携: hunter_line_links（既存 hunters への汎用参照。チャネル内で line_user_id 一意。pending/verified/blocked）、line_webhook_events（webhookEventId の unique による冪等性台帳）、line_inbound_messages（職員が確認・返信する受信メッセージ。位置は has_location フラグのみで原座標を保存しない） |
+
+| 0022_capture_reports.sql | 捕獲報告（LINE経由）: capture_reports（獣種・捕獲方法・原座標・写真file・本文・ai_suggestion・status[pending/accepted/rejected]・individual_id）、line_conversation_states（会話状態。捕獲報告の続きとして写真・本文を受け取る）。org_settings は既存キーバリューに gibier_accepting / gibier_acceptance_note を足すのみ（スキーマ変更なし） |
+
+| 0023_line_channel_ref.sql | LINEチャネル識別子を安定ラベル（channel:hunter 等）に統一。line_channel_registry（受信した destination を自動記録。ルーティングには使わない）+ 既存行の読み替え + 列コメント。**LINE_HUNTER_CHANNEL_ID は不要になった** |
+
 **適用状況**: 0001〜0020 は本番 Supabase プロジェクト（tateyama-gibier /
 clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（0001〜0011: 2026-07-05、
 0012〜0020: 2026-07-06〜15）。
+**0021〜0023 は未適用**（捕獲者LINE統合。適用は沖代表の承認後）。
 seed.sql（ダミーデータ）は本番には投入していない。
 
 ## テーブル設計の標準

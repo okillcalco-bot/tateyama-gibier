@@ -3,6 +3,10 @@ import { writeAuditLog, type AuditContext } from "@/domain/audit/audit-log-servi
 import { createTask } from "@/domain/tasks/task-service";
 import { voiceMemoOutputSchema } from "@/ai/schemas/voice-memo.schema";
 import { grantDraftOutputSchema } from "@/ai/schemas/grant.schema";
+import {
+  hunterMessageOutputSchema,
+  HUNTER_INTENT_LABELS,
+} from "@/ai/schemas/hunter-message.schema";
 
 /**
  * ドラフト承認サービス — ALCO OS の中核ルールを実装する。
@@ -87,6 +91,8 @@ async function applyDraft(db: DbPort, ctx: AuditContext, draft: Row): Promise<Ro
       return applySocialPosts(db, ctx, draft);
     case "advisor_brief":
       return applyAdvisorBrief(db, ctx, draft);
+    case "hunter_message_result":
+      return applyHunterMessageResult(db, ctx, draft);
     case "nature_report":
       // レポートはドラフト承認のみで完結（提出用の確定文書化は将来 grant_documents 同様の仕組みで）
       return [];
@@ -118,6 +124,51 @@ async function applyVoiceMemoResult(db: DbPort, ctx: AuditContext, draft: Row): 
     await db.update("voice_memos", draft.source_id as string, {
       status: "processed",
       detected_category: content.detected_category,
+    });
+  }
+
+  return created;
+}
+
+/**
+ * 捕獲者からのLINE連絡の分類結果 → 対応タスクを作成 + 受信メッセージを対応済みに。
+ *
+ * 既存ジビエ基幹テーブル（individuals / hunters / orders）には一切書き込まない。
+ * 捕獲者へのLINE返信もここでは送らない（送信は職員が /line 画面で明示操作する）。
+ */
+async function applyHunterMessageResult(
+  db: DbPort,
+  ctx: AuditContext,
+  draft: Row,
+): Promise<Row[]> {
+  const content = hunterMessageOutputSchema.parse(draft.content);
+  const intentLabel = HUNTER_INTENT_LABELS[content.detected_intent] ?? content.detected_intent;
+  const created: Row[] = [];
+
+  for (const suggested of content.suggested_tasks) {
+    const task = await createTask(db, ctx, {
+      title: suggested.title,
+      dueDate: suggested.due_date,
+      priority: suggested.priority,
+      module: "hunter_line",
+      relatedTable: draft.source_table as string | undefined,
+      relatedId: draft.source_id as string | undefined,
+      sourceDraftId: draft.id as string,
+    });
+    created.push(task);
+  }
+
+  if (draft.source_table === "line_inbound_messages" && draft.source_id) {
+    const message = await db.update("line_inbound_messages", draft.source_id as string, {
+      status: "handled",
+      detected_intent: content.detected_intent,
+    });
+    await writeAuditLog(db, ctx, {
+      action: "update",
+      tableName: "line_inbound_messages",
+      recordId: message.id as string,
+      after: message,
+      note: `捕獲者の連絡を承認（${intentLabel}）`,
     });
   }
 

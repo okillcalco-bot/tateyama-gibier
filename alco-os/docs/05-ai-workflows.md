@@ -26,6 +26,7 @@
 | generate_social_posts | 一次データ（メモ/FB/文字起こし）+ 対象チャンネル | social_posts | social_projects.approved_content（HP/Instagram/FB/YouTube別原稿） |
 | generate_advisor_brief | 士業相談（分野+相談文） | advisor_brief | advisor_consultations.approved_content（論点整理・専門家への質問リスト。**法的助言ではない**） |
 | parse_field_note | 現場メモ（音声文字起こし・走り書き） | field_note_result | （承認のみ。観察記録の確定は人が /nature/quick で行う）**種を確定しない・危険語はサーバー側でも保護側に倒す** — docs/10 |
+| classify_hunter_message | 捕獲者からのLINE本文（+ 照合済み氏名・位置情報の有無） | hunter_message_result | tasks + line_inbound_messages.status + capture_reports.ai_suggestion（**候補のみ。individuals / hunters には書き込まない**）|
 | summarize_meeting | （プロンプト定義のみ。実装は次段） | meeting_minutes | - |
 
 共有ボードのタグ付けは AI ではなく辞書ベース（domain/board/board-service の
@@ -33,6 +34,17 @@ TAG_RULES）。AI提案タグを足す場合も必ずドラフト承認フロー
 
 メディア系は「添付した素材ファイル名以外の割付」をスキーマ検証
 （superRefine）で保存前に拒否する（nature_report の証跡実在チェックと同じ方式）。
+
+classify_hunter_message はリッチメニューの5分類（捕獲報告 / 搬入連絡 /
+受入状況 / 買取状況 / 使い方）+ その他。ただし**メニュー操作は文字列で
+確実に振り分ける**（domain/hunters/hunter-keywords.ts）ため、AIが呼ばれるのは
+メニュー語に当たらない自由文と、捕獲報告の会話中の本文だけ。
+捕獲報告での出力は `capture_reports.ai_suggestion` に入る**候補**であり、
+獣種・捕獲方法の確定は職員が /gibier/reports で行う。捕獲場所・わな・私有地などの語、または
+位置情報メッセージが含まれる場合は、AIの判定に関わらずサーバー側で
+`sensitivity_flag` を true に上書きする（parse_field_note と共通の
+`detectSensitiveKeywords`）。捕獲者への返信文をAIが自動送信することはなく、
+職員が /line で読んで編集したものだけを送る。
 
 ## ワークフローを追加する手順（Opus向けチェックリスト）
 
@@ -63,7 +75,9 @@ TAG_RULES）。AI提案タグを足す場合も必ずドラフト承認フロー
 
 ## データ取り扱いの注意
 
-- ai_runs.input_summary には個人情報の生データを入れない（要約のみ）
+- ai_runs.input_summary には個人情報の生データを入れない（要約のみ）。
+  classify_hunter_message は本文・氏名・電話番号を入れず、文字数と
+  位置情報の有無だけを記録する
 - 顧客実名・財務実数を含む本番データをAIに渡す運用を始める前に、
   利用するAPIプランのデータ保持ポリシーを確認する
 - 設計・検証段階はダミーデータ（seed.sql）で行う

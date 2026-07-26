@@ -1,6 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
-import { env } from "@/lib/env";
-import { SupabaseDb } from "@/lib/db/supabase-db";
+import { getServiceDbContext } from "@/lib/db/service-context";
 import { getProvider } from "@/ai/model-router";
 import { classifyVoiceMemo } from "@/ai/workflows/classify-voice-memo";
 
@@ -22,25 +20,14 @@ export async function ingestInboxText(params: {
   title?: string;
   source: string; // inbox / line / email / shortcut など
 }): Promise<InboxResult> {
-  if (!env.supabaseServiceRoleKey) {
-    throw new Error("SUPABASE_SERVICE_ROLE_KEY 未設定");
-  }
   const text = params.text.trim().slice(0, 20_000);
   if (!text) throw new Error("text は必須です");
 
-  const supabase = createClient(env.supabaseUrl, env.supabaseServiceRoleKey);
-  const { data: org, error: orgError } = await supabase
-    .from("organizations")
-    .select("id")
-    .eq("slug", "alco")
-    .single();
-  if (orgError || !org) throw new Error("組織が見つかりません");
-
-  const db = new SupabaseDb(supabase);
+  const { db, organizationId } = await getServiceDbContext();
   const title = (params.title?.trim() || `受信箱（${params.source}）`).slice(0, 120);
 
   const memo = await db.insert("voice_memos", {
-    organization_id: org.id,
+    organization_id: organizationId,
     title,
     raw_text: text,
     source_type: "text_memo",
@@ -52,7 +39,7 @@ export async function ingestInboxText(params: {
   let category: string | null = null;
   try {
     const result = await classifyVoiceMemo(
-      { db, provider: getProvider(), organizationId: org.id as string, userId: null },
+      { db, provider: getProvider(), organizationId, userId: null },
       { title, raw_text: text, source_type: "text_memo" },
       { memoId: memo.id as string },
     );

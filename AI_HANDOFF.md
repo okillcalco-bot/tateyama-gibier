@@ -75,7 +75,9 @@ AIは提案者であり、判断者・承認者ではない。迷ったときの
 | `/advisor` | 士業相談（税務/労務/法務/知財/行政の一次整理AI。法的助言ではない。承認→相談文コピー→専門家回答を記録） |
 | `/manual` | スタッフ用マニュアル（静的。機能変更時に必ず更新） |
 | `/api/inbox` | 汎用受信箱（INBOX_TOKEN認証。iPhoneショートカット等から） |
-| `/api/line` | LINE Webhook（HMAC署名検証、既存GAS秘書へ転送共存、テキストをメモ化）※環境変数設定待ち |
+| `/line` | **捕獲者LINE**（職員用）。既存の捕獲者向けLINE公式アカウント（@889alcvb）からの連絡を確認・返信。お名前の確認まち→捕獲者台帳と紐付け（承認権限者のみ）→ 職員が読んで返信。高齢者UI（大きいボタン・状態は文字でも表示） |
+| `/gibier/reports` | **捕獲報告の確認**（職員用）。LINEの「捕獲報告」で届いた写真・場所・本文を確認し、獣種と捕獲方法を職員が選んで承認 → `individuals` に「搬入待ち」の仮登録を作成（**individuals へ書き込む唯一の経路**）。本日の受入可否の切り替えもここ |
+| `/api/line` | LINE Webhook（HMAC署名検証で**送信元チャネルを特定**。秘書チャネル=既存GAS秘書へ転送+メモ化 / 捕獲者チャネル=GAS転送せず、リッチメニュー5語の分岐・写真・位置情報を処理して**必ず即時返信**）※環境変数設定待ち |
 
 ## AIワークフロー（src/ai/。追加手順は docs/05）
 
@@ -98,21 +100,37 @@ MockProvider は `[workflow:名前]` マーカーで応答を返す（テスト�
 
 ## 環境変数（Vercel / .env.local。env.ts が全値をtrim）
 
-NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY /
+必須: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY /
 SUPABASE_SERVICE_ROLE_KEY / AI_PROVIDER(anthropic|mock) / AI_DEFAULT_MODEL /
-ANTHROPIC_API_KEY / INBOX_TOKEN / LINE_CHANNEL_SECRET /
-LINE_CHANNEL_ACCESS_TOKEN / GAS_WEBHOOK_URL
+ANTHROPIC_API_KEY
+
+LINE（捕獲者チャネル）: LINE_HUNTER_CHANNEL_SECRET / LINE_HUNTER_CHANNEL_ACCESS_TOKEN
+LINE（秘書チャネル）: LINE_SECRETARY_CHANNEL_SECRET / LINE_SECRETARY_CHANNEL_ACCESS_TOKEN
+  （旧名 LINE_CHANNEL_SECRET・LINE_CHANNEL_ACCESS_TOKEN がフォールバックとして有効）
+任意: INBOX_TOKEN / GAS_WEBHOOK_URL / NEXT_PUBLIC_SITE_URL /
+  LINE_SECRETARY_CHANNEL_ID・LINE_HUNTER_CHANNEL_ID
+  （Bot User ID。**設定しなくても全機能が動く**。設定すると整合性チェックが増えるだけ。
+   実際の値は初回受信後に /line の「つながっているLINE」で確認できる）
 
 ## DBマイグレーション状態
 
-0001〜0016 本番適用済み（core / voice_memo / grants / nature / crm / projects /
-hr_documents(※documentsは既存衝突のため knowledge_docs) / dashboard_views /
-provisioning / storage / gibier_views / media / workforce / billing /
-boards_social / ledger_advisor / billing_center）。
+**0001〜0020 が本番適用済み**（core / voice_memo / grants / nature / crm /
+projects / hr_documents(※documentsは既存衝突のため knowledge_docs) /
+dashboard_views / provisioning / storage / gibier_views / media / workforce /
+billing / boards_social / ledger_advisor / billing_center / gibier_link /
+satoyama_os / quests_support）。詳細と適用日は docs/04-database-schema.md が一次情報。
+
+**0021_hunter_line.sql / 0022_capture_reports.sql / 0023_line_channel_ref.sql は未適用**
+（捕獲者LINE連携・捕獲報告・チャネル識別子の安定化。適用は沖代表の承認後）。
 
 ## 未完・段階2（docs/08 Phase 2-3 参照）
 
-- **LINE秘書の接続**: コードは完成。Vercel環境変数5つ + LINE DevelopersのWebhook URL切替が未実施（ユーザー作業待ち）
+- **LINEの接続**: コードは完成（秘書チャネル・捕獲者チャネルの両方）。
+  Vercel環境変数 + LINE DevelopersのWebhook URL切替・0021の適用が未実施（ユーザー作業待ち）。
+  **既存のLINE公式アカウント（捕獲者向け: @889alcvb）をそのまま使う。
+  アカウントID・友だち追加URL・QRコードは変更しない**（変えるのは Webhook URL だけ）。
+  リッチメニュー2×3の5マスは「捕獲報告 / 搬入連絡 / 受入状況 / 買取状況 / 使い方」、
+  残り1マスは電話（tel: URI）
 - 週次経営サマリーのLINE配信 / メール取込 / 音声・動画の自動文字起こし
 - SNS自動投稿（Meta Graph API / YouTube Data API。**承認済み原稿のみ・監査ログ必須**）
 - 動画のサーバーレンダリング・TTS / シフト公開フロー・給与集計 / 定番注文・リマインド / 月締め請求書
@@ -129,6 +147,6 @@ boards_social / ledger_advisor / billing_center）。
 
 1. `alco-os/CLAUDE.md` と `docs/07` を読む
 2. 変更は小さく。domain経由・監査ログ・承認フローを迂回しない
-3. `pnpm typecheck && pnpm test`（現在49件）→ `pnpm build`
+3. `pnpm typecheck && pnpm test`（現在170件）→ `pnpm build`
 4. docs/ と /manual を更新 → PR（main直pushしない）
 5. 報告: 変更概要 / ファイル / テスト / マイグレーション / リスク
