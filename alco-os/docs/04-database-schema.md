@@ -36,10 +36,12 @@
 
 | 0023_line_channel_ref.sql | LINEチャネル識別子を安定ラベル（channel:hunter 等）に統一。line_channel_registry（受信した destination を自動記録。ルーティングには使わない）+ 既存行の読み替え + 列コメント。**LINE_HUNTER_CHANNEL_ID は不要になった** |
 
+| 0024_line_chat_and_report_photos.sql | 職員チャット返信 line_outbound_messages（本文・送信者・送信時刻・成否）、捕獲報告の写真種別 capture_report_photos（未仕分け/全体/尻尾を切る前/切った後/その他） |
+
 **適用状況**: 0001〜0020 は本番 Supabase プロジェクト（tateyama-gibier /
 clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（0001〜0011: 2026-07-05、
 0012〜0020: 2026-07-06〜15）。
-**0021〜0023 は未適用**（捕獲者LINE統合。適用は沖代表の承認後）。
+**0021〜0023 は PR #52 で main にマージ済み（本番DBへの適用は沖代表の承認後）。0024 は未適用。**
 seed.sql（ダミーデータ）は本番には投入していない。
 
 ## テーブル設計の標準

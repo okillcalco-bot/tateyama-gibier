@@ -5,7 +5,9 @@ import { SupabaseDb } from "@/lib/db/supabase-db";
 import { getAcceptanceStatus } from "@/domain/hunters/gibier-status-service";
 import { CAPTURE_REPORT_STATUS_LABELS } from "@/domain/hunters/capture-report-service";
 import { maskObservationPoint } from "@/domain/satoyama/geo-masking";
-import { AcceptanceStatusForm, ApproveReportForm } from "./report-forms";
+import { PHOTO_KIND_LABELS, toReportPhoto } from "@/domain/hunters/capture-photo-service";
+import { missingCityFormPhotos } from "@/domain/hunters/capture-photo-service";
+import { AcceptanceStatusForm, ApproveReportForm, PhotoKindForm } from "./report-forms";
 
 export const dynamic = "force-dynamic";
 
@@ -79,8 +81,27 @@ export default async function CaptureReportsPage() {
     ((huntersResult.data ?? []) as { id: string; name: string }[]).map((h) => [h.id, h.name]),
   );
 
+  // 種別つきの写真一覧（0024）
+  const { data: photoRows } = await supabase
+    .from("capture_report_photos")
+    .select("id, capture_report_id, file_id, photo_kind, sort_order")
+    .in(
+      "capture_report_id",
+      reports.length > 0 ? reports.map((r) => r.id) : ["00000000-0000-0000-0000-000000000000"],
+    );
+  const photosByReport = new Map<string, ReturnType<typeof toReportPhoto>[]>();
+  for (const row of photoRows ?? []) {
+    const key = String(row.capture_report_id);
+    const list = photosByReport.get(key) ?? [];
+    list.push(toReportPhoto(row as Record<string, unknown>));
+    photosByReport.set(key, list);
+  }
+
   // 写真は非公開バケット。都度の署名URLで表示する（URLは1時間で失効）
-  const fileIds = reports.map((r) => r.photo_file_id).filter((v): v is string => Boolean(v));
+  const fileIds = [
+    ...reports.map((r) => r.photo_file_id).filter((v): v is string => Boolean(v)),
+    ...(photoRows ?? []).map((row) => String(row.file_id)),
+  ];
   const photoUrlByFileId = new Map<string, string>();
   if (fileIds.length > 0) {
     const { data: files } = await supabase
@@ -151,16 +172,54 @@ export default async function CaptureReportsPage() {
                       {hunterName || "まだ確認できていません"}
                     </p>
 
-                    {photoUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={photoUrl}
-                        alt="捕獲者から届いた写真"
-                        className="mt-2 w-full rounded-xl border border-stone-200"
-                      />
-                    ) : (
-                      <p className="mt-2 text-base text-stone-600">写真はまだ届いていません。</p>
-                    )}
+                    {(() => {
+                      const photos = photosByReport.get(report.id) ?? [];
+                      if (photos.length === 0) {
+                        return photoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={photoUrl}
+                            alt="捕獲者から届いた写真"
+                            className="mt-2 w-full rounded-xl border border-stone-200"
+                          />
+                        ) : (
+                          <p className="mt-2 text-base text-stone-600">
+                            写真はまだ届いていません。
+                          </p>
+                        );
+                      }
+                      const missing = missingCityFormPhotos(photos);
+                      return (
+                        <div className="mt-2 space-y-3">
+                          {photos.map((photo) => {
+                            const url = photoUrlByFileId.get(photo.fileId);
+                            return (
+                              <div key={photo.id} className="rounded-xl border border-stone-200 p-2">
+                                {url ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={url}
+                                    alt={PHOTO_KIND_LABELS[photo.photoKind]}
+                                    className="w-full rounded-lg"
+                                  />
+                                ) : (
+                                  <p className="text-base text-stone-600">
+                                    写真を読み込めませんでした。
+                                  </p>
+                                )}
+                                <PhotoKindForm photoId={photo.id} photoKind={photo.photoKind} />
+                              </div>
+                            );
+                          })}
+                          {missing.length > 0 ? (
+                            <p className="rounded-xl bg-amber-50 p-3 text-base font-bold text-amber-900">
+                              ⚠ 市役所提出に足りない写真：
+                              {missing.map((kind) => PHOTO_KIND_LABELS[kind]).join("・")}
+                            </p>
+                          ) : null}
+                        </div>
+                      );
+                    })()}
 
                     {report.raw_text ? (
                       <p className="mt-2 whitespace-pre-wrap break-words rounded-xl bg-stone-50 p-3 text-base text-stone-800">
@@ -221,9 +280,17 @@ export default async function CaptureReportsPage() {
                     ／{report.species ?? "獣種不明"}
                   </p>
                   {report.individual_id ? (
-                    <p className="mt-1 text-base text-stone-600">
-                      個体を作成しました。個体番号は現場アプリ（受入）で付けてください。
-                    </p>
+                    <>
+                      <p className="mt-1 text-base text-stone-600">
+                        個体を作成しました。個体番号は現場アプリ（受入）で付けてください。
+                      </p>
+                      <a
+                        href={`/gibier/reports/${report.id}/pack`}
+                        className="mt-3 inline-flex min-h-[56px] w-full items-center justify-center rounded-xl bg-green-700 px-4 text-base font-bold text-white"
+                      >
+                        🏛 市役所提出パックを開く
+                      </a>
+                    </>
                   ) : null}
                 </Card>
               ))}

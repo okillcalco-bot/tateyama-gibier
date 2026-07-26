@@ -14,6 +14,7 @@ import {
   ACCEPTANCE_NOTE_KEY,
   ACCEPTING_KEY,
 } from "@/domain/hunters/gibier-status-service";
+import { isPhotoKind, setPhotoKind } from "@/domain/hunters/capture-photo-service";
 
 /**
  * 捕獲報告の確認（職員）。
@@ -111,6 +112,27 @@ export async function saveAcceptanceStatusAction(formData: FormData): Promise<Ac
         after: { accepting, note },
         note: `本日の受入可否を「${accepting}」に変更`,
       },
+    );
+    revalidatePath("/gibier/reports");
+  });
+}
+
+/** 写真の種別（全体 / 尻尾を切る前 / 切った後 など）を職員が決める */
+export async function setPhotoKindAction(formData: FormData): Promise<ActionResult> {
+  return runAction(async () => {
+    const supabase = await createSupabaseServerClient();
+    const user = await getCurrentUser(supabase);
+    if (!user) throw new Error("ログインが必要です");
+
+    const photoId = String(formData.get("photo_id") ?? "");
+    const photoKind = String(formData.get("photo_kind") ?? "");
+    if (!photoId) throw new Error("対象の写真が指定されていません");
+    if (!isPhotoKind(photoKind)) throw new Error("写真の種類を選んでください");
+
+    await setPhotoKind(
+      new SupabaseDb(supabase),
+      { organizationId: user.organizationId, actorId: user.userId },
+      { photoId, photoKind },
     );
     revalidatePath("/gibier/reports");
   });

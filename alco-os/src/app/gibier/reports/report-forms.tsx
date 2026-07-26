@@ -6,6 +6,7 @@ import {
   approveCaptureReportAction,
   rejectCaptureReportAction,
   saveAcceptanceStatusAction,
+  setPhotoKindAction,
 } from "./actions";
 
 /**
@@ -206,6 +207,54 @@ export function ApproveReportForm({
         ✕ この報告を取り消す（個体は作りません）
       </button>
 
+      <ErrorText error={error} />
+    </div>
+  );
+}
+
+/** 写真の種別を職員が決める（市役所提出の台紙に並べるため） */
+export function PhotoKindForm({
+  photoId,
+  photoKind,
+}: {
+  photoId: string;
+  photoKind: string;
+}) {
+  const { isPending, error, run } = useAction();
+  const [kind, setKind] = useState(photoKind);
+
+  const options: { value: string; label: string }[] = [
+    { value: "unsorted", label: "未仕分け" },
+    { value: "whole", label: "全体" },
+    { value: "tail_before", label: "尻尾を切る前" },
+    { value: "tail_after", label: "尻尾を切った後" },
+    { value: "other", label: "その他" },
+  ];
+
+  return (
+    <div className="mt-2">
+      <label className="block">
+        <span className="text-base font-bold text-stone-700">この写真は何ですか</span>
+        <select
+          value={kind}
+          disabled={isPending}
+          onChange={(e) => {
+            const next = e.target.value;
+            setKind(next);
+            const formData = new FormData();
+            formData.set("photo_id", photoId);
+            formData.set("photo_kind", next);
+            run(setPhotoKindAction, formData);
+          }}
+          className={FIELD}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
       <ErrorText error={error} />
     </div>
   );
