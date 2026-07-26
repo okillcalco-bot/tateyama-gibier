@@ -16,6 +16,7 @@ import {
 } from "@/domain/hunters/gibier-status-service";
 import { isPhotoKind, setPhotoKind } from "@/domain/hunters/capture-photo-service";
 import { isWeightMeasure } from "@/domain/hunters/weight-service";
+import { issueShareLink, revokeShareLink } from "@/domain/hunters/capture-share-service";
 
 /**
  * 捕獲報告の確認（職員）。
@@ -151,6 +152,36 @@ export async function setPhotoKindAction(formData: FormData): Promise<ActionResu
       new SupabaseDb(supabase),
       { organizationId: user.organizationId, actorId: user.userId },
       { photoId, photoKind },
+    );
+    revalidatePath("/gibier/reports");
+  });
+}
+
+/** 捕獲票の共有リンクを再発行する（前のリンクはその場で無効になる） */
+export async function reissueShareLinkAction(formData: FormData): Promise<ActionResult> {
+  return runAction(async () => {
+    const { supabase, user } = await requireApprover();
+    const reportId = String(formData.get("report_id") ?? "");
+    if (!reportId) throw new Error("対象が指定されていません");
+
+    await issueShareLink(new SupabaseDb(supabase), reportId, {
+      ctx: { organizationId: user.organizationId, actorId: user.userId },
+    });
+    revalidatePath("/gibier/reports");
+  });
+}
+
+/** 捕獲票の共有リンクを無効にする */
+export async function revokeShareLinkAction(formData: FormData): Promise<ActionResult> {
+  return runAction(async () => {
+    const { supabase, user } = await requireApprover();
+    const reportId = String(formData.get("report_id") ?? "");
+    if (!reportId) throw new Error("対象が指定されていません");
+
+    await revokeShareLink(
+      new SupabaseDb(supabase),
+      { organizationId: user.organizationId, actorId: user.userId },
+      reportId,
     );
     revalidatePath("/gibier/reports");
   });

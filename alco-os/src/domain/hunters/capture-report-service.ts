@@ -215,3 +215,84 @@ export async function rejectCaptureReport(
 
   return updated;
 }
+
+/** 定型文から読み取った項目を保存する（0025・0027の列へ） */
+export async function setCaptureFormFields(
+  db: DbPort,
+  reportId: string,
+  fields: {
+    species?: string | null;
+    captureMethod?: string | null;
+    capturePlace?: string | null;
+    captureDate?: string | null;
+    weightKg?: number | null;
+    weightMeasure?: string | null;
+    sex?: string | null;
+    isJuvenile?: boolean | null;
+    bodyLengthCm?: number | null;
+    trapNumber?: string | null;
+    baitType?: string | null;
+    trapSetDate?: string | null;
+    finishingMethod?: string | null;
+  },
+): Promise<Row> {
+  const patch: Row = {};
+  const set = (column: string, value: unknown) => {
+    if (value !== null && value !== undefined) patch[column] = value;
+  };
+  set("species", fields.species);
+  set("capture_method", fields.captureMethod);
+  set("capture_place", fields.capturePlace);
+  set("capture_date", fields.captureDate);
+  set("weight_kg", fields.weightKg);
+  set("weight_measure", fields.weightMeasure);
+  set("sex", fields.sex);
+  set("is_juvenile", fields.isJuvenile);
+  set("body_length_cm", fields.bodyLengthCm);
+  set("trap_number", fields.trapNumber);
+  set("bait_type", fields.baitType);
+  set("trap_set_date", fields.trapSetDate);
+  set("finishing_method", fields.finishingMethod);
+
+  if (Object.keys(patch).length === 0) {
+    const current = await db.findById("capture_reports", reportId);
+    if (!current) throw new Error("捕獲報告が見つかりません");
+    return current;
+  }
+  return db.update("capture_reports", reportId, patch);
+}
+
+/** 保存済みの行から、定型文パーサと同じ形に読み出す */
+export function readSavedFields(report: Row | null): {
+  species: string | null;
+  captureMethod: string | null;
+  capturePlace: string | null;
+  captureDate: string | null;
+  weightKg: number | null;
+  weightMeasure: string | null;
+  sex: string | null;
+  isJuvenile: boolean | null;
+  bodyLengthCm: number | null;
+  trapNumber: string | null;
+  baitType: string | null;
+  trapSetDate: string | null;
+  finishingMethod: string | null;
+} {
+  const str = (value: unknown) => (typeof value === "string" && value ? value : null);
+  const num = (value: unknown) => (typeof value === "number" ? value : null);
+  return {
+    species: str(report?.species),
+    captureMethod: str(report?.capture_method),
+    capturePlace: str(report?.capture_place),
+    captureDate: str(report?.capture_date),
+    weightKg: num(report?.weight_kg),
+    weightMeasure: str(report?.weight_measure),
+    sex: str(report?.sex),
+    isJuvenile: typeof report?.is_juvenile === "boolean" ? report.is_juvenile : null,
+    bodyLengthCm: num(report?.body_length_cm),
+    trapNumber: str(report?.trap_number),
+    baitType: str(report?.bait_type),
+    trapSetDate: str(report?.trap_set_date),
+    finishingMethod: str(report?.finishing_method),
+  };
+}

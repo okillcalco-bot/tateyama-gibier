@@ -7,6 +7,8 @@ import {
   rejectCaptureReportAction,
   saveAcceptanceStatusAction,
   setPhotoKindAction,
+  reissueShareLinkAction,
+  revokeShareLinkAction,
 } from "./actions";
 
 /**
@@ -341,6 +343,63 @@ export function PhotoKindForm({
           ))}
         </select>
       </label>
+      <ErrorText error={error} />
+    </div>
+  );
+}
+
+/**
+ * 捕獲票の共有リンク（捕獲者が自分でダウンロードする）。
+ * 誤って別の人に渡ってしまったときに備え、**無効化と再発行を必ず用意する**。
+ */
+export function ShareLinkForm({
+  reportId,
+  shareUrl,
+  expiresAt,
+  isValid,
+}: {
+  reportId: string;
+  shareUrl: string;
+  expiresAt: string | null;
+  isValid: boolean;
+}) {
+  const { isPending, error, run } = useAction();
+
+  const submit = (fn: (fd: FormData) => Promise<ActionResult>) => {
+    const formData = new FormData();
+    formData.set("report_id", reportId);
+    run(fn, formData);
+  };
+
+  return (
+    <div className="mt-3 space-y-3 rounded-xl bg-stone-50 p-3">
+      <p className="text-base font-bold text-stone-700">
+        <span aria-hidden="true">{isValid ? "✓" : "－"}</span>{" "}
+        捕獲者むけダウンロードリンク：{isValid ? "有効" : "なし（期限切れ・無効）"}
+      </p>
+      {isValid && shareUrl ? (
+        <p className="break-all rounded-lg bg-white p-2 text-base text-stone-800">{shareUrl}</p>
+      ) : null}
+      {isValid && expiresAt ? (
+        <p className="text-sm text-stone-600">期限：{expiresAt}</p>
+      ) : null}
+
+      <button
+        type="button"
+        disabled={isPending}
+        onClick={() => submit(reissueShareLinkAction)}
+        className={`${BUTTON_BASE} bg-green-700 text-white`}
+      >
+        🔁 リンクを作り直す（前のリンクは使えなくなります）
+      </button>
+      <button
+        type="button"
+        disabled={isPending || !isValid}
+        onClick={() => submit(revokeShareLinkAction)}
+        className={`${BUTTON_BASE} border-2 border-stone-400 bg-white text-stone-700`}
+      >
+        ✕ リンクを無効にする
+      </button>
       <ErrorText error={error} />
     </div>
   );

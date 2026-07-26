@@ -7,7 +7,14 @@ import { CAPTURE_REPORT_STATUS_LABELS } from "@/domain/hunters/capture-report-se
 import { maskObservationPoint } from "@/domain/satoyama/geo-masking";
 import { PHOTO_KIND_LABELS, toReportPhoto } from "@/domain/hunters/capture-photo-service";
 import { missingCityFormPhotos } from "@/domain/hunters/capture-photo-service";
-import { AcceptanceStatusForm, ApproveReportForm, PhotoKindForm } from "./report-forms";
+import { buildShareUrl, isShareLinkValid } from "@/domain/hunters/capture-share-service";
+import { env } from "@/lib/env";
+import {
+  AcceptanceStatusForm,
+  ApproveReportForm,
+  PhotoKindForm,
+  ShareLinkForm,
+} from "./report-forms";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +46,8 @@ interface ReportRow {
   created_at: string;
   weight_kg: number | null;
   weight_measure: string | null;
+  share_token: string | null;
+  share_expires_at: string | null;
 }
 
 function formatDateTime(value: string): string {
@@ -70,7 +79,7 @@ export default async function CaptureReportsPage() {
     supabase
       .from("capture_reports")
       .select(
-        "id, hunter_id, species, capture_method, capture_date, capture_lat, capture_lng, photo_file_id, raw_text, ai_suggestion, status, individual_id, created_at, weight_kg, weight_measure",
+        "id, hunter_id, species, capture_method, capture_date, capture_lat, capture_lng, photo_file_id, raw_text, ai_suggestion, status, individual_id, created_at, weight_kg, weight_measure, share_token, share_expires_at",
       )
       .order("created_at", { ascending: false })
       .limit(50),
@@ -248,6 +257,17 @@ export default async function CaptureReportsPage() {
                       </p>
                     )}
 
+                    <ShareLinkForm
+                      reportId={report.id}
+                      shareUrl={
+                        report.share_token
+                          ? buildShareUrl(env.siteUrl, report.share_token)
+                          : ""
+                      }
+                      expiresAt={report.share_expires_at}
+                      isValid={isShareLinkValid(report.share_token, report.share_expires_at)}
+                    />
+
                     <ApproveReportForm
                       reportId={report.id}
                       hunterName={hunterName}
@@ -288,6 +308,14 @@ export default async function CaptureReportsPage() {
                       <p className="mt-1 text-base text-stone-600">
                         個体を作成しました。個体番号は現場アプリ（受入）で付けてください。
                       </p>
+                      <ShareLinkForm
+                        reportId={report.id}
+                        shareUrl={
+                          report.share_token ? buildShareUrl(env.siteUrl, report.share_token) : ""
+                        }
+                        expiresAt={report.share_expires_at}
+                        isValid={isShareLinkValid(report.share_token, report.share_expires_at)}
+                      />
                       <a
                         href={`/gibier/reports/${report.id}/pack`}
                         className="mt-3 inline-flex min-h-[56px] w-full items-center justify-center rounded-xl bg-green-700 px-4 text-base font-bold text-white"

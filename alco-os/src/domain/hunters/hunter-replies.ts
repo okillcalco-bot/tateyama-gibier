@@ -13,24 +13,66 @@ import type { HunterMenuIntent } from "./hunter-keywords";
 /** すべての受信に共通の締め。指示書の「受け付けました。担当が確認します」 */
 export const ACK_TEXT = "受け付けました。担当が確認します。";
 
-export function captureReportStartReply(): string {
+export function captureReportStartReply(templateLines: readonly string[]): string {
   return [
     "捕獲報告をはじめます。",
-    "写真を3枚、続けて送ってください。",
-    "① 全体がわかる写真",
-    "② 尻尾を切る前",
-    "③ 尻尾を切った後",
-    "そのあとに、獣種・捕獲方法・場所を文章で送っていただけると助かります。",
-    "位置情報（LINEの「＋」→「位置情報」）も送れます。",
-    "1枚だけでも受け付けます。足りない分は担当者から確認します。",
+    "",
+    "【写真】2枚、続けて送ってください。",
+    "① 尻尾を切る前",
+    "② 尻尾を切った後",
+    "場所は、LINEの「＋」→「位置情報」で送れます。",
+    "",
+    "【内容】下の型をコピーして、分かるところだけ埋めて1回で送ってください。",
+    "分からない項目は空欄のままで大丈夫です。",
+    "",
+    ...templateLines,
+    "",
+    "型が難しければ、今までどおり1つずつ聞くこともできます。",
+    "そのまま文章で送っていただいても大丈夫です。",
+  ].join("\n");
+}
+
+/** 不足している必須項目だけを1通でまとめて聞く */
+export function missingFieldsQuestionReply(labels: string[]): string {
+  return [
+    "ありがとうございます。あと少しだけ教えてください。",
+    "",
+    ...labels.map((label) => `・${label}`),
+    "",
+    "分かるところだけで大丈夫です。まとめて1回で送れます。",
+    "分からない項目は「わからない」と送ってください。担当者が確認します。",
+  ].join("\n");
+}
+
+/** すべてそろったので捕獲票のダウンロードリンクを渡す */
+export function cityFormReadyReply(url: string): string {
+  return [
+    "捕獲票ができました。",
+    "こちらから印刷／PDF保存できます。",
+    url,
+    "（30日間有効です）",
+    "",
+    "印刷したものと、捕獲獣の尾を市役所へご提出ください。",
+  ].join("\n");
+}
+
+/** そろったが写真がまだのとき */
+export function cityFormReadyButPhotosReply(url: string, missingLabels: string[]): string {
+  return [
+    "捕獲票ができました。",
+    url,
+    "（30日間有効です）",
+    "",
+    `写真がまだ届いていません：${missingLabels.join("・")}`,
+    "お手すきのときに送ってください。",
   ].join("\n");
 }
 
 export function captureReportPhotoSavedReply(): string {
   return [
     "写真を受け取りました。",
-    "続けて写真がある場合は、そのまま送ってください。",
-    "獣種（イノシシ・シカなど）と捕獲方法（くくり罠・箱罠・銃猟）も教えてください。",
+    "尻尾を切る前・切った後の2枚をお願いします。まだの分はそのまま送ってください。",
+    "内容は、先ほどの型に記入して1回で送っていただけると助かります。",
     ACK_TEXT,
   ].join("\n");
 }
