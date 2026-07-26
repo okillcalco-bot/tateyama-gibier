@@ -96,7 +96,7 @@ describe("捕獲報告の受け取り", () => {
     if (outcome.kind !== "received") throw new Error("unreachable");
     const report = await db.findById("capture_reports", outcome.captureReportId!);
     expect(report?.photo_file_id).toBeTruthy();
-    expect(outcome.reply).toContain("写真を受け取りました");
+    expect(outcome.reply).toContain("写真1枚を受け取りました");
   });
 
   it("位置情報は座標を保存する（表示側でマスキングする）", async () => {

@@ -43,7 +43,11 @@ AIは提案者であり、判断者・承認者ではない。迷ったときの
 1. **AI出力は必ず `generated_drafts` に draft 保存 → 人間承認 → 業務テーブル反映。** 反映経路は `draft-service.approveDraft()` のみ
 2. AI実行は成功・失敗とも `ai_runs` に記録。重要な業務変更は `audit_logs` に記録（両テーブルとも削除・改変機能を作らない）
 3. ジビエ基幹の既存テーブル（individuals / hunters / staff / attendance / shifts / products / orders / order_items / customers / org_settings 等）は**スキーマ変更禁止**。行の読み書きは許可されたもののみ（下記「統合ポイント」）
-4. マイグレーションは追加のみ（`alco-os/supabase/migrations/` 連番。既存ファイル編集禁止）。新テーブルは organization_id + `alco_add_member_policy('<table>')` + set_updated_at トリガー
+4. マイグレーションは追加のみ（`alco-os/supabase/migrations/` 連番。既存ファイル編集禁止）。新テーブルは organization_id + `alco_add_member_policy('<table>')` + set_updated_at トリガー。
+   **1ファイル内のSQLは「参照より定義が先」の順に並べる**（列の追加 → 関数・ビューの定義 → ポリシー・トリガー・index）。
+   PostgreSQLは関数の本体を**作成時に検証する**ため、関数が参照する列を後ろで追加すると
+   `column ... does not exist` で適用に失敗する（0027で実際に踏んだ）。
+   InMemoryDbのテストでは検出できないため、`tests/migrations/sql-order.test.ts` が並び順を機械的に確認する
 5. モデル名ハードコード禁止（env + `src/ai/model-router.ts`）。最新Claudeモデルは temperature 非対応（送ると400）
 6. UIは日本語、コード・DB名は英語。ビジネスロジックは `src/domain/`（DbPort依存・Supabase直接依存禁止）
 7. server action のエラーは throw せず ActionResult 型で返す（本番Nextはエラー内容をマスクするため）
@@ -153,6 +157,6 @@ satoyama_os / quests_support）。詳細と適用日は docs/04-database-schema.
 
 1. `alco-os/CLAUDE.md` と `docs/07` を読む
 2. 変更は小さく。domain経由・監査ログ・承認フローを迂回しない
-3. `pnpm typecheck && pnpm test`（現在230件）→ `pnpm build`
+3. `pnpm typecheck && pnpm test`（現在240件）→ `pnpm build`
 4. docs/ と /manual を更新 → PR（main直pushしない）
 5. 報告: 変更概要 / ファイル / テスト / マイグレーション / リスク

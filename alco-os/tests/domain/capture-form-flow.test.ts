@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { intakeHunterEvent } from "@/domain/hunters/hunter-message-service";
 import { createPendingLink, verifyLink } from "@/domain/hunters/hunter-link-service";
-import { getConversation } from "@/domain/hunters/conversation-state-service";
+import { getConversation, setConversation } from "@/domain/hunters/conversation-state-service";
 import { InMemoryDb } from "../helpers/in-memory-db";
 
 /**
@@ -194,5 +194,164 @@ describe("定型文で1回入力", () => {
     );
     if (outcome.kind !== "received") throw new Error("unreachable");
     expect(outcome.reply).not.toContain("http");
+  });
+});
+
+/**
+ * 本番テスト（2026-07-27）で見つかった不具合の再現テスト。
+ * 沖代表のスクリーンショットに沿ってタイムラインを再現する。
+ */
+describe("本番で見つかった不具合の再現", () => {
+  let db: InMemoryDb;
+
+  /** 写真を1枚受け取る（種別は unsorted のまま = 職員が後で仕分ける） */
+  async function sendPhoto(messageId: string) {
+    return intakeHunterEvent(
+      {
+        db,
+        organizationId: ORG,
+        siteUrl: SITE,
+        savePhoto: async ({ captureReportId }) => {
+          const file = await db.insert("files", {
+            organization_id: ORG,
+            bucket: "alco-os",
+            path: `hunter-line/${messageId}.jpg`,
+            filename: `${messageId}.jpg`,
+            related_table: "capture_reports",
+            related_id: captureReportId,
+          });
+          return file.id as string;
+        },
+      },
+      event({ messageType: "image", messageId, text: null }),
+    );
+  }
+
+  beforeEach(async () => {
+    db = await setup();
+  });
+
+  it("バグA: 写真2枚（unsorted）で「まだ足りない」と催促しない", async () => {
+    await intakeHunterEvent({ db, organizationId: ORG, siteUrl: SITE }, event());
+
+    const first = await sendPhoto("msg-1");
+    if (first.kind !== "received") throw new Error("unreachable");
+    expect(first.reply).toContain("写真1枚を受け取りました");
+
+    const second = await sendPhoto("msg-2");
+    if (second.kind !== "received") throw new Error("unreachable");
+    expect(second.reply).toContain("写真2枚を受け取りました");
+    expect(second.reply).toContain("ありがとうございます");
+    // 種別は職員の作業。捕獲者に催促しない
+    expect(second.reply).not.toContain("お願いします");
+
+    // 保存された写真はすべて未仕分け（種別ベースだと「不足」に見える状態）
+    const photos = db.tables.get("capture_report_photos") ?? [];
+    expect(photos).toHaveLength(2);
+    expect(photos.every((p) => p.photo_kind === "unsorted")).toBe(true);
+  });
+
+  it("バグA: 2枚あればリンク送信時に「写真がまだ」と言わない", async () => {
+    await intakeHunterEvent({ db, organizationId: ORG, siteUrl: SITE }, event());
+    await sendPhoto("msg-1");
+    await sendPhoto("msg-2");
+
+    const outcome = await intakeHunterEvent(
+      { db, organizationId: ORG, siteUrl: SITE },
+      event({ text: FULL_FORM }),
+    );
+    if (outcome.kind !== "received") throw new Error("unreachable");
+    expect(outcome.reply).toContain("/hunter/city-form/");
+    expect(outcome.reply).not.toContain("写真がまだ");
+    expect(outcome.reply).not.toContain("尻尾を切る前");
+  });
+
+  it("バグA: 1枚しかなければ枚数で伝える（種別名では催促しない）", async () => {
+    await intakeHunterEvent({ db, organizationId: ORG, siteUrl: SITE }, event());
+    await sendPhoto("msg-1");
+
+    const outcome = await intakeHunterEvent(
+      { db, organizationId: ORG, siteUrl: SITE },
+      event({ text: FULL_FORM }),
+    );
+    if (outcome.kind !== "received") throw new Error("unreachable");
+    expect(outcome.reply).toContain("写真は1枚届いています");
+  });
+
+  it("バグB: そろった後の自由文で体重サブフローが再起動しない", async () => {
+    await intakeHunterEvent({ db, organizationId: ORG, siteUrl: SITE }, event());
+    await sendPhoto("msg-1");
+    await sendPhoto("msg-2");
+    await intakeHunterEvent(
+      { db, organizationId: ORG, siteUrl: SITE },
+      event({ text: FULL_FORM }),
+    );
+
+    // 位置情報 → 新しい空の報告を作ってしまわないこと
+    await intakeHunterEvent(
+      { db, organizationId: ORG, siteUrl: SITE },
+      event({ messageType: "location", text: null, hasLocation: true, latitude: 34.9, longitude: 139.8 }),
+    );
+    expect(db.tables.get("capture_reports")).toHaveLength(1);
+
+    // 自由文
+    const outcome = await intakeHunterEvent(
+      {
+        db,
+        organizationId: ORG,
+        siteUrl: SITE,
+        classify: async () => ({ intent: "other", suggestion: null, draftId: null }),
+      },
+      event({ text: "写真は送ってるよ" }),
+    );
+
+    if (outcome.kind !== "received") throw new Error("unreachable");
+    expect(outcome.reply).not.toContain("体重について教えてください");
+    expect(outcome.reply).toContain("すでに受け付けています");
+    expect(outcome.choices ?? []).toHaveLength(0);
+    expect((await getConversation(db, CHANNEL, USER)).state).toBe("idle");
+  });
+
+  it("バグB: 体重の3択を押し直しても数値を聞き直さない", async () => {
+    await intakeHunterEvent({ db, organizationId: ORG, siteUrl: SITE }, event());
+    await intakeHunterEvent(
+      { db, organizationId: ORG, siteUrl: SITE },
+      event({ text: FULL_FORM }),
+    );
+
+    // 体重の質問に戻ってしまう状況を作る（会話状態だけ体重待ちにする）
+    const report = (db.tables.get("capture_reports") ?? [])[0];
+    await setConversation(db, {
+      organizationId: ORG,
+      lineChannelId: CHANNEL,
+      lineUserId: USER,
+      state: "awaiting_weight_kind",
+      captureReportId: report.id as string,
+    });
+
+    const outcome = await intakeHunterEvent(
+      { db, organizationId: ORG, siteUrl: SITE },
+      event({ text: "処理施設で計量" }),
+    );
+    if (outcome.kind !== "received") throw new Error("unreachable");
+    expect(outcome.reply).toContain("記録済み");
+    expect(outcome.reply).not.toContain("数字で送ってください");
+    expect((await getConversation(db, CHANNEL, USER)).state).toBe("idle");
+  });
+
+  it("そろった報告に文章が来ても、既に渡したリンクを作り直さない", async () => {
+    await intakeHunterEvent({ db, organizationId: ORG, siteUrl: SITE }, event());
+    const first = await intakeHunterEvent(
+      { db, organizationId: ORG, siteUrl: SITE },
+      event({ text: FULL_FORM }),
+    );
+    if (first.kind !== "received") throw new Error("unreachable");
+    const token = (db.tables.get("capture_reports") ?? [])[0].share_token;
+
+    await intakeHunterEvent(
+      { db, organizationId: ORG, siteUrl: SITE },
+      event({ text: FULL_FORM }),
+    );
+    expect((db.tables.get("capture_reports") ?? [])[0].share_token).toBe(token);
   });
 });

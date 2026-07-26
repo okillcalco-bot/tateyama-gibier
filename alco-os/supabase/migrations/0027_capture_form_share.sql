@@ -27,6 +27,16 @@ comment on column capture_reports.share_token is
 comment on column capture_reports.share_expires_at is
   '共有リンクの期限（発行から30日）。過ぎたら開けない（0027）';
 
+-- ── 捕獲場所（大字）を保持する列。定型文の「場所：」を受ける ──
+-- ※ 下の get_capture_form_by_token() がこの列を参照するため、
+--   **関数の定義より前に必ず追加する**（SQL関数は作成時に本体を検証するため、
+--   順序が逆だと "column r.capture_place does not exist" で適用に失敗する）。
+alter table capture_reports
+  add column if not exists capture_place text;
+
+comment on column capture_reports.capture_place is
+  '捕獲場所の地名表現（大字など）。座標とは別に、捕獲票の「捕獲場所」欄へそのまま入れる（0027）';
+
 -- ── 会話状態に「定型文の記入まち」を追加 ──
 -- 0025 で張り替えた check 制約をさらに更新する（既存ファイルは編集しない）
 alter table line_conversation_states
@@ -107,10 +117,3 @@ comment on function public.get_capture_form_by_token(text) is
 
 revoke all on function public.get_capture_form_by_token(text) from public;
 grant execute on function public.get_capture_form_by_token(text) to anon, authenticated;
-
--- ── 捕獲場所（大字）を保持する列。定型文の「場所：」を受ける ──
-alter table capture_reports
-  add column if not exists capture_place text;
-
-comment on column capture_reports.capture_place is
-  '捕獲場所の地名表現（大字など）。座標とは別に、捕獲票の「捕獲場所」欄へそのまま入れる（0027）';

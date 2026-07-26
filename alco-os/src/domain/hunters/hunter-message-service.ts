@@ -17,8 +17,7 @@ import {
   parseCaptureForm,
   type CaptureFormFields,
 } from "./capture-form-parser";
-import { buildShareUrl, issueShareLink } from "./capture-share-service";
-import { REQUIRED_PHOTO_KINDS, PHOTO_KIND_LABELS, toReportPhoto } from "./capture-photo-service";
+import { buildShareUrl, isShareLinkValid, issueShareLink } from "./capture-share-service";
 import { attachReportPhoto } from "./capture-photo-service";
 import {
   clearConversation,
@@ -40,9 +39,12 @@ import {
   acceptanceStatusReply,
   askNameReply,
   captureReportDetailSavedReply,
+  REQUIRED_PHOTO_COUNT,
   cityFormReadyButPhotosReply,
   cityFormReadyReply,
   missingFieldsQuestionReply,
+  reportAlreadyCompleteReply,
+  weightAlreadyRecordedReply,
   weightKindQuestionReply,
   weightNotUnderstoodReply,
   weightSavedReply,
@@ -175,7 +177,36 @@ async function readHunterName(db: DbPort, hunterId: unknown): Promise<string | u
   }
 }
 
-/** 進行中の捕獲報告を取り出す。無ければ新しく開く */
+/** 直近24時間以内に開いた、まだ処理されていない報告を探す */
+const RECENT_REPORT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+async function findRecentOpenReport(
+  db: DbPort,
+  linkId: string,
+  now: Date,
+): Promise<Row | null> {
+  const rows = await db.findMany(
+    "capture_reports",
+    { hunter_line_link_id: linkId, status: "pending" },
+    50,
+  );
+  const recent = rows
+    .filter((row) => {
+      const created = Date.parse(String(row.created_at ?? ""));
+      return !Number.isFinite(created) || now.getTime() - created < RECENT_REPORT_WINDOW_MS;
+    })
+    .sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
+  return recent[0] ?? null;
+}
+
+/**
+ * 進行中の捕獲報告を取り出す。無ければ新しく開く。
+ *
+ * 会話状態が切れたあと（＝リンク発行後）に写真や位置情報が届くことがあるため、
+ * **直近の未処理レポートがあればそれに足す**。毎回新しい報告を作ると
+ * 空の報告が量産され、捕獲者にも同じ質問を繰り返してしまう。
+ * 「捕獲報告」を押したときだけ forceNew で新しく開く。
+ */
 async function ensureCaptureReport(
   deps: HunterIntakeDeps,
   params: {
@@ -183,11 +214,17 @@ async function ensureCaptureReport(
     channelId: string;
     lineUserId: string;
     existingId: string | null;
+    forceNew?: boolean;
+    now: Date;
   },
 ): Promise<Row> {
   if (params.existingId) {
     const existing = await deps.db.findById("capture_reports", params.existingId);
     if (existing && existing.status === "pending") return existing;
+  }
+  if (!params.forceNew) {
+    const recent = await findRecentOpenReport(deps.db, params.link.id as string, params.now);
+    if (recent) return recent;
   }
   return openCaptureReport(deps.db, {
     organizationId: deps.organizationId,
@@ -298,6 +335,8 @@ export async function intakeHunterEvent(
             channelId: input.channelId,
             lineUserId: input.lineUserId,
             existingId: null,
+            forceNew: true,
+            now,
           });
           captureReportId = report.id as string;
           await setConversation(db, {
@@ -341,6 +380,7 @@ export async function intakeHunterEvent(
         channelId: input.channelId,
         lineUserId: input.lineUserId,
         existingId: conversation.captureReportId,
+        now,
       });
       captureReportId = report.id as string;
 
@@ -369,7 +409,14 @@ export async function intakeHunterEvent(
         captureReportId,
         now,
       });
-      reply = captureReportPhotoSavedReply();
+      {
+        const photoRows = await db.findMany(
+          "capture_report_photos",
+          { capture_report_id: captureReportId },
+          50,
+        );
+        reply = captureReportPhotoSavedReply(photoRows.length);
+      }
     } else if (hasLocation) {
       // ── 3. 位置情報（原座標を保存。表示時は必ず geo-masking を通す） ──
       const report = await ensureCaptureReport(deps, {
@@ -377,6 +424,7 @@ export async function intakeHunterEvent(
         channelId: input.channelId,
         lineUserId: input.lineUserId,
         existingId: conversation.captureReportId,
+        now,
       });
       captureReportId = report.id as string;
 
@@ -403,12 +451,13 @@ export async function intakeHunterEvent(
         channelId: input.channelId,
         lineUserId: input.lineUserId,
         existingId: conversation.captureReportId,
+        now,
       });
       captureReportId = report.id as string;
 
       const parsed = parseCaptureForm(text, now);
       if (parsed.filledCount === 0) {
-        // 型ではない自由文 → 従来どおり本文として保存し、AIに候補を出させる
+        // 型ではない自由文 → 本文として保存し、AIに候補を出させる
         let suggestion: Record<string, unknown> | null = null;
         let draftId: string | null = null;
         if (deps.classify) {
@@ -431,17 +480,61 @@ export async function intakeHunterEvent(
           aiSuggestion: suggestion,
           sourceDraftId: draftId,
         });
-        // 型を使わない人はこれまでどおり1つずつ聞く
-        await setConversation(db, {
-          organizationId,
-          lineChannelId: input.channelId,
-          lineUserId: input.lineUserId,
-          state: "awaiting_weight_kind",
-          captureReportId,
-          now,
-        });
-        reply = `${captureReportDetailSavedReply()}\n\n${weightKindQuestionReply()}`;
-        choices = WEIGHT_MEASURE_CHOICES;
+
+        // **保存済みの内容とあわせて判定する。**
+        // 直近のメッセージだけで見ると、必要な内容がそろっているのに
+        // 体重の質問を最初からやり直してしまう（本番で発生した不具合）。
+        const current = await db.findById("capture_reports", captureReportId);
+        const savedFields = readSavedFields(current) as CaptureFormFields;
+        const stillMissing = missingRequiredFields(savedFields);
+
+        if (stillMissing.length === 0) {
+          // そろっている報告への補足・雑談 → 聞き直さない
+          await clearConversation(db, {
+            organizationId,
+            lineChannelId: input.channelId,
+            lineUserId: input.lineUserId,
+          });
+          const token =
+            typeof current?.share_token === "string" ? current.share_token : null;
+          const valid = isShareLinkValid(
+            token,
+            typeof current?.share_expires_at === "string" ? current.share_expires_at : null,
+            now,
+          );
+          reply = reportAlreadyCompleteReply(
+            valid && deps.siteUrl ? buildShareUrl(deps.siteUrl, token!) : "",
+          );
+          captureReportId = null;
+        } else if (
+          stillMissing.includes("weightKg") ||
+          stillMissing.includes("weightMeasure")
+        ) {
+          // 型を使わない人はこれまでどおり1つずつ聞く（体重から）
+          await setConversation(db, {
+            organizationId,
+            lineChannelId: input.channelId,
+            lineUserId: input.lineUserId,
+            state: "awaiting_weight_kind",
+            captureReportId,
+            now,
+          });
+          reply = `${captureReportDetailSavedReply()}\n\n${weightKindQuestionReply()}`;
+          choices = WEIGHT_MEASURE_CHOICES;
+        } else {
+          await setConversation(db, {
+            organizationId,
+            lineChannelId: input.channelId,
+            lineUserId: input.lineUserId,
+            state: "awaiting_capture_form",
+            captureReportId,
+            now,
+          });
+          reply = missingFieldsQuestionReply(
+            stillMissing.map((key) => REQUIRED_FIELD_LABELS[key]),
+          );
+          choices = buildMissingChoices(stillMissing);
+        }
       } else {
         // 型として読めた → 保存し、不足だけをまとめて聞く
         const saved = readSavedFields(await db.findById("capture_reports", captureReportId));
@@ -479,7 +572,26 @@ export async function intakeHunterEvent(
       // ── 4-a. 体重の計測区分（センター / 処理施設 / 推定） ──
       const reportId = conversation.captureReportId;
       const measure = matchWeightMeasure(text);
-      if (isSkipAnswer(text)) {
+      const currentReport = reportId ? await db.findById("capture_reports", reportId) : null;
+      const alreadyHasWeight =
+        typeof currentReport?.weight_kg === "number" &&
+        typeof currentReport?.weight_measure === "string";
+
+      if (alreadyHasWeight) {
+        // 既に記録済み。数値を聞き直さない（本番で無限ループになった不具合）
+        await clearConversation(db, {
+          organizationId,
+          lineChannelId: input.channelId,
+          lineUserId: input.lineUserId,
+        });
+        captureReportId = null;
+        reply = weightAlreadyRecordedReply(
+          describeWeight(
+            currentReport?.weight_kg as number,
+            currentReport?.weight_measure as string,
+          ),
+        );
+      } else if (isSkipAnswer(text)) {
         await clearConversation(db, {
           organizationId,
           lineChannelId: input.channelId,
@@ -646,7 +758,18 @@ async function completeCaptureReport(
 ): Promise<{ reply: string }> {
   const { db, organizationId } = deps;
 
-  const { token } = await issueShareLink(db, params.reportId, { now: params.now });
+  // 既に有効なリンクがあれば作り直さない（捕獲者が受け取ったリンクを無効にしない）
+  const existing = await db.findById("capture_reports", params.reportId);
+  const existingToken =
+    typeof existing?.share_token === "string" ? existing.share_token : null;
+  const stillValid = isShareLinkValid(
+    existingToken,
+    typeof existing?.share_expires_at === "string" ? existing.share_expires_at : null,
+    params.now,
+  );
+  const token = stillValid
+    ? existingToken!
+    : (await issueShareLink(db, params.reportId, { now: params.now })).token;
   const url = buildShareUrl(deps.siteUrl ?? "", token);
 
   await clearConversation(db, {
@@ -655,27 +778,21 @@ async function completeCaptureReport(
     lineUserId: params.lineUserId,
   });
 
+  // 捕獲者には**枚数**で伝える。種別（尻尾を切る前／後）の仕分けは職員の作業なので、
+  // 届いているのに「まだ足りない」と催促しない
   const photoRows = await db.findMany(
     "capture_report_photos",
     { capture_report_id: params.reportId },
     50,
   );
-  const photos = photoRows.map(toReportPhoto);
-  const missingPhotos = REQUIRED_PHOTO_KINDS.filter(
-    (kind) => !photos.some((photo) => photo.photoKind === kind),
-  );
+  const photoCount = photoRows.length;
 
   if (!url) {
     // 公開URLが未設定のときはリンクを出さない（壊れたURLを送らない）
     return { reply: "ありがとうございます。捕獲票の準備ができました。担当者からご連絡します。" };
   }
-  if (missingPhotos.length > 0) {
-    return {
-      reply: cityFormReadyButPhotosReply(
-        url,
-        missingPhotos.map((kind) => PHOTO_KIND_LABELS[kind]),
-      ),
-    };
+  if (photoCount < REQUIRED_PHOTO_COUNT) {
+    return { reply: cityFormReadyButPhotosReply(url, photoCount) };
   }
   return { reply: cityFormReadyReply(url) };
 }
