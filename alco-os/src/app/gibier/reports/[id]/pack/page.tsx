@@ -5,6 +5,8 @@ import { SetupNotice } from "@/components/ui";
 import { SupabaseDb } from "@/lib/db/supabase-db";
 import { getCityFormReadiness, buildCityFormUrl } from "@/domain/hunters/city-form-service";
 import { PHOTO_KIND_LABELS } from "@/domain/hunters/capture-photo-service";
+import { describeWeight } from "@/domain/hunters/weight-service";
+import { buildCityMailtoUrl, CITY_MAIL_TO } from "@/domain/hunters/city-mail-service";
 import { PrintButton } from "./print-button";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +38,7 @@ export default async function CityFormPackPage({ params }: PageProps) {
   const { data: report } = await supabase
     .from("capture_reports")
     .select(
-      "id, hunter_id, species, capture_method, capture_date, capture_lat, capture_lng, individual_id, status",
+      "id, hunter_id, species, capture_method, capture_date, capture_lat, capture_lng, individual_id, status, weight_kg, weight_measure",
     )
     .eq("id", id)
     .maybeSingle();
@@ -77,10 +79,33 @@ export default async function CityFormPackPage({ params }: PageProps) {
 
   const labelId = (individual?.label_id as string | undefined) ?? "";
   const cityFormUrl = buildCityFormUrl(env.gibierAppUrl, labelId);
+  const hunterName = (hunter?.name as string | undefined) ?? "";
+  const weightText = describeWeight(
+    report.weight_kg as number | null,
+    report.weight_measure as string | null,
+  );
+  const isEstimated = report.weight_measure === "estimated";
+  const mailParams = {
+    hunterName: hunterName || "捕獲者",
+    captureDate: (report.capture_date as string | null) ?? null,
+    species: (report.species as string | null) ?? null,
+    labelId: labelId || null,
+    sender: "staff" as const,
+  };
+  const staffMailUrl = buildCityMailtoUrl(mailParams);
+  const hunterMailUrl = buildCityMailtoUrl({ ...mailParams, sender: "hunter" });
 
   return (
     <main className="mx-auto max-w-[760px] bg-white p-6 text-stone-900 print:p-0">
-      <style>{`@media print { .no-print { display: none !important; } }`}</style>
+      <style>{`
+        @page { size: A4 portrait; margin: 12mm; }
+        @media print {
+          .no-print { display: none !important; }
+          body { background: #fff; }
+          figure { break-inside: avoid; page-break-inside: avoid; }
+          img { max-height: 110mm; object-fit: contain; }
+        }
+      `}</style>
 
       <div className="no-print mb-4 flex flex-wrap gap-3 rounded-xl bg-stone-100 p-4">
         <PrintButton />
@@ -105,6 +130,35 @@ export default async function CityFormPackPage({ params }: PageProps) {
         >
           ← 捕獲報告の一覧へ
         </a>
+      </div>
+
+      <div className="no-print mb-4 rounded-xl border-2 border-green-700 bg-green-50 p-4">
+        <p className="text-lg font-bold text-green-900">市役所へメールで提出する</p>
+        <ol className="mt-2 list-decimal space-y-1 pl-5 text-base text-stone-800">
+          <li>上の「🖨 印刷 / PDF保存」で、この台紙をPDFとして保存します。</li>
+          <li>捕獲票（と図面）も同じようにPDFで保存します。</li>
+          <li>下のボタンでメールを開き、保存したPDFを添付して送信します。</li>
+        </ol>
+        <p className="mt-2 text-base text-stone-700">
+          宛先：{CITY_MAIL_TO}（館山市役所 農水産課）
+        </p>
+        <div className="mt-3 flex flex-col gap-2">
+          <a
+            href={staffMailUrl}
+            className="inline-flex min-h-[56px] items-center justify-center rounded-xl bg-green-700 px-5 text-base font-bold text-white"
+          >
+            ✉ センターが代わりに送るメールを開く
+          </a>
+          <a
+            href={hunterMailUrl}
+            className="inline-flex min-h-[56px] items-center justify-center rounded-xl border-2 border-green-700 bg-white px-5 text-base font-bold text-green-800"
+          >
+            ✉ 捕獲者ご本人が送る文面でメールを開く
+          </a>
+        </div>
+        <p className="mt-2 text-sm text-stone-600">
+          メールに添付できるのは保存したPDFです。捕獲獣の尾は、これまでどおり別途ご提出ください。
+        </p>
       </div>
 
       {readiness.missingPhotos.length > 0 ? (
@@ -133,6 +187,15 @@ export default async function CityFormPackPage({ params }: PageProps) {
             <th className="border border-stone-800 bg-stone-100 p-2 text-left">獣種・方法</th>
             <td className="border border-stone-800 p-2">
               {report.species ?? ""} {report.capture_method ? `／${report.capture_method}` : ""}
+            </td>
+          </tr>
+          <tr>
+            <th className="border border-stone-800 bg-stone-100 p-2 text-left">体重</th>
+            <td className="border border-stone-800 p-2" colSpan={3}>
+              {weightText}
+              {isEstimated ? (
+                <strong>　※ 計量しておらず、推定値です</strong>
+              ) : null}
             </td>
           </tr>
           <tr>

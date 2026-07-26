@@ -109,12 +109,16 @@ export function ApproveReportForm({
   defaultSpecies,
   defaultMethod,
   defaultDate,
+  defaultWeightKg = "",
+  defaultWeightMeasure = "",
 }: {
   reportId: string;
   hunterName: string;
   defaultSpecies: string;
   defaultMethod: string;
   defaultDate: string;
+  defaultWeightKg?: string;
+  defaultWeightMeasure?: string;
 }) {
   const { isPending, error, run } = useAction();
   const [species, setSpecies] = useState(defaultSpecies);
@@ -123,7 +127,17 @@ export function ApproveReportForm({
   const [reason, setReason] = useState("");
 
   return (
-    <div className="mt-3 space-y-3">
+    <form
+      action={(formData) => {
+        formData.set("report_id", reportId);
+        formData.set("species", species);
+        formData.set("capture_method", method);
+        formData.set("capture_date", date);
+        formData.set("hunter_name", hunterName);
+        run(approveCaptureReportAction, formData);
+      }}
+      className="mt-3 space-y-3"
+    >
       <p className="text-base text-stone-700">
         AIの読み取りは<strong>下書き</strong>です。正しいか確かめてから登録してください。
       </p>
@@ -162,18 +176,90 @@ export function ApproveReportForm({
         />
       </label>
 
+      <div className="rounded-xl bg-stone-50 p-3">
+        <p className="text-base font-bold text-stone-700">体重</p>
+        <label className="mt-2 block">
+          <span className="text-base text-stone-700">どこで測りましたか</span>
+          <select name="weight_measure" defaultValue={defaultWeightMeasure} className={FIELD}>
+            <option value="">えらんでください</option>
+            <option value="center">ジビエセンターで計量</option>
+            <option value="facility">処理施設で計量</option>
+            <option value="estimated">推定（計量していない）</option>
+          </select>
+        </label>
+        <label className="mt-2 block">
+          <span className="text-base text-stone-700">体重（kg）</span>
+          <input
+            name="weight_kg"
+            inputMode="decimal"
+            defaultValue={defaultWeightKg}
+            className={FIELD}
+          />
+        </label>
+        <p className="mt-1 text-sm text-stone-600">
+          推定を選ぶと、市役所に出す書類に「推定値」と印字されます。
+        </p>
+      </div>
+
+      <details className="rounded-xl bg-stone-50 p-3">
+        <summary className="text-base font-bold text-stone-700">
+          捕獲票に必要なその他の項目（わかる分だけ）
+        </summary>
+        <div className="mt-2 space-y-2">
+          <label className="block">
+            <span className="text-base text-stone-700">性別</span>
+            <select name="sex" className={FIELD}>
+              <option value="">えらんでください</option>
+              <option value="オス">オス</option>
+              <option value="メス">メス</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-base text-stone-700">成獣か幼獣か</span>
+            <select name="is_juvenile" className={FIELD}>
+              <option value="成獣">成獣</option>
+              <option value="幼獣">幼獣</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-base text-stone-700">体長（cm）</span>
+            <input name="body_length_cm" inputMode="decimal" className={FIELD} />
+          </label>
+          <label className="block">
+            <span className="text-base text-stone-700">箱わな番号</span>
+            <input name="trap_number" className={FIELD} />
+          </label>
+          <label className="block">
+            <span className="text-base text-stone-700">餌の種類（箱わなのみ）</span>
+            <input name="bait_type" className={FIELD} />
+          </label>
+          <label className="block">
+            <span className="text-base text-stone-700">わな設置日</span>
+            <input type="date" name="trap_set_date" className={FIELD} />
+          </label>
+          <label className="block">
+            <span className="text-base text-stone-700">止め刺し方法</span>
+            <select name="finishing_method" className={FIELD}>
+              <option value="">えらんでください</option>
+              <option value="銃">射殺（銃）</option>
+              <option value="刺殺">刺殺（竹槍・ナイフなど）</option>
+              <option value="既に死亡">既に死亡</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-base text-stone-700">処理方法</span>
+            <input
+              name="disposal_method"
+              defaultValue="販売（館山ジビエセンター）"
+              className={FIELD}
+            />
+          </label>
+        </div>
+      </details>
+
       <button
-        type="button"
+        type="submit"
         disabled={isPending || !species || !hunterName}
-        onClick={() => {
-          const formData = new FormData();
-          formData.set("report_id", reportId);
-          formData.set("species", species);
-          formData.set("capture_method", method);
-          formData.set("capture_date", date);
-          formData.set("hunter_name", hunterName);
-          run(approveCaptureReportAction, formData);
-        }}
         className={`${BUTTON_BASE} bg-green-700 text-white`}
       >
         ✓ 個体として登録する（搬入待ち）
@@ -208,7 +294,7 @@ export function ApproveReportForm({
       </button>
 
       <ErrorText error={error} />
-    </div>
+    </form>
   );
 }
 

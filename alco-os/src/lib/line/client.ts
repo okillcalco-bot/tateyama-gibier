@@ -12,9 +12,17 @@ const LINE_API = "https://api.line.me/v2/bot";
 /** LINEのテキストメッセージ上限は5000文字 */
 const MAX_TEXT_LENGTH = 4900;
 
+export interface LineQuickReply {
+  items: {
+    type: "action";
+    action: { type: "message"; label: string; text: string };
+  }[];
+}
+
 export interface LineTextMessage {
   type: "text";
   text: string;
+  quickReply?: LineQuickReply;
 }
 
 export interface LineSendResult {
@@ -92,4 +100,36 @@ export async function fetchDisplayName(
   } catch {
     return null;
   }
+}
+
+/** クイックリプライの選択肢（押すとそのテキストが送信される） */
+export interface QuickReplyChoice {
+  label: string;
+  text: string;
+}
+
+/**
+ * 選択肢つきのテキストメッセージ。
+ * 高齢の捕獲者が文字を打たずに1タップで答えられるようにする。
+ * label は20文字までという制限があるため切り詰める。
+ */
+export function textMessageWithChoices(
+  text: string,
+  choices: QuickReplyChoice[],
+): LineTextMessage {
+  const base = textMessage(text);
+  if (choices.length === 0) return base;
+  return {
+    ...base,
+    quickReply: {
+      items: choices.slice(0, 13).map((choice) => ({
+        type: "action" as const,
+        action: {
+          type: "message" as const,
+          label: choice.label.slice(0, 20),
+          text: choice.text,
+        },
+      })),
+    },
+  };
 }

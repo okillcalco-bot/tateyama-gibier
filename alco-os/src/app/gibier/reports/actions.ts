@@ -15,6 +15,7 @@ import {
   ACCEPTING_KEY,
 } from "@/domain/hunters/gibier-status-service";
 import { isPhotoKind, setPhotoKind } from "@/domain/hunters/capture-photo-service";
+import { isWeightMeasure } from "@/domain/hunters/weight-service";
 
 /**
  * 捕獲報告の確認（職員）。
@@ -47,6 +48,23 @@ export async function approveCaptureReportAction(formData: FormData): Promise<Ac
 
     if (!reportId) throw new Error("対象が指定されていません");
     if (!species) throw new Error("獣種を選んでください");
+
+    // 捕獲票の様式に必要な項目と体重を、承認前に報告へ反映する
+    const weightRaw = String(formData.get("weight_kg") ?? "").trim();
+    const weightMeasure = String(formData.get("weight_measure") ?? "").trim();
+    const formPatch: Record<string, unknown> = {
+      sex: String(formData.get("sex") ?? "").trim() || null,
+      is_juvenile: String(formData.get("is_juvenile") ?? "") === "幼獣",
+      body_length_cm: Number(formData.get("body_length_cm")) || null,
+      trap_number: String(formData.get("trap_number") ?? "").trim() || null,
+      bait_type: String(formData.get("bait_type") ?? "").trim() || null,
+      trap_set_date: String(formData.get("trap_set_date") ?? "").trim() || null,
+      finishing_method: String(formData.get("finishing_method") ?? "").trim() || null,
+      disposal_method: String(formData.get("disposal_method") ?? "").trim() || null,
+    };
+    if (weightRaw) formPatch.weight_kg = Number(weightRaw) || null;
+    if (isWeightMeasure(weightMeasure)) formPatch.weight_measure = weightMeasure;
+    await new SupabaseDb(supabase).update("capture_reports", reportId, formPatch);
     if (!hunterName) {
       throw new Error("捕獲者名がありません。先に「捕獲者LINE」で紐付けてください");
     }

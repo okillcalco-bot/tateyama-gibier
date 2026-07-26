@@ -15,10 +15,24 @@ import {
 } from "./conversation-state-service";
 import { getAcceptanceStatus, getTodayIntakeCount } from "./gibier-status-service";
 import {
+  WEIGHT_MEASURE_CHOICES,
+  WEIGHT_MEASURE_LABELS,
+  describeWeight,
+  matchWeightMeasure,
+  parseWeightKg,
+  setWeightMeasure,
+  setWeightValue,
+} from "./weight-service";
+import {
   ACK_TEXT,
   acceptanceStatusReply,
   askNameReply,
   captureReportDetailSavedReply,
+  weightKindQuestionReply,
+  weightNotUnderstoodReply,
+  weightSavedReply,
+  weightSkippedReply,
+  weightValueQuestionReply,
   captureReportLocationSavedReply,
   captureReportPhotoSavedReply,
   captureReportStartReply,
@@ -79,6 +93,8 @@ export type HunterIntakeOutcome =
       menuIntent: HunterMenuIntent | null;
       captureReportId: string | null;
       reply: string;
+      /** 返信に付ける選択肢（LINEのクイックリプライ）。1タップで答えられる */
+      choices?: { label: string; text: string }[];
     };
 
 export interface HunterClassifyResult {
@@ -251,6 +267,7 @@ export async function intakeHunterEvent(
   const conversation = await getConversation(db, input.channelId, input.lineUserId, now);
 
   let reply = ACK_TEXT;
+  let choices: { label: string; text: string }[] | undefined;
   let classified = false;
   let captureReportId: string | null = conversation.captureReportId;
 
@@ -358,6 +375,64 @@ export async function intakeHunterEvent(
         now,
       });
       reply = captureReportLocationSavedReply();
+    } else if (text && conversation.state === "awaiting_weight_kind") {
+      // ── 4-a. 体重の計測区分（センター / 処理施設 / 推定） ──
+      const reportId = conversation.captureReportId;
+      const measure = matchWeightMeasure(text);
+      if (isSkipAnswer(text)) {
+        await clearConversation(db, {
+          organizationId,
+          lineChannelId: input.channelId,
+          lineUserId: input.lineUserId,
+        });
+        captureReportId = null;
+        reply = weightSkippedReply();
+      } else if (measure && reportId) {
+        await setWeightMeasure(db, reportId, measure);
+        await setConversation(db, {
+          organizationId,
+          lineChannelId: input.channelId,
+          lineUserId: input.lineUserId,
+          state: "awaiting_weight_value",
+          captureReportId: reportId,
+          now,
+        });
+        reply = weightValueQuestionReply(WEIGHT_MEASURE_LABELS[measure]);
+      } else {
+        // 区分が読めない文は報告の続きとして保存し、もう一度たずねる
+        if (reportId) await attachDetail(db, reportId, { rawText: text });
+        reply = weightKindQuestionReply();
+        choices = WEIGHT_MEASURE_CHOICES;
+      }
+    } else if (text && conversation.state === "awaiting_weight_value") {
+      // ── 4-b. 体重の数値 ──
+      const reportId = conversation.captureReportId;
+      if (isSkipAnswer(text)) {
+        await clearConversation(db, {
+          organizationId,
+          lineChannelId: input.channelId,
+          lineUserId: input.lineUserId,
+        });
+        captureReportId = null;
+        reply = weightSkippedReply();
+      } else {
+        const weightKg = parseWeightKg(text);
+        if (weightKg === null) {
+          reply = weightNotUnderstoodReply();
+        } else {
+          if (reportId) await setWeightValue(db, reportId, weightKg);
+          const report = reportId ? await db.findById("capture_reports", reportId) : null;
+          await clearConversation(db, {
+            organizationId,
+            lineChannelId: input.channelId,
+            lineUserId: input.lineUserId,
+          });
+          captureReportId = null;
+          reply = weightSavedReply(
+            describeWeight(weightKg, (report?.weight_measure as string | null) ?? null),
+          );
+        }
+      }
     } else if (text && conversation.state !== "idle") {
       // ── 4. 捕獲報告の会話中の本文（AIは候補のみ） ──
       const report = await ensureCaptureReport(deps, {
@@ -390,7 +465,16 @@ export async function intakeHunterEvent(
         aiSuggestion: suggestion,
         sourceDraftId: draftId,
       });
-      reply = captureReportDetailSavedReply();
+      await setConversation(db, {
+        organizationId,
+        lineChannelId: input.channelId,
+        lineUserId: input.lineUserId,
+        state: "awaiting_weight_kind",
+        captureReportId,
+        now,
+      });
+      reply = `${captureReportDetailSavedReply()}\n\n${weightKindQuestionReply()}`;
+      choices = WEIGHT_MEASURE_CHOICES;
     } else if (text) {
       // ── 5. 自由文（メニュー以外）: AI分類のみ。業務データは動かさない ──
       if (deps.classify) {
@@ -453,5 +537,14 @@ export async function intakeHunterEvent(
     menuIntent,
     captureReportId,
     reply,
+    choices,
   };
+}
+
+/** 「わからない」等の答え。無理に入力させない（高齢の捕獲者への配慮） */
+function isSkipAnswer(text: string): boolean {
+  const normalized = text.trim().replace(/[\s　]/g, "");
+  return ["わからない", "分からない", "わかりません", "不明", "スキップ", "とばす"].some(
+    (word) => normalized === word || normalized.includes(word),
+  );
 }

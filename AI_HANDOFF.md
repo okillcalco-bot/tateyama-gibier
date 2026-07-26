@@ -76,6 +76,7 @@ AIは提案者であり、判断者・承認者ではない。迷ったときの
 | `/manual` | スタッフ用マニュアル（静的。機能変更時に必ず更新） |
 | `/api/inbox` | 汎用受信箱（INBOX_TOKEN認証。iPhoneショートカット等から） |
 | `/line` | **捕獲者LINE**（職員用）。捕獲者ごとのスレッドで受信・送信を時系列表示し、その場でチャット返信できる（送信者と時刻を記録）。既存の捕獲者向けLINE公式アカウント（@889alcvb）からの連絡を確認・返信。お名前の確認まち→捕獲者台帳と紐付け（承認権限者のみ）→ 職員が読んで返信。高齢者UI（大きいボタン・状態は文字でも表示） |
+| `/hunters` | **捕獲者の情報**（職員用）。生年月日・住所・電話・活動エリア・従事者証（hunter_profiles）と口座（既存 hunters の欄）。口座は下4桁表示・フル表示とCSV一括取込は owner/manager 限定＋監査ログ |
 | `/guide` | **捕獲者向けLINE使い方ページ**（ログイン不要の公開ページ。middlewareで認証除外）。大きい文字・記号併記 |
 | `/gibier/reports` | **捕獲報告の確認**（職員用）。LINEの「捕獲報告」で届いた写真・場所・本文を確認し、獣種と捕獲方法を職員が選んで承認 → `individuals` に「搬入待ち」の仮登録を作成（**individuals へ書き込む唯一の経路**）。本日の受入可否の切り替えと、市役所提出パック（既存の捕獲票へのリンク + 写真台紙 `/gibier/reports/[id]/pack`）もここ |
 | `/api/line` | LINE Webhook（HMAC署名検証で**送信元チャネルを特定**。秘書チャネル=既存GAS秘書へ転送+メモ化 / 捕獲者チャネル=GAS転送せず、リッチメニュー5語の分岐・写真・位置情報を処理して**必ず即時返信**）※環境変数設定待ち |
@@ -110,7 +111,7 @@ LINE（秘書チャネル）: LINE_SECRETARY_CHANNEL_SECRET / LINE_SECRETARY_CHA
   （旧名 LINE_CHANNEL_SECRET・LINE_CHANNEL_ACCESS_TOKEN がフォールバックとして有効）
 任意: INBOX_TOKEN / GAS_WEBHOOK_URL / NEXT_PUBLIC_SITE_URL /
   NEXT_PUBLIC_GIBIER_APP_URL（既存ジビエ基幹アプリのURL。市役所捕獲票へのリンク生成に使う。
-   未設定でも動作し、画面に手順を表示する） /
+   本番値は https://tateyama-gibier.vercel.app。未設定でも動作し、画面に手順を表示する） /
   LINE_SECRETARY_CHANNEL_ID・LINE_HUNTER_CHANNEL_ID
   （Bot User ID。**設定しなくても全機能が動く**。設定すると整合性チェックが増えるだけ。
    実際の値は初回受信後に /line の「つながっているLINE」で確認できる）
@@ -124,7 +125,8 @@ billing / boards_social / ledger_advisor / billing_center / gibier_link /
 satoyama_os / quests_support）。詳細と適用日は docs/04-database-schema.md が一次情報。
 
 0021〜0023 は PR #52 で main にマージ済み（**本番DBへの適用は沖代表の承認後**）。
-**0024_line_chat_and_report_photos.sql は未適用**（職員チャット返信・写真種別）。
+**0024〜0026 は未適用**（0024 職員チャット返信・写真種別 / 0025 体重3区分と捕獲票の職員入力項目 / 0026 捕獲者の追加情報）。
+ジビエ基幹側にも `/migrations/20260726_hunters_rls_hardening.sql`（hunters の物理削除禁止）を追加。
 
 ## 未完・段階2（docs/08 Phase 2-3 参照）
 
@@ -150,6 +152,6 @@ satoyama_os / quests_support）。詳細と適用日は docs/04-database-schema.
 
 1. `alco-os/CLAUDE.md` と `docs/07` を読む
 2. 変更は小さく。domain経由・監査ログ・承認フローを迂回しない
-3. `pnpm typecheck && pnpm test`（現在184件）→ `pnpm build`
+3. `pnpm typecheck && pnpm test`（現在200件）→ `pnpm build`
 4. docs/ と /manual を更新 → PR（main直pushしない）
 5. 報告: 変更概要 / ファイル / テスト / マイグレーション / リスク

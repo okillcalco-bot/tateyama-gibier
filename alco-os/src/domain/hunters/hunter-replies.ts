@@ -42,8 +42,49 @@ export function captureReportLocationSavedReply(): string {
 export function captureReportDetailSavedReply(): string {
   return [
     "内容を受け取りました。",
-    "担当者が確認して、あらためてご連絡します。",
     "写真がまだの場合は、このまま送ってください。",
+  ].join("\n");
+}
+
+/** 体重の計測区分をたずねる（下に出るボタンを押すだけで答えられる） */
+export function weightKindQuestionReply(): string {
+  return [
+    "体重について教えてください。",
+    "下のボタンから選んでください。",
+    "・センターで計量",
+    "・処理施設で計量",
+    "・だいたいの重さ（推定）",
+  ].join("\n");
+}
+
+export function weightValueQuestionReply(measureLabel: string): string {
+  return [
+    `${measureLabel} ですね。`,
+    "重さを数字で送ってください。",
+    "例：45",
+    "分からないときは「わからない」と送ってください。",
+  ].join("\n");
+}
+
+export function weightSavedReply(description: string): string {
+  return [
+    `体重 ${description} で受け取りました。`,
+    "報告は以上です。担当者が確認して、あらためてご連絡します。",
+  ].join("\n");
+}
+
+export function weightSkippedReply(): string {
+  return [
+    "わかりました。体重は担当者が確認します。",
+    "報告は以上です。ありがとうございました。",
+  ].join("\n");
+}
+
+export function weightNotUnderstoodReply(): string {
+  return [
+    "すみません、数字が読み取れませんでした。",
+    "「45」のように数字だけで送ってください。",
+    "分からないときは「わからない」と送ってください。",
   ].join("\n");
 }
 
@@ -132,12 +173,21 @@ export function helpReply(guideUrl: string): string {
   return lines.join("\n");
 }
 
+/**
+ * 初回の案内（B案 / 2026-07-26 確定）。
+ * 口座番号はLINEで受け取らない。登録済みの人には入力を求めない。
+ */
 export function askNameReply(): string {
   return [
     "ご連絡ありがとうございます。",
     "はじめてのご連絡のため、まだお名前が分かりません。",
     "お手数ですが、お名前（フルネーム）を送ってください。",
-    "担当者が確認して、あらためてご連絡します。",
+    "",
+    "すでにセンターに登録がある方は、お名前だけで大丈夫です。",
+    "住所や生年月日などをあらためて送っていただく必要はありません。",
+    "",
+    "口座番号は、安全のためLINEでは送らないでください。",
+    "必要なときは担当者からお電話でご連絡します。",
   ].join("\n");
 }
 

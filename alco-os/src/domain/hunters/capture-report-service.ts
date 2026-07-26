@@ -1,5 +1,6 @@
 import type { DbPort, Row } from "@/lib/db/port";
 import { writeAuditLog, type AuditContext } from "@/domain/audit/audit-log-service";
+import { buildWeightMemo } from "./weight-service";
 
 /**
  * 捕獲報告サービス（改修指示書 2026-07-25）。
@@ -120,6 +121,16 @@ export async function approveCaptureReport(
 
   const now = input.now ?? new Date();
 
+  // 推定体重であることを memo に残す。既存 cityFormPrint が memo を
+  // 「その他特記事項」に印字するため、既存の捕獲票にもそのまま出る
+  const weightMemo = buildWeightMemo(
+    typeof report.weight_kg === "number" ? report.weight_kg : null,
+    typeof report.weight_measure === "string" ? report.weight_measure : null,
+  );
+  const memo = [input.memo ?? "LINEの捕獲報告から作成", weightMemo]
+    .filter(Boolean)
+    .join(" / ");
+
   // 既存アプリ（capture-form.html?hunter=）の仮登録と同じ形で作る
   const individual = await db.insert("individuals", {
     label_id: buildTemporaryLabelId(now),
@@ -131,7 +142,18 @@ export async function approveCaptureReport(
     hunter_name: input.hunterName.trim(),
     capture_lat: report.capture_lat ?? null,
     capture_lng: report.capture_lng ?? null,
-    memo: input.memo ?? "LINEの捕獲報告から作成",
+    // 体重は値のみ既存カラムへ。計測区分は memo で伝える（既存スキーマを変えない）
+    weight_total: typeof report.weight_kg === "number" ? report.weight_kg : null,
+    // 捕獲票の様式に必要な項目（職員が /gibier/reports で入力したもの）
+    sex: report.sex ?? null,
+    is_juvenile: report.is_juvenile ?? null,
+    body_length_cm: report.body_length_cm ?? null,
+    trap_number: report.trap_number ?? null,
+    bait_type: report.bait_type ?? null,
+    trap_set_date: report.trap_set_date ?? null,
+    finishing_method: report.finishing_method ?? null,
+    disposal_method: report.disposal_method ?? null,
+    memo,
   });
 
   const updated = await db.update("capture_reports", input.reportId, {

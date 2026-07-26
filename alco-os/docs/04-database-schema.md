@@ -38,10 +38,14 @@
 
 | 0024_line_chat_and_report_photos.sql | 職員チャット返信 line_outbound_messages（本文・送信者・送信時刻・成否）、捕獲報告の写真種別 capture_report_photos（未仕分け/全体/尻尾を切る前/切った後/その他） |
 
+| 0025_capture_weight_and_form_fields.sql | 体重（weight_kg + weight_measure: center/facility/estimated）、捕獲票の職員入力項目（性別・幼獣・体長・箱わな番号・餌・設置日・止め刺し方法・処理方法）、会話状態に体重の聞き取りを追加 |
+| 0026_hunter_profiles.sql | 捕獲者の追加情報 hunter_profiles（生年月日・郵便番号・住所・電話・活動エリア・従事者証）。**口座は入れない**（既存 hunters の欄を使う） |
+
 **適用状況**: 0001〜0020 は本番 Supabase プロジェクト（tateyama-gibier /
 clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（0001〜0011: 2026-07-05、
 0012〜0020: 2026-07-06〜15）。
-**0021〜0023 は PR #52 で main にマージ済み（本番DBへの適用は沖代表の承認後）。0024 は未適用。**
+**0021〜0023 は PR #52 で main にマージ済み（本番DBへの適用は沖代表の承認後）。0024〜0026 は未適用。**
+あわせてジビエ基幹側に `/migrations/20260726_hunters_rls_hardening.sql`（hunters の delete ポリシー廃止）を追加している。
 seed.sql（ダミーデータ）は本番には投入していない。
 
 ## テーブル設計の標準

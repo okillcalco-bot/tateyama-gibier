@@ -37,6 +37,8 @@ interface ReportRow {
   status: string;
   individual_id: string | null;
   created_at: string;
+  weight_kg: number | null;
+  weight_measure: string | null;
 }
 
 function formatDateTime(value: string): string {
@@ -68,7 +70,7 @@ export default async function CaptureReportsPage() {
     supabase
       .from("capture_reports")
       .select(
-        "id, hunter_id, species, capture_method, capture_date, capture_lat, capture_lng, photo_file_id, raw_text, ai_suggestion, status, individual_id, created_at",
+        "id, hunter_id, species, capture_method, capture_date, capture_lat, capture_lng, photo_file_id, raw_text, ai_suggestion, status, individual_id, created_at, weight_kg, weight_measure",
       )
       .order("created_at", { ascending: false })
       .limit(50),
@@ -257,6 +259,8 @@ export default async function CaptureReportsPage() {
                         suggestionText(report.ai_suggestion, "capture_method")
                       }
                       defaultDate={report.capture_date || today}
+                      defaultWeightKg={report.weight_kg === null ? "" : String(report.weight_kg)}
+                      defaultWeightMeasure={report.weight_measure ?? ""}
                     />
                   </Card>
                 );

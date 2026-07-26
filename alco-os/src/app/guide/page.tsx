@@ -78,8 +78,13 @@ export default function GuidePage() {
         <Step mark="⑥" title="はじめてご連絡いただくとき">
           <p>お名前（フルネーム）を送ってください。職員が確認します。</p>
           <p className="rounded-xl bg-stone-100 p-4">
-            すでにセンターに登録がある方は、あらためて住所や口座などをお送りいただく必要は
+            すでにセンターに登録がある方は、あらためて住所などをお送りいただく必要は
             ありません。お名前だけで大丈夫です。
+          </p>
+          <p className="rounded-xl bg-amber-50 p-4 font-bold text-amber-900">
+            口座番号は、安全のためLINEでは送らないでください。
+            <br />
+            必要なときは担当者からお電話でご連絡します。
           </p>
         </Step>
       </div>

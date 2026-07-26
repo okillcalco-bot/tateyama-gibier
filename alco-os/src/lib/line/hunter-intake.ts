@@ -78,3 +78,10 @@ export function buildHunterAutoReply(outcome: HunterIntakeOutcome): string | nul
       return null;
   }
 }
+
+/** 返信に付ける選択肢（1タップで答えられるボタン）。無ければ空配列 */
+export function buildHunterReplyChoices(
+  outcome: HunterIntakeOutcome,
+): { label: string; text: string }[] {
+  return outcome.kind === "received" ? (outcome.choices ?? []) : [];
+}
