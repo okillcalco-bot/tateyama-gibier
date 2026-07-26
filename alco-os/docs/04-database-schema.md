@@ -47,7 +47,10 @@
 clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（0001〜0011: 2026-07-05、
 0012〜0020: 2026-07-06〜15）。
 **0021〜0026 は本番適用済み**（0021〜0023: PR #52 / 0024〜0026: PR #53）。ジビエ基幹側の `20260726_hunters_rls_hardening.sql` も適用済み。
-**0027 は未適用**（捕獲票のセルフダウンロード）。
+0027 も本番適用済み（適用名 `alco_os_0027_capture_form_share`）。
+なお 0027 は当初、関数定義が `capture_place` の列追加より前にあり素のPostgresでは
+適用に失敗する順序だった。**本番へは順序を直したSQLで適用済み**で、
+リポジトリのファイルも同じ順序に修正した（内容は同一。適用済みDBへの影響なし）。
 あわせてジビエ基幹側に `/migrations/20260726_hunters_rls_hardening.sql`（hunters の delete ポリシー廃止）を追加している。
 seed.sql（ダミーデータ）は本番には投入していない。
 
@@ -79,9 +82,26 @@ tasks, files, knowledge_docs は特定モジュールに依存しないよう
 `related_table` + `related_id` の汎用参照を使う（FKなし）。
 モジュール固有の強い整合性が必要な場合のみ専用FKカラムを足す。
 
+## 1ファイル内のSQLの並び順（重要）
+
+**「参照より定義が先」** の順に書く。
+
+1. `create table` / `alter table ... add column`
+2. `create index` / 制約
+3. `create or replace function` / `create view`
+4. `select alco_add_member_policy(...)` / トリガー / `comment on`
+
+PostgreSQLは**SQL関数の本体を作成時に検証する**ため、関数が参照する列を
+そのファイルの後ろで追加すると `column ... does not exist` で適用に失敗する。
+
+> 実例: 0027 は当初 `get_capture_form_by_token()` を `capture_place` の追加より
+> 前に書いてしまい、素のPostgresへの適用に失敗した（本番へは順序を直したSQLで適用）。
+> `tests/migrations/sql-order.test.ts` がこの並び順を機械的に確認する。
+
 ## 変更手順
 
 1. 新しい連番SQLファイルを作る（既存ファイルは編集しない）
-2. `alco_add_member_policy` + `set_updated_at` トリガーを忘れない
-3. 本ドキュメントの一覧表を更新する
-4. Supabase に適用（`supabase db push` または MCP の apply_migration）
+2. 上の並び順を守る（`pnpm test` の並び順チェックが落ちたら順序を見直す）
+3. `alco_add_member_policy` + `set_updated_at` トリガーを忘れない
+4. 本ドキュメントの一覧表を更新する
+5. Supabase に適用（`supabase db push` または MCP の apply_migration）
