@@ -44,6 +44,13 @@ export const env = {
   lineHunterAccessToken: read(process.env.LINE_HUNTER_CHANNEL_ACCESS_TOKEN),
   /** 既存のGAS秘書システムへLINE webhookを転送する場合のURL（任意） */
   gasWebhookUrl: read(process.env.GAS_WEBHOOK_URL),
+  /**
+   * 既存ジビエ基幹アプリ（ルートの静的PWA）の公開URL。
+   * 市役所提出用「有害鳥獣捕獲票」は既存の capture-form.html?cityform= を
+   * そのまま使うため、そこへのリンク生成に必要（任意。未設定なら手順を表示）。
+   * 本番値: https://tateyama-gibier.vercel.app
+   */
+  gibierAppUrl: read(process.env.NEXT_PUBLIC_GIBIER_APP_URL).replace(/\/$/, ""),
   /** 公開URL（応援リンクの生成に使う。Vercelが自動で入れる本番ドメイン） */
   siteUrl: read(
     process.env.NEXT_PUBLIC_SITE_URL ||

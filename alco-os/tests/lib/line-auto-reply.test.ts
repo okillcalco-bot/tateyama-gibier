@@ -40,7 +40,7 @@ describe("捕獲者への即時返信", () => {
       classified: false,
       menuIntent: "help",
       captureReportId: null,
-      reply: helpReply(),
+      reply: helpReply("https://example.test/guide"),
     });
     expect(text).toContain("使い方");
   });

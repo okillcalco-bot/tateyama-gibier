@@ -8,8 +8,12 @@ import {
   readDestination,
   resolveChannelBySignature,
 } from "@/lib/line/verify";
-import { replyMessage, textMessage } from "@/lib/line/client";
-import { buildHunterAutoReply, intakeHunterWebhookEvent } from "@/lib/line/hunter-intake";
+import { replyMessage, textMessage, textMessageWithChoices } from "@/lib/line/client";
+import {
+  buildHunterAutoReply,
+  buildHunterReplyChoices,
+  intakeHunterWebhookEvent,
+} from "@/lib/line/hunter-intake";
 
 /**
  * LINE Messaging API webhook — 複数チャネル共用の入口。
@@ -130,9 +134,14 @@ export async function POST(request: Request) {
     if (!channel.accessToken || !event.replyToken) return false;
     return !usedReplyTokens.has(event.replyToken);
   };
-  const reply = async (event: LineEvent & { replyToken: string }, text: string) => {
+  const reply = async (
+    event: LineEvent & { replyToken: string },
+    text: string,
+    choices: { label: string; text: string }[] = [],
+  ) => {
     usedReplyTokens.add(event.replyToken);
-    await replyMessage(channel.accessToken, event.replyToken, [textMessage(text)]);
+    const message = choices.length > 0 ? textMessageWithChoices(text, choices) : textMessage(text);
+    await replyMessage(channel.accessToken, event.replyToken, [message]);
   };
 
   for (const event of events) {
@@ -151,7 +160,11 @@ export async function POST(request: Request) {
 }
 
 type CanReply = (event: LineEvent) => event is LineEvent & { replyToken: string };
-type Reply = (event: LineEvent & { replyToken: string }, text: string) => Promise<void>;
+type Reply = (
+  event: LineEvent & { replyToken: string },
+  text: string,
+  choices?: { label: string; text: string }[],
+) => Promise<void>;
 
 /** 秘書チャネル: 従来どおりテキストを受信箱へ取り込む */
 async function handleSecretaryEvent(
@@ -209,6 +222,6 @@ async function handleHunterEvent(
 
   const autoReply = buildHunterAutoReply(outcome);
   if (autoReply && canReply(event)) {
-    await reply(event, autoReply);
+    await reply(event, autoReply, buildHunterReplyChoices(outcome));
   }
 }

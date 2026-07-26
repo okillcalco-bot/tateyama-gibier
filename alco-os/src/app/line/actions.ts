@@ -5,8 +5,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { SupabaseDb } from "@/lib/db/supabase-db";
 import { getCurrentUser, canApprove } from "@/lib/auth";
 import { runAction, type ActionResult } from "@/lib/action-result";
-import { writeAuditLog } from "@/domain/audit/audit-log-service";
 import { blockLink, unblockLink, verifyLink } from "@/domain/hunters/hunter-link-service";
+import { sendHunterReply } from "@/domain/hunters/hunter-chat-service";
 import { resolveLineChannels } from "@/lib/line/channels";
 import { pushMessage, textMessage } from "@/lib/line/client";
 
@@ -87,9 +87,11 @@ export async function unblockLinkAction(formData: FormData): Promise<ActionResul
 }
 
 /**
- * 捕獲者へLINEで返信する。
- * webhook の replyToken は既に失効しているためプッシュ送信を使う。
+ * 捕獲者へLINEで返信する（要望1 / 0024）。
+ *
+ * webhook の replyToken は失効しているためプッシュ送信を使う。
  * 文面は職員が確認・編集したものだけを送る（AIの下書きをそのまま送らない）。
+ * 送信者と送信時刻は line_outbound_messages に必ず残る（複数職員前提）。
  */
 export async function sendHunterReplyAction(formData: FormData): Promise<ActionResult> {
   return runAction(async () => {
@@ -97,43 +99,25 @@ export async function sendHunterReplyAction(formData: FormData): Promise<ActionR
     const user = await getCurrentUser(supabase);
     if (!user) throw new Error("ログインが必要です");
 
-    const messageId = String(formData.get("message_id") ?? "");
+    const linkId = String(formData.get("link_id") ?? "");
+    const inReplyToId = String(formData.get("message_id") ?? "").trim();
     const text = String(formData.get("reply_text") ?? "").trim();
-    if (!messageId) throw new Error("対象のメッセージが指定されていません");
+    if (!linkId) throw new Error("送信先が指定されていません");
     if (!text) throw new Error("返信の文章を入力してください");
-
-    const db = new SupabaseDb(supabase);
-    const message = await db.findById("line_inbound_messages", messageId);
-    if (!message) throw new Error("メッセージが見つかりません");
 
     const channel = resolveLineChannels().find((c) => c.key === "hunter");
     if (!channel) {
       throw new Error("捕獲者チャネルが未設定です（管理者に連絡してください）");
     }
 
-    const result = await pushMessage(channel.accessToken, String(message.line_user_id), [
-      textMessage(text),
-    ]);
-    if (!result.ok) {
-      throw new Error(result.error ?? "送信に失敗しました");
-    }
-
-    const updated = await db.update("line_inbound_messages", messageId, {
-      status: "handled",
-      replied_at: new Date().toISOString(),
-      replied_by: user.userId,
-    });
-
-    await writeAuditLog(
-      db,
-      { organizationId: user.organizationId, actorId: user.userId },
+    await sendHunterReply(
       {
-        action: "update",
-        tableName: "line_inbound_messages",
-        recordId: messageId,
-        after: updated,
-        note: `捕獲者へLINEで返信（${text.length}字）`,
+        db: new SupabaseDb(supabase),
+        ctx: { organizationId: user.organizationId, actorId: user.userId },
+        send: async ({ lineUserId, text: body }) =>
+          pushMessage(channel.accessToken, lineUserId, [textMessage(body)]),
       },
+      { linkId, inReplyToId: inReplyToId || null, body: text },
     );
 
     revalidatePath("/line");

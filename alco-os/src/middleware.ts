@@ -13,6 +13,7 @@ import { env, isSupabaseConfigured } from "@/lib/env";
  *            セッションを持たないためリダイレクトすると必ず失敗する
  * - /portal  飲食店ボード（customers.portal_token 認証）
  * - /support 応援ページ（ログイン不要の公開ページ）
+ * - /guide   捕獲者向けのLINE使い方ページ（ログイン不要の公開ページ）
  */
 export async function middleware(request: NextRequest) {
   if (!isSupabaseConfigured()) {
@@ -52,7 +53,8 @@ export async function middleware(request: NextRequest) {
   // 公開ページ（飲食店ボード=トークン式 / 応援ページ）は認証リダイレクトから除外
   if (
     request.nextUrl.pathname.startsWith("/portal") ||
-    request.nextUrl.pathname.startsWith("/support")
+    request.nextUrl.pathname.startsWith("/support") ||
+    request.nextUrl.pathname.startsWith("/guide")
   ) {
     return response;
   }

@@ -6,6 +6,7 @@ import {
   type HunterEventInput,
   type HunterIntakeOutcome,
 } from "@/domain/hunters/hunter-message-service";
+import { env } from "@/lib/env";
 import { fetchDisplayName } from "./client";
 import { saveLinePhoto } from "./photo";
 import type { LineChannel } from "./channels";
@@ -28,6 +29,8 @@ export async function intakeHunterWebhookEvent(
       fetchDisplayName: channel.accessToken
         ? (lineUserId) => fetchDisplayName(channel.accessToken, lineUserId)
         : undefined,
+      // 「使い方」で案内する説明ページ（ログイン不要・大きい文字）
+      guideUrl: env.siteUrl ? `${env.siteUrl}/guide` : "",
       savePhoto: channel.accessToken
         ? ({ lineMessageId, captureReportId }) =>
             saveLinePhoto({
@@ -74,4 +77,11 @@ export function buildHunterAutoReply(outcome: HunterIntakeOutcome): string | nul
     case "blocked":
       return null;
   }
+}
+
+/** 返信に付ける選択肢（1タップで答えられるボタン）。無ければ空配列 */
+export function buildHunterReplyChoices(
+  outcome: HunterIntakeOutcome,
+): { label: string; text: string }[] {
+  return outcome.kind === "received" ? (outcome.choices ?? []) : [];
 }

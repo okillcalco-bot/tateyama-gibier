@@ -14,6 +14,8 @@ import {
   ACCEPTANCE_NOTE_KEY,
   ACCEPTING_KEY,
 } from "@/domain/hunters/gibier-status-service";
+import { isPhotoKind, setPhotoKind } from "@/domain/hunters/capture-photo-service";
+import { isWeightMeasure } from "@/domain/hunters/weight-service";
 
 /**
  * 捕獲報告の確認（職員）。
@@ -46,6 +48,23 @@ export async function approveCaptureReportAction(formData: FormData): Promise<Ac
 
     if (!reportId) throw new Error("対象が指定されていません");
     if (!species) throw new Error("獣種を選んでください");
+
+    // 捕獲票の様式に必要な項目と体重を、承認前に報告へ反映する
+    const weightRaw = String(formData.get("weight_kg") ?? "").trim();
+    const weightMeasure = String(formData.get("weight_measure") ?? "").trim();
+    const formPatch: Record<string, unknown> = {
+      sex: String(formData.get("sex") ?? "").trim() || null,
+      is_juvenile: String(formData.get("is_juvenile") ?? "") === "幼獣",
+      body_length_cm: Number(formData.get("body_length_cm")) || null,
+      trap_number: String(formData.get("trap_number") ?? "").trim() || null,
+      bait_type: String(formData.get("bait_type") ?? "").trim() || null,
+      trap_set_date: String(formData.get("trap_set_date") ?? "").trim() || null,
+      finishing_method: String(formData.get("finishing_method") ?? "").trim() || null,
+      disposal_method: String(formData.get("disposal_method") ?? "").trim() || null,
+    };
+    if (weightRaw) formPatch.weight_kg = Number(weightRaw) || null;
+    if (isWeightMeasure(weightMeasure)) formPatch.weight_measure = weightMeasure;
+    await new SupabaseDb(supabase).update("capture_reports", reportId, formPatch);
     if (!hunterName) {
       throw new Error("捕獲者名がありません。先に「捕獲者LINE」で紐付けてください");
     }
@@ -111,6 +130,27 @@ export async function saveAcceptanceStatusAction(formData: FormData): Promise<Ac
         after: { accepting, note },
         note: `本日の受入可否を「${accepting}」に変更`,
       },
+    );
+    revalidatePath("/gibier/reports");
+  });
+}
+
+/** 写真の種別（全体 / 尻尾を切る前 / 切った後 など）を職員が決める */
+export async function setPhotoKindAction(formData: FormData): Promise<ActionResult> {
+  return runAction(async () => {
+    const supabase = await createSupabaseServerClient();
+    const user = await getCurrentUser(supabase);
+    if (!user) throw new Error("ログインが必要です");
+
+    const photoId = String(formData.get("photo_id") ?? "");
+    const photoKind = String(formData.get("photo_kind") ?? "");
+    if (!photoId) throw new Error("対象の写真が指定されていません");
+    if (!isPhotoKind(photoKind)) throw new Error("写真の種類を選んでください");
+
+    await setPhotoKind(
+      new SupabaseDb(supabase),
+      { organizationId: user.organizationId, actorId: user.userId },
+      { photoId, photoKind },
     );
     revalidatePath("/gibier/reports");
   });

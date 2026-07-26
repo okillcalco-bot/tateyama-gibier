@@ -6,7 +6,14 @@ import type { DbPort, Row } from "@/lib/db/port";
  * 期限（既定24時間）を過ぎたら通常のメッセージとして扱う。
  */
 
-export type ConversationState = "idle" | "awaiting_capture_photo" | "awaiting_capture_detail";
+export type ConversationState =
+  | "idle"
+  | "awaiting_capture_photo"
+  | "awaiting_capture_detail"
+  /** 体重の計測区分（センター / 処理施設 / 推定）を聞いている */
+  | "awaiting_weight_kind"
+  /** 体重の数値を聞いている */
+  | "awaiting_weight_value";
 
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 

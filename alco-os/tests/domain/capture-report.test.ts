@@ -162,7 +162,21 @@ describe("メニューの回答", () => {
     await verifiedLink(db);
   });
 
-  it("受入状況は org_settings のフラグを読んで返す", async () => {
+  it("受入状況は本日の受入件数を返す（仕様確定 2026-07-26）", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    await db.insert("individuals", { capture_date: today, species: "イノシシ" });
+    await db.insert("individuals", { capture_date: today, species: "シカ" });
+    await db.insert("individuals", { capture_date: "2020-01-01", species: "イノシシ" });
+
+    const outcome = await intakeHunterEvent(
+      { db, organizationId: ORG },
+      baseEvent({ text: "受入状況" }),
+    );
+    if (outcome.kind !== "received") throw new Error("unreachable");
+    expect(outcome.reply).toContain("本日の受入は 2 件です");
+  });
+
+  it("受入を止めている日はその旨も添える", async () => {
     await db.insert("org_settings", { key: "gibier_accepting", value: "受入停止" });
     await db.insert("org_settings", { key: "gibier_acceptance_note", value: "明日は受付します" });
 
@@ -175,62 +189,32 @@ describe("メニューの回答", () => {
     expect(outcome.reply).toContain("明日は受付します");
   });
 
-  it("未設定なら「担当者が確認します」と返す", async () => {
-    const outcome = await intakeHunterEvent(
-      { db, organizationId: ORG },
-      baseEvent({ text: "受入状況" }),
-    );
-    if (outcome.kind !== "received") throw new Error("unreachable");
-    expect(outcome.reply).toContain("担当者が確認します");
-  });
-
-  it("買取状況は紐づけ済み捕獲者の直近だけを返す", async () => {
+  it("買取状況は準備中の案内を返し、金額を一切出さない（仕様確定 2026-07-26）", async () => {
     await db.insert("individuals", {
       hunter_name: "山田 太郎",
       capture_date: "2026-07-01",
       species: "イノシシ",
       buyback_amount: 8000,
     });
-    await db.insert("individuals", {
-      hunter_name: "山田 太郎",
-      capture_date: "2026-07-20",
-      species: "シカ",
-      buyback_amount: null,
-    });
-    await db.insert("individuals", {
-      hunter_name: "別人",
-      capture_date: "2026-07-21",
-      species: "イノシシ",
-      buyback_amount: 99999,
-    });
 
     const outcome = await intakeHunterEvent(
       { db, organizationId: ORG },
       baseEvent({ text: "買取状況" }),
     );
     if (outcome.kind !== "received") throw new Error("unreachable");
-    expect(outcome.reply).toContain("8,000円");
-    expect(outcome.reply).toContain("まだ確定していません");
-    // 他人の金額は絶対に出さない
-    expect(outcome.reply).not.toContain("99,999");
-    // 新しい順
-    expect(outcome.reply.indexOf("シカ")).toBeLessThan(outcome.reply.indexOf("イノシシ"));
+    expect(outcome.reply).toContain("準備中");
+    expect(outcome.reply).not.toMatch(/円/);
+    // 問い合わせ自体は職員が見られるよう受信一覧に残る
+    expect(db.tables.get("line_inbound_messages")).toHaveLength(1);
   });
 
-  it("未紐づけの相手には金額を出さず、名前を尋ねる", async () => {
-    const other = new InMemoryDb();
-    await createPendingLink(other, {
-      organizationId: ORG,
-      lineChannelId: CHANNEL,
-      lineUserId: USER,
-    });
+  it("使い方は説明ページのリンクを添えて返す", async () => {
     const outcome = await intakeHunterEvent(
-      { db: other, organizationId: ORG },
-      baseEvent({ text: "買取状況" }),
+      { db, organizationId: ORG, guideUrl: "https://example.test/guide" },
+      baseEvent({ text: "使い方" }),
     );
-    expect(outcome.kind).toBe("pending");
-    if (outcome.kind !== "pending") throw new Error("unreachable");
-    expect(outcome.reply).not.toMatch(/円/);
+    if (outcome.kind !== "received") throw new Error("unreachable");
+    expect(outcome.reply).toContain("https://example.test/guide");
   });
 
   it("使い方はメニューの案内を返す", async () => {
@@ -241,6 +225,16 @@ describe("メニューの回答", () => {
     if (outcome.kind !== "received") throw new Error("unreachable");
     expect(outcome.reply).toContain("捕獲報告");
     expect(outcome.reply).toContain("電話");
+  });
+
+  it("捕獲報告の案内は尻尾の前後写真をお願いする（要望3）", async () => {
+    const outcome = await intakeHunterEvent(
+      { db, organizationId: ORG },
+      baseEvent({ text: "捕獲報告" }),
+    );
+    if (outcome.kind !== "received") throw new Error("unreachable");
+    expect(outcome.reply).toContain("尻尾を切る前");
+    expect(outcome.reply).toContain("尻尾を切った後");
   });
 
   it("どの受信にも必ず返事の文面がある（送りっぱなしにしない）", async () => {
