@@ -1,9 +1,9 @@
 import { isSupabaseConfigured } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Card, PageHeader, SetupNotice, EmptyState } from "@/components/ui";
-import { HUNTER_INTENT_LABELS } from "@/ai/schemas/hunter-message.schema";
 import { HUNTER_LINK_STATUS_LABELS } from "@/domain/hunters/hunter-link-service";
 import { CHANNEL_LABELS } from "@/lib/line/channels";
+import { buildThread } from "@/domain/hunters/hunter-chat-service";
 import { ReplyForm, UnblockLinkForm, VerifyLinkForm, type HunterOption } from "./line-forms";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +45,18 @@ interface MessageRow {
   detected_intent: string | null;
   status: string;
   received_at: string;
+  replied_at: string | null;
+  replied_by: string | null;
+}
+
+interface OutboundRow {
+  id: string;
+  hunter_line_link_id: string | null;
+  body: string;
+  sent_at: string;
+  sent_by: string | null;
+  status: string;
+  error: string | null;
 }
 
 function formatDateTime(value: string): string {
@@ -75,7 +87,8 @@ export default async function LinePage() {
 
   const supabase = await createSupabaseServerClient();
 
-  const [linksResult, messagesResult, huntersResult, channelsResult] = await Promise.all([
+  const [linksResult, messagesResult, huntersResult, channelsResult, outboundResult, profilesResult] =
+    await Promise.all([
     supabase
       .from("hunter_line_links")
       .select("id, hunter_id, line_display_name, status, created_at")
@@ -84,7 +97,7 @@ export default async function LinePage() {
     supabase
       .from("line_inbound_messages")
       .select(
-        "id, hunter_line_link_id, body, message_type, has_location, detected_intent, status, received_at",
+        "id, hunter_line_link_id, body, message_type, has_location, detected_intent, status, received_at, replied_at, replied_by",
       )
       .order("received_at", { ascending: false })
       .limit(50),
@@ -98,30 +111,65 @@ export default async function LinePage() {
       .from("line_channel_registry")
       .select("channel_key, destination, last_seen_at, event_count")
       .order("channel_key"),
+    supabase
+      .from("line_outbound_messages")
+      .select("id, hunter_line_link_id, body, sent_at, sent_by, status, error")
+      .order("sent_at", { ascending: false })
+      .limit(100),
+    supabase.from("profiles").select("id, display_name").limit(200),
   ]);
 
   const links = (linksResult.data ?? []) as LinkRow[];
   const messages = (messagesResult.data ?? []) as MessageRow[];
   const hunters = (huntersResult.data ?? []) as HunterOption[];
   const channels = (channelsResult.data ?? []) as ChannelRow[];
+  const outbound = (outboundResult.data ?? []) as OutboundRow[];
+  const staffNameById = new Map(
+    ((profilesResult.data ?? []) as { id: string; display_name: string }[]).map((p) => [
+      p.id,
+      p.display_name,
+    ]),
+  );
 
   const hunterNameById = new Map(hunters.map((h) => [h.id, h.name]));
   const linkById = new Map(links.map((l) => [l.id, l]));
+
+  // 捕獲者ごとに受信・送信をまとめてスレッドにする
+  const conversations = links
+    .map((link) => {
+      const inboundRows = messages.filter((m) => m.hunter_line_link_id === link.id);
+      const outboundRows = outbound.filter((o) => o.hunter_line_link_id === link.id);
+      if (inboundRows.length === 0 && outboundRows.length === 0) return null;
+
+      const entries = buildThread(
+        inboundRows as unknown as Record<string, unknown>[],
+        outboundRows as unknown as Record<string, unknown>[],
+      );
+      const unhandledRows = inboundRows.filter((m) => m.status !== "handled");
+      return {
+        linkId: link.id,
+        title: link.hunter_id
+          ? (hunterNameById.get(link.hunter_id) ?? "登録ずみの捕獲者")
+          : `お名前の確認まち${
+              link.line_display_name ? `（LINEの表示名：${link.line_display_name}）` : ""
+            }`,
+        entries,
+        unhandled: unhandledRows.length,
+        latestUnhandledId: unhandledRows[0]?.id ?? null,
+        hasLocation: inboundRows.some((m) => m.has_location),
+      };
+    })
+    .filter((conv): conv is NonNullable<typeof conv> => conv !== null)
+    .sort((a, b) =>
+      (b.entries[b.entries.length - 1]?.at ?? "").localeCompare(
+        a.entries[a.entries.length - 1]?.at ?? "",
+      ),
+    );
 
   const pendingLinks = links.filter((l) => l.status === "pending");
   const blockedLinks = links.filter((l) => l.status === "blocked");
   const verifiedCount = links.filter((l) => l.status === "verified").length;
 
-  const senderLabel = (message: MessageRow): string => {
-    const link = message.hunter_line_link_id ? linkById.get(message.hunter_line_link_id) : null;
-    if (!link) return "送信者：不明";
-    if (link.hunter_id) {
-      return `送信者：${hunterNameById.get(link.hunter_id) ?? "登録ずみの捕獲者"}`;
-    }
-    return `送信者：まだ確認できていません${
-      link.line_display_name ? `（LINEの表示名：${link.line_display_name}）` : ""
-    }`;
-  };
 
   return (
     <>
@@ -159,61 +207,74 @@ export default async function LinePage() {
           )}
         </section>
 
-        {/* 2. 受信メッセージ */}
+        {/* 2. 会話（スレッド） */}
         <section>
-          <h2 className="mb-2 text-lg font-bold text-stone-800">2. 届いた連絡</h2>
+          <h2 className="mb-2 text-lg font-bold text-stone-800">2. 届いた連絡とやりとり</h2>
           <p className="mb-2 text-base text-stone-600">
-            AIの仕分けは目安です。搬入するかどうかは職員が決めてください。
-            タスクにするときは「承認」タブで承認します。
+            捕獲者ごとのやりとりです。文章を書いて「LINEで送る」を押すと、その人に届きます。
+            送った人と時刻は記録に残ります。
           </p>
-          {messages.length === 0 ? (
+          {conversations.length === 0 ? (
             <EmptyState message="まだ連絡は届いていません。" />
           ) : (
             <div className="space-y-3">
-              {messages.map((message) => (
-                <Card key={message.id}>
-                  <p className="text-sm text-stone-500">{formatDateTime(message.received_at)}</p>
-                  <p className="mt-1 text-base font-bold text-stone-800">
-                    {senderLabel(message)}
-                  </p>
-
-                  {message.detected_intent ? (
-                    <StatusLine
-                      mark="▶"
-                      text={`AIの仕分け：${
-                        HUNTER_INTENT_LABELS[
-                          message.detected_intent as keyof typeof HUNTER_INTENT_LABELS
-                        ] ?? message.detected_intent
-                      }`}
-                    />
+              {conversations.map((conv) => (
+                <Card key={conv.linkId}>
+                  <p className="text-base font-bold text-stone-800">{conv.title}</p>
+                  {conv.unhandled > 0 ? (
+                    <StatusLine mark="！" text={`未対応 ${conv.unhandled}件`} />
                   ) : (
-                    <StatusLine mark="－" text="AIの仕分け：まだありません" />
+                    <StatusLine mark="✓" text="未対応はありません" />
                   )}
 
-                  {message.status === "handled" ? (
-                    <StatusLine mark="✓" text="対応ずみ" />
-                  ) : (
-                    <StatusLine mark="！" text="未対応" />
-                  )}
+                  <div className="mt-2 space-y-2">
+                    {conv.entries.map((entry) => {
+                      const inbound = entry.direction === "inbound";
+                      return (
+                        <div
+                          key={`${entry.direction}-${entry.id}`}
+                          className={`rounded-xl p-3 ${
+                            inbound ? "bg-stone-50" : "bg-green-50"
+                          }`}
+                        >
+                          <p className="text-sm text-stone-500">
+                            <span aria-hidden="true">{inbound ? "←" : "→"}</span>{" "}
+                            {inbound
+                              ? "捕獲者から"
+                              : `職員から（${
+                                  entry.actorId
+                                    ? (staffNameById.get(entry.actorId) ?? "担当者")
+                                    : "担当者"
+                                }）`}
+                            ／{formatDateTime(entry.at)}
+                            {entry.status === "failed" ? "／送信できませんでした" : ""}
+                          </p>
+                          {entry.body ? (
+                            <p className="mt-1 whitespace-pre-wrap break-words text-base text-stone-800">
+                              {entry.body}
+                            </p>
+                          ) : (
+                            <p className="mt-1 text-base text-stone-600">
+                              文章以外の連絡です（種類：{entry.messageType ?? "不明"}）
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
 
-                  {message.body ? (
-                    <p className="mt-2 whitespace-pre-wrap break-words rounded-xl bg-stone-50 p-3 text-base text-stone-800">
-                      {message.body}
-                    </p>
-                  ) : (
-                    <p className="mt-2 text-base text-stone-600">
-                      文章以外の連絡です（種類：{message.message_type}）
-                    </p>
-                  )}
-
-                  {message.has_location ? (
+                  {conv.hasLocation ? (
                     <p className="mt-2 rounded-xl bg-amber-50 p-3 text-base font-bold text-amber-900">
                       ⚠ 位置情報が送られています。捕獲場所・わなの場所は外部に出せません。
                       画面や書類に地図・座標を貼らないでください。
                     </p>
                   ) : null}
 
-                  <ReplyForm messageId={message.id} suggestedReply="" />
+                  <ReplyForm
+                    linkId={conv.linkId}
+                    messageId={conv.latestUnhandledId ?? undefined}
+                    suggestedReply=""
+                  />
                 </Card>
               ))}
             </div>

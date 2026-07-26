@@ -42,9 +42,23 @@ export async function getAcceptanceStatus(db: DbPort): Promise<AcceptanceStatus>
 }
 
 /**
+ * 本日の受入件数（「受入状況」ボタンの答え）。
+ * individuals は既存テーブルのため読み取りのみ。
+ * 仕様（2026-07-26 確定）: まずは件数だけを返す。
+ */
+export async function getTodayIntakeCount(db: DbPort, today: string): Promise<number> {
+  try {
+    const rows = await db.findMany("individuals", { capture_date: today }, 500);
+    return rows.length;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * 捕獲者の直近の買取状況。
- * individuals は既存テーブルのため読み取りのみ。DbPort に並び替えが無いので
- * 取得後にJS側で捕獲日の新しい順に並べる（1人あたり数十件の想定）。
+ * ※「買取状況」ボタンは現在「準備中」の案内を返す運用のため、この関数は
+ *   職員画面や将来の個別配信のために残している（LINE返信には使っていない）。
  */
 export async function getRecentBuybacks(
   db: DbPort,

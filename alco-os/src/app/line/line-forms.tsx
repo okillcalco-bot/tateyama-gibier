@@ -136,11 +136,15 @@ export function UnblockLinkForm({ linkId }: { linkId: string }) {
 
 /** 捕獲者へLINEで返信する（文面は職員が確認・編集してから送る） */
 export function ReplyForm({
+  linkId,
   messageId,
   suggestedReply,
+  label = "返信する文章（送る前に必ず読んでください）",
 }: {
-  messageId: string;
+  linkId: string;
+  messageId?: string;
   suggestedReply: string;
+  label?: string;
 }) {
   const { isPending, error, run } = useAction();
   const [text, setText] = useState(suggestedReply);
@@ -149,12 +153,13 @@ export function ReplyForm({
   return (
     <div className="mt-3 space-y-3">
       <label className="block">
-        <span className="text-base font-bold text-stone-700">
-          返信する文章（送る前に必ず読んでください）
-        </span>
+        <span className="text-base font-bold text-stone-700">{label}</span>
         <textarea
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            setSent(false);
+          }}
           rows={4}
           className="mt-1 w-full rounded-xl border-2 border-stone-300 p-3 text-base"
           placeholder="例）ご連絡ありがとうございます。明日の午前中に受け入れできます。"
@@ -165,10 +170,12 @@ export function ReplyForm({
         disabled={isPending || !text.trim()}
         onClick={() => {
           const formData = new FormData();
-          formData.set("message_id", messageId);
+          formData.set("link_id", linkId);
+          if (messageId) formData.set("message_id", messageId);
           formData.set("reply_text", text);
           run(sendHunterReplyAction, formData);
           setSent(true);
+          setText("");
         }}
         className={`${BUTTON_BASE} bg-green-700 text-white`}
       >

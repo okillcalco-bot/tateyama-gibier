@@ -16,16 +16,21 @@ export const ACK_TEXT = "受け付けました。担当が確認します。";
 export function captureReportStartReply(): string {
   return [
     "捕獲報告をはじめます。",
-    "まず、獲物の写真を送ってください。",
+    "写真を3枚、続けて送ってください。",
+    "① 全体がわかる写真",
+    "② 尻尾を切る前",
+    "③ 尻尾を切った後",
     "そのあとに、獣種・捕獲方法・場所を文章で送っていただけると助かります。",
     "位置情報（LINEの「＋」→「位置情報」）も送れます。",
+    "1枚だけでも受け付けます。足りない分は担当者から確認します。",
   ].join("\n");
 }
 
 export function captureReportPhotoSavedReply(): string {
   return [
     "写真を受け取りました。",
-    "続けて、獣種（イノシシ・シカなど）と捕獲方法（くくり罠・箱罠・銃猟）を送ってください。",
+    "続けて写真がある場合は、そのまま送ってください。",
+    "獣種（イノシシ・シカなど）と捕獲方法（くくり罠・箱罠・銃猟）も教えてください。",
     ACK_TEXT,
   ].join("\n");
 }
@@ -60,17 +65,21 @@ export function deliveryNoticeReply(params: {
   return lines.join("\n");
 }
 
+/**
+ * 受入状況（仕様確定 2026-07-26）: まずは「本日の受入件数」だけを返す。
+ * 受入可否の設定があれば一言だけ添える。
+ */
 export function acceptanceStatusReply(params: {
+  todayCount: number;
   accepting: boolean | null;
   note: string;
 }): string {
-  const lines = ["【本日の受け入れ】"];
-  if (params.accepting === true) {
-    lines.push("受け入れできます。");
-  } else if (params.accepting === false) {
+  const lines = [
+    "【本日の受入状況】",
+    `本日の受入は ${params.todayCount} 件です。`,
+  ];
+  if (params.accepting === false) {
     lines.push("本日は受け入れを止めています。");
-  } else {
-    lines.push("まだ設定されていません。担当者が確認します。");
   }
   if (params.note) lines.push(params.note);
   lines.push("搬入されるときは「搬入連絡」を押してください。");
@@ -84,49 +93,43 @@ export interface PaymentSummaryLine {
   amount: number | null;
 }
 
-export function paymentStatusReply(params: {
-  linked: boolean;
-  hunterName?: string;
-  rows: PaymentSummaryLine[];
-}): string {
-  if (!params.linked) {
-    return [
-      "買取のご確認ですね。",
-      "まだお名前の確認ができていないため、金額をお伝えできません。",
-      "お名前（フルネーム）を送ってください。担当者が確認します。",
-    ].join("\n");
-  }
-  if (params.rows.length === 0) {
-    return [
-      `【${params.hunterName ?? "お客様"}さまの買取状況】`,
-      "直近の記録が見つかりませんでした。",
-      "担当者が確認しますので、少しお待ちください。",
-    ].join("\n");
-  }
-  const lines = [`【${params.hunterName ?? "お客様"}さまの直近の買取】`];
-  for (const row of params.rows) {
-    const date = row.captureDate ?? "日付不明";
-    const species = row.species ?? "獣種不明";
-    const amount =
-      row.amount === null ? "金額はまだ確定していません" : `${row.amount.toLocaleString()}円`;
-    lines.push(`・${date} ${species}：${amount}`);
-  }
-  lines.push("金額のご質問は担当者が確認します。");
-  return lines.join("\n");
+/**
+ * 買取状況（仕様確定 2026-07-26）: 当面は「準備中」の案内を返す。
+ *
+ * 買取額は精肉の歩留まりに連動して決まるため、自動でお伝えすると
+ * 誤った金額を伝える恐れがある。金額の自動配信ができるようになるまでは
+ * 案内だけを返し、問い合わせ自体は職員一覧に残して人が対応する。
+ */
+export function paymentStatusReply(): string {
+  return [
+    "【買取状況】",
+    "この機能は準備中です。",
+    "お急ぎの場合は職員が確認してご連絡します。このままお待ちください。",
+    "お電話でのお問い合わせは、下のメニューの「電話」からお願いします。",
+  ].join("\n");
 }
 
-export function helpReply(): string {
-  return [
+/**
+ * 使い方（仕様確定 2026-07-26）: 短い説明 + 説明ページへのリンク。
+ * ページはログイン不要・大きい文字（/guide）。
+ */
+export function helpReply(guideUrl: string): string {
+  const lines = [
     "【館山ジビエセンター LINEの使い方】",
-    "下のメニューを押してください。",
+    "下のメニューを押すだけで手続きができます。",
     "・捕獲報告：写真と場所を送って報告できます",
     "・搬入連絡：これから持ち込むときに押してください",
-    "・受入状況：今日受け入れできるかが分かります",
-    "・買取状況：直近の買取をお知らせします",
-    "・使い方：この案内が出ます",
+    "・受入状況：本日の受入件数をお知らせします",
+    "・買取状況：準備中です",
     "・電話：センターに直接つながります",
-    "文章をそのまま送っていただいても大丈夫です。担当者が読みます。",
-  ].join("\n");
+  ];
+  if (guideUrl) {
+    lines.push("");
+    lines.push("くわしい使い方はこちら（文字が大きい説明ページ）");
+    lines.push(guideUrl);
+  }
+  lines.push("文章をそのまま送っていただいても大丈夫です。担当者が読みます。");
+  return lines.join("\n");
 }
 
 export function askNameReply(): string {

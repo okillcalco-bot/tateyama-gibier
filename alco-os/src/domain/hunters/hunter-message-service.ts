@@ -7,12 +7,13 @@ import {
   attachPhoto,
   openCaptureReport,
 } from "./capture-report-service";
+import { attachReportPhoto } from "./capture-photo-service";
 import {
   clearConversation,
   getConversation,
   setConversation,
 } from "./conversation-state-service";
-import { getAcceptanceStatus, getRecentBuybacks } from "./gibier-status-service";
+import { getAcceptanceStatus, getTodayIntakeCount } from "./gibier-status-service";
 import {
   ACK_TEXT,
   acceptanceStatusReply,
@@ -104,6 +105,8 @@ export interface HunterIntakeDeps {
   }) => Promise<string | null>;
   /** LINEプロフィールの表示名取得 */
   fetchDisplayName?: (lineUserId: string) => Promise<string | null>;
+  /** 「使い方」で案内する説明ページのURL（ログイン不要） */
+  guideUrl?: string;
   now?: () => Date;
 }
 
@@ -279,23 +282,21 @@ export async function intakeHunterEvent(
           break;
         }
         case "acceptance_status": {
-          reply = acceptanceStatusReply(await getAcceptanceStatus(db));
+          const today = now.toISOString().slice(0, 10);
+          const [status, todayCount] = await Promise.all([
+            getAcceptanceStatus(db),
+            getTodayIntakeCount(db, today),
+          ]);
+          reply = acceptanceStatusReply({ ...status, todayCount });
           break;
         }
         case "payment_status": {
-          if (!hunterName) {
-            reply = paymentStatusReply({ linked: false, rows: [] });
-          } else {
-            reply = paymentStatusReply({
-              linked: true,
-              hunterName,
-              rows: await getRecentBuybacks(db, hunterName),
-            });
-          }
+          // 当面は準備中の案内のみ。問い合わせは職員一覧に残る
+          reply = paymentStatusReply();
           break;
         }
         case "help": {
-          reply = helpReply();
+          reply = helpReply(deps.guideUrl ?? "");
           break;
         }
       }
@@ -316,7 +317,15 @@ export async function intakeHunterEvent(
           captureReportId,
         });
       }
-      if (fileId) await attachPhoto(db, captureReportId, fileId);
+      if (fileId) {
+        // 代表写真（0022の後方互換）+ 種別つきの一覧（0024）の両方に記録する
+        await attachPhoto(db, captureReportId, fileId);
+        await attachReportPhoto(db, {
+          organizationId,
+          captureReportId,
+          fileId,
+        });
+      }
 
       await setConversation(db, {
         organizationId,
