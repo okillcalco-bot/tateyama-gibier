@@ -4,6 +4,9 @@ import { useState, useTransition } from "react";
 import type { ActionResult } from "@/lib/action-result";
 import {
   blockLinkAction,
+  disableGroupNotifyAction,
+  enableGroupNotifyAction,
+  renameGroupAction,
   sendHunterReplyAction,
   unblockLinkAction,
   verifyLinkAction,
@@ -184,6 +187,77 @@ export function ReplyForm({
       {sent && !error && !isPending ? (
         <p className="rounded-lg bg-green-50 p-2 text-base font-bold text-green-800">
           ✓ 送信しました
+        </p>
+      ) : null}
+      <ErrorText error={error} />
+    </div>
+  );
+}
+
+/** スタッフグループの通知ON/OFFと名前 */
+export function StaffGroupForm({
+  groupId,
+  label,
+  notifyDelivery,
+  status,
+}: {
+  groupId: string;
+  label: string;
+  notifyDelivery: boolean;
+  status: string;
+}) {
+  const { isPending, error, run } = useAction();
+  const [name, setName] = useState(label);
+
+  const submit = (fn: (fd: FormData) => Promise<ActionResult>, extra?: [string, string]) => {
+    const formData = new FormData();
+    formData.set("group_id", groupId);
+    if (extra) formData.set(extra[0], extra[1]);
+    run(fn, formData);
+  };
+
+  return (
+    <div className="mt-3 space-y-3">
+      <label className="block">
+        <span className="text-base font-bold text-stone-700">このグループの名前（任意）</span>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="例）センター スタッフ"
+          className="mt-1 w-full min-h-[56px] rounded-xl border-2 border-stone-300 bg-white px-3 text-base"
+        />
+      </label>
+      <button
+        type="button"
+        disabled={isPending}
+        onClick={() => submit(renameGroupAction, ["label", name])}
+        className={`${BUTTON_BASE} border-2 border-stone-400 bg-white text-stone-700`}
+      >
+        ✎ 名前を保存する
+      </button>
+
+      {notifyDelivery ? (
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={() => submit(disableGroupNotifyAction)}
+          className={`${BUTTON_BASE} border-2 border-stone-400 bg-white text-stone-700`}
+        >
+          ✕ このグループへの通知を止める
+        </button>
+      ) : (
+        <button
+          type="button"
+          disabled={isPending || status === "left"}
+          onClick={() => submit(enableGroupNotifyAction)}
+          className={`${BUTTON_BASE} bg-green-700 text-white`}
+        >
+          ✓ このグループへ搬入連絡を通知する
+        </button>
+      )}
+      {status === "left" ? (
+        <p className="text-base text-stone-700">
+          このグループからは退出しています。もう一度招待してください。
         </p>
       ) : null}
       <ErrorText error={error} />

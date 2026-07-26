@@ -43,11 +43,14 @@
 
 | 0027_capture_form_share.sql | 捕獲票のセルフDL: capture_reports に share_token / share_expires_at / capture_place、`get_capture_form_by_token()`（SECURITY DEFINER・期限内1件・捕獲票に必要な列だけ）、会話状態に awaiting_capture_form |
 
+| 0028_staff_notify_groups.sql | 搬入連絡のスタッフグループ通知: line_staff_groups（グループID・通知ON/OFF・状態 pending/active/disabled/left・通知回数） |
+
 **適用状況**: 0001〜0020 は本番 Supabase プロジェクト（tateyama-gibier /
 clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（0001〜0011: 2026-07-05、
 0012〜0020: 2026-07-06〜15）。
 **0021〜0026 は本番適用済み**（0021〜0023: PR #52 / 0024〜0026: PR #53）。ジビエ基幹側の `20260726_hunters_rls_hardening.sql` も適用済み。
 0027 も本番適用済み（適用名 `alco_os_0027_capture_form_share`）。
+**0028 は未適用**（搬入連絡のスタッフグループ通知）。
 なお 0027 は当初、関数定義が `capture_place` の列追加より前にあり素のPostgresでは
 適用に失敗する順序だった。**本番へは順序を直したSQLで適用済み**で、
 リポジトリのファイルも同じ順序に修正した（内容は同一。適用済みDBへの影響なし）。

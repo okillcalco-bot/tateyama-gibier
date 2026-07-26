@@ -14,6 +14,7 @@ import {
   buildHunterReplyChoices,
   intakeHunterWebhookEvent,
 } from "@/lib/line/hunter-intake";
+import { handleStaffGroupEvent, notifyStaffGroupsOfDelivery } from "@/lib/line/staff-group";
 
 /**
  * LINE Messaging API webhook — 複数チャネル共用の入口。
@@ -60,7 +61,7 @@ interface LineEvent {
   type?: string;
   webhookEventId?: string;
   replyToken?: string;
-  source?: { userId?: string };
+  source?: { type?: string; userId?: string; groupId?: string; roomId?: string };
   message?: {
     id?: string;
     type?: string;
@@ -203,6 +204,21 @@ async function handleHunterEvent(
   const webhookEventId = String(event.webhookEventId ?? "").trim();
   const messageType = event.message?.type ?? null;
 
+  // ── グループ・複数人トークからのイベント ──
+  // **業務処理しない**（誤爆防止）。招待と「登録」「解除」だけに反応する。
+  const groupId = event.source?.groupId ?? event.source?.roomId ?? null;
+  if (groupId) {
+    const groupReply = await handleStaffGroupEvent(channel, {
+      eventType: String(event.type ?? "unknown"),
+      lineGroupId: groupId,
+      text: messageType === "text" ? (event.message?.text ?? null) : null,
+    });
+    if (groupReply && canReply(event)) {
+      await reply(event, groupReply);
+    }
+    return;
+  }
+
   const outcome = await intakeHunterWebhookEvent(channel, {
     // 保存する識別子は環境変数に依存しない安定ラベル（0023）
     channelId: channel.ref,
@@ -223,5 +239,10 @@ async function handleHunterEvent(
   const autoReply = buildHunterAutoReply(outcome);
   if (autoReply && canReply(event)) {
     await reply(event, autoReply, buildHunterReplyChoices(outcome));
+  }
+
+  // 搬入連絡はスタッフのグループへも知らせる（内容は最小限）
+  if (outcome.kind === "received" && outcome.menuIntent === "delivery_notice") {
+    await notifyStaffGroupsOfDelivery(channel, { hunterName: outcome.hunterName ?? null });
   }
 }
