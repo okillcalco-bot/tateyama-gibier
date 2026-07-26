@@ -119,8 +119,15 @@ export function orderForCityForm(photos: ReportPhoto[]): ReportPhoto[] {
     });
 }
 
-/** 市役所提出に足りているか（全体・切る前・切った後がそろっているか） */
+/**
+ * 市役所提出に足りているか。
+ * フェーズ3の決定で **必要なのは尻尾切除前・切除後の2枚**（全体写真は不要）。
+ * whole は既存データのために種別としては残す（後方互換）。
+ */
+export const REQUIRED_PHOTO_KINDS: PhotoKind[] = ["tail_before", "tail_after"];
+
 export function missingCityFormPhotos(photos: ReportPhoto[]): PhotoKind[] {
-  const required: PhotoKind[] = ["whole", "tail_before", "tail_after"];
-  return required.filter((kind) => !photos.some((photo) => photo.photoKind === kind));
+  return REQUIRED_PHOTO_KINDS.filter(
+    (kind) => !photos.some((photo) => photo.photoKind === kind),
+  );
 }

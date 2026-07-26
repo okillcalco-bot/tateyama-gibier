@@ -62,7 +62,7 @@ describe("捕獲報告の受け取り", () => {
     expect(outcome.captureReportId).toBeTruthy();
 
     const state = await getConversation(db, CHANNEL, USER);
-    expect(state.state).toBe("awaiting_capture_photo");
+    expect(state.state).toBe("awaiting_capture_form");
     // この時点では individuals を作らない
     expect(db.tables.get("individuals")).toBeUndefined();
   });
@@ -120,7 +120,7 @@ describe("捕獲報告の受け取り", () => {
     expect(outcome.reply).toContain("場所を受け取りました");
   });
 
-  it("会話中の本文はAIの候補（ai_suggestion）として報告に足す", async () => {
+  it("型ではない自由文はAIの候補（ai_suggestion）として報告に足す", async () => {
     await intakeHunterEvent({ db, organizationId: ORG }, baseEvent());
 
     const outcome = await intakeHunterEvent(
@@ -133,12 +133,12 @@ describe("捕獲報告の受け取り", () => {
           draftId: "draft-1",
         }),
       },
-      baseEvent({ text: "イノシシです。くくり罠でとれました" }),
+      baseEvent({ text: "きょうは山の上でとれました" }),
     );
 
     if (outcome.kind !== "received") throw new Error("unreachable");
     const report = await db.findById("capture_reports", outcome.captureReportId!);
-    expect(report?.raw_text).toContain("イノシシ");
+    expect(report?.raw_text).toContain("山の上");
     expect(report?.ai_suggestion).toEqual({ species: "イノシシ", capture_method: "くくり罠" });
     // 候補であって確定値ではない
     expect(report?.species).toBeUndefined();

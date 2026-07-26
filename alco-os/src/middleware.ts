@@ -14,6 +14,7 @@ import { env, isSupabaseConfigured } from "@/lib/env";
  * - /portal  飲食店ボード（customers.portal_token 認証）
  * - /support 応援ページ（ログイン不要の公開ページ）
  * - /guide   捕獲者向けのLINE使い方ページ（ログイン不要の公開ページ）
+ * - /hunter/city-form/[token] 捕獲票のセルフダウンロード（トークン式・期限つき）
  */
 export async function middleware(request: NextRequest) {
   if (!isSupabaseConfigured()) {
@@ -54,7 +55,8 @@ export async function middleware(request: NextRequest) {
   if (
     request.nextUrl.pathname.startsWith("/portal") ||
     request.nextUrl.pathname.startsWith("/support") ||
-    request.nextUrl.pathname.startsWith("/guide")
+    request.nextUrl.pathname.startsWith("/guide") ||
+    request.nextUrl.pathname.startsWith("/hunter/city-form")
   ) {
     return response;
   }

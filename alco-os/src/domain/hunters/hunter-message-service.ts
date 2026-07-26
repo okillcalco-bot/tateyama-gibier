@@ -6,7 +6,19 @@ import {
   attachLocation,
   attachPhoto,
   openCaptureReport,
+  readSavedFields,
+  setCaptureFormFields,
 } from "./capture-report-service";
+import {
+  FORM_TEMPLATE_LINES,
+  REQUIRED_FIELD_LABELS,
+  mergeFields,
+  missingRequiredFields,
+  parseCaptureForm,
+  type CaptureFormFields,
+} from "./capture-form-parser";
+import { buildShareUrl, issueShareLink } from "./capture-share-service";
+import { REQUIRED_PHOTO_KINDS, PHOTO_KIND_LABELS, toReportPhoto } from "./capture-photo-service";
 import { attachReportPhoto } from "./capture-photo-service";
 import {
   clearConversation,
@@ -28,6 +40,9 @@ import {
   acceptanceStatusReply,
   askNameReply,
   captureReportDetailSavedReply,
+  cityFormReadyButPhotosReply,
+  cityFormReadyReply,
+  missingFieldsQuestionReply,
   weightKindQuestionReply,
   weightNotUnderstoodReply,
   weightSavedReply,
@@ -123,6 +138,8 @@ export interface HunterIntakeDeps {
   fetchDisplayName?: (lineUserId: string) => Promise<string | null>;
   /** 「使い方」で案内する説明ページのURL（ログイン不要） */
   guideUrl?: string;
+  /** 捕獲票の共有リンクを作るための公開URL（例: https://alco-os.vercel.app） */
+  siteUrl?: string;
   now?: () => Date;
 }
 
@@ -287,11 +304,11 @@ export async function intakeHunterEvent(
             organizationId,
             lineChannelId: input.channelId,
             lineUserId: input.lineUserId,
-            state: "awaiting_capture_photo",
+            state: "awaiting_capture_form",
             captureReportId,
             now,
           });
-          reply = captureReportStartReply();
+          reply = captureReportStartReply(FORM_TEMPLATE_LINES);
           break;
         }
         case "delivery_notice": {
@@ -348,7 +365,7 @@ export async function intakeHunterEvent(
         organizationId,
         lineChannelId: input.channelId,
         lineUserId: input.lineUserId,
-        state: "awaiting_capture_detail",
+        state: "awaiting_capture_form",
         captureReportId,
         now,
       });
@@ -370,11 +387,94 @@ export async function intakeHunterEvent(
         organizationId,
         lineChannelId: input.channelId,
         lineUserId: input.lineUserId,
-        state: "awaiting_capture_detail",
+        state: "awaiting_capture_form",
         captureReportId,
         now,
       });
       reply = captureReportLocationSavedReply();
+    } else if (
+      text &&
+      (conversation.state === "awaiting_capture_form" ||
+        conversation.state === "awaiting_capture_detail")
+    ) {
+      // ── 4. 定型文（型）を読む。ラベルが1つも無ければAI分類へ回す ──
+      const report = await ensureCaptureReport(deps, {
+        link,
+        channelId: input.channelId,
+        lineUserId: input.lineUserId,
+        existingId: conversation.captureReportId,
+      });
+      captureReportId = report.id as string;
+
+      const parsed = parseCaptureForm(text, now);
+      if (parsed.filledCount === 0) {
+        // 型ではない自由文 → 従来どおり本文として保存し、AIに候補を出させる
+        let suggestion: Record<string, unknown> | null = null;
+        let draftId: string | null = null;
+        if (deps.classify) {
+          try {
+            const result = await deps.classify({
+              messageId: message.id as string,
+              text,
+              hunterName,
+              hasLocation,
+            });
+            suggestion = result.suggestion ?? null;
+            draftId = result.draftId ?? null;
+            classified = true;
+          } catch {
+            // ai_runs に失敗が記録済み
+          }
+        }
+        await attachDetail(db, captureReportId, {
+          rawText: text,
+          aiSuggestion: suggestion,
+          sourceDraftId: draftId,
+        });
+        // 型を使わない人はこれまでどおり1つずつ聞く
+        await setConversation(db, {
+          organizationId,
+          lineChannelId: input.channelId,
+          lineUserId: input.lineUserId,
+          state: "awaiting_weight_kind",
+          captureReportId,
+          now,
+        });
+        reply = `${captureReportDetailSavedReply()}\n\n${weightKindQuestionReply()}`;
+        choices = WEIGHT_MEASURE_CHOICES;
+      } else {
+        // 型として読めた → 保存し、不足だけをまとめて聞く
+        const saved = readSavedFields(await db.findById("capture_reports", captureReportId));
+        const merged = mergeFields(saved as Partial<CaptureFormFields>, parsed.fields);
+        // 捕獲日が空欄なら送信日を使う（フェーズ3の決定）
+        if (!merged.captureDate) merged.captureDate = now.toISOString().slice(0, 10);
+
+        await setCaptureFormFields(db, captureReportId, merged);
+        await attachDetail(db, captureReportId, { rawText: text });
+
+        const missing = missingRequiredFields(merged);
+        if (missing.length > 0) {
+          await setConversation(db, {
+            organizationId,
+            lineChannelId: input.channelId,
+            lineUserId: input.lineUserId,
+            state: "awaiting_capture_form",
+            captureReportId,
+            now,
+          });
+          reply = missingFieldsQuestionReply(missing.map((key) => REQUIRED_FIELD_LABELS[key]));
+          choices = buildMissingChoices(missing);
+        } else {
+          const result = await completeCaptureReport(deps, {
+            reportId: captureReportId,
+            channelId: input.channelId,
+            lineUserId: input.lineUserId,
+            now,
+          });
+          reply = result.reply;
+          captureReportId = null;
+        }
+      }
     } else if (text && conversation.state === "awaiting_weight_kind") {
       // ── 4-a. 体重の計測区分（センター / 処理施設 / 推定） ──
       const reportId = conversation.captureReportId;
@@ -433,48 +533,6 @@ export async function intakeHunterEvent(
           );
         }
       }
-    } else if (text && conversation.state !== "idle") {
-      // ── 4. 捕獲報告の会話中の本文（AIは候補のみ） ──
-      const report = await ensureCaptureReport(deps, {
-        link,
-        channelId: input.channelId,
-        lineUserId: input.lineUserId,
-        existingId: conversation.captureReportId,
-      });
-      captureReportId = report.id as string;
-
-      let suggestion: Record<string, unknown> | null = null;
-      let draftId: string | null = null;
-      if (deps.classify) {
-        try {
-          const result = await deps.classify({
-            messageId: message.id as string,
-            text,
-            hunterName,
-            hasLocation,
-          });
-          suggestion = result.suggestion ?? null;
-          draftId = result.draftId ?? null;
-          classified = true;
-        } catch {
-          // ai_runs に失敗が記録済み。職員が画面で読める
-        }
-      }
-      await attachDetail(db, captureReportId, {
-        rawText: text,
-        aiSuggestion: suggestion,
-        sourceDraftId: draftId,
-      });
-      await setConversation(db, {
-        organizationId,
-        lineChannelId: input.channelId,
-        lineUserId: input.lineUserId,
-        state: "awaiting_weight_kind",
-        captureReportId,
-        now,
-      });
-      reply = `${captureReportDetailSavedReply()}\n\n${weightKindQuestionReply()}`;
-      choices = WEIGHT_MEASURE_CHOICES;
     } else if (text) {
       // ── 5. 自由文（メニュー以外）: AI分類のみ。業務データは動かさない ──
       if (deps.classify) {
@@ -547,4 +605,77 @@ function isSkipAnswer(text: string): boolean {
   return ["わからない", "分からない", "わかりません", "不明", "スキップ", "とばす"].some(
     (word) => normalized === word || normalized.includes(word),
   );
+}
+
+/**
+ * 不足項目の答えを1タップで返せる選択肢を作る。
+ * 選択肢を持つ項目のうち、最初のものを出す（場所や番号は手入力）。
+ */
+function buildMissingChoices(
+  missing: ReturnType<typeof missingRequiredFields>,
+): { label: string; text: string }[] {
+  for (const field of missing) {
+    switch (field) {
+      case "species":
+        return ["イノシシ", "シカ", "キョン"].map((v) => ({ label: v, text: `獣種：${v}` }));
+      case "captureMethod":
+        return ["くくり罠", "箱罠", "銃猟"].map((v) => ({ label: v, text: `捕獲方法：${v}` }));
+      case "sex":
+        return ["オス", "メス"].map((v) => ({ label: v, text: `性別：${v}` }));
+      case "weightMeasure":
+        return WEIGHT_MEASURE_CHOICES.map((c) => ({
+          label: c.label,
+          text: `体重の測り方：${c.text}`,
+        }));
+      case "finishingMethod":
+        return ["銃", "刺殺", "既に死亡"].map((v) => ({ label: v, text: `止め刺し：${v}` }));
+      default:
+        continue;
+    }
+  }
+  return [];
+}
+
+/**
+ * 必須項目がそろったので捕獲票の共有リンクを発行し、会話を閉じる。
+ * 写真が足りない場合もリンクは出す（あとから送ってもらう）。
+ */
+async function completeCaptureReport(
+  deps: HunterIntakeDeps,
+  params: { reportId: string; channelId: string; lineUserId: string; now: Date },
+): Promise<{ reply: string }> {
+  const { db, organizationId } = deps;
+
+  const { token } = await issueShareLink(db, params.reportId, { now: params.now });
+  const url = buildShareUrl(deps.siteUrl ?? "", token);
+
+  await clearConversation(db, {
+    organizationId,
+    lineChannelId: params.channelId,
+    lineUserId: params.lineUserId,
+  });
+
+  const photoRows = await db.findMany(
+    "capture_report_photos",
+    { capture_report_id: params.reportId },
+    50,
+  );
+  const photos = photoRows.map(toReportPhoto);
+  const missingPhotos = REQUIRED_PHOTO_KINDS.filter(
+    (kind) => !photos.some((photo) => photo.photoKind === kind),
+  );
+
+  if (!url) {
+    // 公開URLが未設定のときはリンクを出さない（壊れたURLを送らない）
+    return { reply: "ありがとうございます。捕獲票の準備ができました。担当者からご連絡します。" };
+  }
+  if (missingPhotos.length > 0) {
+    return {
+      reply: cityFormReadyButPhotosReply(
+        url,
+        missingPhotos.map((kind) => PHOTO_KIND_LABELS[kind]),
+      ),
+    };
+  }
+  return { reply: cityFormReadyReply(url) };
 }

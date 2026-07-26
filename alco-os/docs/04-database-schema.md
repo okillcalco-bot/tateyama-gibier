@@ -41,10 +41,13 @@
 | 0025_capture_weight_and_form_fields.sql | 体重（weight_kg + weight_measure: center/facility/estimated）、捕獲票の職員入力項目（性別・幼獣・体長・箱わな番号・餌・設置日・止め刺し方法・処理方法）、会話状態に体重の聞き取りを追加 |
 | 0026_hunter_profiles.sql | 捕獲者の追加情報 hunter_profiles（生年月日・郵便番号・住所・電話・活動エリア・従事者証）。**口座は入れない**（既存 hunters の欄を使う） |
 
+| 0027_capture_form_share.sql | 捕獲票のセルフDL: capture_reports に share_token / share_expires_at / capture_place、`get_capture_form_by_token()`（SECURITY DEFINER・期限内1件・捕獲票に必要な列だけ）、会話状態に awaiting_capture_form |
+
 **適用状況**: 0001〜0020 は本番 Supabase プロジェクト（tateyama-gibier /
 clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（0001〜0011: 2026-07-05、
 0012〜0020: 2026-07-06〜15）。
-**0021〜0023 は PR #52 で main にマージ済み（本番DBへの適用は沖代表の承認後）。0024〜0026 は未適用。**
+**0021〜0026 は本番適用済み**（0021〜0023: PR #52 / 0024〜0026: PR #53）。ジビエ基幹側の `20260726_hunters_rls_hardening.sql` も適用済み。
+**0027 は未適用**（捕獲票のセルフダウンロード）。
 あわせてジビエ基幹側に `/migrations/20260726_hunters_rls_hardening.sql`（hunters の delete ポリシー廃止）を追加している。
 seed.sql（ダミーデータ）は本番には投入していない。
 

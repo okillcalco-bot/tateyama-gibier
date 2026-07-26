@@ -31,6 +31,8 @@ export async function intakeHunterWebhookEvent(
         : undefined,
       // 「使い方」で案内する説明ページ（ログイン不要・大きい文字）
       guideUrl: env.siteUrl ? `${env.siteUrl}/guide` : "",
+      // 捕獲票の共有リンク（/hunter/city-form/<token>）の組み立てに使う
+      siteUrl: env.siteUrl,
       savePhoto: channel.accessToken
         ? ({ lineMessageId, captureReportId }) =>
             saveLinePhoto({

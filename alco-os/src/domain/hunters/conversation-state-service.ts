@@ -10,6 +10,8 @@ export type ConversationState =
   | "idle"
   | "awaiting_capture_photo"
   | "awaiting_capture_detail"
+  /** 定型文（型）の記入まち。不足項目だけをまとめて聞いている */
+  | "awaiting_capture_form"
   /** 体重の計測区分（センター / 処理施設 / 推定）を聞いている */
   | "awaiting_weight_kind"
   /** 体重の数値を聞いている */
