@@ -26,6 +26,30 @@ export class MockProvider implements AiProvider {
 }
 
 const DEFAULT_RESPONSES: Record<string, string> = {
+  classify_hunter_message: JSON.stringify({
+    summary: "イノシシ1頭をこれから搬入したいという連絡。到着は本日の午後を希望。",
+    detected_intent: "delivery_notice",
+    extracted: {
+      species: "イノシシ",
+      capture_method: "くくり罠",
+      capture_date_text: "今朝",
+      head_count: 1,
+      desired_datetime_text: "今日の午後",
+      place_text: null,
+      phone_text: null,
+    },
+    suggested_reply:
+      "ご連絡ありがとうございます。イノシシ1頭・本日午後の搬入で承りました。担当者が受入状況を確認のうえ、あらためてご連絡します。",
+    suggested_tasks: [
+      { title: "搬入受入の可否を確認して捕獲者へ返信する", due_date: null, priority: "high" },
+    ],
+    missing_fields: ["到着予定の具体的な時刻"],
+    sensitivity_flag: false,
+    sensitivity_reason: "",
+    confidence: 0.82,
+    needs_human_review: true,
+    warnings: [],
+  }),
   classify_voice_memo: JSON.stringify({
     summary: "湿地でアカガエル卵塊3つを確認。草刈りは竹の伸びた南側を優先。田中氏へ補助金の件で金曜までに連絡。",
     detected_category: "task",

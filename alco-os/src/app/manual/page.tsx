@@ -21,10 +21,10 @@ function Section({
 }) {
   return (
     <Card>
-      <h2 className="mb-2 text-base font-bold text-green-800">
+      <h2 className="mb-2 text-lg font-bold text-green-800">
         {icon} {title}
       </h2>
-      <div className="space-y-2 text-sm leading-relaxed text-stone-700">{children}</div>
+      <div className="space-y-2 text-base leading-relaxed text-stone-700">{children}</div>
     </Card>
   );
 }
@@ -40,8 +40,8 @@ function Step({ n, children }: { n: number; children: React.ReactNode }) {
   );
 }
 
-const NOTE = "rounded-lg bg-amber-50 p-2 text-xs text-amber-900";
-const HINT = "rounded-lg bg-stone-50 p-2 text-xs text-stone-500";
+const NOTE = "rounded-lg bg-amber-50 p-2 text-sm text-amber-900";
+const HINT = "rounded-lg bg-stone-50 p-2 text-sm text-stone-500";
 
 export default function ManualPage() {
   return (
@@ -274,6 +274,85 @@ export default function ManualPage() {
           </p>
           <p>
             <strong>CRM / プロジェクト</strong>: 取引先・案件と、R.O.K.A.などの工事案件の管理。
+          </p>
+        </Section>
+
+        <Section icon="📱" title="捕獲者LINE — 捕獲者からの連絡を受ける">
+          <p>
+            捕獲者のみなさんが使っているLINE公式アカウントは<strong>これまでと同じ</strong>です。
+            友だち追加のQRコードもURLも変わりません。届いた連絡が ALCO OS の「捕獲者LINE」に
+            並ぶようになりました。
+          </p>
+          <p className="mt-2">
+            <strong>1. お名前の確認まち</strong>
+            <br />
+            はじめてLINEを送ってきた人は、まだ誰か分かりません。一覧から捕獲者を選んで
+            「この捕獲者として登録する」を押してください。次からは自動で名前が出ます。
+            心当たりのない相手は「この相手からは受け取らない」を押せます。
+            <span className={NOTE}>この2つの操作は承認権限のある人だけができます。</span>
+          </p>
+          <p className="mt-2">
+            <strong>2. 届いた連絡</strong>
+            <br />
+            捕獲者はLINEの下のメニュー（6マス）から「捕獲報告／搬入連絡／受入状況／
+            買取状況／使い方／電話」を押します。押した内容で自動的に仕分けされ、
+            <strong>どの連絡にも「受け付けました」と自動でお返事します。</strong>
+            メニュー以外の文章はAIが仕分けますが、<strong>これは目安です。</strong>
+            受け入れるかどうかは職員が決めてください。
+          </p>
+          <p className="mt-2">
+            <strong>3. 返信</strong>
+            <br />
+            返信の文章を入力して「この文章をLINEで送る」を押すと、その人のLINEに届きます。
+            <strong>AIが勝手に返信することはありません。</strong>
+            送る前に必ず文章を読んでください。
+          </p>
+          <p className="mt-2">
+            <strong>4. タスクにする</strong>
+            <br />
+            「明日の受け入れ準備」などのタスクにしたいときは、「承認」タブで承認します。
+            承認するまでタスクにはなりません。
+          </p>
+          <p className={NOTE}>
+            捕獲場所・わなの場所は外に出せません。位置情報が送られてきたときは
+            画面に警告が出ます。地図や座標を書類・SNS・メールに貼らないでください。
+          </p>
+          <p className={NOTE}>
+            重さ・肉ランクなどの詳しい入力はこれまで通り現場アプリで行います。
+            LINEから自動で個体データが書き換わることはありません。
+          </p>
+          <p className={HINT}>
+            画面のいちばん下に「つながっているLINE」があります。設定の確認に使う番号が
+            出ているので、業者や担当者に聞かれたらここを見てください。
+          </p>
+        </Section>
+
+        <Section icon="📷" title="捕獲報告の確認 — 写真が届いたら">
+          <p>
+            捕獲者が「捕獲報告」を押すと、LINEが「写真を送ってください」と自動で返します。
+            届いた写真・場所・文章は「捕獲報告」画面に並びます。
+          </p>
+          <Step n={1}>
+            写真と文章を見て、<strong>獣種</strong>と<strong>捕獲方法</strong>を
+            自分で選びます。AIの読み取りは下書きなので、必ず見比べてください。
+          </Step>
+          <Step n={2}>
+            「個体として登録する」を押すと、現場アプリに<strong>搬入待ちの個体</strong>が
+            できます。個体番号は、これまで通り現場アプリの受入画面で付けてください。
+          </Step>
+          <Step n={3}>
+            同じ報告が2回届いたときなどは「この報告を取り消す」を押します。
+            取り消しても個体は作られません。
+          </Step>
+          <p className="mt-2">
+            画面の上で<strong>今日の受け入れ</strong>を切り替えられます。ここで選んだ内容が、
+            捕獲者の「受入状況」ボタンの答えになります。朝いちばんに設定してください。
+          </p>
+          <p className={NOTE}>
+            捕獲場所は外に出せません。地図や座標をSNS・メール・書類に貼らないでください。
+          </p>
+          <p className={NOTE}>
+            登録・取り消し・受け入れの切り替えは、承認権限のある人だけができます。
           </p>
         </Section>
 

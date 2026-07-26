@@ -81,6 +81,79 @@ audit_logs 記録。
 - 飲食店向けボード（/portal/board）は既存 `customers.portal_token` で認証する。
   order-portal.html は変更していない（リンクを置くのは任意・既存側の作業）
 
+## Step 2.6: 捕獲者チャネル（LINE）— 実施済み（0021）
+
+館山ジビエセンターの**既存の**捕獲者向けLINE公式アカウントを ALCO OS に接続する段階。
+LINE公式アカウントは新規作成しない（**アカウントID・友だち追加URL・QRコードは変更しない**。
+変更するのは LINE Developers の Webhook URL のみ）。
+
+| 対象 | 正となるテーブル | ALCO OS の役割 |
+|---|---|---|
+| 捕獲者台帳 | 既存 `hunters`（206名） | **読み取りのみ**。行の作成・更新・削除はしない |
+| LINEとの紐付け | ALCO OS `hunter_line_links`（0021） | 職員が /line で捕獲者を選んで確定（pending → verified） |
+| 受信メッセージ | ALCO OS `line_inbound_messages`（0021） | 受信・分類・返信の記録 |
+| 冪等性 | ALCO OS `line_webhook_events`（0021） | webhookEventId の unique で再送を弾く |
+
+`/api/line` は1つのエンドポイントで秘書チャネルと捕獲者チャネルを扱う。
+
+- チャネルの特定は **署名検証**で行う（`destination` は署名検証前には信用できないため、
+  登録済み全チャネルのシークレットで順に検証し、成功したチャネルを送信元とする）。
+  `destination` は検証後の設定ミス検知にのみ使う
+- 秘書チャネル: 従来どおり GAS秘書へ転送し、受信箱へメモ化する（**挙動を変えない**）。
+  GASが返信を担うため ALCO OS は返信しない（replyToken は1回のみ有効）
+- 捕獲者チャネル: GASへ**転送しない**。ALCO OS が受信・分類・返信を担当する
+- 自動返信は定型文のみ（受領のお知らせ・お名前の確認）。
+  受入の可否や日時を自動で約束しない。返信文は職員が /line で読んでから送る
+- AIは `generated_drafts` にしか書かない。タスク化は /drafts の承認後
+- **`individuals`（個体）へ書き込むのは、職員が /gibier/reports で捕獲報告を
+  承認したときだけ**（`capture-report-service.approveCaptureReport()`）。
+  webhook・AIからは絶対に書き込まない。作るのは既存と同じ「搬入待ち」の仮登録で、
+  個体番号の採番・詳細入力は従来どおり現場アプリ（capture-form.html）で行う
+
+注意:
+- 捕獲者は捕獲場所・わなの位置を書いてくることがある。これは docs/10 の
+  sensitive 相当。`line_inbound_messages` には原座標を保存せず `has_location`
+  フラグのみ持つ。地図・座標を画面や書類に出さないこと
+- 環境変数は `LINE_HUNTER_CHANNEL_SECRET` / `LINE_HUNTER_CHANNEL_ACCESS_TOKEN` の2つ。
+  秘書チャネルは `LINE_SECRETARY_*`（未設定なら既存 `LINE_CHANNEL_*` を使う）
+- **`LINE_*_CHANNEL_ID`（Bot User ID / destination）は不要**（0023）。
+  チャネルの特定は署名検証で完結しており、DBに保存する識別子は
+  安定ラベル `channel:hunter` / `channel:secretary`。
+  destination は初回受信時に `line_channel_registry` へ自動記録され、
+  `/line` の「つながっているLINE」で確認できる。
+  設定した場合は整合性チェック（設定ミスの検知）にだけ使う
+
+### リッチメニューと受信の分岐（改修指示書 2026-07-25）
+
+対象アカウント: 既存の捕獲者向けLINE公式アカウント（Basic ID `@889alcvb`）。
+**アカウントは作り直さない。友だち追加URL・QRコードは変更しない。**
+
+リッチメニューは2×3の6分割。5マスがテキスト送信、1マスが電話（tel: URI）。
+電話はLINEアプリが直接発信するため webhook には届かない。
+
+| マス | 送信テキスト | Webhookの動き |
+|---|---|---|
+| 捕獲報告 | `捕獲報告` | capture_reports を開き「写真を送ってください」と返す。以降の写真・位置・本文を報告の続きとして受ける（line_conversation_states） |
+| 搬入連絡 | `搬入連絡` | org_settings の受入可否と受付の案内を返し、担当へのタスクを促す |
+| 受入状況 | `受入状況` | org_settings（gibier_accepting / gibier_acceptance_note）を読んで返信 |
+| 買取状況 | `買取状況` | **紐づけ済みの捕獲者のみ** individuals を読んで直近の買取を返す。未紐づけなら金額を出さず「担当者が確認します」 |
+| 使い方 | `使い方` | 短い案内文 |
+| 電話 | （tel: URI） | webhook には届かない |
+
+- キーワードは `domain/hunters/hunter-keywords.ts` が文字列で確実に振り分ける
+  （AIより先。現場が止まらないことを優先）。旧実装の「搬入します」
+  「現場引取を相談します」「受入方法」も後方互換で受ける
+- 写真（image）: Content API → Storage バケット `alco-os` → `files` 台帳 →
+  `capture_reports.photo_file_id`
+- 位置情報（location）: 原座標を `capture_reports.capture_lat/lng` に保存。
+  **表示・出力は必ず geo-masking を通す**（docs/10）
+- **どの受信にも必ず即時返信する**（「受け付けました。担当が確認します」）。
+  送りっぱなしにしない
+- 捕獲報告の承認（/gibier/reports）でのみ `individuals` に仮登録を作る。
+  形式は既存の捕獲者フォーム（capture-form.html?hunter=）と同じ
+  （`label_id='仮-xxx'` / `serial_number=null` / `intake_status='搬入待ち'`）。
+  スタッフが `capture-form.html?receive=` で個体番号を付けると null に戻る既存運用に乗る
+
 ## Step 3: 統一（権限・データモデル）
 
 - 既存テーブルに organization_id を追加（default で単一組織を埋める）

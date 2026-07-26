@@ -28,6 +28,8 @@ const NAV_ITEMS = [
   { href: "/ledger", label: "経理・伝票", icon: "💰" },
   { href: "/advisor", label: "士業相談", icon: "⚖️" },
   { href: "/gibier", label: "ジビエ", icon: "🐗" },
+  { href: "/line", label: "捕獲者LINE", icon: "📱" },
+  { href: "/gibier/reports", label: "捕獲報告", icon: "📷" },
   { href: "/manual", label: "使い方", icon: "📖" },
 ];
 

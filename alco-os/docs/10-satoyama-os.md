@@ -97,6 +97,25 @@ management_actions）を土台に拡張している。
   領収書の自動発行（/billing の billing_documents を流用）、
   応援者へのメール成果報告、企業協賛プラン、図鑑カード（種ごとの解明度可視化）
 
+## 捕獲者LINE（0021）での位置情報の扱い
+
+捕獲者からのLINE連絡には捕獲場所・わなの位置が含まれることがある。
+これは本章の **sensitive 相当**（罠・捕獲地点）として扱う。
+
+- `line_inbound_messages` に緯度経度の列を作らない（`has_location` フラグのみ）。
+  原座標は業務レコードである `capture_reports.capture_lat/lng` にだけ持つ
+  （既存 `individuals.capture_lat/lng` と同じ扱い）
+- `/gibier/reports` は `maskObservationPoint({sensitivity:'sensitive'}, 'restricted')`
+  を通してから座標を表示し、「外部に出さない」警告を必ず添える。
+  CSV・GeoJSON への書き出しは行わない
+- `/line` 画面は位置情報つきの連絡に「地図・座標を貼らない」警告を出す
+- 観察記録として残す場合は、必ず既存の観察ルート
+  （`biodiversity_observations` + `maskObservationPoint()`）に載せる。
+  LINE由来のデータを直接公開系へ流さない
+- `classify_hunter_message` は「わな・捕獲地点・私有地」等の語、または
+  位置情報の添付があれば `sensitivity_flag` を強制的に true にする
+  （`detectSensitiveKeywords` を parse_field_note と共用）
+
 追加時の注意:
 - 位置に関わる新機能は必ず geo-masking を通す。テスト（tests/domain/satoyama.test.ts）を必ず追加する
 - PostGIS は未導入。メッシュ丸めで足りる範囲で実装し、必要になった時点で
