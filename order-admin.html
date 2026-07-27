@@ -180,6 +180,7 @@ th,td{padding:8px 6px;font-size:.8rem}
   <div class="tab" data-tab="shipping" onclick="switchTab('shipping')">&#x1f69a; 発送管理</div>
   <div class="tab" data-tab="documents" onclick="switchTab('documents')">&#x1f4c4; 書類発行</div>
   <div class="tab" data-tab="customers" onclick="switchTab('customers')">&#x1f464; 顧客管理</div>
+  <div class="tab" data-tab="pricing" onclick="switchTab('pricing')">&#x1f3f7;&#xfe0f; 価格マスタ</div>
 </div>
 
 <div class="main">
@@ -266,6 +267,20 @@ th,td{padding:8px 6px;font-size:.8rem}
     </div>
     <div class="pagination" id="custPagination"></div>
   </div>
+
+  <!-- Tab 5: 価格マスタ -->
+  <div class="tab-content" id="tab-pricing">
+    <div class="filter-bar">
+      <input class="search-input" type="text" placeholder="獣種・部位で検索..." id="priceSearch" oninput="renderPricing()">
+      <span style="font-size:.82rem;color:var(--text2)">3パターン（スタンダード＝既定／ローカル／スタートメンバー）の単価(円/kg)。数字を直して「保存」。</span>
+    </div>
+    <div class="table-wrap">
+      <table class="customer-table">
+        <thead><tr><th>獣種</th><th>部位</th><th>ランク</th><th>スタンダード</th><th>ローカル</th><th>スタートメンバー</th><th>操作</th></tr></thead>
+        <tbody id="priceBody"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <!-- Order Detail Modal -->
@@ -284,10 +299,21 @@ th,td{padding:8px 6px;font-size:.8rem}
     <h2>手入力注文</h2>
     <div id="moContent">
       <div class="form-row">
-        <div class="form-group"><label>顧客</label><select id="moCustomer" onchange="onMoCustomerChange()"><option value="">-- 選択 --</option></select></div>
+        <div class="form-group"><label>顧客（店舗名・コード・カナで検索）</label>
+          <input type="text" id="moCustomerInput" list="moCustomerList" placeholder="入力すると候補が出ます" autocomplete="off" oninput="onMoCustomerInput()">
+          <datalist id="moCustomerList"></datalist>
+          <input type="hidden" id="moCustomer">
+          <div id="moCustomerHit" style="font-size:.78rem;color:var(--text2);margin-top:4px;"></div>
+        </div>
         <div class="form-group"><label>受注チャネル</label>
           <select id="moChannel"><option>電話</option><option>FAX</option><option>メール</option><option>直接</option></select>
         </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>配送業者</label>
+          <select id="moCarrier"><option value="">-- 顧客を選ぶと候補表示 --</option></select>
+        </div>
+        <div class="form-group"><label>価格パターン</label><input type="text" id="moRankLabel" readonly value="—"></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label>納品希望日</label><input type="date" id="moDate"></div>
@@ -340,21 +366,32 @@ th,td{padding:8px 6px;font-size:.8rem}
       <div class="form-group"><label>敬称</label><input type="text" id="cfHonorific" value="様"></div>
     </div>
     <div class="form-row3">
-      <div class="form-group"><label>価格ランク</label>
-        <select id="cfRank"><option value="standard">standard</option><option value="premium">premium</option><option value="wholesale">wholesale</option></select>
+      <div class="form-group"><label>価格パターン</label>
+        <select id="cfRank"><option value="standard">スタンダード</option><option value="local">ローカル</option><option value="startmember">スタートメンバー</option></select>
       </div>
       <div class="form-group"><label>デフォルト商品</label><input type="text" id="cfDefaultItem"></div>
       <div class="form-group"><label>時間帯</label><input type="text" id="cfTimeZone" value="0000"></div>
+    </div>
+    <div class="form-group"><label>既定の配送業者（複数可）</label>
+      <div id="cfCarriers" style="display:flex;gap:16px;flex-wrap:wrap;padding:6px 0;">
+        <label style="font-weight:400;display:flex;gap:6px;align-items:center;"><input type="checkbox" class="cf-carrier" value="ヤマト運輸"> ヤマト運輸</label>
+        <label style="font-weight:400;display:flex;gap:6px;align-items:center;"><input type="checkbox" class="cf-carrier" value="佐川急便"> 佐川急便</label>
+        <label style="font-weight:400;display:flex;gap:6px;align-items:center;"><input type="checkbox" class="cf-carrier" value="その他"> その他</label>
+      </div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>ご依頼主コード</label><input type="text" id="cfReqCode"></div>
       <div class="form-group"><label>ご依頼主電話</label><input type="text" id="cfReqPhone"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>ポータルパスワード</label><input type="text" id="cfPassword"></div>
+      <div class="form-group"><label>ポータルのログインID<span style="color:var(--text2);font-size:.75rem">（お客様が変更可・管理者のみ閲覧。空欄なら店舗名）</span></label><input type="text" id="cfLoginId"></div>
+      <div class="form-group"><label>ポータルパスワード<span style="color:var(--text2);font-size:.75rem">（初期＝電話下6桁）</span></label><input type="text" id="cfPassword"></div>
+    </div>
+    <div class="form-row">
       <div class="form-group"><label>有効</label>
         <select id="cfActive"><option value="true">有効</option><option value="false">無効</option></select>
       </div>
+      <div class="form-group" style="display:flex;align-items:flex-end;"><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="deleteCustomerFromModal()">🗑 この顧客を削除（管理者）</button></div>
     </div>
     <button class="btn btn-gold" style="width:100%;margin-top:14px" onclick="saveCustomer()">保存</button>
   </div>
@@ -392,9 +429,12 @@ async function sb(method,table,body,query=''){
 }
 
 // ── State ──
-let allOrders=[], allCustomers=[], allProducts=[], currentFilter='all', currentOrderSearch='';
+let allOrders=[], allCustomers=[], allProducts=[], allPriceMaster=[], currentFilter='all', currentOrderSearch='';
 let moCart=[], moSpecies='', docOrders=[];
 const custPage={page:0,size:50};
+const RANK_LABEL={standard:'スタンダード',local:'ローカル',startmember:'スタートメンバー'};
+function rankLabel(r){return RANK_LABEL[r]||'スタンダード';}
+function isAdminOk(){const c=prompt('管理者コードを入力してください');return c==='2468';}
 
 // ── Init ──
 async function init(){
@@ -424,6 +464,7 @@ async function loadCustomers(){
 
 async function loadProducts(){
   allProducts=await sb('GET','price_master','','?grade=eq.上&barcode_num=not.is.null&order=species.asc,part_name.asc');
+  allPriceMaster=await sb('GET','price_master','','?order=species.asc,part_name.asc,grade.asc');
 }
 
 // ── Tab switching ──
@@ -431,6 +472,35 @@ function switchTab(tab){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===tab));
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.toggle('active',c.id==='tab-'+tab));
   if(tab==='documents') populateDocCustomerDropdown();
+  if(tab==='pricing') renderPricing();
+}
+
+// ── 価格マスタ（3パターン編集） ──
+function renderPricing(){
+  const s=(document.getElementById('priceSearch')?.value||'').toLowerCase();
+  let rows=allPriceMaster;
+  if(s) rows=rows.filter(p=>(p.species||'').toLowerCase().includes(s)||(p.part_name||'').toLowerCase().includes(s));
+  document.getElementById('priceBody').innerHTML=rows.map(p=>`<tr>
+    <td>${esc(p.species||'')}</td><td>${esc(p.part_name||'')}</td><td style="color:var(--text2)">${esc(p.grade||'')}</td>
+    <td><input type="number" id="pm_s_${p.id}" value="${p.price_standard??''}" style="width:90px"></td>
+    <td><input type="number" id="pm_l_${p.id}" value="${p.price_local??''}" style="width:90px"></td>
+    <td><input type="number" id="pm_m_${p.id}" value="${p.price_startmember??''}" style="width:90px"></td>
+    <td><button class="btn btn-gold btn-sm" onclick="savePriceRow('${p.id}')">保存</button></td>
+  </tr>`).join('')||'<tr><td colspan="7" class="empty">価格マスタがありません</td></tr>';
+}
+async function savePriceRow(id){
+  const num=v=>{const n=parseFloat(v);return isNaN(n)?null:n;};
+  const data={
+    price_standard:num(document.getElementById('pm_s_'+id).value),
+    price_local:num(document.getElementById('pm_l_'+id).value),
+    price_startmember:num(document.getElementById('pm_m_'+id).value)
+  };
+  try{
+    await sb('PATCH','price_master',data,`?id=eq.${id}`);
+    const p=allPriceMaster.find(x=>x.id===id); if(p) Object.assign(p,data);
+    const ap=allProducts.find(x=>x.id===id); if(ap) Object.assign(ap,data);
+    alert('保存しました');
+  }catch(e){alert('保存エラー: '+e.message)}
 }
 
 // ── Modals ──
@@ -728,15 +798,16 @@ function renderCustomers(){
   const page=filtered.slice(start,start+custPage.size);
   const body=document.getElementById('custBody');
   body.innerHTML=page.map(c=>{
-    const rankClass={'standard':'rank-standard','premium':'rank-premium','wholesale':'rank-wholesale'}[c.price_rank]||'rank-standard';
+    const rankClass={'standard':'rank-standard','local':'rank-premium','startmember':'rank-wholesale'}[c.price_rank]||'rank-standard';
     return `<tr>
       <td style="font-weight:700">${esc(c.code||'')}</td>
       <td>${esc(c.name||'')}</td>
       <td style="color:var(--text2)">${esc(c.kana||'')}</td>
       <td>${esc(c.phone||'')}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.address||'')}</td>
-      <td><span class="price-rank ${rankClass}">${c.price_rank||'standard'}</span></td>
-      <td><button class="btn btn-outline btn-sm" onclick="openEditCustomer('${c.id}')">編集</button></td>
+      <td><span class="price-rank ${rankClass}">${rankLabel(c.price_rank)}</span></td>
+      <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="openEditCustomer('${c.id}')">編集</button>
+      <button class="btn btn-sm" style="color:var(--red)" onclick="deleteCustomer('${c.id}')">🗑</button></td>
     </tr>`}).join('');
   const totalPages=Math.ceil(filtered.length/custPage.size);
   const pag=document.getElementById('custPagination');
@@ -751,7 +822,8 @@ function renderCustomers(){
 function openAddCustomer(){
   document.getElementById('custModalTitle').textContent='顧客追加';
   document.getElementById('custEditId').value='';
-  ['cfName','cfKana','cfPhone','cfAddress','cfBuilding','cfContact','cfEmail','cfCompany1','cfCompany2','cfReqCode','cfReqPhone','cfPassword','cfDefaultItem'].forEach(id=>document.getElementById(id).value='');
+  ['cfName','cfKana','cfPhone','cfAddress','cfBuilding','cfContact','cfEmail','cfCompany1','cfCompany2','cfReqCode','cfReqPhone','cfPassword','cfDefaultItem','cfLoginId'].forEach(id=>document.getElementById(id).value='');
+  document.querySelectorAll('.cf-carrier').forEach(cb=>cb.checked=false);
   document.getElementById('cfHonorific').value='様';
   document.getElementById('cfTimeZone').value='0000';
   document.getElementById('cfRank').value='standard';
@@ -784,6 +856,9 @@ function openEditCustomer(id){
   document.getElementById('cfReqCode').value=c.requester_code||'';
   document.getElementById('cfReqPhone').value=c.requester_phone||'';
   document.getElementById('cfPassword').value=c.portal_password||'';
+  document.getElementById('cfLoginId').value=c.portal_login_id||'';
+  const carriers=Array.isArray(c.default_carriers)?c.default_carriers:[];
+  document.querySelectorAll('.cf-carrier').forEach(cb=>{cb.checked=carriers.includes(cb.value)});
   openModal('custModal');
 }
 
@@ -809,7 +884,9 @@ async function saveCustomer(){
     default_time_zone:document.getElementById('cfTimeZone').value,
     requester_code:document.getElementById('cfReqCode').value,
     requester_phone:document.getElementById('cfReqPhone').value,
-    portal_password:pw
+    portal_password:pw,
+    portal_login_id:document.getElementById('cfLoginId').value||null,
+    default_carriers:Array.from(document.querySelectorAll('.cf-carrier:checked')).map(cb=>cb.value)
   };
   if(!data.name){alert('名前を入力してください');return}
   try{
@@ -821,19 +898,73 @@ async function saveCustomer(){
   }catch(e){alert('保存エラー: '+e.message)}
 }
 
+async function deleteCustomer(id){
+  const c=allCustomers.find(x=>x.id===id); if(!c) return;
+  if(!confirm(`顧客「${c.name}」を削除しますか？\nこの操作は元に戻せません。`)) return;
+  if(!isAdminOk()){alert('管理者コードが違います');return}
+  try{
+    await sb('DELETE','customers','',`?id=eq.${id}`);
+    closeModal('custModal');
+    await loadCustomers();
+    populateCustomerDropdowns();
+    alert('削除しました');
+  }catch(e){
+    // 注文が紐づいていて物理削除できない場合は無効化を提案
+    if(confirm('この顧客には注文履歴があり完全削除できません。\n「無効」にして一覧・ログインから外しますか？')){
+      await sb('PATCH','customers',{is_active:false},`?id=eq.${id}`);
+      closeModal('custModal');
+      await loadCustomers(); populateCustomerDropdowns();
+      alert('無効にしました');
+    }
+  }
+}
+function deleteCustomerFromModal(){
+  const id=document.getElementById('custEditId').value;
+  if(!id){alert('保存済みの顧客のみ削除できます');return}
+  deleteCustomer(id);
+}
+
 // ── Manual Order ──
 function populateCustomerDropdowns(){
-  ['moCustomer','docCustomer'].forEach(selId=>{
-    const sel=document.getElementById(selId);
-    const val=sel.value;
-    sel.innerHTML='<option value="">-- 選択 --</option>';
+  // 書類発行タブの顧客セレクト（従来どおり）
+  const doc=document.getElementById('docCustomer');
+  if(doc){
+    const val=doc.value;
+    doc.innerHTML='<option value="">-- 選択 --</option>';
     allCustomers.filter(c=>c.is_active!==false).forEach(c=>{
-      const op=document.createElement('option');
-      op.value=c.id;op.textContent=`${c.code} ${c.name}`;
-      sel.appendChild(op);
+      const op=document.createElement('option');op.value=c.id;op.textContent=`${c.code} ${c.name}`;doc.appendChild(op);
     });
-    if(val) sel.value=val;
-  });
+    if(val) doc.value=val;
+  }
+  // 手入力注文の顧客検索（datalist・予測変換）
+  const dl=document.getElementById('moCustomerList');
+  if(dl){
+    dl.innerHTML=allCustomers.filter(c=>c.is_active!==false).map(c=>
+      `<option value="${esc(c.code)} ${esc(c.name)}">${esc(c.kana||'')} / ${esc(c.phone||'')}</option>`).join('');
+  }
+}
+
+// 手入力注文：検索欄の入力から顧客を確定する
+function onMoCustomerInput(){
+  const v=(document.getElementById('moCustomerInput').value||'').trim();
+  const hit=document.getElementById('moCustomerHit');
+  if(!v){document.getElementById('moCustomer').value='';hit.textContent='';return;}
+  const lv=v.toLowerCase();
+  // 「コード 名前」完全一致を優先、なければ部分一致（名前・カナ・コード・電話）
+  let c=allCustomers.find(x=>`${x.code} ${x.name}`===v)
+    || allCustomers.filter(x=>x.is_active!==false).find(x=>
+        (x.name||'').toLowerCase().includes(lv)||(x.kana||'').toLowerCase().includes(lv)||
+        (x.code||'').toLowerCase().includes(lv)||(x.phone||'').includes(v));
+  if(c){
+    document.getElementById('moCustomer').value=c.id;
+    hit.style.color='var(--gold)';
+    hit.textContent=`✓ ${c.code} ${c.name}（${rankLabel(c.price_rank)}）`;
+    onMoCustomerChange();
+  }else{
+    document.getElementById('moCustomer').value='';
+    hit.style.color='var(--text2)';
+    hit.textContent='該当なし。候補から選ぶか、正確に入力してください';
+  }
 }
 
 function onMoCustomerChange(){
@@ -843,6 +974,12 @@ function onMoCustomerChange(){
   document.getElementById('moDelivName').value=c.name||'';
   document.getElementById('moDelivPhone').value=c.phone||'';
   document.getElementById('moTimeZone').value=c.default_time_zone||'0000';
+  document.getElementById('moRankLabel').value=rankLabel(c.price_rank);
+  // 配送業者：顧客の既定業者を候補に（複数なら選択、無ければ全社から）
+  const sel=document.getElementById('moCarrier');
+  const carriers=(Array.isArray(c.default_carriers)&&c.default_carriers.length)?c.default_carriers:['ヤマト運輸','佐川急便','その他'];
+  sel.innerHTML=carriers.map((x,i)=>`<option value="${esc(x)}"${i===0?' selected':''}>${esc(x)}</option>`).join('');
+  renderMoProducts(); // 価格パターンに合わせて商品価格を更新
 }
 
 function openManualOrder(){
@@ -850,6 +987,11 @@ function openManualOrder(){
   renderMoCart();
   document.getElementById('moMemo').value='';
   document.getElementById('moDate').value=tomorrow();
+  document.getElementById('moCustomerInput').value='';
+  document.getElementById('moCustomer').value='';
+  document.getElementById('moCustomerHit').textContent='';
+  document.getElementById('moRankLabel').value='—';
+  document.getElementById('moCarrier').innerHTML='<option value="">-- 顧客を選ぶと候補表示 --</option>';
   renderMoProducts();
   openModal('manualOrderModal');
 }
@@ -921,6 +1063,7 @@ async function submitManualOrder(){
     delivery_name:document.getElementById('moDelivName').value,
     delivery_phone:document.getElementById('moDelivPhone').value,
     price_rank:cust?.price_rank||'standard',
+    carrier:document.getElementById('moCarrier').value||null,
     total_amount:total,
     memo:document.getElementById('moMemo').value,
     channel:document.getElementById('moChannel').value,

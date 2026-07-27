@@ -116,3 +116,11 @@ exception when duplicate_object then null; end $$;
 -- 2026-07-24 適用済み: individuals_radiation_test
 -- individuals に radiation_test_date / radiation_result_date / radiation_result を追加。
 -- 検査表速報（手書き原本の写真）から57個体分の検査日=判明日を反映（T176-T201, M077-M105）。
+
+-- ─────────────────────────────────────────────
+-- 2026-07-27 適用済み: order_portal_foundation（受発注リニューアル 基盤）
+-- price_master に price_local / price_startmember を追加（3パターン: スタンダード/ローカル/スタートメンバー）。
+-- customers.price_rank を standard/local/startmember に統一（既定 standard）。
+-- customers に default_carriers text[]（既定配送業者・複数可）、portal_login_id（ポータルのログインID）を追加。
+-- orders に carrier（配送業者）を追加。
+-- customer_saved_items（いつもの/マイリスト）、portal_recommendations（おすすめ）テーブルを新規追加。
