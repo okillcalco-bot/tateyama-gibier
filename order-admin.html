@@ -258,6 +258,9 @@ th,td{padding:8px 6px;font-size:.8rem}
     <div class="filter-bar">
       <input class="search-input" type="text" placeholder="名前・コード・電話で検索..." id="custSearch" oninput="renderCustomers()">
       <button class="btn btn-gold btn-sm" onclick="openAddCustomer()">+ 顧客追加</button>
+      <button class="btn btn-outline btn-sm" onclick="exportCustomersCSV()">⬇ CSVエクスポート</button>
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('custCsvFile').click()">⬆ CSVインポート</button>
+      <input type="file" id="custCsvFile" accept=".csv,text/csv" style="display:none" onchange="importCustomersCSV(this)">
     </div>
     <div class="table-wrap">
       <table class="customer-table">
@@ -922,6 +925,82 @@ function deleteCustomerFromModal(){
   const id=document.getElementById('custEditId').value;
   if(!id){alert('保存済みの顧客のみ削除できます');return}
   deleteCustomer(id);
+}
+
+// ── 顧客CSV（エクスポート/インポート・codeをキーにupsert） ──
+const CSV_COLS=['code','name','kana','phone','email','address','building','contact_name','company1','company2','honorific','price_rank','default_carriers','portal_login_id','portal_password','default_time_zone','requester_code','requester_phone','is_active','notes'];
+function csvCell(v){
+  if(v==null)v='';
+  if(Array.isArray(v))v=v.join(';');
+  v=String(v);
+  return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
+}
+function exportCustomersCSV(){
+  const header=CSV_COLS.join(',');
+  const rows=allCustomers.map(c=>CSV_COLS.map(k=>csvCell(c[k])).join(','));
+  const csv='﻿'+header+'\n'+rows.join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download='顧客_'+today()+'.csv';
+  a.click();URL.revokeObjectURL(a.href);
+}
+// RFC4180準拠の簡易パーサ（引用符・カンマ・改行対応）
+function parseCSV(text){
+  text=text.replace(/^﻿/,'');
+  const rows=[];let row=[],cur='',q=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(q){
+      if(ch==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; }
+      else cur+=ch;
+    }else{
+      if(ch==='"')q=true;
+      else if(ch===','){row.push(cur);cur='';}
+      else if(ch==='\r'){}
+      else if(ch==='\n'){row.push(cur);rows.push(row);row=[];cur='';}
+      else cur+=ch;
+    }
+  }
+  if(cur!==''||row.length){row.push(cur);rows.push(row);}
+  return rows.filter(r=>r.length>1||(r[0]||'').trim()!=='');
+}
+async function importCustomersCSV(input){
+  const file=input.files&&input.files[0];input.value='';
+  if(!file)return;
+  if(!isAdminOk()){alert('管理者コードが違います');return}
+  try{
+    const text=await file.text();
+    const rows=parseCSV(text);
+    if(rows.length<2){alert('データがありません');return}
+    const head=rows[0].map(h=>h.trim());
+    const idx={};head.forEach((h,i)=>idx[h]=i);
+    if(!('code' in idx)&&!('name' in idx)){alert('ヘッダーに code または name が必要です');return}
+    const byCode={};allCustomers.forEach(c=>{if(c.code)byCode[c.code]=c;});
+    let upd=0,ins=0,skip=0;const errs=[];
+    for(let r=1;r<rows.length;r++){
+      const row=rows[r];if(!row.length||row.every(v=>(v||'').trim()===''))continue;
+      const get=k=>k in idx?(row[idx[k]]??'').trim():undefined;
+      const rec={};
+      CSV_COLS.forEach(k=>{const v=get(k);if(v===undefined)return;
+        if(k==='default_carriers')rec[k]=v?v.split(/[;；]/).map(x=>x.trim()).filter(Boolean):[];
+        else if(k==='is_active')rec[k]=!(v==='false'||v==='0'||v==='無効'||v==='');
+        else if(k==='price_rank')rec[k]=(['standard','local','startmember'].includes(v)?v:'standard');
+        else rec[k]=v;
+      });
+      if(!rec.name){skip++;continue;}
+      try{
+        const code=get('code');
+        if(code&&byCode[code]){await sb('PATCH','customers',rec,`?code=eq.${encodeURIComponent(code)}`);upd++;}
+        else{
+          if(!rec.code){const mx=allCustomers.reduce((m,c)=>{const n=parseInt((c.code||'').replace('C',''));return n>m?n:m},0)+ins+1;rec.code='C'+String(mx).padStart(4,'0');}
+          if(!rec.portal_password&&rec.phone)rec.portal_password=rec.phone.replace(/\D/g,'').slice(-6);
+          await sb('POST','customers',[rec]);ins++;
+        }
+      }catch(e){errs.push('行'+(r+1)+': '+e.message.slice(0,60));}
+    }
+    await loadCustomers();populateCustomerDropdowns();
+    alert(`インポート完了\n更新 ${upd} / 新規 ${ins} / スキップ ${skip}`+(errs.length?`\nエラー ${errs.length}件:\n`+errs.slice(0,5).join('\n'):''));
+  }catch(e){alert('読み込みエラー: '+e.message)}
 }
 
 // ── Manual Order ──
