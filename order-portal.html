@@ -96,6 +96,9 @@ input,select,textarea,button{font-family:inherit;font-size:inherit;color:inherit
 .cart-table td{padding:10px 6px;border-bottom:1px solid var(--border);vertical-align:middle}
 .cart-table .num{text-align:right}
 .cart-remove{width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--red);cursor:pointer;font-size:1rem;border-radius:50%;transition:background .2s}
+.mini-toggle{padding:4px 8px;font-size:.72rem;border:1px solid var(--border);background:var(--surface2);color:var(--text2);border-radius:6px;cursor:pointer;white-space:nowrap}
+.mini-toggle.on{border-color:var(--gold);color:var(--gold);background:rgba(200,164,90,.1)}
+.search-input{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px}
 .cart-remove:hover{background:rgba(200,80,80,.12)}
 .cart-total{display:flex;justify-content:space-between;align-items:center;padding:14px 0;font-size:1rem}
 .cart-total .label{color:var(--text2)}
@@ -220,12 +223,31 @@ input,select,textarea,button{font-family:inherit;font-size:inherit;color:inherit
   <div class="tabs">
     <button class="tab-btn active" data-tab="order" onclick="switchTab('order')">&#128722; 新規注文</button>
     <button class="tab-btn" data-tab="history" onclick="switchTab('history')">&#128203; 注文履歴</button>
+    <button class="tab-btn" data-tab="calendar" onclick="switchTab('calendar')">&#128197; 納品予定</button>
+    <button class="tab-btn" data-tab="mylist" onclick="switchTab('mylist')">&#11088; マイリスト</button>
     <button class="tab-btn" data-tab="settings" onclick="switchTab('settings')">&#9881; 設定</button>
   </div>
 
   <!-- New Order Tab -->
   <div class="tab-content active" id="tab-order">
     <div class="notice">ご注文は納品日の<strong>3日前</strong>までにお願いいたします</div>
+
+    <!-- おすすめ -->
+    <div class="card" id="reco-card" style="display:none">
+      <div class="card-title">&#128226; おすすめ・お知らせ</div>
+      <div id="reco-list"></div>
+      <div id="reco-admin" style="display:none;margin-top:10px;border-top:1px dashed var(--border);padding-top:10px;">
+        <input type="text" id="reco-title" class="search-input" placeholder="タイトル（例: 本日の搬入 イノシシ3頭）" style="width:100%;margin-bottom:6px;">
+        <textarea id="reco-body" placeholder="本文（任意）" style="width:100%;min-height:50px;margin-bottom:6px;"></textarea>
+        <button onclick="addRecommendation()" style="padding:8px 14px;background:var(--accent);color:#111;border:none;border-radius:8px;font-weight:700;cursor:pointer;">おすすめを追加（管理者）</button>
+      </div>
+    </div>
+
+    <!-- いつもの・マイリスト（クイック注文） -->
+    <div class="card" id="quick-card" style="display:none">
+      <div class="card-title">&#11088; いつもの・マイリスト</div>
+      <div id="quick-list"></div>
+    </div>
 
     <!-- Last Order -->
     <div class="card" id="last-order-card" style="display:none">
@@ -282,8 +304,21 @@ input,select,textarea,button{font-family:inherit;font-size:inherit;color:inherit
     <button class="submit-btn" id="submit-btn" onclick="submitOrder()">注文を送信する</button>
   </div>
 
-  <!-- History Tab -->
-  <div class="tab-content" id="tab-settings" style="display:none">
+  <!-- Settings Tab -->
+  <div class="tab-content" id="tab-settings">
+
+      <!-- 店舗情報 -->
+      <div class="card">
+        <div class="card-title">&#127978; 店舗・ユーザー情報</div>
+        <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px;">店舗名</label>
+        <input type="text" id="set-name" class="search-input" style="width:100%;margin-bottom:8px;">
+        <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px;">ユーザー名（ご担当者）</label>
+        <input type="text" id="set-user" class="search-input" style="width:100%;margin-bottom:8px;">
+        <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px;">ログインID（次回からこのIDでログイン可・空欄なら店舗名）</label>
+        <input type="text" id="set-loginid" class="search-input" style="width:100%;margin-bottom:10px;">
+        <div id="set-msg" style="font-size:12px;margin-bottom:8px;"></div>
+        <button onclick="saveSettings()" style="width:100%;padding:12px;background:var(--accent);color:#111;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">保存する</button>
+      </div>
 
       <!-- パスワード変更 -->
       <div class="card">
@@ -309,7 +344,29 @@ input,select,textarea,button{font-family:inherit;font-size:inherit;color:inherit
     </div>
 
     <div class="tab-content" id="tab-history">
+    <input type="text" id="history-search" class="search-input" placeholder="🔍 注文番号・品名・日付で検索" style="width:100%;margin-bottom:12px;" oninput="renderHistory()">
     <div id="history-list"></div>
+  </div>
+
+  <!-- Calendar Tab（納品予定） -->
+  <div class="tab-content" id="tab-calendar">
+    <div class="card">
+      <div class="card-title">&#128197; 納品予定</div>
+      <div id="calendar-content"><div style="text-align:center;padding:20px"><div class="spinner"></div></div></div>
+    </div>
+  </div>
+
+  <!-- My List Tab（マイリスト・いつもの） -->
+  <div class="tab-content" id="tab-mylist">
+    <div class="card">
+      <div class="card-title">&#11088; マイリスト（お気に入り）</div>
+      <div id="mylist-fav"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">&#128257; いつもの商品</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:8px;">よく買う商品を登録しておくと、新規注文の上からすぐ追加できます。</div>
+      <div id="mylist-usual"></div>
+    </div>
   </div>
 </div>
 
@@ -351,6 +408,10 @@ let cart=[];
 let lastOrder=null;
 let lastOrderItems=[];
 let currentSpecies='イノシシ';
+let savedItems=[];       // customer_saved_items（usual/favorite）
+let recommendations=[];  // portal_recommendations（おすすめ）
+function savedKey(sp,part){return (sp||'')+'|'+(part||'');}
+function isSaved(kind,sp,part){return savedItems.some(s=>s.kind===kind&&savedKey(s.species,s.part_name)===savedKey(sp,part));}
 
 /* ── Loading ── */
 function showLoading(){document.getElementById('loading').classList.add('show')}
@@ -380,19 +441,25 @@ async function doLogin(){
   if(!name||!pass){errEl.textContent='お客様名とパスワードを入力してください';return}
   showLoading();
   try{
-    const q='?name=ilike.*'+encodeURIComponent(name)+'*&portal_password=eq.'+encodeURIComponent(pass)+'&is_active=eq.true&limit=5';
+    const enc=encodeURIComponent(name);
+    const q='?or=(name.ilike.*'+enc+'*,portal_login_id.eq.'+enc+')&portal_password=eq.'+encodeURIComponent(pass)+'&is_active=eq.true&limit=5';
     const rows=await sb('GET','customers',null,q);
     if(!rows.length){errEl.textContent='お客様名またはパスワードが正しくありません';hideLoading();return}
     customer=rows[0];
-    await initMain();
-    loadPriceTable();
-    document.getElementById('login-screen').style.display='none';
-    document.getElementById('main-screen').style.display='block';
+    await onLoginSuccess();
   }catch(e){
     console.error(e);
     errEl.textContent='ログインに失敗しました。再度お試しください';
   }
   hideLoading();
+}
+
+async function onLoginSuccess(){
+  await initMain();
+  loadPriceTable();
+  fillSettings();
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('main-screen').style.display='block';
 }
 
 document.getElementById('login-pass').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin()});
@@ -489,6 +556,12 @@ async function initMain(){
     }
   }catch(e){console.error(e);document.getElementById('last-order-card').style.display='none'}
 
+  // マイリスト・いつもの・おすすめ
+  await loadSaved();
+  renderQuick();
+  renderMyList();
+  loadRecommendations();
+
   // Reset cart
   cart=[];
   renderCart();
@@ -504,6 +577,9 @@ function switchSpecies(sp){
 
 function getPrice(item){
   const rank=customer.price_rank||'standard';
+  if(rank==='local')return item.price_local||item.price_standard||0;
+  if(rank==='startmember')return item.price_startmember||item.price_standard||0;
+  // 旧ランク値も一応拾う（premium/wholesale）
   if(rank==='premium')return item.price_premium||item.price_standard||0;
   if(rank==='wholesale')return item.price_wholesale||item.price_standard||0;
   return item.price_standard||0;
@@ -515,15 +591,152 @@ function renderProducts(){
   if(!filtered.length){grid.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text3)">商品がありません</div>';return}
   grid.innerHTML=filtered.map((p,i)=>{
     const price=getPrice(p);
+    const fav=isSaved('favorite',p.species,p.part_name);
+    const usu=isSaved('usual',p.species,p.part_name);
     return '<div class="product-card">'+
-      '<div class="product-name">'+esc(p.part_name)+'</div>'+
-      ''+// price hidden +
+      '<div class="product-name">'+esc(p.part_name)+(p.grade&&p.grade!=='上'?' <span style="font-size:11px;color:var(--text2)">('+esc(p.grade)+')</span>':'')+'</div>'+
+      '<div style="font-size:13px;color:var(--gold);margin:2px 0 6px;">&yen;'+Number(price).toLocaleString()+'/kg</div>'+
+      '<div style="display:flex;gap:6px;margin-bottom:6px;">'+
+        '<button class="mini-toggle'+(fav?' on':'')+'" onclick="toggleSaved(\'favorite\',\''+esc(p.species)+'\',\''+esc(p.part_name)+'\',\''+p.id+'\')" title="マイリスト">'+(fav?'★':'☆')+'</button>'+
+        '<button class="mini-toggle'+(usu?' on':'')+'" onclick="toggleSaved(\'usual\',\''+esc(p.species)+'\',\''+esc(p.part_name)+'\',\''+p.id+'\')" title="いつものに登録">'+(usu?'🔁 いつもの':'＋いつもの')+'</button>'+
+      '</div>'+
       '<div class="product-row">'+
       '<input type="number" id="qty-'+i+'" min="0.1" step="0.1" value="1.0" inputmode="decimal">'+
       '<span class="unit-label">kg</span>'+
       '<button class="add-btn" onclick="addToCart(\''+currentSpecies+'\','+i+')">カートに追加</button>'+
       '</div></div>';
   }).join('');
+}
+
+/* ── マイリスト / いつもの ── */
+async function loadSaved(){
+  try{ savedItems=await sb('GET','customer_saved_items',null,'?customer_id=eq.'+customer.id+'&select=*&order=created_at.desc'); }
+  catch(e){ savedItems=[]; }
+}
+async function toggleSaved(kind,species,part,pid){
+  const existing=savedItems.find(s=>s.kind===kind&&savedKey(s.species,s.part_name)===savedKey(species,part));
+  try{
+    if(existing){
+      await sb('DELETE','customer_saved_items',null,'?id=eq.'+existing.id);
+      savedItems=savedItems.filter(s=>s.id!==existing.id);
+    }else{
+      const row={customer_id:customer.id,kind:kind,product_id:pid||null,species:species,part_name:part};
+      const ins=await sb('POST','customer_saved_items',[row]);
+      if(ins&&ins[0]) savedItems.unshift(ins[0]);
+    }
+    renderProducts(); renderQuick(); renderMyList();
+  }catch(e){ alert('保存に失敗しました'); }
+}
+function quickAddByName(species,part){
+  const p=products.find(x=>x.species===species&&x.part_name===part);
+  if(!p){alert('この商品は現在取り扱いがありません');return;}
+  const price=getPrice(p);
+  cart.push({product_id:p.id,species:p.species,part_name:p.part_name,weight_kg:1.0,unit_price:price,subtotal:Math.round(price)});
+  renderCart();
+  document.getElementById('quick-card').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function savedItemRow(s,withRemove){
+  const p=products.find(x=>x.species===s.species&&x.part_name===s.part_name);
+  const price=p?getPrice(p):null;
+  return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:8px;">'+
+    '<div><div style="font-size:14px;">'+esc(s.species)+' '+esc(s.part_name)+'</div>'+(price!=null?'<div style="font-size:12px;color:var(--gold)">&yen;'+Number(price).toLocaleString()+'/kg</div>':'<div style="font-size:12px;color:var(--text3)">現在取扱なし</div>')+'</div>'+
+    '<div style="display:flex;gap:6px;">'+
+      (p?'<button class="add-btn" style="padding:6px 10px;" onclick="quickAddByName(\''+esc(s.species)+'\',\''+esc(s.part_name)+'\')">1kg追加</button>':'')+
+      (withRemove?'<button class="cart-remove" onclick="removeSaved(\''+s.id+'\')">&times;</button>':'')+
+    '</div></div>';
+}
+async function removeSaved(id){
+  try{ await sb('DELETE','customer_saved_items',null,'?id=eq.'+id); savedItems=savedItems.filter(s=>s.id!==id); renderProducts(); renderQuick(); renderMyList(); }catch(e){}
+}
+function renderQuick(){
+  const usual=savedItems.filter(s=>s.kind==='usual');
+  const fav=savedItems.filter(s=>s.kind==='favorite');
+  const card=document.getElementById('quick-card');
+  if(!usual.length&&!fav.length){card.style.display='none';return;}
+  card.style.display='';
+  let html='';
+  if(usual.length) html+='<div style="font-size:12px;color:var(--text2);margin:2px 0 4px;">いつもの</div>'+usual.map(s=>savedItemRow(s,false)).join('');
+  if(fav.length) html+='<div style="font-size:12px;color:var(--text2);margin:10px 0 4px;">マイリスト</div>'+fav.map(s=>savedItemRow(s,false)).join('');
+  document.getElementById('quick-list').innerHTML=html;
+}
+function renderMyList(){
+  const fav=savedItems.filter(s=>s.kind==='favorite');
+  const usual=savedItems.filter(s=>s.kind==='usual');
+  document.getElementById('mylist-fav').innerHTML=fav.length?fav.map(s=>savedItemRow(s,true)).join(''):'<div style="color:var(--text3);font-size:13px;">商品の☆を押すとここに追加されます</div>';
+  document.getElementById('mylist-usual').innerHTML=usual.length?usual.map(s=>savedItemRow(s,true)).join(''):'<div style="color:var(--text3);font-size:13px;">商品の「＋いつもの」を押すと登録されます</div>';
+}
+
+/* ── おすすめ ── */
+async function loadRecommendations(){
+  try{ recommendations=await sb('GET','portal_recommendations',null,'?is_active=eq.true&select=*&order=sort_order.asc,created_at.desc'); }
+  catch(e){ recommendations=[]; }
+  renderRecommendations();
+}
+function renderRecommendations(){
+  const card=document.getElementById('reco-card');
+  document.getElementById('reco-admin').style.display=isAdminSession?'block':'none';
+  if(!recommendations.length&&!isAdminSession){card.style.display='none';return;}
+  card.style.display='';
+  document.getElementById('reco-list').innerHTML=recommendations.length?recommendations.map(r=>
+    '<div style="padding:8px 0;border-bottom:1px solid var(--border);">'+
+    '<div style="font-weight:700;font-size:14px;">'+esc(r.title)+'</div>'+
+    (r.body?'<div style="font-size:13px;color:var(--text2);margin-top:2px;white-space:pre-wrap;">'+esc(r.body)+'</div>':'')+
+    (isAdminSession?'<button class="cart-remove" style="float:right;margin-top:-20px;" onclick="deleteRecommendation(\''+r.id+'\')">&times;</button>':'')+
+    '</div>').join(''):'<div style="color:var(--text3);font-size:13px;">現在お知らせはありません</div>';
+}
+async function addRecommendation(){
+  const t=document.getElementById('reco-title').value.trim();
+  if(!t){alert('タイトルを入力してください');return;}
+  const b=document.getElementById('reco-body').value.trim();
+  try{
+    await sb('POST','portal_recommendations',[{title:t,body:b||null}]);
+    document.getElementById('reco-title').value='';document.getElementById('reco-body').value='';
+    await loadRecommendations();
+  }catch(e){alert('追加に失敗しました');}
+}
+async function deleteRecommendation(id){
+  if(!confirm('このおすすめを削除しますか？'))return;
+  try{ await sb('PATCH','portal_recommendations',{is_active:false},'?id=eq.'+id); await loadRecommendations(); }catch(e){}
+}
+
+/* ── 納品予定カレンダー ── */
+async function loadCalendar(){
+  const el=document.getElementById('calendar-content');
+  el.innerHTML='<div style="text-align:center;padding:20px"><div class="spinner"></div></div>';
+  try{
+    const today=fmtDate(new Date());
+    const orders=await sb('GET','orders',null,'?customer_id=eq.'+customer.id+'&status=neq.キャンセル&delivery_date=gte.'+today+'&order=delivery_date.asc&limit=100');
+    if(!orders.length){el.innerHTML='<div style="color:var(--text3);font-size:13px;padding:10px;">今後の納品予定はありません</div>';return;}
+    const byDate={};
+    orders.forEach(o=>{(byDate[o.delivery_date]=byDate[o.delivery_date]||[]).push(o);});
+    el.innerHTML=Object.keys(byDate).sort().map(d=>{
+      const dt=new Date(d+'T00:00:00');const w='日月火水木金土'[dt.getDay()];
+      return '<div style="border-left:3px solid var(--gold);padding:8px 12px;margin-bottom:10px;background:var(--surface2);border-radius:0 8px 8px 0;">'+
+        '<div style="font-weight:700;">'+d.replace(/-/g,'/')+'（'+w+'）</div>'+
+        byDate[d].map(o=>'<div style="font-size:13px;color:var(--text2);margin-top:2px;">'+esc(o.order_code||'')+' / '+esc(o.status||'')+' / &yen;'+Number(o.total_amount||0).toLocaleString()+'</div>').join('')+
+      '</div>';
+    }).join('');
+  }catch(e){el.innerHTML='<div style="color:var(--text3)">取得に失敗しました</div>';}
+}
+
+/* ── 設定（店舗名・ユーザー名・ログインID） ── */
+function fillSettings(){
+  const g=id=>document.getElementById(id);
+  if(g('set-name'))g('set-name').value=customer.name||'';
+  if(g('set-user'))g('set-user').value=customer.contact_name||'';
+  if(g('set-loginid'))g('set-loginid').value=customer.portal_login_id||'';
+}
+async function saveSettings(){
+  const g=id=>document.getElementById(id);
+  const msg=g('set-msg');
+  const data={name:g('set-name').value.trim(),contact_name:g('set-user').value.trim(),portal_login_id:g('set-loginid').value.trim()||null};
+  if(!data.name){msg.style.color='#e05555';msg.textContent='店舗名を入力してください';return;}
+  try{
+    await sb('PATCH','customers',data,'?id=eq.'+customer.id);
+    Object.assign(customer,data);
+    document.getElementById('banner-name').textContent=customer.name+(customer.honorific?' '+customer.honorific:'');
+    msg.style.color='#4caf7d';msg.textContent='保存しました';
+  }catch(e){msg.style.color='#e05555';msg.textContent='保存に失敗しました';}
 }
 
 function addToCart(species,idx){
@@ -596,38 +809,51 @@ function switchTab(tab){
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
   if(tab==='history')loadHistory();
+  if(tab==='calendar')loadCalendar();
+  if(tab==='mylist')renderMyList();
+  if(tab==='settings')fillSettings();
 }
 
 /* ── Order History ── */
+let historyOrders=[], historyItemMap={};
 async function loadHistory(){
   const el=document.getElementById('history-list');
   el.innerHTML='<div style="text-align:center;padding:30px"><div class="spinner"></div></div>';
   try{
-    const orders=await sb('GET','orders',null,'?customer_id=eq.'+customer.id+'&order=created_at.desc&limit=50');
-    if(!orders.length){el.innerHTML='<div class="history-empty">注文履歴はまだありません</div>';return}
-    // Fetch all order items
-    const ids=orders.map(o=>o.id);
+    historyOrders=await sb('GET','orders',null,'?customer_id=eq.'+customer.id+'&order=created_at.desc&limit=100');
+    if(!historyOrders.length){el.innerHTML='<div class="history-empty">注文履歴はまだありません</div>';return}
+    const ids=historyOrders.map(o=>o.id);
     const allItems=await sb('GET','order_items',null,'?order_id=in.('+ids.join(',')+')');
-    const itemMap={};
-    allItems.forEach(it=>{if(!itemMap[it.order_id])itemMap[it.order_id]=[];itemMap[it.order_id].push(it)});
-
-    el.innerHTML=orders.map(o=>{
-      const items=itemMap[o.id]||[];
-      const summary=items.map(it=>esc(it.species)+' '+esc(it.part_name)+' '+((it.weight_kg||it.weight)||0)+'kg').join('、');
-      const total=o.total_amount||items.reduce((s,it)=>s+(it.subtotal||it.amount||0),0);
-      const d=o.order_date||o.created_at?.slice(0,10)||'';
-      const badge=o.status?'<span class="badge badge-'+o.status+'">'+esc(o.status)+'</span>':'';
-      return '<div class="order-card">'+
-        '<div class="order-header"><div><span class="order-code">'+esc(o.order_code||'')+'</span> '+badge+'</div><span class="order-date">'+esc(d)+'</span></div>'+
-        '<div class="order-items-summary">'+summary+'</div>'+
-        ''+// total hidden +
-        '<button class="order-reorder-btn" onclick="reorderFromHistory(\''+o.id+'\')">&#x1F501; 同じ内容で注文</button>'+
-        '</div>';
-    }).join('');
+    historyItemMap={};
+    allItems.forEach(it=>{if(!historyItemMap[it.order_id])historyItemMap[it.order_id]=[];historyItemMap[it.order_id].push(it)});
+    renderHistory();
   }catch(e){
     console.error(e);
     el.innerHTML='<div class="history-empty">履歴の取得に失敗しました</div>';
   }
+}
+function renderHistory(){
+  const el=document.getElementById('history-list');
+  const q=(document.getElementById('history-search')?.value||'').toLowerCase();
+  let orders=historyOrders;
+  if(q) orders=orders.filter(o=>{
+    const items=historyItemMap[o.id]||[];
+    const hay=[(o.order_code||''),(o.order_date||''),(o.created_at||'').slice(0,10),(o.status||''),items.map(it=>it.species+it.part_name).join('')].join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+  if(!orders.length){el.innerHTML='<div class="history-empty">該当する注文がありません</div>';return;}
+  el.innerHTML=orders.map(o=>{
+    const items=historyItemMap[o.id]||[];
+    const summary=items.map(it=>esc(it.species)+' '+esc(it.part_name)+' '+((it.weight_kg||it.weight)||0)+'kg').join('、');
+    const d=o.order_date||o.created_at?.slice(0,10)||'';
+    const badge=o.status?'<span class="badge badge-'+o.status+'">'+esc(o.status)+'</span>':'';
+    return '<div class="order-card">'+
+      '<div class="order-header"><div><span class="order-code">'+esc(o.order_code||'')+'</span> '+badge+'</div><span class="order-date">'+esc(d)+'</span></div>'+
+      '<div class="order-items-summary">'+summary+'</div>'+
+      (o.delivery_date?'<div style="font-size:12px;color:var(--text2);margin-top:2px;">納品予定: '+esc(o.delivery_date)+'</div>':'')+
+      '<button class="order-reorder-btn" onclick="reorderFromHistory(\''+o.id+'\')">&#x1F501; 同じ内容で注文</button>'+
+      '</div>';
+  }).join('');
 }
 
 async function reorderFromHistory(orderId){
@@ -681,6 +907,7 @@ async function submitOrder(){
       delivery_name:customer.name,
       delivery_phone:customer.phone||'',
       price_rank:customer.price_rank||'standard',
+      carrier:(Array.isArray(customer.default_carriers)&&customer.default_carriers[0])||null,
       total_amount:total,
       memo:memo,
       channel:'portal',
