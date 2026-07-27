@@ -326,6 +326,39 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   .pm-label-expiry { font-size: 8.5px; font-weight: bold; border-top: 0.5pt solid #000; margin-top: 1mm; padding-top: 0.5mm; }
 }
 
+/* マニュアル 画面ビュー */
+#manualView { display: none; position: fixed; inset: 0; background: #eceadf; z-index: 9998; overflow: auto; -webkit-overflow-scrolling: touch; }
+#manualView .mv-bar { position: sticky; top: 0; z-index: 2; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: #23271c; padding: 10px 14px; }
+#manualView .mv-bar button { border: none; border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 700; cursor: pointer; }
+#manualView .mv-print { background: #c9a13b; color: #1c1f16; }
+#manualView .mv-close { background: #3a3f31; color: #fff; }
+#manualView .mv-hint { color: #cfd3c4; font-size: 11.5px; }
+#manualView .mv-pages { padding: 16px 10px 60px; }
+/* A4縦の紙面 */
+.mv-sheet { background: #fff; color: #1a1a1a; width: 182mm; max-width: 96vw; margin: 0 auto 16px; padding: 16mm 14mm; box-sizing: border-box; box-shadow: 0 2px 10px rgba(0,0,0,.15); font-family: 'Yu Gothic', 'Hiragino Sans', sans-serif; line-height: 1.75; }
+.mv-sheet h1 { font-size: 20px; margin: 0 0 2px; color: #111; }
+.mv-sheet .mv-sub { color: #555; font-size: 12.5px; margin-bottom: 4px; }
+.mv-sheet .mv-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: #333; border-top: 1.5px solid #222; border-bottom: 1.5px solid #222; padding: 6px 0; margin: 8px 0 14px; }
+.mv-sheet .mv-meta b { color: #8d6a1d; }
+.mv-step { display: flex; gap: 10px; margin: 0 0 12px; page-break-inside: avoid; }
+.mv-step .mv-no { flex: 0 0 26px; height: 26px; border-radius: 50%; background: #8d6a1d; color: #fff; font-weight: 700; text-align: center; line-height: 26px; font-size: 14px; }
+.mv-step .mv-body { flex: 1; }
+.mv-step .mv-h { font-weight: 700; font-size: 15px; color: #1a1a1a; }
+.mv-step .mv-d { font-size: 13px; color: #333; margin-top: 2px; }
+.mv-step .mv-tip { font-size: 12px; color: #555; background: #f3f1e6; border-left: 3px solid #c9a13b; padding: 4px 8px; margin-top: 4px; border-radius: 0 4px 4px 0; }
+.mv-caution { font-size: 12.5px; color: #7a1f1f; background: #fbeeee; border: 1px solid #e6c3c3; border-radius: 6px; padding: 8px 12px; margin-top: 10px; }
+.mv-foot { margin-top: 16px; border-top: 1px dashed #999; padding-top: 6px; font-size: 10.5px; color: #888; display: flex; justify-content: space-between; }
+@media print {
+  body.manual-open .pm-label-print-area { display: none !important; }
+  body.manual-open > *:not(#manualView) { display: none !important; }
+  body.manual-open #manualView { display: block !important; position: static; overflow: visible; background: #fff; }
+  body.manual-open #manualView .mv-bar { display: none !important; }
+  body.manual-open #manualView .mv-pages { padding: 0; }
+  .mv-sheet { width: auto; max-width: none; margin: 0; padding: 0; box-shadow: none; page-break-after: always; }
+  .mv-sheet:last-child { page-break-after: auto; }
+  @page { size: A4 portrait; margin: 16mm 15mm; }
+}
+
 /* Sync Status Section */
 .sync-flow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
 .sync-node{text-align:center;min-width:80px;padding:10px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);}
@@ -403,6 +436,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <button class="tab-btn" data-tab="supplies">&#x1F9F4; 資材在庫<span class="nav-badge" id="nav-badge-supplies"></span></button>
   <div class="nav-group">書類・帳票</div>
   <button class="tab-btn" data-tab="docs">&#x1F4C4; 書類・帳票<span class="nav-badge" id="nav-badge-docs"></span></button>
+  <button class="tab-btn" data-tab="manual">&#x1F4D6; マニュアル</button>
   <button class="tab-btn" data-tab="datamgmt">&#x1F5C4; データ管理</button>
 </nav>
 
@@ -505,7 +539,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="section">
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
         <span>精肉する個体を選ぶ</span>
-        <button class="btn btn-primary" onclick="openProcessingMode()">🔪 精肉モードを開く</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-sm" onclick="manualOpen('butcher')">📖 使い方</button><button class="btn btn-primary" onclick="openProcessingMode()">🔪 精肉モードを開く</button></div>
       </div>
       <div style="padding:10px 12px;border:1px dashed var(--gold2);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.8;background:var(--surface2);margin-bottom:12px;">
         部位・重量の登録は<strong style="color:var(--gold);">精肉モード</strong>で行います。下の一覧から個体の「🔪 精肉モードで開く」を押すと、その個体を選んだ状態で精肉モードが起動します。
@@ -794,7 +828,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="section">
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
         <span>加工処理・完成品在庫</span>
-        <button class="btn btn-primary" onclick="productOpenNew()">＋ 商品を追加</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-sm" onclick="manualOpen('product')">📖 使い方</button><button class="btn btn-primary" onclick="productOpenNew()">＋ 商品を追加</button></div>
       </div>
       <div style="font-size:12.5px;color:var(--text2);margin-bottom:12px;">精肉を加工して作った卸売・小売商品の完成個数をここで記録します（ホワイトボードの置き換え）。完成したら「＋完成」、イベント等へ持ち出したら「−持ち出し」。BASEネットショップの商品と対応しています。</div>
       <div id="products-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;"></div>
@@ -1079,7 +1113,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <!-- Radiation (放射能検査) -->
   <div class="tab-panel" id="panel-radiation">
     <div class="section">
-      <div class="section-title">放射能検査を記録</div>
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;"><span>放射能検査を記録</span><button class="btn btn-sm" onclick="manualOpen('radiation')">📖 使い方</button></div>
       <div style="font-size:12.5px;color:var(--text2);margin-bottom:12px;">その日に検査した個体番号をまとめて記録します。<b>検査日＝結果判明日</b>として保存し、市役所提出の台帳（放射性物質検査結果）に使えます。ふだんはセシウム「なし（検出下限値以下）」です。</div>
       <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
         <div class="form-group" style="margin:0;"><label>検査日（＝結果判明日）</label><input class="form-input" id="rad-date" type="date" style="max-width:180px;"></div>
@@ -1189,6 +1223,18 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div id="doc-approve-bar" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"></div>
       </div>
       <div id="doc-preview-body" style="overflow-x:auto;background:#fff;color:#222;padding:18px;border-radius:var(--radius);border:1px solid var(--border);"></div>
+    </div>
+  </div>
+
+  <!-- Manual (マニュアル) -->
+  <div class="tab-panel" id="panel-manual">
+    <div class="section">
+      <div class="section-title">📖 業務マニュアル（捕獲 → 精肉 → 完成品 → 納品・出荷）</div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:6px;">各段階の手順です。カードを開くと画面で確認でき、<strong>A4縦で印刷・PDF保存</strong>もできます（現場に貼る用）。細かい表現は随時直せます。</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px;">
+        <button class="btn btn-primary" onclick="manualOpen('all')">🖨 全手順をまとめて印刷（A4）</button>
+      </div>
+      <div id="manual-index" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;"></div>
     </div>
   </div>
 
@@ -1325,7 +1371,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <!-- Shipping -->
   <div class="tab-panel" id="panel-shipping">
     <div class="section" id="ship-workbench">
-      <div class="section-title">バーコード出荷スキャン（注文あり）</div>
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;"><span>バーコード出荷スキャン（注文あり）</span><button class="btn btn-sm" onclick="manualOpen('shipping')">📖 使い方</button></div>
       <div style="padding:10px 12px;border:1px dashed var(--gold2);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.9;background:var(--surface2);margin-bottom:10px;">
         📖 <strong style="color:var(--gold);">やり方</strong><br>
         ① 下の<strong>出荷待ち注文一覧</strong>から、出したい注文の「<strong>📌 この注文に割当</strong>」を押す（お店を選ぶイメージ）<br>
@@ -1703,6 +1749,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'staff') loadStaffPanel();
     if (btn.dataset.tab === 'cleaning') loadCleaning();
     if (btn.dataset.tab === 'radiation') loadRadiation();
+    if (btn.dataset.tab === 'manual') loadManual();
     if (btn.dataset.tab === 'supplies') loadSupplies();
     if (btn.dataset.tab === 'datamgmt') loadDataMgmt();
     if (btn.dataset.tab === 'shifts') loadShiftBoard();
@@ -6516,6 +6563,137 @@ async function radCopyForDaicho() {
 function nextMonthStr(month) {
   const [y, m] = month.split('-').map(Number);
   return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+}
+
+/* ───────── 業務マニュアル（画面参照 + A4縦印刷） ───────── */
+const MANUALS = [
+  { id: 'capture', icon: '🐗', title: '① 捕獲報告（捕獲者）', who: '捕獲者さん', when: '捕獲したら', where: 'LINE「捕獲を報告する」／捕獲票入力リンク',
+    steps: [
+      { h: 'LINEで「捕獲を報告する」を押す', d: '渡された捕獲票入力リンクを開いてもOKです。' },
+      { h: '案内された型に沿って1回で送る', d: '獣種・捕獲方法・場所・体重（センター計量／処理施設計量／推定）などを、うめて送信します。', tip: '分かる項目だけでOK。足りない分は後でセンターがお聞きします。' },
+      { h: '写真を送る', d: '「尻尾を切る前」「切った後」の2枚。位置情報（LINEの＋→位置情報）も送れます。' },
+      { h: '送信して完了', d: '「受け付けました」と返ります。個体番号はセンターで付けます。' },
+      { h: '市役所の捕獲票（任意）', d: '必要項目が揃うと、捕獲票のダウンロードリンクがLINEに届きます。' },
+    ], caution: '口座番号などはLINEで送らないでください。担当から電話・対面で確認します。' },
+  { id: 'receive', icon: '🪤', title: '② 搬入・受入（個体登録）', who: 'センタースタッフ', when: '個体が届いたら', where: '業務トップ →「捕獲受入・個体」の搬入待ち',
+    steps: [
+      { h: 'はかり・ラベルプリンターを接続', d: '電源を入れて接続。つながらない時は一度電源を入れ直すと直ります。' },
+      { h: '搬入待ちから「受入」を押す', d: '捕獲者がLINE／フォームで送った内容が入っています。中身を確認します。' },
+      { h: 'はかりに乗せて計量', d: 'はかりの「プリント」ボタンを押すと重さが取り込まれます（手入力も可）。' },
+      { h: '個体番号を発番', d: 'TGC-08-… の管理番号が自動で付きます。' },
+      { h: '「受入して登録する」→ ラベル印刷', d: '本体管理・放射能検査用・背割り管理の3枚が出ます。個体に貼ります。' },
+    ], caution: '受入時刻・処理時刻・放血時刻は市役所提出にも使います。分かる範囲で入れてください。' },
+  { id: 'radiation', icon: '🔬', title: '③ 放射能検査', who: 'スタッフ', when: '検査から戻ったら（ほぼ毎日）', where: '業務トップ →「放射能検査」',
+    steps: [
+      { h: '検査日を確認', d: '検査日＝結果判明日。既定は今日です。' },
+      { h: '検査した個体を選ぶ', d: '「未検査の個体」からタップ、または個体番号（T176 等）を入力してEnter。まとめて選べます。' },
+      { h: '結果を確認', d: '通常は「なし（検出下限値以下）」のまま。検出があった日だけ「検出あり」に切替。' },
+      { h: '「この検査日で記録する」', d: '選んだ個体すべてに検査日が保存されます。' },
+      { h: '月末に台帳へ転記', d: '「台帳転記用にコピー」で、台帳スプレッドシートの個体別シートへ貼り付けます。' },
+    ], caution: '検査日は市役所提出の放射能検査資料になります。' },
+  { id: 'butcher', icon: '🔪', title: '④ 精肉入力（精肉モード）', who: 'スタッフ', when: '熟成後、精肉するとき', where: '業務トップ →「精肉入力」',
+    steps: [
+      { h: '作業者を選ぶ', d: '上のメニューで自分（作業者）を選びます。' },
+      { h: '精肉する個体を選ぶ', d: '個体を選ぶと精肉画面が開きます。' },
+      { h: '部位を選んで計量', d: 'ロース／モモ（全体・ウチ・ソト・シンタマ）／バラ／スライス等を選び、はかりに乗せて計量。' },
+      { h: 'ラベルを印刷して貼る', d: '部位・重量・賞味期限・バーコード入りのラベルが出ます。部位ごとに繰り返します。' },
+      { h: '保存場所を選ぶ', d: '冷凍庫（F1〜）を選ぶと在庫一覧に反映されます。' },
+      { h: '「精肉完了」', d: '完了した個体は別表示になります。途中でやめても登録済みは保存されています。' },
+    ] },
+  { id: 'product', icon: '🛍', title: '⑤ 加工処理・完成品在庫', who: 'スタッフ', when: '味付け肉・スライス等を作ったとき', where: '業務トップ →「加工処理」',
+    steps: [
+      { h: '商品カードの「＋完成」を押す', d: '味付けみそ・スライス2mm など、作った商品のカードを選びます。' },
+      { h: '完成数などを入力', d: '完成した数・作業者・元にした個体番号を入れて「記録する」。' },
+      { h: '在庫が増える', d: 'この完成品在庫が、道の駅納品やBASE販売の元になります。' },
+    ], caution: '道の駅やBASEに出す前に、ここで完成数を入れておいてください。' },
+  { id: 'outlet', icon: '🏪', title: '⑥ 道の駅への納品', who: 'スタッフ（外回り）', when: '道の駅へ持って行くとき', where: 'スマホの納品ページ（outlet.html）',
+    steps: [
+      { h: '店を選ぶ', d: 'グリーンファーム館山／とみうら・枇杷倶楽部／富楽里とみやま／おふくろ／あわ海月堂。' },
+      { h: '使い方メモを確認', d: '店ごとの手数料・設定価格・バーコードの扱いが書いてあります。' },
+      { h: '「納品を記録」', d: '持って行った商品と数を入れて登録します。' },
+      { h: '売上は自動で反映', d: '3道の駅の売上は毎晩メールから自動取込。手で入れるときは「販売報告」。' },
+      { h: '在庫がずれたら直す', d: '在庫数をタップすると、その場で正しい数に直せます。' },
+    ], caution: 'とみうら・枇杷倶楽部は、バーコードを事前にセンターで打ち出して商品に貼ってから納品します。' },
+  { id: 'shipping', icon: '📤', title: '⑦ 出荷処理（注文・BASE）', who: 'スタッフ', when: '注文が入ったら', where: '業務トップ →「出荷処理」',
+    steps: [
+      { h: '注文に割り当てる', d: '注文一覧から対象を選び「この注文に割当」。' },
+      { h: '商品をスキャン', d: '商品のバーコードを読む（コード入力も可）。' },
+      { h: 'BASE注文の発送', d: '「BASE注文」欄に出る注文に送り状番号を入れて「発送処理」。在庫が自動で引かれ、BASEも発送済みになります（購入者に発送メール）。' },
+    ], caution: '革製品だけの注文はジビエ管轄外のため一覧に出ません。' },
+  { id: 'cleaning', icon: '🧹', title: '⑧ 清掃記録（HACCP）', who: 'スタッフ', when: '清掃したら', where: '業務トップ →「清掃記録」',
+    steps: [
+      { h: '清掃した部屋をタップ', d: '解体室・精肉室・冷蔵冷凍庫・前室・トイレ・施設外周。' },
+      { h: '実施者を選んで「記録する」', d: 'その場で記録されます。' },
+      { h: '冷蔵冷凍庫は温度も', d: '庫内温度を確認して記録します。' },
+    ], caution: '清掃記録は保健所・国産ジビエ認証の審査で確認されます。毎日つけてください。' },
+  { id: 'punch', icon: '⏱', title: '⑨ 出退勤打刻', who: 'スタッフ', when: '出勤・退勤のとき', where: '打刻用スマホ（punch.html）／「出退勤打刻」',
+    steps: [
+      { h: '自分の名前を押す', d: '打刻用スマホは置きっぱなしでOK。自動で起動します。' },
+      { h: '体調を選ぶ', d: '「異常なし」／「異常あり」。あれば内容も入れます。' },
+      { h: '「出勤」／「退勤」を押す', d: '出勤中・退勤済みが表示されます。' },
+    ], caution: '体調に異常があるときは必ず記録し、責任者に伝えてください（食品衛生）。' },
+  { id: 'cityreport', icon: '🏛', title: '⑩ 市役所提出（月次業務報告書）', who: '責任者', when: '毎月', where: '業務トップ →「書類・帳票」→「市役所提出」',
+    steps: [
+      { h: '対象月を選ぶ', d: '先に台帳スプレッドシートを最新に同期しておきます。' },
+      { h: 'データ集計プレビュー', d: '受入頭数（イノシシのみ）・出勤・清掃を画面で確認します。' },
+      { h: '「月次業務報告書（Excel）」', d: '様式そのままのExcelがダウンロードされます。' },
+      { h: 'Excel上で仕上げる', d: '打合せ記録（農水産課メール）・収支（会計事務所メール）・冷蔵庫温度を記入します。' },
+      { h: '年度末は綴る', d: '各月の報告書を綴って年度業務報告書にします（年度まとめで数字確認）。' },
+    ], caution: '受入頭数はイノシシのみ。捕獲日ベース・搬入待ちは除外します。' },
+  { id: 'mailimport', icon: '📧', title: '⑪ 売上メール自動取込（運用）', who: '運用者', when: '一度設定すれば自動', where: 'Google Apps Script（GAS）',
+    steps: [
+      { h: 'GASにスクリプトを貼る', d: 'script.google.com で新規プロジェクトを作り、配布したスクリプトを貼り付けます。' },
+      { h: '「setup」を実行', d: '初回だけGmailの許可を出すと、毎晩21:20に自動取込するトリガーが登録されます。' },
+      { h: '確認は「runNow」', d: 'その場で実行してログに取込結果が出ます。' },
+      { h: '店が増えたら追記', d: '差出人アドレスと商品名を、スクリプトの表に足します。' },
+    ], caution: '3道の駅の売上メールから在庫へ自動反映。数字が止まったら担当に連絡してください。' },
+];
+function loadManual() {
+  const box = document.getElementById('manual-index');
+  if (!box) return;
+  box.innerHTML = MANUALS.map(m =>
+    `<div style="border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;background:var(--surface2);">
+       <div style="font-size:15px;font-weight:700;">${m.icon} ${esc2(m.title)}</div>
+       <div style="font-size:12px;color:var(--text2);margin:4px 0 10px;">対象: ${esc2(m.who)}／${esc2(m.when)}</div>
+       <button class="btn btn-sm" onclick="manualOpen('${m.id}')">📖 開く・印刷</button>
+     </div>`).join('');
+}
+function manualSheetHtml(m) {
+  const steps = m.steps.map((s, i) =>
+    `<div class="mv-step"><div class="mv-no">${i + 1}</div><div class="mv-body">
+       <div class="mv-h">${esc2(s.h)}</div>
+       ${s.d ? `<div class="mv-d">${esc2(s.d)}</div>` : ''}
+       ${s.tip ? `<div class="mv-tip">💡 ${esc2(s.tip)}</div>` : ''}
+     </div></div>`).join('');
+  return `<div class="mv-sheet">
+    <h1>${m.icon} ${esc2(m.title.replace(/^[①-⑪]\s*/, ''))}</h1>
+    <div class="mv-sub">館山ジビエセンター 業務マニュアル</div>
+    <div class="mv-meta"><span><b>対象</b> ${esc2(m.who)}</span><span><b>タイミング</b> ${esc2(m.when)}</span><span><b>場所</b> ${esc2(m.where)}</span></div>
+    ${steps}
+    ${m.caution ? `<div class="mv-caution">⚠ ${esc2(m.caution)}</div>` : ''}
+    <div class="mv-foot"><span>館山ジビエセンター運営（合同会社アルコ）</span><span>${m.title.replace(/^([①-⑪]).*/, '$1')}</span></div>
+  </div>`;
+}
+function manualOpen(id) {
+  let ov = document.getElementById('manualView');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'manualView'; document.body.appendChild(ov); }
+  const list = id === 'all' ? MANUALS : MANUALS.filter(m => m.id === id);
+  const title = id === 'all' ? '全手順（A4・各ページ1手順）' : list[0].title;
+  ov.innerHTML =
+    '<div class="mv-bar">' +
+      '<button type="button" class="mv-print" onclick="window.print()">🖨 印刷 / PDF保存（A4縦）</button>' +
+      '<button type="button" class="mv-close" onclick="manualClose()">✕ 閉じる</button>' +
+      '<span class="mv-hint">' + esc2(title) + '　／　印刷ダイアログで「PDFに保存」も選べます</span>' +
+    '</div>' +
+    '<div class="mv-pages">' + list.map(manualSheetHtml).join('') + '</div>';
+  ov.style.display = 'block';
+  ov.scrollTop = 0;
+  document.body.classList.add('manual-open');
+}
+function manualClose() {
+  const ov = document.getElementById('manualView');
+  if (ov) ov.style.display = 'none';
+  document.body.classList.remove('manual-open');
 }
 
 /* ───────── 解体所見（胎児の有無・内臓異常。スタッフが随時追記） ───────── */
