@@ -22,7 +22,9 @@ export type WorkflowName =
   | "generate_social_posts"
   | "generate_advisor_brief"
   | "parse_field_note"
-  | "classify_hunter_message";
+  | "classify_hunter_message"
+  | "analyze_crosspost_source"
+  | "generate_crosspost_drafts";
 
 interface ModelConfig {
   model: string;
@@ -46,6 +48,9 @@ const WORKFLOW_CONFIG: Record<WorkflowName, Partial<ModelConfig>> = {
   generate_advisor_brief: { maxTokens: 8192 },
   parse_field_note: { maxTokens: 4096 },
   classify_hunter_message: { maxTokens: 2048 },
+  analyze_crosspost_source: { maxTokens: 4096 },
+  // 媒体2〜3件ぶんの本文。バッチで呼ぶので極端には伸ばさない
+  generate_crosspost_drafts: { maxTokens: 8192 },
 };
 
 export function resolveModelConfig(workflow: WorkflowName): ModelConfig {

@@ -45,11 +45,14 @@
 
 | 0028_staff_notify_groups.sql | 搬入連絡のスタッフグループ通知: line_staff_groups（グループID・通知ON/OFF・状態 pending/active/disabled/left・通知回数） |
 
+| 0029_crosspost.sql | FB投稿 横展開（Phase 1）: social_sources / social_source_assets / social_channels / social_style_profiles / social_channel_drafts / social_publications。承認・却下を owner/manager に限定するトリガー、別組織の親子を紐づけさせないトリガー、媒体8件とスタイルv1のseed |
+
 **適用状況**: 0001〜0020 は本番 Supabase プロジェクト（tateyama-gibier /
 clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（0001〜0011: 2026-07-05、
 0012〜0020: 2026-07-06〜15）。
 **0021〜0026 は本番適用済み**（0021〜0023: PR #52 / 0024〜0026: PR #53）。ジビエ基幹側の `20260726_hunters_rls_hardening.sql` も適用済み。
 0027 も本番適用済み（適用名 `alco_os_0027_capture_form_share`）。
+**0029 は未適用**（FB投稿 横展開 Phase 1）。
 **0028 は未適用**（搬入連絡のスタッフグループ通知）。
 なお 0027 は当初、関数定義が `capture_place` の列追加より前にあり素のPostgresでは
 適用に失敗する順序だった。**本番へは順序を直したSQLで適用済み**で、

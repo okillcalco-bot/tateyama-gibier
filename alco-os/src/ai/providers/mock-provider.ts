@@ -26,6 +26,49 @@ export class MockProvider implements AiProvider {
 }
 
 const DEFAULT_RESPONSES: Record<string, string> = {
+  analyze_crosspost_source: JSON.stringify({
+    facts: ["朝いちで罠を見回った", "館山市山本のくくり罠にイノシシがかかっていた"],
+    numbers: ["1頭", "45kg", "午前6時30分"],
+    voice_quotes: ["毎回、慣れないなと思う", "これでよかったのかは、まだ分からない"],
+    must_keep: ["イノシシ1頭", "45kg", "館山市山本"],
+    speculations: ["去年より数が増えている気がする"],
+    mentioned_people: ["捕獲者さん"],
+    source_no: "12",
+    missing_information: ["搬入した時刻"],
+  }),
+  generate_crosspost_drafts: JSON.stringify({
+    drafts: [
+      {
+        channel_key: "instagram",
+        title: null,
+        body: "朝いちで罠を見回った。館山市山本のくくり罠にイノシシが1頭、45kg。毎回、慣れないなと思う。（モック出力）",
+        hashtags: ["ジビエ", "館山", "里山"],
+        link_guidance: "詳しくはプロフィールのリンクから",
+        cta: "館山ジビエセンターの取り組みを見る",
+        photo_order: [0, 1],
+        photo_captions: ["罠の様子", "搬入したイノシシ"],
+        narration: null,
+        cautions: [],
+        anonymized_notes: ["捕獲者の氏名を「捕獲者さん」に置き換えました"],
+      },
+      {
+        channel_key: "threads",
+        title: null,
+        body: "イノシシ1頭、45kg。毎回、慣れないなと思う。これでよかったのかは、まだ分からない。（モック出力）",
+        hashtags: [],
+        link_guidance: "詳しくはFacebookに書きました",
+        cta: null,
+        photo_order: [0],
+        photo_captions: [],
+        narration: null,
+        cautions: [],
+        anonymized_notes: [],
+      },
+    ],
+    missing_information: ["搬入した時刻"],
+    sensitive_flags: ["捕獲・止め刺しに関する記述があります"],
+    style_notes: ["迷いの表現をそのまま残しました"],
+  }),
   classify_hunter_message: JSON.stringify({
     summary: "イノシシ1頭をこれから搬入したいという連絡。到着は本日の午後を希望。",
     detected_intent: "delivery_notice",

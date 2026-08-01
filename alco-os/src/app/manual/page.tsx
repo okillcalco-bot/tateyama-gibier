@@ -217,6 +217,38 @@ export default function ManualPage() {
           </p>
         </Section>
 
+        <Section icon="🔁" title="FB横展開 — Facebookの投稿を各媒体へ">
+          <p>
+            沖代表のFacebook投稿を登録すると、
+            <strong>Instagram・Threads・LINE公式・Googleビジネス・Web・X・Reels台本</strong>
+            の下書きをAIが作ります。<strong>自動では投稿しません。</strong>
+          </p>
+          <Step n={1}>
+            「新しい投稿を登録する」で、原文をそのまま貼り付けます。写真も一緒に登録できます。
+            人物が写っているときはチェックを入れてください。
+          </Step>
+          <Step n={2}>
+            「媒体別の下書きを作る」を押します。少し時間がかかります。
+          </Step>
+          <Step n={3}>
+            媒体ごとに開いて本文を直し、<strong>承認</strong>します。合わない媒体は却下できます。
+            承認・却下は権限のある人だけができます。
+          </Step>
+          <Step n={4}>
+            各媒体で実際に投稿したら、投稿URLを入れて「投稿済みにする」を押します。
+            同じ媒体に二重登録はできません。
+          </Step>
+          <p className={NOTE}>
+            止め刺し・ウリ坊・価格・行政などが含まれる投稿は<strong>「要確認」</strong>になります。
+            理由が画面に出るので、読んだうえで「理由を確認して承認する」を押してください。
+            理由は承認後も記録に残ります。
+          </p>
+          <p className={HINT}>
+            AIが最初に作った文章と、人が承認した文章は<strong>別々に保存されます</strong>。
+            あとから「AIが何を書いて、どこを直したか」を確認できます。
+          </p>
+        </Section>
+
         <Section icon="📣" title="発信 — SNS・HPの投稿文を一括作成">
           <Step n={1}>「発信」→ もとネタ（メモ・FB投稿・文字起こし）を貼って登録</Step>
           <Step n={2}>「AI生成」→ HP / Instagram / Facebook / YouTube 向けの原稿が一度にできる</Step>

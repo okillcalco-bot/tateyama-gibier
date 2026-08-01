@@ -93,6 +93,8 @@ async function applyDraft(db: DbPort, ctx: AuditContext, draft: Row): Promise<Ro
       return applyAdvisorBrief(db, ctx, draft);
     case "hunter_message_result":
       return applyHunterMessageResult(db, ctx, draft);
+    case "crosspost_approval":
+      return applyCrosspostApproval(db, ctx, draft);
     case "nature_report":
       // レポートはドラフト承認のみで完結（提出用の確定文書化は将来 grant_documents 同様の仕組みで）
       return [];
@@ -173,6 +175,45 @@ async function applyHunterMessageResult(
   }
 
   return created;
+}
+
+/**
+ * FB横展開の承認 → social_channel_drafts に「承認した本文」を固定保存する。
+ *
+ * draft.content は**承認ボタンを押した瞬間の本文のスナップショット**。
+ * AIの元出力（social_channel_drafts.ai_body / crosspost_ai_output のドラフト）は
+ * 別レコードとして残り、ここでは触らない。
+ */
+async function applyCrosspostApproval(
+  db: DbPort,
+  ctx: AuditContext,
+  draft: Row,
+): Promise<Row[]> {
+  if (draft.source_table !== "social_channel_drafts" || !draft.source_id) {
+    return [];
+  }
+  const content = (draft.content ?? {}) as Record<string, unknown>;
+  const body = typeof content.body === "string" ? content.body : "";
+  if (!body) throw new Error("承認する本文が空です");
+
+  const updated = await db.update("social_channel_drafts", draft.source_id as string, {
+    status: "approved",
+    approved_body: body,
+    approval_draft_id: draft.id,
+    // 要確認だった場合、誰が理由を確認したかを残す（理由自体は消さない）
+    review_acknowledged_by: ctx.actorId,
+    review_acknowledged_at: new Date().toISOString(),
+  });
+
+  await writeAuditLog(db, ctx, {
+    action: "update",
+    tableName: "social_channel_drafts",
+    recordId: updated.id as string,
+    after: updated,
+    note: `承認した本文を確定（${String(content.channel_key ?? "")}・${body.length}字）`,
+  });
+
+  return [updated];
 }
 
 /** プレゼン構成 / 動画プラン → media_projects.approved_content に確定保存 */
