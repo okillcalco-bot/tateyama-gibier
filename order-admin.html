@@ -216,12 +216,8 @@ th,td{padding:8px 6px;font-size:.8rem}
   <!-- Tab 3: 書類発行 -->
   <div class="tab-content" id="tab-documents">
     <div class="doc-section">
-      <h3>顧客・期間選択</h3>
+      <h3>発送一覧（期間・顧客で絞り込み）</h3>
       <div class="form-row" style="margin-bottom:12px">
-        <div class="form-group">
-          <label>顧客</label>
-          <select id="docCustomer" onchange="loadDocOrders()"><option value="">-- 選択 --</option></select>
-        </div>
         <div class="form-group">
           <label>期間</label>
           <select id="docPeriod" onchange="loadDocOrders()">
@@ -231,16 +227,21 @@ th,td{padding:8px 6px;font-size:.8rem}
             <option value="custom">カスタム</option>
           </select>
         </div>
+        <div class="form-group">
+          <label>顧客（絞り込み）</label>
+          <select id="docCustomer" onchange="loadDocOrders()"><option value="">全ての顧客</option></select>
+        </div>
       </div>
       <div class="form-row" id="docCustomDates" style="display:none;margin-bottom:12px">
         <div class="form-group"><label>開始日</label><input type="date" id="docDateFrom" onchange="loadDocOrders()"></div>
         <div class="form-group"><label>終了日</label><input type="date" id="docDateTo" onchange="loadDocOrders()"></div>
       </div>
+      <div style="font-size:.8rem;color:var(--text2)">発送済みの注文のみ表示。<strong>未発行が上</strong>、書類を発行すると<strong>処理済み</strong>として下がります。</div>
     </div>
     <div class="doc-section">
-      <h3>注文選択</h3>
+      <h3>発送済みの注文（未発行を優先表示）</h3>
       <div style="margin-bottom:8px"><label><input type="checkbox" id="docSelectAll" onchange="toggleDocSelectAll()" style="accent-color:var(--gold)"> 全て選択</label></div>
-      <div class="order-checks" id="docOrderList"><div class="empty">顧客を選択してください</div></div>
+      <div class="order-checks" id="docOrderList"><div class="empty">読み込み中…</div></div>
     </div>
     <div class="doc-section">
       <h3>書類発行</h3>
@@ -435,9 +436,15 @@ async function sb(method,table,body,query=''){
 let allOrders=[], allCustomers=[], allProducts=[], allPriceMaster=[], currentFilter='all', currentOrderSearch='';
 let moCart=[], moSpecies='', docOrders=[];
 const custPage={page:0,size:50};
+let custAdminUnlocked=false; // 顧客管理タブで一度コードを入れたらセッション中は解錠
 const RANK_LABEL={standard:'スタンダード',local:'ローカル',startmember:'スタートメンバー'};
 function rankLabel(r){return RANK_LABEL[r]||'スタンダード';}
 function isAdminOk(){const c=prompt('管理者コードを入力してください');return c==='2468';}
+function ensureCustAdmin(){
+  if(custAdminUnlocked) return true;
+  if(isAdminOk()){custAdminUnlocked=true;return true;}
+  return false;
+}
 
 // ── Init ──
 async function init(){
@@ -477,14 +484,29 @@ function switchTab(tab){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===tab));
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.toggle('active',c.id==='tab-'+tab));
   try{ history.replaceState(null,'', tab==='orders' ? location.pathname : '#'+tab); }catch(e){}
-  if(tab==='documents') populateDocCustomerDropdown();
+  if(tab==='documents'){ populateDocCustomerDropdown(); loadDocOrders(); }
   if(tab==='pricing') renderPricing();
+  if(tab==='customers' && !custAdminUnlocked) ensureCustAdmin();
 }
 
 // ── 価格マスタ（3パターン編集） ──
+const GRADE_ORDER={'並':1,'上':2,'極上':3};
+const SPECIES_ORDER={'イノシシ':1,'シカ':2,'中型獣':3};
 function renderPricing(){
   const s=(document.getElementById('priceSearch')?.value||'').toLowerCase();
-  let rows=allPriceMaster;
+  // 部位ごとの並び順は「上」行のバーコード番号で決める（並/上/極上を隣接させる）
+  const partOrder={};
+  allPriceMaster.forEach(p=>{
+    const k=p.species+'|'+p.part_name;
+    const bc=p.barcode_num?parseInt(p.barcode_num,10):null;
+    if(bc!=null && (partOrder[k]==null||bc<partOrder[k])) partOrder[k]=bc;
+  });
+  const sortKey=p=>[SPECIES_ORDER[p.species]||9, partOrder[p.species+'|'+p.part_name]??999, p.part_name||'', GRADE_ORDER[p.grade]||9];
+  let rows=allPriceMaster.slice().sort((a,b)=>{
+    const ka=sortKey(a),kb=sortKey(b);
+    for(let i=0;i<ka.length;i++){if(ka[i]<kb[i])return -1;if(ka[i]>kb[i])return 1;}
+    return 0;
+  });
   if(s) rows=rows.filter(p=>(p.species||'').toLowerCase().includes(s)||(p.part_name||'').toLowerCase().includes(s));
   document.getElementById('priceBody').innerHTML=rows.map(p=>`<tr>
     <td>${esc(p.species||'')}</td><td>${esc(p.part_name||'')}</td><td style="color:var(--text2)">${esc(p.grade||'')}</td>
@@ -677,44 +699,75 @@ function renderShipping(){
 }
 
 // ── Documents Tab ──
+const SHIP_STATUSES=['発送済','納品完了'];
+const DOC_TYPES=['見積書','納品書','請求書','領収書'];
+let docDocsMap={}; // order_id -> Set(doc_type)
+
+// 発送した顧客だけをドロップダウンに出す
 function populateDocCustomerDropdown(){
   const sel=document.getElementById('docCustomer');
-  if(sel.options.length>1) return;
-  allCustomers.forEach(c=>{const op=document.createElement('option');op.value=c.id;op.textContent=`${c.code} ${c.name}`;sel.appendChild(op)});
+  if(!sel) return;
+  const prev=sel.value;
+  const shippedIds=new Set(allOrders.filter(o=>SHIP_STATUSES.includes(o.status)).map(o=>o.customer_id));
+  const custs=allCustomers.filter(c=>shippedIds.has(c.id)).sort((a,b)=>(a.code||'').localeCompare(b.code||''));
+  sel.innerHTML='<option value="">全ての顧客</option>'+custs.map(c=>`<option value="${c.id}">${esc(c.code||'')} ${esc(c.name||'')}</option>`).join('');
+  if(prev && custs.some(c=>c.id===prev)) sel.value=prev;
 }
 
-async function loadDocOrders(){
-  const custId=document.getElementById('docCustomer').value;
+function docPeriodRange(){
   const period=document.getElementById('docPeriod').value;
   document.getElementById('docCustomDates').style.display=period==='custom'?'grid':'none';
-  if(!custId){document.getElementById('docOrderList').innerHTML='<div class="empty">顧客を選択してください</div>';return}
-  let dateFrom,dateTo;
-  const now=new Date();
+  const now=new Date();let dateFrom,dateTo;
   if(period==='thisMonth'){dateFrom=new Date(now.getFullYear(),now.getMonth(),1);dateTo=new Date(now.getFullYear(),now.getMonth()+1,0)}
   else if(period==='lastMonth'){dateFrom=new Date(now.getFullYear(),now.getMonth()-1,1);dateTo=new Date(now.getFullYear(),now.getMonth(),0)}
   else if(period==='thisYear'){const fy=now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;dateFrom=new Date(fy,3,1);dateTo=new Date(fy+1,2,31)}
-  else{
-    const f=document.getElementById('docDateFrom').value;const t=document.getElementById('docDateTo').value;
-    if(!f||!t) return;
-    dateFrom=new Date(f);dateTo=new Date(t);
-  }
-  const from=fmtDate(dateFrom),to=fmtDate(dateTo);
+  else{const f=document.getElementById('docDateFrom').value,t=document.getElementById('docDateTo').value;if(!f||!t)return null;dateFrom=new Date(f);dateTo=new Date(t)}
+  return {from:fmtDate(dateFrom),to:fmtDate(dateTo)};
+}
+
+async function loadDocOrders(){
+  const el=document.getElementById('docOrderList');
+  if(!el) return;
+  const custId=document.getElementById('docCustomer').value;
+  const range=docPeriodRange();
+  if(!range){el.innerHTML='<div class="empty">期間を指定してください</div>';return}
+  el.innerHTML='<div class="empty">読み込み中…</div>';
   try{
-    docOrders=await sb('GET','orders','',`?customer_id=eq.${custId}&order_date=gte.${from}&order_date=lte.${to}&select=*,order_items(*)&order=order_date.asc`);
+    let q=`?status=in.(${SHIP_STATUSES.join(',')})&order_date=gte.${range.from}&order_date=lte.${range.to}&select=*,order_items(*)&order=order_date.desc`;
+    if(custId) q+=`&customer_id=eq.${custId}`;
+    docOrders=await sb('GET','orders','',q);
+    // 発行済み書類を突き合わせ（order_idごとにどの書類が出ているか）
+    docDocsMap={};
+    const ids=docOrders.map(o=>o.id);
+    if(ids.length){
+      const docs=await sb('GET','documents','',`?order_id=in.(${ids.join(',')})&select=order_id,doc_type`);
+      docs.forEach(d=>{ (docDocsMap[d.order_id]=docDocsMap[d.order_id]||new Set()).add(d.doc_type); });
+    }
     renderDocOrders();
-  }catch(e){console.error(e);document.getElementById('docOrderList').innerHTML='<div class="empty">エラーが発生しました</div>'}
+  }catch(e){console.error(e);el.innerHTML='<div class="empty">エラーが発生しました</div>'}
 }
 
 function renderDocOrders(){
   const el=document.getElementById('docOrderList');
-  if(!docOrders.length){el.innerHTML='<div class="empty">該当する注文がありません</div>';return}
-  el.innerHTML=docOrders.map(o=>{
+  if(!docOrders.length){el.innerHTML='<div class="empty">該当する発送はありません</div>';return}
+  // 未発行（発行書類ゼロ）を上に、次に発行数の少ない順、同点は新しい発送順
+  const sorted=docOrders.slice().sort((a,b)=>{
+    const na=(docDocsMap[a.id]||new Set()).size, nb=(docDocsMap[b.id]||new Set()).size;
+    if(na!==nb) return na-nb;
+    return (b.order_date||'').localeCompare(a.order_date||'');
+  });
+  el.innerHTML=sorted.map(o=>{
     const items=(o.order_items||[]).map(i=>`${i.species||''} ${i.part_name||''}`).join(', ');
-    return `<div class="order-check-item">
+    const issued=docDocsMap[o.id]||new Set();
+    const badges=issued.size
+      ? DOC_TYPES.filter(t=>issued.has(t)).map(t=>`<span style="display:inline-block;background:rgba(90,150,110,.18);color:#3f7d54;border-radius:4px;padding:1px 6px;font-size:.72rem;margin-right:4px">✓${t.replace('書','')}</span>`).join('')
+      : `<span style="display:inline-block;background:rgba(200,90,90,.15);color:#b04a4a;border-radius:4px;padding:1px 6px;font-size:.72rem;font-weight:700">未発行</span>`;
+    return `<div class="order-check-item" style="${issued.size?'opacity:.72':''}">
       <input type="checkbox" data-oid="${o.id}">
       <div>
-        <strong>${esc(o.order_code||'')}</strong> | ${o.order_date||''} | &yen;${Number(o.total_amount||0).toLocaleString()}<br>
-        <span style="font-size:.8rem;color:var(--text2)">${esc(items)}</span>
+        <strong>${esc(o.customer_name||'')}</strong> <span style="color:var(--text2);font-size:.8rem">${esc(o.order_code||'')}</span> | ${o.order_date||''} | &yen;${Number(o.total_amount||0).toLocaleString()}<br>
+        <span style="font-size:.8rem;color:var(--text2)">${esc(items)}</span><br>
+        <div style="margin-top:3px">${badges}</div>
       </div>
     </div>`}).join('');
 }
@@ -733,7 +786,10 @@ function getSelectedDocOrders(){
 async function generateDoc(type){
   const selected=getSelectedDocOrders();
   if(!selected.length){alert('注文を選択してください');return}
-  const custId=document.getElementById('docCustomer').value;
+  // 選択注文は同一顧客のみ（合算書類は顧客ごと）
+  const custIds=[...new Set(selected.map(o=>o.customer_id))];
+  if(custIds.length>1){alert('複数の顧客の注文が選択されています。書類は顧客ごとに発行してください。');return}
+  const custId=custIds[0];
   const cust=allCustomers.find(c=>c.id===custId);
   if(!cust){alert('顧客が見つかりません');return}
   const now=new Date();
@@ -787,11 +843,16 @@ async function generateDoc(type){
   document.getElementById('docPreviewContent').innerHTML=html;
   openModal('docPreview');
   try{
-    await sb('POST','documents',[{
+    // 選択した各注文を処理済みとして記録（同一書類番号を共有）
+    const rows=selected.map((o,idx)=>({
       doc_type:type,doc_number:docNum,customer_id:custId,
-      order_id:selected[0].id,issue_date:fmtDate(now),
-      total_amount:total,tax_amount:tax,status:'発行済'
-    }]);
+      order_id:o.id,issue_date:fmtDate(now),
+      total_amount:idx===0?total:0,tax_amount:idx===0?tax:0,status:'発行済'
+    }));
+    await sb('POST','documents',rows);
+    // 一覧を更新（発行済みは下がる）
+    selected.forEach(o=>{(docDocsMap[o.id]=docDocsMap[o.id]||new Set()).add(type);});
+    renderDocOrders();
   }catch(e){console.error('書類保存エラー:',e)}
 }
 
@@ -906,8 +967,8 @@ async function saveCustomer(){
 
 async function deleteCustomer(id){
   const c=allCustomers.find(x=>x.id===id); if(!c) return;
+  if(!ensureCustAdmin()){alert('管理者コードが違います');return}
   if(!confirm(`顧客「${c.name}」を削除しますか？\nこの操作は元に戻せません。`)) return;
-  if(!isAdminOk()){alert('管理者コードが違います');return}
   try{
     await sb('DELETE','customers','',`?id=eq.${id}`);
     closeModal('custModal');
