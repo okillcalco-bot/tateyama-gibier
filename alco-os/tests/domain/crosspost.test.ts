@@ -793,6 +793,12 @@ describe("レビュー指摘の修正（2巡目）", () => {
     expect(sql).toContain("<@");
   });
 
+  it("3-1: ai_body の説明が実装（再生成で置き換わる）と合っている", async () => {
+    const sql = await readSql();
+    expect(sql).not.toContain("ai_body=AIの元出力（不変）");
+    expect(sql).toContain("ai_body=直近のAI出力（再生成すると置き換わる");
+  });
+
   it("2-3: 本番の承認経路が1つであることを文書に書いてある", async () => {
     const { readFileSync } = await import("node:fs");
     const path = await import("node:path");

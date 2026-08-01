@@ -267,9 +267,24 @@ declare approver boolean;
 begin
   approver := coalesce(can_approve(), false);
 
-  -- 承認・却下・投稿済みへの遷移、承認まわりの列の操作は owner/manager のみ
+  -- 識別のための列は後から変えられない。
+  -- （承認済みの行の元投稿・媒体を差し替えると、承認の証跡が
+  --   別の投稿・別の媒体に付け替えられたのと同じことになる）
+  if new.organization_id is distinct from old.organization_id
+     or new.social_source_id is distinct from old.social_source_id
+     or new.channel_key is distinct from old.channel_key
+     or new.created_by is distinct from old.created_by
+  then
+    raise exception '下書きの組織・元投稿・媒体・作成者は後から変えられません（新しい下書きを作ってください）';
+  end if;
+
+  -- 承認・却下・投稿済みへの遷移、**および承認済みからの引き戻し**、
+  -- 承認まわりの列の操作は owner/manager のみ。
+  -- 変更前・変更後の**どちらか**が承認系の状態なら承認権限を要る形にして、
+  -- approved → editing / published → draft のような逆方向も塞ぐ。
   if (new.status is distinct from old.status
-        and new.status in ('approved', 'rejected', 'queued', 'published'))
+        and (new.status in ('approved', 'rejected', 'queued', 'published')
+             or old.status in ('approved', 'rejected', 'queued', 'published')))
      or (new.approved_body is distinct from old.approved_body)
      or (new.approval_draft_id is distinct from old.approval_draft_id)
      or (new.approved_by is distinct from old.approved_by)
@@ -278,7 +293,7 @@ begin
      or (new.review_acknowledged_at is distinct from old.review_acknowledged_at)
   then
     if not approver then
-      raise exception '承認・却下には承認権限（owner / manager）が必要です';
+      raise exception '承認・却下・差し戻しには承認権限（owner / manager）が必要です';
     end if;
   end if;
 
@@ -670,5 +685,5 @@ where not exists (
 );
 
 comment on table social_sources is 'FB投稿の一次原稿。横展開の起点（0029）';
-comment on table social_channel_drafts is '媒体ごとの下書き。ai_body=AIの元出力（不変）/ edited_body=人の修正 / approved_body=承認時に固定した本文（0029）';
-comment on function alco_social_enforce_approval() is '承認・却下・確認済みの操作を owner/manager に限定し、承認者と日時をサーバー側で決める（0029）';
+comment on table social_channel_drafts is '媒体ごとの下書き。ai_body=直近のAI出力（再生成すると置き換わる。過去のAI出力は generated_drafts(crosspost_ai_output) に残る）/ edited_body=人の修正 / approved_body=承認時に固定した本文（不変）（0029）';
+comment on function alco_social_enforce_approval() is '承認・却下・差し戻しの操作を owner/manager に限定し、承認者と日時をサーバー側で決める。識別列（組織・元投稿・媒体・作成者）は変更不可（0029）';
