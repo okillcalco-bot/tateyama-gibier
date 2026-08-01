@@ -491,7 +491,7 @@ async function loadPriceTable(){
     let rows=[];
     try{ rows=await sb('GET','customer_prices',null,'?customer_id=eq.'+customer.id+'&select=part_name,unit_price,species&order=species,part_name'); }catch(e){}
     if(!rows||!rows.length){
-      rows=await sb('GET','price_master',null,'?grade=eq.'+encodeURIComponent(customer.price_rank||'standard')+'&barcode_num=not.is.null&select=species,part_name,price_standard,price_premium,price_wholesale&order=species,part_name');
+      rows=await sb('GET','price_master',null,'?grade=eq.上&barcode_num=not.is.null&select=species,part_name,price_standard,price_local,price_startmember,price_premium,price_wholesale&order=species.asc,part_name.asc');
       const rank=customer.price_rank||'standard';
       rows=rows.map(r=>({species:r.species,part_name:r.part_name,unit_price:r['price_'+rank]||r.price_standard}));
     }
