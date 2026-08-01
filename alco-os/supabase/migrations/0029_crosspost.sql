@@ -267,15 +267,31 @@ declare approver boolean;
 begin
   approver := coalesce(can_approve(), false);
 
-  -- 承認・却下・投稿済みへの遷移、確認済みフラグの操作は owner/manager のみ
+  -- 承認・却下・投稿済みへの遷移、承認まわりの列の操作は owner/manager のみ
   if (new.status is distinct from old.status
         and new.status in ('approved', 'rejected', 'queued', 'published'))
      or (new.approved_body is distinct from old.approved_body)
+     or (new.approval_draft_id is distinct from old.approval_draft_id)
+     or (new.approved_by is distinct from old.approved_by)
+     or (new.approved_at is distinct from old.approved_at)
      or (new.review_acknowledged_by is distinct from old.review_acknowledged_by)
      or (new.review_acknowledged_at is distinct from old.review_acknowledged_at)
   then
     if not approver then
       raise exception '承認・却下には承認権限（owner / manager）が必要です';
+    end if;
+  end if;
+
+  -- 承認証跡のIDは、承認・差し戻し以外で書き換えさせない
+  if new.approval_draft_id is distinct from old.approval_draft_id then
+    if not (
+      -- 承認したとき（新しい証跡を結ぶ）
+      (new.status = 'approved' and old.status is distinct from 'approved')
+      -- 差し戻したとき（証跡との結びを外す）
+      or (new.approval_draft_id is null
+          and new.status in ('draft', 'editing', 'needs_review', 'not_generated'))
+    ) then
+      raise exception '承認の証跡は付け替えられません';
     end if;
   end if;
 
@@ -302,10 +318,13 @@ begin
     end if;
   end if;
 
-  -- センシティブ判定の理由は消させない（追記のみ）
-  if array_length(old.review_reasons, 1) is not null
-     and array_length(new.review_reasons, 1) is null then
-    new.review_reasons := old.review_reasons;
+  -- センシティブ判定の理由は**追記のみ**。
+  -- 空にするのはもちろん、別の内容へ差し替えることもできない。
+  -- （古い要素がすべて残っているときだけ、新しい配列を受け入れる）
+  if old.review_reasons is distinct from new.review_reasons then
+    if not (coalesce(old.review_reasons, '{}') <@ coalesce(new.review_reasons, '{}')) then
+      raise exception '確認が必要な理由は消したり書き換えたりできません（追記のみ）';
+    end if;
   end if;
 
   return new;
@@ -405,6 +424,87 @@ begin
   return v_draft;
 end;
 $$;
+
+/*
+ * 投稿済みの登録を1つのトランザクションで行う。
+ *
+ * 履歴のINSERTだけ成功して下書きの状態更新が失敗すると、
+ * unique制約で再登録できず、履歴はRLSで更新も削除もできないため復旧が難しい。
+ * 関数の中はひとつのトランザクションなので、全部成功か全部失敗になる。
+ */
+create or replace function alco_crosspost_record_publication(
+  p_draft_id uuid,
+  p_posted_url text default null,
+  p_posted_at timestamptz default null
+)
+returns social_publications
+language plpgsql security definer set search_path = public as $$
+declare
+  v_draft social_channel_drafts;
+  v_pub social_publications;
+  v_org uuid;
+  v_actor uuid;
+begin
+  if not coalesce(can_approve(), false) then
+    raise exception '投稿済みの登録には承認権限（owner / manager）が必要です';
+  end if;
+
+  v_org := current_organization_id();
+  v_actor := auth.uid();
+
+  select * into v_draft from social_channel_drafts where id = p_draft_id for update;
+  if v_draft.id is null then
+    raise exception '下書きが見つかりません';
+  end if;
+  if v_draft.organization_id <> v_org then
+    raise exception '他の組織の下書きは登録できません';
+  end if;
+
+  -- 誤操作の二重登録を先に弾く（1回目で published になるため、状態確認より先に見る）
+  if exists (
+    select 1 from social_publications
+    where social_source_id = v_draft.social_source_id
+      and channel_key = v_draft.channel_key
+      and result = 'success'
+  ) then
+    raise exception 'この媒体はすでに投稿済みとして登録されています';
+  end if;
+
+  if v_draft.status not in ('approved', 'queued') then
+    raise exception '承認していない下書きは投稿済みにできません';
+  end if;
+  if coalesce(length(btrim(v_draft.approved_body)), 0) = 0 then
+    raise exception '承認した本文がありません';
+  end if;
+
+  insert into social_publications (
+    organization_id, social_source_id, social_channel_draft_id, channel_key,
+    final_body, posted_url, posted_at, result, publisher,
+    approved_by, approved_at, posted_by, created_by
+  ) values (
+    v_org, v_draft.social_source_id, p_draft_id, v_draft.channel_key,
+    v_draft.approved_body, nullif(btrim(coalesce(p_posted_url, '')), ''),
+    coalesce(p_posted_at, now()), 'success', 'manual',
+    v_draft.approved_by, v_draft.approved_at, v_actor, v_actor
+  ) returning * into v_pub;
+
+  update social_channel_drafts set status = 'published' where id = p_draft_id;
+
+  insert into audit_logs (organization_id, actor_id, action, table_name, record_id, after, note)
+  values (
+    v_org, v_actor, 'insert', 'social_publications', v_pub.id,
+    to_jsonb(v_pub), v_draft.channel_key || ' を投稿済みとして登録'
+  );
+
+  return v_pub;
+end;
+$$;
+
+comment on function alco_crosspost_record_publication(uuid, text, timestamptz) is
+  '投稿済みの登録を1トランザクションで行う（重複確認・履歴作成・下書きの状態更新・監査ログ）。0029';
+
+revoke all on function alco_crosspost_record_publication(uuid, text, timestamptz) from public;
+grant execute on function alco_crosspost_record_publication(uuid, text, timestamptz) to authenticated;
 
 comment on function alco_crosspost_approve(uuid, text, boolean) is
   '媒体別の承認を1トランザクションで行う（スナップショット作成・本文確定・状態更新・監査ログ）。0029';

@@ -19,10 +19,30 @@ export interface RecordPublicationInput {
   publisher?: string;
 }
 
+/**
+ * 投稿済みの登録を1トランザクションで行う関数（0029 の
+ * alco_crosspost_record_publication）。本番はこれを通す。
+ */
+export type RecordPublicationRpc = (params: {
+  draftId: string;
+  postedUrl: string | null;
+  postedAt: string | null;
+}) => Promise<Row>;
+
+/**
+ * 投稿済みとして登録する。
+ *
+ * 履歴の作成・下書きの状態更新・監査ログは**1トランザクション**で行う
+ * （履歴だけ残って状態が変わらないと、unique制約で再登録できず
+ *   履歴はRLSで更新も削除もできないため復旧が難しい）。
+ *
+ * rpc が渡されない場合（テストなど）は逐次処理にフォールバックする。
+ */
 export async function recordPublication(
   db: DbPort,
   ctx: AuditContext,
   input: RecordPublicationInput,
+  rpc?: RecordPublicationRpc,
 ): Promise<Row> {
   const draft = await db.findById("social_channel_drafts", input.draftId);
   if (!draft) throw new Error("下書きが見つかりません");
@@ -37,6 +57,16 @@ export async function recordPublication(
 
   const channelKey = String(draft.channel_key);
 
+  // ── 本番経路：DB関数で一体化 ──
+  if (rpc) {
+    return rpc({
+      draftId: input.draftId,
+      postedUrl: (input.postedUrl ?? "").trim() || null,
+      postedAt: input.postedAt ?? null,
+    });
+  }
+
+  // ── フォールバック（テスト用の逐次処理） ──
   // 誤操作の二重登録を先に弾く（Phase 1 は再投稿を扱わない）。
   // 状態チェックより先に見るのは、1回目の登録で status が published になり、
   // 2回目に「承認していない」という分かりにくい理由が出てしまうため。

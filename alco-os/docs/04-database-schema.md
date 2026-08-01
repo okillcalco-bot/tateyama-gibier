@@ -45,7 +45,7 @@
 
 | 0028_staff_notify_groups.sql | 搬入連絡のスタッフグループ通知: line_staff_groups（グループID・通知ON/OFF・状態 pending/active/disabled/left・通知回数） |
 
-| 0029_crosspost.sql | FB投稿 横展開（Phase 1）: social_sources / social_source_assets / social_channels / social_style_profiles / social_channel_drafts / social_publications。**制限が要るテーブルは alco_add_member_policy を使わず用途別ポリシー**（RLSはOR条件のため）、承認をまとめて行う `alco_crosspost_approve()`、承認INSERTの抜け道を塞ぐトリガー、下書きの組織・元投稿・媒体の一致検証、媒体8件とスタイルv1のseed |
+| 0029_crosspost.sql | FB投稿 横展開（Phase 1）: social_sources / social_source_assets / social_channels / social_style_profiles / social_channel_drafts / social_publications。**制限が要るテーブルは alco_add_member_policy を使わず用途別ポリシー**（RLSはOR条件のため）、承認をまとめて行う `alco_crosspost_approve()`（**唯一の本番承認経路**。generated_draftsへの承認証跡・業務反映・監査ログを同一トランザクションで記録）、投稿済み登録をまとめて行う `alco_crosspost_record_publication()`（同じく唯一の本番経路）、承認INSERTの抜け道を塞ぐトリガー、承認列と確認理由の改ざん防止（approval_draft_id の付け替え禁止・review_reasons は追記のみ）、下書きの組織・元投稿・媒体の一致検証、媒体8件とスタイルv1のseed |
 
 **適用状況**: 0001〜0020 は本番 Supabase プロジェクト（tateyama-gibier /
 clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（0001〜0011: 2026-07-05、

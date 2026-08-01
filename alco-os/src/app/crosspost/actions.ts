@@ -261,11 +261,27 @@ export async function recordPublishedAction(formData: FormData): Promise<ActionR
   return runAction(async () => {
     const { supabase, ctx } = await requireApprover();
     const sourceId = String(formData.get("source_id") ?? "");
-    await recordPublication(new SupabaseDb(supabase), ctx, {
-      sourceId,
-      draftId: String(formData.get("draft_id") ?? ""),
-      postedUrl: String(formData.get("posted_url") ?? ""),
-    });
+    await recordPublication(
+      new SupabaseDb(supabase),
+      ctx,
+      {
+        sourceId,
+        draftId: String(formData.get("draft_id") ?? ""),
+        postedUrl: String(formData.get("posted_url") ?? ""),
+      },
+      // 投稿済み登録も1トランザクションで行う（0029 の RPC）
+      async ({ draftId, postedUrl, postedAt }) => {
+        const { data, error } = await supabase.rpc("alco_crosspost_record_publication", {
+          p_draft_id: draftId,
+          p_posted_url: postedUrl,
+          p_posted_at: postedAt,
+        });
+        if (error) throw new Error(error.message);
+        const row = Array.isArray(data) ? data[0] : data;
+        if (!row) throw new Error("投稿済みの登録に失敗しました");
+        return row as Record<string, unknown>;
+      },
+    );
     revalidatePath(`/crosspost/${sourceId}`);
   });
 }

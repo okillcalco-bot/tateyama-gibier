@@ -677,3 +677,130 @@ describe("レビュー指摘の修正", () => {
     expect((db.tables.get("audit_logs") ?? []).length).toBeGreaterThan(0);
   });
 });
+
+describe("レビュー指摘の修正（2巡目）", () => {
+  let db: InMemoryDb;
+  let sourceId: string;
+
+  async function readSql() {
+    const { readFileSync } = await import("node:fs");
+    const path = await import("node:path");
+    return readFileSync(
+      path.join(process.cwd(), "supabase", "migrations", "0029_crosspost.sql"),
+      "utf8",
+    );
+  }
+
+  beforeEach(async () => {
+    db = new InMemoryDb();
+    sourceId = await seedSource(db);
+  });
+
+  async function approvedDraft() {
+    const [row] = await saveGeneratedDrafts(db, ctx, {
+      sourceId,
+      aiGeneratedDraftId: "ai-1",
+      drafts: [draft()],
+      specs: SPECS,
+      sourceBody: SOURCE_BODY,
+      hasPersonPhoto: false,
+      needsPublicCheck: false,
+      aiFlags: [],
+      styleProfileId: null,
+      styleVersion: null,
+    });
+    await approveChannelDraft(db, ctx, {
+      draftId: row.id as string,
+      acknowledgeReasons: true,
+    });
+    return row;
+  }
+
+  it("2-1: 投稿済み登録を1トランザクションで行う関数がある", async () => {
+    const sql = await readSql();
+    expect(sql).toContain("create or replace function alco_crosspost_record_publication");
+    // 履歴 → 下書きの状態 → 監査ログ を1つの関数の中で行う
+    expect(sql).toContain("insert into social_publications");
+    expect(sql).toContain("'published'");
+    expect(sql).toContain("を投稿済みとして登録");
+    // 権限も関数内で確かめる
+    expect(sql).toContain(
+      "投稿済みの登録には承認権限（owner / manager）が必要です",
+    );
+    // 同時押しに備えて行を押さえる
+    expect(sql).toContain("for update");
+  });
+
+  it("2-1: rpc を渡すと逐次処理をせずそちらを使う", async () => {
+    const row = await approvedDraft();
+    const before = (db.tables.get("social_publications") ?? []).length;
+
+    let called: { draftId: string; postedUrl: string | null; postedAt: string | null } | null =
+      null;
+    const result = await recordPublication(
+      db,
+      ctx,
+      { sourceId, draftId: row.id as string, postedUrl: " https://example.com/p/1 " },
+      async (params) => {
+        called = params;
+        return { id: "pub-1", social_channel_draft_id: params.draftId, result: "success" };
+      },
+    );
+
+    expect(called).not.toBeNull();
+    expect(called!.postedUrl).toBe("https://example.com/p/1");
+    expect(result.id).toBe("pub-1");
+    // 逐次処理は動いていない（履歴が増えていない）
+    expect((db.tables.get("social_publications") ?? []).length).toBe(before);
+  });
+
+  it("2-1: rpc を渡しても組織・元投稿の食い違いは手前で弾く", async () => {
+    const row = await approvedDraft();
+    const other = await db.insert("social_sources", {
+      organization_id: ORG,
+      body: SOURCE_BODY,
+      status: "draft",
+    });
+
+    await expect(
+      recordPublication(
+        db,
+        ctx,
+        { sourceId: other.id as string, draftId: row.id as string },
+        async () => ({ id: "pub-x" }),
+      ),
+    ).rejects.toThrow(/別の元投稿/);
+  });
+
+  it("2-2: 承認の証跡列も承認権限がないと変えられない", async () => {
+    const sql = await readSql();
+    expect(sql).toContain("new.approval_draft_id is distinct from old.approval_draft_id");
+    expect(sql).toContain("new.approved_by is distinct from old.approved_by");
+    expect(sql).toContain("new.approved_at is distinct from old.approved_at");
+  });
+
+  it("2-2: 承認の証跡は付け替えられない", async () => {
+    const sql = await readSql();
+    expect(sql).toContain("承認の証跡は付け替えられません");
+  });
+
+  it("2-2: 確認が必要な理由は追記しかできない", async () => {
+    const sql = await readSql();
+    expect(sql).toContain(
+      "確認が必要な理由は消したり書き換えたりできません（追記のみ）",
+    );
+    // 配列の包含で「消していない」ことを確かめる
+    expect(sql).toContain("<@");
+  });
+
+  it("2-3: 本番の承認経路が1つであることを文書に書いてある", async () => {
+    const { readFileSync } = await import("node:fs");
+    const path = await import("node:path");
+    const docs = readFileSync(
+      path.join(process.cwd(), "docs", "05-ai-workflows.md"),
+      "utf8",
+    );
+    expect(docs).toContain("`alco_crosspost_approve()` を唯一の本番承認経路とする");
+    expect(docs).toContain("テスト用フォールバックは本番コードから呼べない");
+  });
+});

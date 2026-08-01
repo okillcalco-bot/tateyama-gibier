@@ -38,6 +38,18 @@ FB横展開（0029）は AI を2段階で呼ぶ。事実整理を1回だけ実�
 センシティブ判定は `domain/social/crosspost/sensitive.ts` の辞書が最終権限で、
 AIが「問題なし」と言っても辞書に当たれば要確認になる。
 
+**Crosspostの承認は `alco_crosspost_approve()` を唯一の本番承認経路とする。**
+`generated_drafts` への承認証跡、業務反映（`social_channel_drafts` の
+`approved_body` / `approved_at` / `approved_by` / `approval_draft_id`）、監査ログを
+**同一トランザクション**で記録する。同様に、投稿済みの登録は
+`alco_crosspost_record_publication()` が唯一の本番経路で、投稿履歴・下書きの状態・
+監査ログを同一トランザクションで記録する。
+
+`draft-service.ts` / `publication-service.ts` の逐次処理は
+**テスト用フォールバック**であり、`rpc` 引数を渡さなかった場合にだけ動く。
+本番コード（`src/app/crosspost/actions.ts`）は常に `rpc` を渡すため、
+**テスト用フォールバックは本番コードから呼べない**。
+
 共有ボードのタグ付けは AI ではなく辞書ベース（domain/board/board-service の
 TAG_RULES）。AI提案タグを足す場合も必ずドラフト承認フローを通すこと。
 
