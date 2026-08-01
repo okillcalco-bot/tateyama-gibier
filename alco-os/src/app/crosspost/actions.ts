@@ -13,7 +13,11 @@ import {
 import { getProvider } from "@/ai/model-router";
 import { analyzeCrosspostSource } from "@/ai/workflows/analyze-crosspost-source";
 import { generateCrosspostDrafts } from "@/ai/workflows/generate-crosspost-drafts";
-import { createSource, attachAsset } from "@/domain/social/crosspost/source-service";
+import {
+  createSource,
+  attachAsset,
+  setAssetFlags,
+} from "@/domain/social/crosspost/source-service";
 import {
   generateDraftsForSource,
   type GenerationResult,
@@ -35,6 +39,10 @@ import { saveStyleVersion } from "@/domain/social/crosspost/style-service";
  * - owner / manager … 承認、却下、差し戻し、投稿済み登録、スタイル変更
  *   （DB側のトリガーとポリシーでも強制。ここは二重チェック）
  */
+
+/** 登録できるファイルの種類と大きさ */
+const ALLOWED_UPLOAD_TYPES = ["image/", "video/"];
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 async function requireUser() {
   const supabase = await createSupabaseServerClient();
@@ -69,15 +77,32 @@ export async function createSourceAction(
       note: String(formData.get("note") ?? ""),
     });
 
-    // 写真（複数可）
+    // 写真・動画（複数可）。種類と大きさを確かめ、失敗は黙って捨てずに知らせる
     const files = formData.getAll("photos").filter((f): f is File => f instanceof File);
-    for (const file of files) {
+    for (const [index, file] of files.entries()) {
       if (!file.size) continue;
-      const path = `crosspost/${source.id}/${Date.now()}-${encodeURIComponent(file.name)}`;
+
+      if (!ALLOWED_UPLOAD_TYPES.some((prefix) => file.type.startsWith(prefix))) {
+        warnings.push(`${file.name}: 画像か動画だけ登録できます（${file.type || "種類不明"}）`);
+        continue;
+      }
+      if (file.size > MAX_UPLOAD_BYTES) {
+        warnings.push(
+          `${file.name}: 大きすぎます（${Math.round(file.size / 1024 / 1024)}MB / 上限${
+            MAX_UPLOAD_BYTES / 1024 / 1024
+          }MB）`,
+        );
+        continue;
+      }
+
+      const path = `crosspost/${source.id}/${Date.now()}-${index}-${encodeURIComponent(file.name)}`;
       const { error } = await supabase.storage
         .from("alco-os")
         .upload(path, file, { contentType: file.type, upsert: false });
-      if (error) continue;
+      if (error) {
+        warnings.push(`${file.name}: アップロードできませんでした（${error.message}）`);
+        continue;
+      }
 
       const saved = await db.insert("files", {
         organization_id: ctx.organizationId,
@@ -184,11 +209,27 @@ export async function editDraftAction(formData: FormData): Promise<ActionResult>
 export async function approveDraftAction(formData: FormData): Promise<ActionResult> {
   return runAction(async () => {
     const { supabase, ctx } = await requireApprover();
-    await approveChannelDraft(new SupabaseDb(supabase), ctx, {
-      draftId: String(formData.get("draft_id") ?? ""),
-      // 要確認の理由を読んだうえで押すボタン（二段階にしない）
-      acknowledgeReasons: formData.get("acknowledge") === "on",
-    });
+    await approveChannelDraft(
+      new SupabaseDb(supabase),
+      ctx,
+      {
+        draftId: String(formData.get("draft_id") ?? ""),
+        // 要確認の理由を読んだうえで押すボタン（二段階にしない）
+        acknowledgeReasons: formData.get("acknowledge") === "on",
+      },
+      // 承認は1トランザクションで行う（0029 の alco_crosspost_approve）
+      async ({ draftId, finalBody, acknowledge }) => {
+        const { data, error } = await supabase.rpc("alco_crosspost_approve", {
+          p_draft_id: draftId,
+          p_final_body: finalBody,
+          p_acknowledge: acknowledge,
+        });
+        if (error) throw new Error(error.message);
+        const row = Array.isArray(data) ? data[0] : data;
+        if (!row) throw new Error("承認に失敗しました");
+        return row as Record<string, unknown>;
+      },
+    );
     revalidatePath(`/crosspost/${String(formData.get("source_id") ?? "")}`);
   });
 }
@@ -259,5 +300,19 @@ export async function toggleChannelAction(formData: FormData): Promise<ActionRes
       note: `媒体を${enabled ? "有効" : "非表示"}にした`,
     });
     revalidatePath("/crosspost/settings");
+  });
+}
+
+/** 写真ごとの確認フラグを直す（登録時の一括指定を後から個別に直せるように） */
+export async function setAssetFlagsAction(formData: FormData): Promise<ActionResult> {
+  return runAction(async () => {
+    const { supabase, ctx } = await requireUser();
+    await setAssetFlags(new SupabaseDb(supabase), ctx, {
+      assetId: String(formData.get("asset_id") ?? ""),
+      hasPerson: formData.get("has_person") === "on",
+      needsPublicCheck: formData.get("needs_public_check") === "on",
+      caption: String(formData.get("caption") ?? ""),
+    });
+    revalidatePath(`/crosspost/${String(formData.get("source_id") ?? "")}`);
   });
 }

@@ -244,8 +244,10 @@ export default function ManualPage() {
             理由は承認後も記録に残ります。
           </p>
           <p className={HINT}>
-            AIが最初に作った文章と、人が承認した文章は<strong>別々に保存されます</strong>。
+            AIが作った文章と、人が承認した文章は<strong>別々に保存されます</strong>。
             あとから「AIが何を書いて、どこを直したか」を確認できます。
+            作り直すと画面のAI文章は新しいものに変わりますが、
+            前のAI出力も承認センターの記録として残ります。
           </p>
         </Section>
 

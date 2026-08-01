@@ -210,19 +210,35 @@ export interface ApproveChannelInput {
 }
 
 /**
+ * 承認を1トランザクションで行う関数（0029 の alco_crosspost_approve）。
+ * 本番はこれを通す。渡されなかった場合だけ、下の逐次処理にフォールバックする。
+ */
+export type ApproveRpc = (params: {
+  draftId: string;
+  finalBody: string;
+  acknowledge: boolean;
+}) => Promise<Row>;
+
+/**
  * 媒体ごとの承認。
  *
  * 1. その瞬間の本文（edited_body ?? ai_body）を固定
  * 2. 固定した本文で generated_drafts(crosspost_approval) を1件作る
- * 3. approveDraft() に通す（監査ログ・承認者・承認日時はここで付く）
- * 4. applyDraft() が social_channel_drafts に approved_body を書く
+ * 3. social_channel_drafts に approved_body として反映
+ * 4. 監査ログを残す
  *
- * 失敗した場合、承認は成立しない（「承認だけ通って本文が入らない」向きには壊れない）。
+ * **1〜4は1トランザクションで行う**（DBの alco_crosspost_approve）。
+ * 途中で失敗すると全部取り消されるので、
+ * 「承認ドラフトだけ残る」「本文だけ承認済みになる」状態は起きない。
+ *
+ * rpc が渡されない場合（テストなど）は逐次処理にフォールバックする。
+ * このときも approveDraft() の順序により、失敗時は承認が成立しない側に倒れる。
  */
 export async function approveChannelDraft(
   db: DbPort,
   ctx: AuditContext,
   input: ApproveChannelInput,
+  rpc?: ApproveRpc,
 ): Promise<{ draft: Row; approvalDraftId: string }> {
   const draft = await db.findById("social_channel_drafts", input.draftId);
   if (!draft) throw new Error("下書きが見つかりません");
@@ -241,9 +257,22 @@ export async function approveChannelDraft(
   const finalBody = resolveFinalBody(draft);
   if (!finalBody) throw new Error("本文が空です");
 
+  // ── 本番経路：DB関数で一体化 ──
+  if (rpc) {
+    const updated = await rpc({
+      draftId: input.draftId,
+      finalBody,
+      acknowledge: input.acknowledgeReasons === true,
+    });
+    return {
+      draft: updated,
+      approvalDraftId: String(updated.approval_draft_id ?? ""),
+    };
+  }
+
+  // ── フォールバック（テスト用の逐次処理） ──
   const now = (input.now ?? new Date()).toISOString();
 
-  // 承認スナップショット（この内容で承認したという証跡）
   const approvalDraft = await db.insert("generated_drafts", {
     organization_id: ctx.organizationId,
     draft_type: "crosspost_approval",
@@ -258,7 +287,6 @@ export async function approveChannelDraft(
       cta: draft.cta ?? null,
       link_guidance: draft.link_guidance ?? null,
       photo_order: draft.photo_order ?? [],
-      // 承認時点で残っていた要確認の理由も一緒に固定する
       review_reasons: reasons,
       snapshot_at: now,
     },

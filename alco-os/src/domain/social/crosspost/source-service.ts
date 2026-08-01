@@ -184,3 +184,41 @@ export function summarizeAssetFlags(assets: Row[]): {
     ),
   };
 }
+
+/** 写真ごとの「人物あり」「公開確認が必要」を職員が直す */
+export async function setAssetFlags(
+  db: DbPort,
+  ctx: AuditContext,
+  params: {
+    assetId: string;
+    hasPerson: boolean;
+    needsPublicCheck: boolean;
+    caption?: string | null;
+  },
+): Promise<Row> {
+  const before = await db.findById("social_source_assets", params.assetId);
+  if (!before) throw new Error("写真が見つかりません");
+  if (before.organization_id !== ctx.organizationId) {
+    throw new Error("他の組織の写真は変更できません");
+  }
+
+  const after = await db.update("social_source_assets", params.assetId, {
+    has_person: params.hasPerson,
+    needs_public_check: params.needsPublicCheck,
+    caption:
+      params.caption === undefined ? (before.caption ?? null) : (params.caption ?? "").trim() || null,
+  });
+
+  await writeAuditLog(db, ctx, {
+    action: "update",
+    tableName: "social_source_assets",
+    recordId: params.assetId,
+    before,
+    after,
+    note: `写真の確認フラグを更新（人物 ${params.hasPerson ? "あり" : "なし"} / 公開確認 ${
+      params.needsPublicCheck ? "必要" : "不要"
+    }）`,
+  });
+
+  return after;
+}

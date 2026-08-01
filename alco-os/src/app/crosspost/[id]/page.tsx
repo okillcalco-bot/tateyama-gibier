@@ -12,7 +12,7 @@ import {
   type DraftStatus,
 } from "@/domain/social/crosspost/channels";
 import { resolveFinalBody } from "@/domain/social/crosspost/draft-service";
-import { ChannelDraftForm, GenerateButton } from "../crosspost-forms";
+import { AssetFlagsForm, ChannelDraftForm, GenerateButton } from "../crosspost-forms";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +59,7 @@ export default async function CrosspostDetailPage({ params }: PageProps) {
     .maybeSingle();
   if (!source) notFound();
 
-  const [{ data: drafts }, { data: publications }, specs] = await Promise.all([
+  const [{ data: drafts }, { data: publications }, specs, { data: assets }] = await Promise.all([
     supabase
       .from("social_channel_drafts")
       .select(
@@ -72,6 +72,11 @@ export default async function CrosspostDetailPage({ params }: PageProps) {
       .eq("social_source_id", id)
       .order("created_at", { ascending: false }),
     loadChannelSpecs(new SupabaseDb(supabase), user.organizationId, { onlyEnabled: false }),
+    supabase
+      .from("social_source_assets")
+      .select("id, caption, has_person, needs_public_check, sort_order")
+      .eq("social_source_id", id)
+      .order("sort_order"),
   ]);
 
   const draftByChannel = new Map(
@@ -108,6 +113,37 @@ export default async function CrosspostDetailPage({ params }: PageProps) {
             label={drafts?.length ? "↻ すべての媒体を作り直す" : "▶ 媒体別の下書きを作る"}
           />
         </Card>
+
+        {/* 写真ごとの確認フラグ（登録時の一括指定をここで直せる） */}
+        {assets?.length ? (
+          <section>
+            <h2 className="mb-2 text-lg font-bold text-stone-800">写真の設定</h2>
+            <p className="mb-2 text-base text-stone-600">
+              写真ごとに「人物が写っているか」を直せます。1枚でも該当すると要確認になります。
+            </p>
+            <div className="space-y-3">
+              {assets.map((asset, index) => (
+                <Card key={asset.id}>
+                  <p className="text-base font-bold text-stone-800">
+                    <span aria-hidden="true">
+                      {asset.has_person || asset.needs_public_check ? "！" : "－"}
+                    </span>{" "}
+                    {index + 1}枚目
+                    {asset.has_person ? "／人物あり" : ""}
+                    {asset.needs_public_check ? "／公開確認が必要" : ""}
+                  </p>
+                  <AssetFlagsForm
+                    sourceId={id}
+                    assetId={String(asset.id)}
+                    caption={(asset.caption as string | null) ?? ""}
+                    hasPerson={asset.has_person === true}
+                    needsPublicCheck={asset.needs_public_check === true}
+                  />
+                </Card>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {/* ④ 媒体別の比較 */}
         <section>

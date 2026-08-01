@@ -45,7 +45,7 @@
 
 | 0028_staff_notify_groups.sql | 搬入連絡のスタッフグループ通知: line_staff_groups（グループID・通知ON/OFF・状態 pending/active/disabled/left・通知回数） |
 
-| 0029_crosspost.sql | FB投稿 横展開（Phase 1）: social_sources / social_source_assets / social_channels / social_style_profiles / social_channel_drafts / social_publications。承認・却下を owner/manager に限定するトリガー、別組織の親子を紐づけさせないトリガー、媒体8件とスタイルv1のseed |
+| 0029_crosspost.sql | FB投稿 横展開（Phase 1）: social_sources / social_source_assets / social_channels / social_style_profiles / social_channel_drafts / social_publications。**制限が要るテーブルは alco_add_member_policy を使わず用途別ポリシー**（RLSはOR条件のため）、承認をまとめて行う `alco_crosspost_approve()`、承認INSERTの抜け道を塞ぐトリガー、下書きの組織・元投稿・媒体の一致検証、媒体8件とスタイルv1のseed |
 
 **適用状況**: 0001〜0020 は本番 Supabase プロジェクト（tateyama-gibier /
 clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（0001〜0011: 2026-07-05、
@@ -87,6 +87,17 @@ deleted_at       timestamptz                            -- ソフトデリート
 tasks, files, knowledge_docs は特定モジュールに依存しないよう
 `related_table` + `related_id` の汎用参照を使う（FKなし）。
 モジュール固有の強い整合性が必要な場合のみ専用FKカラムを足す。
+
+## RLSポリシーの注意（重要）
+
+PostgreSQL の通常ポリシーは **OR 条件**で評価される。
+`alco_add_member_policy()` は「組織メンバーに全CRUD」を許可する `FOR ALL` ポリシーを作るため、
+**あとから owner/manager 限定のポリシーを足しても制限にならない**。
+
+権限を絞りたいテーブルでは `alco_add_member_policy()` を**使わず**、
+`SELECT` / `INSERT` / `UPDATE` を用途ごとに明示すること（0029 が実例）。
+また、UPDATE トリガーだけでは **INSERT で最初から承認済みにする抜け道**が残るため、
+BEFORE INSERT トリガーとポリシーの `with check` で二重に塞ぐ。
 
 ## 1ファイル内のSQLの並び順（重要）
 

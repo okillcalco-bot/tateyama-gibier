@@ -93,7 +93,7 @@ create table if not exists social_channel_drafts (
   organization_id uuid not null references organizations(id),
   social_source_id uuid not null references social_sources(id),
   channel_key text not null,
-  /** AIの元出力（証跡）。編集しても書き換えない */
+  /** 直近のAI出力。人が編集しても書き換えない（再生成したときだけ置き換わる） */
   ai_generated_draft_id uuid references generated_drafts(id),
   ai_body text,
   /** 人が編集した本文。承認されるのはこちら */
@@ -191,7 +191,11 @@ create index if not exists idx_social_publications_recent
 -- 子テーブルが別組織の親を参照していないか確かめる
 create or replace function alco_social_assert_same_org()
 returns trigger language plpgsql security definer set search_path = public as $$
-declare parent_org uuid;
+declare
+  parent_org uuid;
+  draft_org uuid;
+  draft_source uuid;
+  draft_channel text;
 begin
   if tg_table_name = 'social_source_assets' then
     select organization_id into parent_org from social_sources where id = new.social_source_id;
@@ -202,17 +206,56 @@ begin
     if parent_org is null or parent_org <> new.organization_id then
       raise exception '別の組織のファイルには紐づけられません';
     end if;
+
   elsif tg_table_name = 'social_channel_drafts' then
     select organization_id into parent_org from social_sources where id = new.social_source_id;
     if parent_org is null or parent_org <> new.organization_id then
       raise exception '別の組織の元投稿には紐づけられません';
     end if;
+
   elsif tg_table_name = 'social_publications' then
     select organization_id into parent_org from social_sources where id = new.social_source_id;
     if parent_org is null or parent_org <> new.organization_id then
       raise exception '別の組織の元投稿には紐づけられません';
     end if;
+
+    -- 下書きが「同じ組織・同じ元投稿・同じ媒体」であることまで確かめる
+    if new.social_channel_draft_id is not null then
+      select organization_id, social_source_id, channel_key
+        into draft_org, draft_source, draft_channel
+        from social_channel_drafts where id = new.social_channel_draft_id;
+      if draft_org is null then
+        raise exception '下書きが見つかりません';
+      end if;
+      if draft_org <> new.organization_id then
+        raise exception '別の組織の下書きは投稿履歴に紐づけられません';
+      end if;
+      if draft_source <> new.social_source_id then
+        raise exception '別の元投稿の下書きは投稿履歴に紐づけられません';
+      end if;
+      if draft_channel <> new.channel_key then
+        raise exception '媒体が一致しない下書きは投稿履歴に紐づけられません';
+      end if;
+    end if;
   end if;
+  return new;
+end;
+$$;
+
+-- INSERT で最初から承認済みにする抜け道を塞ぐ
+create or replace function alco_social_enforce_draft_insert()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.status in ('approved', 'queued', 'published') and not coalesce(can_approve(), false) then
+    raise exception '承認済みの状態で作成することはできません';
+  end if;
+  -- 承認まわりの列は作成時に埋めさせない（承認は必ず所定の手続きを通す）
+  new.approved_body := null;
+  new.approval_draft_id := null;
+  new.approved_by := null;
+  new.approved_at := null;
+  new.review_acknowledged_by := null;
+  new.review_acknowledged_at := null;
   return new;
 end;
 $$;
@@ -269,32 +312,190 @@ begin
 end;
 $$;
 
--- ────────────── 4. ポリシーとトリガー ──────────────
+/*
+ * 承認を1つのトランザクションで行う。
+ *
+ * 承認スナップショットの作成・本文の確定・承認状態の更新・監査ログを
+ * 別々のDB操作で行うと、途中で失敗したときに
+ * 「承認ドラフトだけ残る」「本文だけ承認済みになる」状態が起きうる。
+ * 関数の中はひとつのトランザクションなので、全部成功か全部失敗になる。
+ */
+create or replace function alco_crosspost_approve(
+  p_draft_id uuid,
+  p_final_body text,
+  p_acknowledge boolean default false
+)
+returns social_channel_drafts
+language plpgsql security definer set search_path = public as $$
+declare
+  v_draft social_channel_drafts;
+  v_org uuid;
+  v_actor uuid;
+  v_approval_id uuid;
+  v_reasons text[];
+begin
+  if not coalesce(can_approve(), false) then
+    raise exception '承認には承認権限（owner / manager）が必要です';
+  end if;
 
+  v_org := current_organization_id();
+  v_actor := auth.uid();
+
+  select * into v_draft from social_channel_drafts where id = p_draft_id for update;
+  if v_draft.id is null then
+    raise exception '下書きが見つかりません';
+  end if;
+  if v_draft.organization_id <> v_org then
+    raise exception '他の組織の下書きは承認できません';
+  end if;
+  if v_draft.status in ('approved', 'published') then
+    raise exception 'この下書きはすでに承認されています';
+  end if;
+  if v_draft.status in ('not_generated', 'error') then
+    raise exception '先に下書きを作ってください';
+  end if;
+  if coalesce(length(btrim(p_final_body)), 0) = 0 then
+    raise exception '本文が空です';
+  end if;
+
+  v_reasons := coalesce(v_draft.review_reasons, '{}');
+  if array_length(v_reasons, 1) is not null and not p_acknowledge then
+    raise exception '要確認の理由を確認してから承認してください';
+  end if;
+
+  -- 承認スナップショット（この内容で承認したという証跡）
+  insert into generated_drafts (
+    organization_id, draft_type, source_table, source_id, title, content,
+    needs_human_review, warnings, status, reviewed_by, reviewed_at, applied_at, created_by
+  ) values (
+    v_org, 'crosspost_approval', 'social_channel_drafts', p_draft_id,
+    v_draft.channel_key || ' の承認本文',
+    jsonb_build_object(
+      'channel_key', v_draft.channel_key,
+      'body', p_final_body,
+      'title', v_draft.title,
+      'hashtags', to_jsonb(coalesce(v_draft.hashtags, '{}')),
+      'cta', v_draft.cta,
+      'link_guidance', v_draft.link_guidance,
+      'photo_order', to_jsonb(coalesce(v_draft.photo_order, '{}')),
+      'review_reasons', to_jsonb(v_reasons),
+      'snapshot_at', now()
+    ),
+    false, v_reasons, 'approved', v_actor, now(), now(), v_actor
+  ) returning id into v_approval_id;
+
+  update social_channel_drafts set
+    status = 'approved',
+    approved_body = p_final_body,
+    approval_draft_id = v_approval_id,
+    review_acknowledged_by = case when array_length(v_reasons, 1) is not null then v_actor else review_acknowledged_by end,
+    review_acknowledged_at = case when array_length(v_reasons, 1) is not null then now() else review_acknowledged_at end
+  where id = p_draft_id
+  returning * into v_draft;
+
+  insert into audit_logs (organization_id, actor_id, action, table_name, record_id, after, note)
+  values (
+    v_org, v_actor, 'approve', 'social_channel_drafts', p_draft_id,
+    to_jsonb(v_draft),
+    case when array_length(v_reasons, 1) is not null
+      then v_draft.channel_key || ' を承認（確認した理由: ' || array_to_string(v_reasons, ' / ') || '）'
+      else v_draft.channel_key || ' を承認' end
+  );
+
+  return v_draft;
+end;
+$$;
+
+comment on function alco_crosspost_approve(uuid, text, boolean) is
+  '媒体別の承認を1トランザクションで行う（スナップショット作成・本文確定・状態更新・監査ログ）。0029';
+
+revoke all on function alco_crosspost_approve(uuid, text, boolean) from public;
+grant execute on function alco_crosspost_approve(uuid, text, boolean) to authenticated;
+
+-- ────────────── 4. ポリシーとトリガー ──────────────
+--
+-- 【重要】PostgreSQLの通常ポリシーは **OR 条件**で評価される。
+-- alco_add_member_policy() は「組織メンバーに全CRUD」を許可する FOR ALL ポリシーなので、
+-- あとから owner/manager 限定のポリシーを足しても**制限にならない**。
+-- そのため、制限が要るテーブルでは alco_add_member_policy() を**使わず**、
+-- SELECT / INSERT / UPDATE を用途ごとに明示する。
+
+-- 制限の要らないテーブルは従来どおり（メンバーなら誰でも扱ってよい）
 select alco_add_member_policy('social_sources');
 select alco_add_member_policy('social_source_assets');
-select alco_add_member_policy('social_channels');
-select alco_add_member_policy('social_style_profiles');
-select alco_add_member_policy('social_channel_drafts');
-select alco_add_member_policy('social_publications');
 
--- スタイル設定は owner/manager のみ追加・更新できる（member ポリシーより厳しい方を足す）
+-- 制限が要るテーブルは自前でポリシーを張る
+alter table social_channels enable row level security;
+alter table social_style_profiles enable row level security;
+alter table social_channel_drafts enable row level security;
+alter table social_publications enable row level security;
+
+-- 媒体マスタ: 閲覧はメンバー、変更は owner/manager
 do $$ begin
-  create policy social_style_profiles_write on social_style_profiles for insert
+  create policy social_channels_select on social_channels for select
+    using (organization_id = current_organization_id());
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy social_channels_insert on social_channels for insert
     with check (organization_id = current_organization_id() and can_approve());
 exception when duplicate_object then null; end $$;
-
 do $$ begin
-  create policy social_style_profiles_modify on social_style_profiles for update
+  create policy social_channels_update on social_channels for update
+    using (organization_id = current_organization_id() and can_approve())
+    with check (organization_id = current_organization_id() and can_approve());
+exception when duplicate_object then null; end $$;
+-- delete ポリシーは作らない（媒体は非表示にする運用）
+
+-- スタイル設定: 閲覧はメンバー、追加・変更は owner/manager
+do $$ begin
+  create policy social_style_profiles_select on social_style_profiles for select
+    using (organization_id = current_organization_id());
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy social_style_profiles_insert on social_style_profiles for insert
+    with check (organization_id = current_organization_id() and can_approve());
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy social_style_profiles_update on social_style_profiles for update
     using (organization_id = current_organization_id() and can_approve())
     with check (organization_id = current_organization_id() and can_approve());
 exception when duplicate_object then null; end $$;
 
--- 投稿済みの登録も owner/manager のみ
+-- 投稿履歴: 閲覧はメンバー、登録は owner/manager。**更新・削除はできない**（履歴の保全）
 do $$ begin
-  create policy social_publications_write on social_publications for insert
+  create policy social_publications_select on social_publications for select
+    using (organization_id = current_organization_id());
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy social_publications_insert on social_publications for insert
     with check (organization_id = current_organization_id() and can_approve());
 exception when duplicate_object then null; end $$;
+
+-- 媒体別の下書き:
+--   閲覧・作成・編集はメンバー。ただし**作成時に承認済みの状態にはできない**
+--   （承認まわりの列はトリガーでも消すが、ポリシーでも二重に塞ぐ）
+--   承認・却下への遷移は UPDATE トリガーで owner/manager に限定
+do $$ begin
+  create policy social_channel_drafts_select on social_channel_drafts for select
+    using (organization_id = current_organization_id());
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy social_channel_drafts_insert on social_channel_drafts for insert
+    with check (
+      organization_id = current_organization_id()
+      and status in ('not_generated', 'draft', 'needs_review', 'editing', 'error')
+      and approved_body is null
+      and approved_at is null
+      and approved_by is null
+      and approval_draft_id is null
+    );
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy social_channel_drafts_update on social_channel_drafts for update
+    using (organization_id = current_organization_id())
+    with check (organization_id = current_organization_id());
+exception when duplicate_object then null; end $$;
+-- delete ポリシーは作らない（却下はステータスで表す）
 
 do $$
 declare t text;
@@ -320,6 +521,11 @@ begin
                     for each row execute function alco_social_assert_same_org()', t, t);
   end loop;
 end $$;
+
+drop trigger if exists trg_social_channel_drafts_insert on social_channel_drafts;
+create trigger trg_social_channel_drafts_insert
+  before insert on social_channel_drafts
+  for each row execute function alco_social_enforce_draft_insert();
 
 drop trigger if exists trg_social_channel_drafts_approval on social_channel_drafts;
 create trigger trg_social_channel_drafts_approval

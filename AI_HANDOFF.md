@@ -73,7 +73,7 @@ AIは提案者であり、判断者・承認者ではない。迷ったときの
 | `/orders` | 受注管理（タノム参考）。既存 orders の status 更新のみ（語彙: 受注/確認済/発送済/納品完了/キャンセル — order-portal.html と共通、変更禁止）+ 集計 + CSV |
 | `/orders` 内 帳票 | 請求書/納品書/領収書（0014 billing_documents）。月毎種類毎自動採番 INV/DN/RC-YYYYMM-001、発行時スナップショット、取消=欠番、内税逆算8/10/0%。印刷ページ=/orders/documents/[id] |
 | `/media` | プレゼン（承認後PPTX: /api/media/[id]/pptx、pptxgenjs）/ YouTube動画プラン（台本・メタデータ + ブラウザ内WebM書き出し + SRT + 動画ID手動登録） |
-| `/crosspost` | **FB投稿 横展開**（Phase 1）。沖代表のFB投稿を登録 → 8媒体の下書きをAIが生成 → 媒体ごとに編集・承認・却下 → 投稿済みURLを登録。**AI原文（ai_body）と人が承認した本文（approved_body）を別々に保存**。承認は generated_drafts(crosspost_approval) → draft-service 経由。外部投稿APIは未実装（publisherアダプタのみ）|
+| `/crosspost` | **FB投稿 横展開**（Phase 1）。沖代表のFB投稿を登録 → 8媒体の下書きをAIが生成 → 媒体ごとに編集・承認・却下 → 投稿済みURLを登録。**AI出力（ai_body。再生成で置き換わる／過去分は generated_drafts に残る）と人が承認した本文（approved_body）を別々に保存**。承認は generated_drafts(crosspost_approval) → draft-service 経由。外部投稿APIは未実装（publisherアダプタのみ）|
 | `/social` | 投稿一括更新。一次データ → HP/Instagram/FB/YouTube向け原稿AI生成 → 承認 → コピー投稿 + 投稿済み管理 |
 | `/billing` | 帳票センター（Misoca代替）。見積/納品/請求/領収の自由入力発行・書類変換（明細引き継ぎ・source_document_id で系譜）・Misoca CSVインポート（source='misoca'、金額原本保持） |
 | `/ledger` | 売上伝票（手売り/解体体験/イベント。SL-YYYYMM-###自動採番、取消=欠番、月次集計、税理士用CSV=/api/ledger/csv） |

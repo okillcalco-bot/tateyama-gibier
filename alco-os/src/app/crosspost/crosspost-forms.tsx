@@ -12,6 +12,7 @@ import {
   rejectDraftAction,
   reopenDraftAction,
   saveStyleAction,
+  setAssetFlagsAction,
   toggleChannelAction,
 } from "./actions";
 
@@ -149,12 +150,19 @@ export function NewSourceForm() {
       </label>
       <label className="flex min-h-[56px] items-center gap-3 rounded-xl bg-amber-50 px-3">
         <input type="checkbox" name="has_person" className="h-6 w-6" />
-        <span className="text-base font-bold text-amber-900">人物が写っている</span>
+        <span className="text-base font-bold text-amber-900">
+          いずれかの写真に人物が写っている
+        </span>
       </label>
       <label className="flex min-h-[56px] items-center gap-3 rounded-xl bg-amber-50 px-3">
         <input type="checkbox" name="needs_public_check" className="h-6 w-6" />
-        <span className="text-base font-bold text-amber-900">公開してよいか確認が必要</span>
+        <span className="text-base font-bold text-amber-900">
+          いずれかの写真に公開の確認が必要
+        </span>
       </label>
+      <p className="text-sm text-stone-500">
+        ここでの指定はすべての写真に付きます。登録後、詳細画面で写真ごとに直せます。
+      </p>
 
       <label className="block">
         <span className="text-base font-bold text-stone-700">補足メモ</span>
@@ -443,5 +451,59 @@ export function ChannelToggleForm({
       </button>
       <Notice error={error} done={done} />
     </div>
+  );
+}
+
+/** 写真ごとの確認フラグ（登録後にここで直せる） */
+export function AssetFlagsForm({
+  sourceId,
+  assetId,
+  caption,
+  hasPerson,
+  needsPublicCheck,
+}: {
+  sourceId: string;
+  assetId: string;
+  caption: string;
+  hasPerson: boolean;
+  needsPublicCheck: boolean;
+}) {
+  const { isPending, error, done, run } = useAction();
+  return (
+    <form
+      action={(fd) => {
+        fd.set("source_id", sourceId);
+        fd.set("asset_id", assetId);
+        run(setAssetFlagsAction, fd, "写真の設定を保存しました");
+      }}
+      className="mt-2 space-y-2"
+    >
+      <label className="block">
+        <span className="text-base font-bold text-stone-700">この写真の説明</span>
+        <input name="caption" defaultValue={caption} className={FIELD} />
+      </label>
+      <label className="flex min-h-[56px] items-center gap-3 rounded-xl bg-amber-50 px-3">
+        <input
+          type="checkbox"
+          name="has_person"
+          defaultChecked={hasPerson}
+          className="h-6 w-6"
+        />
+        <span className="text-base font-bold text-amber-900">人物が写っている</span>
+      </label>
+      <label className="flex min-h-[56px] items-center gap-3 rounded-xl bg-amber-50 px-3">
+        <input
+          type="checkbox"
+          name="needs_public_check"
+          defaultChecked={needsPublicCheck}
+          className="h-6 w-6"
+        />
+        <span className="text-base font-bold text-amber-900">公開してよいか確認が必要</span>
+      </label>
+      <button type="submit" disabled={isPending} className={`${BUTTON} border-2 border-stone-400 bg-white text-stone-700`}>
+        ✎ この写真の設定を保存
+      </button>
+      <Notice error={error} done={done} />
+    </form>
   );
 }

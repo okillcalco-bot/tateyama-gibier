@@ -511,3 +511,169 @@ describe("沖浩志スタイル", () => {
     expect(active?.structureNotes).toBe("構造2");
   });
 });
+
+/**
+ * コードレビュー指摘（2026-08-01）への修正を固定するテスト。
+ */
+describe("レビュー指摘の修正", () => {
+  let db: InMemoryDb;
+  let sourceId: string;
+
+  beforeEach(async () => {
+    db = new InMemoryDb();
+    sourceId = await seedSource(db);
+  });
+
+  it("指摘1: 制限テーブルに alco_add_member_policy を使っていない", async () => {
+    const { readFileSync } = await import("node:fs");
+    const path = await import("node:path");
+    const sql = readFileSync(
+      path.join(process.cwd(), "supabase", "migrations", "0029_crosspost.sql"),
+      "utf8",
+    );
+    for (const table of [
+      "social_channels",
+      "social_style_profiles",
+      "social_channel_drafts",
+      "social_publications",
+    ]) {
+      // FOR ALL の許可ポリシーを足すと OR 条件で制限が効かなくなる
+      expect(sql).not.toContain(`alco_add_member_policy('${table}')`);
+      // 代わりに用途ごとのポリシーがある
+      expect(sql).toContain(`create policy ${table}_select`);
+    }
+    // 承認まわりは can_approve() で縛る
+    expect(sql).toContain("create policy social_style_profiles_insert");
+    expect(sql).toContain("create policy social_publications_insert");
+    // INSERT で最初から承認済みにする抜け道を塞ぐ
+    expect(sql).toContain("alco_social_enforce_draft_insert");
+    expect(sql).toContain("before insert on social_channel_drafts");
+  });
+
+  it("指摘2: 承認を1トランザクションで行う関数がある", async () => {
+    const { readFileSync } = await import("node:fs");
+    const path = await import("node:path");
+    const sql = readFileSync(
+      path.join(process.cwd(), "supabase", "migrations", "0029_crosspost.sql"),
+      "utf8",
+    );
+    expect(sql).toContain("create or replace function alco_crosspost_approve");
+    // 1つの関数の中で スナップショット作成 → 本文確定 → 監査ログ まで行う
+    expect(sql).toContain("insert into generated_drafts");
+    expect(sql).toContain("update social_channel_drafts set");
+    expect(sql).toContain("insert into audit_logs");
+    expect(sql).toContain("can_approve()");
+  });
+
+  it("指摘2: rpc を渡すとそちらを使い、逐次処理はしない", async () => {
+    const [row] = await saveGeneratedDrafts(db, ctx, {
+      sourceId,
+      aiGeneratedDraftId: "ai-1",
+      drafts: [draft()],
+      specs: SPECS,
+      sourceBody: SOURCE_BODY,
+      hasPersonPhoto: false,
+      needsPublicCheck: false,
+      aiFlags: [],
+      styleProfileId: null,
+      styleVersion: null,
+    });
+
+    let called: { draftId: string; finalBody: string; acknowledge: boolean } | null = null;
+    const result = await approveChannelDraft(
+      db,
+      ctx,
+      { draftId: row.id as string, acknowledgeReasons: true },
+      async (params) => {
+        called = params;
+        return {
+          ...row,
+          status: "approved",
+          approved_body: params.finalBody,
+          approval_draft_id: "approval-1",
+        };
+      },
+    );
+
+    expect(called).not.toBeNull();
+    expect(called!.acknowledge).toBe(true);
+    expect(result.draft.status).toBe("approved");
+    expect(result.approvalDraftId).toBe("approval-1");
+    // 逐次処理の generated_drafts は作られていない
+    expect(db.tables.get("generated_drafts")).toBeUndefined();
+  });
+
+  it("指摘3: 別の元投稿の下書きを投稿履歴に紐づけられない", async () => {
+    const otherSourceId = (await createSource(db, ctx, { body: "別の投稿" })).source.id as string;
+    const [row] = await saveGeneratedDrafts(db, ctx, {
+      sourceId,
+      aiGeneratedDraftId: "ai-1",
+      drafts: [draft()],
+      specs: SPECS,
+      sourceBody: SOURCE_BODY,
+      hasPersonPhoto: false,
+      needsPublicCheck: false,
+      aiFlags: [],
+      styleProfileId: null,
+      styleVersion: null,
+    });
+    await approveChannelDraft(db, ctx, {
+      draftId: row.id as string,
+      acknowledgeReasons: true,
+    });
+
+    await expect(
+      recordPublication(db, ctx, { sourceId: otherSourceId, draftId: row.id as string }),
+    ).rejects.toThrow(/別の元投稿/);
+  });
+
+  it("指摘3: 別組織の下書きも紐づけられない", async () => {
+    const [row] = await saveGeneratedDrafts(db, ctx, {
+      sourceId,
+      aiGeneratedDraftId: "ai-1",
+      drafts: [draft()],
+      specs: SPECS,
+      sourceBody: SOURCE_BODY,
+      hasPersonPhoto: false,
+      needsPublicCheck: false,
+      aiFlags: [],
+      styleProfileId: null,
+      styleVersion: null,
+    });
+    await db.update("social_channel_drafts", row.id as string, {
+      organization_id: "org-2",
+    });
+
+    await expect(
+      recordPublication(db, ctx, { sourceId, draftId: row.id as string }),
+    ).rejects.toThrow(/他の組織/);
+  });
+
+  it("指摘3: DBトリガーでも下書きの組織・元投稿・媒体を確かめる", async () => {
+    const { readFileSync } = await import("node:fs");
+    const path = await import("node:path");
+    const sql = readFileSync(
+      path.join(process.cwd(), "supabase", "migrations", "0029_crosspost.sql"),
+      "utf8",
+    );
+    expect(sql).toContain("別の組織の下書きは投稿履歴に紐づけられません");
+    expect(sql).toContain("別の元投稿の下書きは投稿履歴に紐づけられません");
+    expect(sql).toContain("媒体が一致しない下書きは投稿履歴に紐づけられません");
+  });
+
+  it("軽微2: 写真ごとに人物ありを直せる", async () => {
+    const file = await db.insert("files", { organization_id: ORG, path: "a.jpg" });
+    const asset = await attachAsset(db, ctx, { sourceId, fileId: file.id as string });
+
+    const { setAssetFlags } = await import("@/domain/social/crosspost/source-service");
+    const after = await setAssetFlags(db, ctx, {
+      assetId: asset.id as string,
+      hasPerson: true,
+      needsPublicCheck: false,
+      caption: "現場の様子",
+    });
+    expect(after.has_person).toBe(true);
+    expect(after.caption).toBe("現場の様子");
+    expect((db.tables.get("audit_logs") ?? []).length).toBeGreaterThan(0);
+  });
+});

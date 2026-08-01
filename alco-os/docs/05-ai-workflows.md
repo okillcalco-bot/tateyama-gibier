@@ -28,7 +28,7 @@
 | parse_field_note | 現場メモ（音声文字起こし・走り書き） | field_note_result | （承認のみ。観察記録の確定は人が /nature/quick で行う）**種を確定しない・危険語はサーバー側でも保護側に倒す** — docs/10 |
 | classify_hunter_message | 捕獲者からのLINE本文（+ 照合済み氏名・位置情報の有無） | hunter_message_result | tasks + line_inbound_messages.status + capture_reports.ai_suggestion（**候補のみ。individuals / hunters には書き込まない**）|
 | analyze_crosspost_source | FB投稿の原文 | crosspost_fact_sheet | social_sources.fact_sheet（事実・数値・引用を1回だけ固定）|
-| generate_crosspost_drafts | 事実シート + 媒体2〜3件 + スタイル設定 | crosspost_ai_output | social_channel_drafts.ai_body（**証跡。承認対象ではない**）|
+| generate_crosspost_drafts | 事実シート + 媒体2〜3件 + スタイル設定 | crosspost_ai_output | social_channel_drafts.ai_body（**承認対象ではない**。再生成すると置き換わるが、過去のAI出力は generated_drafts に残る）|
 | （承認時に生成） | 人が編集した本文のスナップショット | crosspost_approval | social_channel_drafts.approved_body |
 | summarize_meeting | （プロンプト定義のみ。実装は次段） | meeting_minutes | - |
 

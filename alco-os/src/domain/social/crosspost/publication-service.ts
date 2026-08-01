@@ -27,6 +27,14 @@ export async function recordPublication(
   const draft = await db.findById("social_channel_drafts", input.draftId);
   if (!draft) throw new Error("下書きが見つかりません");
 
+  // 別の組織・別の元投稿の下書きを紐づけられないようにする（DBのトリガーと二重で確認）
+  if (draft.organization_id !== ctx.organizationId) {
+    throw new Error("他の組織の下書きは登録できません");
+  }
+  if (draft.social_source_id !== input.sourceId) {
+    throw new Error("この下書きは別の元投稿のものです");
+  }
+
   const channelKey = String(draft.channel_key);
 
   // 誤操作の二重登録を先に弾く（Phase 1 は再投稿を扱わない）。
