@@ -6,6 +6,7 @@
 <title>館山ジビエセンター 業務</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <style>
 :root {
   /* ライトテーマ: 白基調・清潔感優先 */
@@ -385,6 +386,21 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .pc-input:focus{border-color:var(--gold);}
 .pc-error{font-size:13px;color:var(--red);min-height:18px;text-align:center;}
 .pc-hint{font-size:11px;color:var(--text3);text-align:center;margin-top:4px;}
+
+/* 通し番号QRラベル */
+#qrPrintArea{display:none;}
+.qr-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.qr-cell{border:1px solid #000;border-radius:6px;padding:6px 4px;text-align:center;background:#fff;color:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.qr-cell svg{width:100%;height:auto;max-width:120px;}
+.qr-cell .qr-num{font-weight:700;font-size:15px;margin-top:3px;letter-spacing:.5px;}
+@media print{
+  body.qr-print > *:not(#qrPrintArea){display:none !important;}
+  body.qr-print #qrPrintArea{display:block !important;}
+  body.qr-print #qrPrintArea .qr-grid{grid-template-columns:repeat(5,1fr);gap:4mm;}
+  body.qr-print .qr-cell{page-break-inside:avoid;}
+  body.qr-print{ }
+  @page{size:A4 portrait;margin:10mm;}
+}
 </style>
 </head>
 <body>
@@ -907,6 +923,31 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
     </div>
   </div>
+
+  <!-- 通し番号QRラベル印刷モーダル -->
+  <div id="qrLabelModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:680px;margin:24px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:22px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);">🏷️ 通し番号QRラベル印刷</div>
+        <button onclick="document.getElementById('qrLabelModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:14px;line-height:1.7;">
+        通し番号のQRラベルを<strong>先に印刷</strong>しておけます。搬入時に個体へ貼り、精肉モードの「QRラベルをスキャン」で読み取ると、その通し番号に紐づく個体が開きます。<br>
+        <span style="color:var(--text3);">※ 台帳の通し番号（個体登録時の「通し番号」）と一致させてください。QRの中身は <code>TGC#番号</code> です。</span>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="flex:1;min-width:120px;"><label>開始 通し番号</label><input class="form-input" id="qrFrom" type="number" min="1" /></div>
+        <div class="form-group" style="flex:1;min-width:120px;"><label>終了 通し番号</label><input class="form-input" id="qrTo" type="number" min="1" /></div>
+        <button class="btn" onclick="qrLabelGenerate()">プレビュー生成</button>
+        <button class="btn btn-primary" onclick="qrLabelPrint()">🖨 印刷</button>
+      </div>
+      <div id="qrLabelHint" style="font-size:12px;color:var(--text3);margin:8px 0;"></div>
+      <div id="qrLabelPreview" class="qr-grid" style="margin-top:8px;"></div>
+    </div>
+  </div>
+
+  <!-- 印刷専用エリア（通し番号QRラベル） -->
+  <div id="qrPrintArea"></div>
 
   <!-- Product Movement Modal -->
   <div id="prodMoveModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
@@ -1463,6 +1504,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <div id="pmSetup" class="pm-setup">
     <div class="pm-setup-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;"><span>🔪 精肉モード セットアップ</span>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="openQrLabelModal()" style="font-size:12px;padding:5px 12px;border-radius:10px;border:1px solid var(--gold2);background:var(--surface2);color:var(--gold);cursor:pointer;">🏷️ 通し番号QRラベル印刷</button>
         <button onclick="connDiag()" style="font-size:12px;padding:5px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;">🔧 はかり・ラベラー接続診断</button>
         <button onclick="closeProcessingMode()" style="font-size:13px;font-weight:600;padding:5px 14px;border-radius:10px;border:1px solid var(--gold2);background:var(--surface);color:var(--gold);cursor:pointer;">← 業務メニューへ戻る</button>
       </div>
@@ -1478,6 +1520,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="pm-op-grid" id="pmSetupOpGrid"></div>
     <!-- Individual -->
     <div style="font-size:13px;color:var(--text2);margin:16px 0 8px;font-weight:500;">精肉する個体を選択</div>
+    <input class="form-input" id="pmScanInput" placeholder="🔳 QRラベルをスキャン（通し番号）— 読み取ると個体が開きます" onkeydown="if(event.key==='Enter'){event.preventDefault();pmScanSelect(this.value);this.value='';}" style="margin-bottom:6px;font-size:15px;padding:10px 14px;border-color:var(--gold2);" autocomplete="off" />
     <input class="form-input" id="pmIndSearch" placeholder="個体番号で検索（例: TGC-08-T）" oninput="pmSearchIndividuals()" style="margin-bottom:6px;font-size:15px;padding:10px 14px;" />
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;font-size:12px;">
       <span style="color:var(--text3);align-self:center;">クイック:</span>
@@ -2046,6 +2089,19 @@ if (barcodeInput) barcodeInput.addEventListener('keydown', async (e) => {
 
 async function barcodeLookup(code) {
   try {
+    // 通し番号QRラベル（TGC#番号）
+    const sm = String(code).match(/^TGC#0*(\d+)$/i);
+    if (sm) {
+      const ind = await resolveIndividualByCode(code);
+      if (ind) {
+        document.querySelector('[data-tab="trace"]').click();
+        document.getElementById('trace-search').value = ind.label_id;
+        traceSearch();
+      } else {
+        toast('通し番号 ' + sm[1] + ' の個体が見つかりません', 'error');
+      }
+      return;
+    }
     let items = await sb('GET', 'inventory', null, `?ident_code=eq.${encodeURIComponent(code)}&select=*`);
     if (items.length) {
       showDetailModal(items[0]);
@@ -2063,6 +2119,86 @@ async function barcodeLookup(code) {
   } catch (err) {
     toast('検索エラー: ' + err.message, 'error');
   }
+}
+
+/* ===== 通し番号QRラベル：コード解決・スキャン・印刷 ===== */
+// TGC#番号 / 数字のみ → serial_number、それ以外 → label_id で個体を引く
+async function resolveIndividualByCode(code) {
+  code = String(code || '').trim();
+  if (!code) return null;
+  let serial = null;
+  const m = code.match(/^TGC#0*(\d+)$/i);
+  if (m) serial = parseInt(m[1], 10);
+  else if (/^\d+$/.test(code)) serial = parseInt(code, 10);
+  if (serial != null) {
+    const inds = await sb('GET', 'individuals', null, `?serial_number=eq.${serial}&deleted_at=is.null&select=*&order=created_at.desc`);
+    if (!inds.length) return null;
+    const pending = inds.filter(i => !i.processing_done_at);
+    return pending[0] || inds[0];
+  }
+  const inds = await sb('GET', 'individuals', null, `?label_id=eq.${encodeURIComponent(code)}&deleted_at=is.null&select=*`);
+  return inds[0] || null;
+}
+
+async function pmScanSelect(code) {
+  code = String(code || '').trim();
+  if (!code) return;
+  if (!pmCurrentOperator) { toast('先に作業者を選択してください', 'error'); return; }
+  try {
+    const ind = await resolveIndividualByCode(code);
+    if (!ind) { toast('通し番号「' + code + '」の個体が見つかりません', 'error'); return; }
+    if (ind.processing_done_at) toast('※ この個体は精肉完了済みです（追加登録として開きます）', 'info');
+    pmSelectIndividual(ind.label_id);
+  } catch (e) {
+    toast('読取エラー: ' + e.message, 'error');
+  }
+}
+
+async function openQrLabelModal() {
+  document.getElementById('qrLabelModal').style.display = 'block';
+  document.getElementById('qrLabelPreview').innerHTML = '';
+  document.getElementById('qrLabelHint').textContent = '';
+  try {
+    const r = await sb('GET', 'individuals', null, '?select=serial_number&serial_number=not.is.null&order=serial_number.desc&limit=1');
+    const max = (r[0] && r[0].serial_number) || 0;
+    document.getElementById('qrFrom').value = max + 1;
+    document.getElementById('qrTo').value = max + 50;
+    document.getElementById('qrLabelHint').textContent = max ? ('現在の最大通し番号: ' + max + '（次の分をプリセット）') : '';
+  } catch (e) {
+    document.getElementById('qrFrom').value = 1;
+    document.getElementById('qrTo').value = 50;
+  }
+}
+
+function qrLabelGenerate() {
+  const from = parseInt(document.getElementById('qrFrom').value, 10);
+  const to = parseInt(document.getElementById('qrTo').value, 10);
+  if (isNaN(from) || isNaN(to) || from < 1 || to < from) { alert('開始・終了の通し番号を正しく入力してください'); return; }
+  if (to - from > 499) { alert('一度に印刷できるのは500件までです'); return; }
+  if (typeof qrcode === 'undefined') { alert('QR生成ライブラリが読み込めませんでした。オンライン環境で再度お試しください。'); return; }
+  let cells = '';
+  for (let n = from; n <= to; n++) {
+    const text = 'TGC#' + n;
+    const qr = qrcode(0, 'M');
+    qr.addData(text);
+    qr.make();
+    const svg = qr.createSvgTag({ cellSize: 4, margin: 1, scalable: true });
+    cells += `<div class="qr-cell">${svg}<div class="qr-num">#${String(n).padStart(3, '0')}</div></div>`;
+  }
+  document.getElementById('qrLabelPreview').innerHTML = cells;
+  document.getElementById('qrLabelHint').textContent = (to - from + 1) + '件を生成しました。「🖨 印刷」でA4に印刷できます。';
+  document.getElementById('qrPrintArea').innerHTML =
+    `<div style="text-align:center;font-weight:700;margin-bottom:8px;color:#000;">館山ジビエセンター 通し番号QRラベル（#${String(from).padStart(3, '0')}〜#${String(to).padStart(3, '0')}）</div><div class="qr-grid">${cells}</div>`;
+}
+
+function qrLabelPrint() {
+  if (!document.getElementById('qrPrintArea').innerHTML.trim()) { qrLabelGenerate(); }
+  if (!document.getElementById('qrPrintArea').innerHTML.trim()) return;
+  document.body.classList.add('qr-print');
+  const cleanup = () => { document.body.classList.remove('qr-print'); window.removeEventListener('afterprint', cleanup); };
+  window.addEventListener('afterprint', cleanup);
+  window.print();
+  setTimeout(cleanup, 1500);
 }
 
 /* ===== Dashboard ===== */
@@ -3261,6 +3397,9 @@ function pmSetupSelectOp(op) {
   pmCurrentOperator = op;
   pmOperatorName = op;
   pmRenderSetupOps();
+  // ハンディスキャナーですぐ読めるようスキャン欄にフォーカス
+  const scan = document.getElementById('pmScanInput');
+  if (scan) setTimeout(() => scan.focus(), 50);
 }
 
 async function pmResumeSession(op) {
