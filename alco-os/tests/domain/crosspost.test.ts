@@ -793,6 +793,23 @@ describe("レビュー指摘の修正（2巡目）", () => {
     expect(sql).toContain("<@");
   });
 
+  it("4-1: 承認・投稿済みへの遷移は所定のRPCの中だけ", async () => {
+    const sql = await readSql();
+    // トランザクションローカルの印を立てるのは2つのRPCの中だけ
+    expect(sql).toContain("set_config('app.crosspost_approval_rpc', 'on', true)");
+    expect(sql).toContain("set_config('app.crosspost_publication_rpc', 'on', true)");
+    // トリガーはその印を見て判定する
+    expect(sql).toContain("current_setting('app.crosspost_approval_rpc', true)");
+    expect(sql).toContain("current_setting('app.crosspost_publication_rpc', true)");
+    expect(sql).toContain("alco_crosspost_approve() からのみ行えます");
+    expect(sql).toContain("alco_crosspost_record_publication() からのみ行えます");
+    // 承認済みの本文の直接書き換えも塞ぐ
+    expect(sql).toContain("承認した本文は直接書き換えられません");
+    // 承認には本文と証跡が必須
+    expect(sql).toContain("承認には確定した本文が必要です");
+    expect(sql).toContain("承認には承認スナップショット（generated_drafts）が必要です");
+  });
+
   it("3-1: ai_body の説明が実装（再生成で置き換わる）と合っている", async () => {
     const sql = await readSql();
     expect(sql).not.toContain("ai_body=AIの元出力（不変）");

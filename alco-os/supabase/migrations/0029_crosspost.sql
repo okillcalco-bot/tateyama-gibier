@@ -263,9 +263,25 @@ $$;
 -- 承認まわりの列は owner/manager しか動かせない。承認者・日時はサーバーが決める
 create or replace function alco_social_enforce_approval()
 returns trigger language plpgsql security definer set search_path = public as $$
-declare approver boolean;
+declare
+  approver boolean;
+  in_approval_rpc boolean;
+  in_publication_rpc boolean;
+  reopening boolean;
 begin
   approver := coalesce(can_approve(), false);
+
+  -- 所定の関数の中かどうか。alco_crosspost_approve() /
+  -- alco_crosspost_record_publication() がトランザクションの中だけで
+  -- 立てる印で、通常の UPDATE では立たない。
+  in_approval_rpc :=
+    coalesce(current_setting('app.crosspost_approval_rpc', true), 'off') = 'on';
+  in_publication_rpc :=
+    coalesce(current_setting('app.crosspost_publication_rpc', true), 'off') = 'on';
+
+  -- 承認された状態から外れる操作（差し戻し・却下）
+  reopening := new.status is distinct from old.status
+    and new.status in ('draft', 'editing', 'needs_review', 'not_generated', 'rejected');
 
   -- 識別のための列は後から変えられない。
   -- （承認済みの行の元投稿・媒体を差し替えると、承認の証跡が
@@ -297,16 +313,55 @@ begin
     end if;
   end if;
 
-  -- 承認証跡のIDは、承認・差し戻し以外で書き換えさせない
+  -- ── 承認は alco_crosspost_approve() だけ ──
+  -- owner / manager であっても、テーブルを直接 UPDATE して承認済みには
+  -- できない。RPC を通さないと承認証跡（generated_drafts）と監査ログが
+  -- 残らないため。
+  if new.status = 'approved' and old.status is distinct from 'approved' then
+    if not in_approval_rpc then
+      raise exception '承認は alco_crosspost_approve() からのみ行えます（画面の「承認する」を使ってください）';
+    end if;
+    if coalesce(length(btrim(new.approved_body)), 0) = 0 then
+      raise exception '承認には確定した本文が必要です';
+    end if;
+    if new.approval_draft_id is null then
+      raise exception '承認には承認スナップショット（generated_drafts）が必要です';
+    end if;
+  end if;
+
+  -- ── 投稿済みは alco_crosspost_record_publication() だけ ──
+  if new.status = 'published' and old.status is distinct from 'published' then
+    if not in_publication_rpc then
+      raise exception '投稿済みの登録は alco_crosspost_record_publication() からのみ行えます';
+    end if;
+  end if;
+
+  -- 承認した本文は、承認関数で入れるか、差し戻し・却下で空に戻すかだけ。
+  -- 承認済みの本文をあとから書き換えることはできない。
+  if new.approved_body is distinct from old.approved_body then
+    if new.approved_body is not null then
+      if not (in_approval_rpc
+              and new.status = 'approved' and old.status is distinct from 'approved') then
+        raise exception '承認した本文は直接書き換えられません（差し戻してから直してください）';
+      end if;
+    else
+      if not (approver and reopening) then
+        raise exception '承認した本文は直接書き換えられません（差し戻してから直してください）';
+      end if;
+    end if;
+  end if;
+
+  -- 承認証跡のIDも同じ扱い（承認関数で結ぶか、差し戻しで外すかだけ）
   if new.approval_draft_id is distinct from old.approval_draft_id then
-    if not (
-      -- 承認したとき（新しい証跡を結ぶ）
-      (new.status = 'approved' and old.status is distinct from 'approved')
-      -- 差し戻したとき（証跡との結びを外す）
-      or (new.approval_draft_id is null
-          and new.status in ('draft', 'editing', 'needs_review', 'not_generated'))
-    ) then
-      raise exception '承認の証跡は付け替えられません';
+    if new.approval_draft_id is not null then
+      if not (in_approval_rpc
+              and new.status = 'approved' and old.status is distinct from 'approved') then
+        raise exception '承認の証跡は付け替えられません';
+      end if;
+    else
+      if not (approver and reopening) then
+        raise exception '承認の証跡は付け替えられません';
+      end if;
     end if;
   end if;
 
@@ -314,9 +369,10 @@ begin
   if new.status = 'approved' and old.status is distinct from 'approved' then
     new.approved_by := auth.uid();
     new.approved_at := now();
-  elsif new.status is distinct from old.status
-        and new.status in ('draft', 'editing', 'needs_review', 'not_generated') then
-    -- 差し戻し時は承認情報を消す
+  elsif reopening then
+    -- 差し戻し・却下では承認まわりの列をすべて空に戻す
+    new.approved_body := null;
+    new.approval_draft_id := null;
     new.approved_by := null;
     new.approved_at := null;
   else
@@ -397,6 +453,9 @@ begin
     raise exception '要確認の理由を確認してから承認してください';
   end if;
 
+  -- ここから先だけ承認への遷移を許す印を立てる（トランザクション内だけ有効）
+  perform set_config('app.crosspost_approval_rpc', 'on', true);
+
   -- 承認スナップショット（この内容で承認したという証跡）
   insert into generated_drafts (
     organization_id, draft_type, source_table, source_id, title, content,
@@ -426,6 +485,9 @@ begin
     review_acknowledged_at = case when array_length(v_reasons, 1) is not null then now() else review_acknowledged_at end
   where id = p_draft_id
   returning * into v_draft;
+
+  -- 印はすぐ降ろす（同じトランザクションで別のUPDATEが通らないように）
+  perform set_config('app.crosspost_approval_rpc', 'off', true);
 
   insert into audit_logs (organization_id, actor_id, action, table_name, record_id, after, note)
   values (
@@ -492,6 +554,9 @@ begin
     raise exception '承認した本文がありません';
   end if;
 
+  -- ここから先だけ投稿済みへの遷移を許す印を立てる（トランザクション内だけ有効）
+  perform set_config('app.crosspost_publication_rpc', 'on', true);
+
   insert into social_publications (
     organization_id, social_source_id, social_channel_draft_id, channel_key,
     final_body, posted_url, posted_at, result, publisher,
@@ -504,6 +569,9 @@ begin
   ) returning * into v_pub;
 
   update social_channel_drafts set status = 'published' where id = p_draft_id;
+
+  -- 印はすぐ降ろす
+  perform set_config('app.crosspost_publication_rpc', 'off', true);
 
   insert into audit_logs (organization_id, actor_id, action, table_name, record_id, after, note)
   values (
@@ -686,4 +754,4 @@ where not exists (
 
 comment on table social_sources is 'FB投稿の一次原稿。横展開の起点（0029）';
 comment on table social_channel_drafts is '媒体ごとの下書き。ai_body=直近のAI出力（再生成すると置き換わる。過去のAI出力は generated_drafts(crosspost_ai_output) に残る）/ edited_body=人の修正 / approved_body=承認時に固定した本文（不変）（0029）';
-comment on function alco_social_enforce_approval() is '承認・却下・差し戻しの操作を owner/manager に限定し、承認者と日時をサーバー側で決める。識別列（組織・元投稿・媒体・作成者）は変更不可（0029）';
+comment on function alco_social_enforce_approval() is '承認は alco_crosspost_approve()、投稿済みは alco_crosspost_record_publication() の中でしか行えない（トランザクションローカルの印で判定）。差し戻しは owner/manager のみで承認列をすべて空に戻す。識別列（組織・元投稿・媒体・作成者）は変更不可（0029）';

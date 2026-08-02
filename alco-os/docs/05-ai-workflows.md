@@ -39,6 +39,13 @@ FB横展開（0029）は AI を2段階で呼ぶ。事実整理を1回だけ実�
 AIが「問題なし」と言っても辞書に当たれば要確認になる。
 
 **Crosspostの承認は `alco_crosspost_approve()` を唯一の本番承認経路とする。**
+これは運用上の約束ではなく **DB側で強制**している。承認関数は
+`set_config('app.crosspost_approval_rpc', 'on', true)` でトランザクション内だけ
+有効な印を立て、トリガーはこの印があるときしか `approved` への遷移・
+`approved_body` の設定・`approval_draft_id` の設定を通さない。
+owner/manager がテーブルを直接 UPDATE しても承認済みにはできない。
+投稿済み（`published`）も同じ仕組みで
+`alco_crosspost_record_publication()` の中だけに限っている。
 `generated_drafts` への承認証跡、業務反映（`social_channel_drafts` の
 `approved_body` / `approved_at` / `approved_by` / `approval_draft_id`）、監査ログを
 **同一トランザクション**で記録する。同様に、投稿済みの登録は
