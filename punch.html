@@ -70,9 +70,18 @@ h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600;
       <textarea id="health-note" rows="2" placeholder="症状を入力（例: 発熱 / 下痢 / 手指に傷）"></textarea>
     </div>
 
+    <div class="brk" id="brk-default-box" style="display:none;">
+      <label>休憩の初期設定（分）— 自分の既定値。午後出勤で休憩なしの方は「0」に</label>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <input type="number" id="brk-default" value="60" min="0" step="5">
+        <button class="btn-back" style="margin:0;padding:12px 16px;" onclick="saveDefaultBreak()">💾 初期設定を保存</button>
+      </div>
+    </div>
+
     <div class="brk" id="brk-box" style="display:none;">
-      <label>休憩時間（分）</label>
+      <label>今日の休憩時間（分）※初期値を自動入力。違う日だけ直してください</label>
       <input type="number" id="brk-min" value="60" min="0" step="5">
+      <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:14px;cursor:pointer;"><input type="checkbox" id="brk-set-default" style="width:18px;height:18px;"> この休憩時間を次回からの初期値にする</label>
     </div>
 
     <button class="big-btn btn-in" id="btn-in" onclick="punchIn()">🟢 出勤する</button>
@@ -138,7 +147,7 @@ let busy = false;
 
 async function loadNames() {
   try {
-    staffList = await sb('GET', 'staff', null, '?select=id,name&deleted_at=is.null&is_active=eq.true&order=name.asc');
+    staffList = await sb('GET', 'staff', null, '?select=id,name,default_break_min&deleted_at=is.null&is_active=eq.true&order=name.asc');
   } catch (e) { showToast('スタッフの読み込みに失敗しました。通信を確認してください。'); staffList = []; }
   document.getElementById('names').innerHTML = staffList.map(s =>
     `<button class="name-btn" onclick="select('${s.id}')">${esc(s.name)}</button>`).join('');
@@ -183,18 +192,34 @@ async function select(id) {
   const bin = document.getElementById('btn-in');
   const bout = document.getElementById('btn-out');
   const brk = document.getElementById('brk-box');
+  const brkDef = document.getElementById('brk-default-box');
   const health = document.getElementById('health-box');
+  const def = (selected.default_break_min != null) ? selected.default_break_min : 60;
+  document.getElementById('brk-default').value = def;
+  document.getElementById('brk-set-default').checked = false;
   if (!todayRec || !todayRec.clock_in) {
     st.textContent = '本日はまだ出勤していません。体調を確認して「出勤する」を押してください。';
-    bin.style.display = 'block'; bout.style.display = 'none'; brk.style.display = 'none'; health.style.display = 'block';
+    bin.style.display = 'block'; bout.style.display = 'none'; brk.style.display = 'none'; brkDef.style.display = 'block'; health.style.display = 'block';
   } else if (!todayRec.clock_out) {
     st.innerHTML = `🟢 出勤中（出勤 <strong>${todayRec.clock_in}</strong>）。休憩時間を確認し、体調をチェックして「退勤する」を押してください。`;
-    bin.style.display = 'none'; bout.style.display = 'block'; brk.style.display = 'block'; health.style.display = 'block';
-    if (todayRec.break_minutes) document.getElementById('brk-min').value = todayRec.break_minutes;
+    bin.style.display = 'none'; bout.style.display = 'block'; brk.style.display = 'block'; brkDef.style.display = 'none'; health.style.display = 'block';
+    document.getElementById('brk-min').value = (todayRec.break_minutes != null && todayRec.break_minutes !== 0) ? todayRec.break_minutes : def;
   } else {
     st.innerHTML = `✅ 本日は退勤済みです。<br>出勤 <strong>${todayRec.clock_in}</strong> / 退勤 <strong>${todayRec.clock_out}</strong> / 休憩 ${todayRec.break_minutes || 0}分`;
-    bin.style.display = 'none'; bout.style.display = 'none'; brk.style.display = 'none'; health.style.display = 'none';
+    bin.style.display = 'none'; bout.style.display = 'none'; brk.style.display = 'none'; brkDef.style.display = 'none'; health.style.display = 'none';
   }
+}
+
+async function saveDefaultBreak() {
+  if (!selected) return;
+  const v = parseInt(document.getElementById('brk-default').value);
+  if (isNaN(v) || v < 0) { showToast('休憩の初期値（分）を正しく入れてください'); return; }
+  try {
+    await sb('PATCH', 'staff', { default_break_min: v }, `?id=eq.${selected.id}`);
+    selected.default_break_min = v;
+    const s = staffList.find(x => String(x.id) === String(selected.id)); if (s) s.default_break_min = v;
+    showToast(`${selected.name}さんの休憩の初期値を ${v}分 に保存しました`);
+  } catch (e) { showToast('初期設定の保存に失敗しました。通信を確認してください。'); }
 }
 
 function showDone(msg, sub, warn) {
@@ -232,6 +257,10 @@ async function punchOut() {
   const hv = healthValue();
   try {
     await sb('PATCH', 'attendance', { clock_out: t, break_minutes: brk, health_out: hv, updated_at: new Date().toISOString() }, `?id=eq.${todayRec.id}`);
+    // 「この休憩時間を初期値にする」がオンなら本人の既定値も更新
+    if (document.getElementById('brk-set-default').checked) {
+      try { await sb('PATCH', 'staff', { default_break_min: brk }, `?id=eq.${selected.id}`); selected.default_break_min = brk; } catch (_e) {}
+    }
     showDone(`${selected.name}さん お疲れさまでした`, `退勤 ${t} ／ 休憩 ${brk}分 ／ 体調: ${hv}`, !healthOK);
     if (!healthOK) showToast('体調異常が記録されました。責任者に必ず報告してください。');
   } catch (e) { beep(false); showToast('退勤の記録に失敗しました。もう一度押してください。'); }
