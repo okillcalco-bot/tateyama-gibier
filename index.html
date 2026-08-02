@@ -6,7 +6,6 @@
 <title>館山ジビエセンター 業務</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <style>
 :root {
   /* ライトテーマ: 白基調・清潔感優先 */
@@ -387,29 +386,13 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .pc-error{font-size:13px;color:var(--red);min-height:18px;text-align:center;}
 .pc-hint{font-size:11px;color:var(--text3);text-align:center;margin-top:4px;}
 
-/* 個体QRラベル（KML-506 / A4 24面 3列×8段・1片70×33.9mm・左右フチなし・上下余白12.9mm） */
+/* 個体バーコードラベル（KML-506 / A4 24面）— 画面プレビュー用。実寸印刷は別ウィンドウで実施 */
 #qrPrintArea{display:none;}
-/* 画面プレビュー（内容確認用・実寸ではない簡易表示） */
-.qr-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
-.qr-cell{border:1px solid #000;border-radius:6px;padding:6px 4px;text-align:center;background:#fff;color:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;}
-.qr-cell svg{width:100%;height:auto;max-width:120px;}
-.qr-cell .qr-num{font-weight:700;font-size:15px;margin-top:3px;letter-spacing:.5px;}
-/* KML-506 実寸面付け */
-.kml-sheet{width:210mm;box-sizing:border-box;padding:12.9mm 0 12.9mm 0;background:#fff;}
-.kml-grid{display:grid;grid-template-columns:repeat(3,70mm);grid-auto-rows:33.9mm;}
-.kml-cell{width:70mm;height:33.9mm;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:3mm;padding:2mm 3mm;overflow:hidden;color:#000;}
-.kml-cell svg{width:24mm;height:24mm;flex:none;}
-.kml-cell .kml-txt{display:flex;flex-direction:column;line-height:1.25;}
-.kml-cell .kml-num{font-weight:700;font-size:15pt;letter-spacing:.5px;}
-.kml-cell .kml-sub{font-size:8pt;color:#333;}
-@media print{
-  body.qr-print > *:not(#qrPrintArea){display:none !important;}
-  body.qr-print #qrPrintArea{display:block !important;}
-  body.qr-print .kml-sheet{page-break-after:always;padding-top:12.9mm;}
-  body.qr-print .kml-sheet:last-child{page-break-after:auto;}
-  body.qr-print .kml-cell{page-break-inside:avoid;}
-  @page{size:A4 portrait;margin:0;}
-}
+.qr-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.qr-cell{border:1px solid #000;border-radius:6px;padding:6px 8px;text-align:center;background:#fff;color:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;}
+.qr-cell img{width:100%;height:auto;max-height:44px;object-fit:contain;}
+.qr-cell .qr-num{font-weight:700;font-size:15px;letter-spacing:.5px;}
+.qr-cell .qr-sub{font-size:10px;color:#555;}
 </style>
 </head>
 <body>
@@ -937,12 +920,12 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <div id="qrLabelModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
     <div style="max-width:680px;margin:24px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:22px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <div style="font-size:17px;font-weight:700;color:var(--gold);">🏷️ 個体QRラベル印刷（KML-506・24面）</div>
+        <div style="font-size:17px;font-weight:700;color:var(--gold);">🏷️ 個体バーコードラベル印刷（KML-506・24面）</div>
         <button onclick="document.getElementById('qrLabelModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
       </div>
       <div style="font-size:12.5px;color:var(--text2);margin-bottom:14px;line-height:1.7;">
-        個体QRラベルを<strong>先に印刷</strong>しておけます。搬入時に貼り、精肉モードの「QRラベルをスキャン」で読み取ると該当個体が開きます。<br>
-        <span style="color:var(--text3);">用紙: <strong>KML-506（A4・24面 3列×8段）</strong>。イノシシは通し番号、その他は「年度＋獣種＋番号」でラベルになります。</span>
+        個体バーコード（Code128）ラベルを<strong>先に印刷</strong>しておけます。搬入時に貼り、精肉モードの「バーコードをスキャン」で読み取ると該当個体が開きます。<br>
+        <span style="color:var(--text3);">用紙: <strong>KML-506（A4・24面 3列×8段・横長）</strong>。イノシシは通し番号、その他は「年度＋獣種＋番号」でラベルになります。「🖨 印刷」で別ウィンドウが開きます。</span>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
         <div class="form-group" style="min-width:170px;"><label>獣種</label>
@@ -1527,7 +1510,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <div id="pmSetup" class="pm-setup">
     <div class="pm-setup-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;"><span>🔪 精肉モード セットアップ</span>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button onclick="openQrLabelModal()" style="font-size:12px;padding:5px 12px;border-radius:10px;border:1px solid var(--gold2);background:var(--surface2);color:var(--gold);cursor:pointer;">🏷️ 個体QRラベル印刷</button>
+        <button onclick="openQrLabelModal()" style="font-size:12px;padding:5px 12px;border-radius:10px;border:1px solid var(--gold2);background:var(--surface2);color:var(--gold);cursor:pointer;">🏷️ 個体バーコードラベル印刷</button>
         <button onclick="connDiag()" style="font-size:12px;padding:5px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;">🔧 はかり・ラベラー接続診断</button>
         <button onclick="closeProcessingMode()" style="font-size:13px;font-weight:600;padding:5px 14px;border-radius:10px;border:1px solid var(--gold2);background:var(--surface);color:var(--gold);cursor:pointer;">← 業務メニューへ戻る</button>
       </div>
@@ -1543,7 +1526,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="pm-op-grid" id="pmSetupOpGrid"></div>
     <!-- Individual -->
     <div style="font-size:13px;color:var(--text2);margin:16px 0 8px;font-weight:500;">精肉する個体を選択</div>
-    <input class="form-input" id="pmScanInput" placeholder="🔳 QRラベルをスキャン（通し番号）— 読み取ると個体が開きます" onkeydown="if(event.key==='Enter'){event.preventDefault();pmScanSelect(this.value);this.value='';}" style="margin-bottom:6px;font-size:15px;padding:10px 14px;border-color:var(--gold2);" autocomplete="off" />
+    <input class="form-input" id="pmScanInput" placeholder="🔳 バーコードをスキャン — 読み取ると個体が開きます" onkeydown="if(event.key==='Enter'){event.preventDefault();pmScanSelect(this.value);this.value='';}" style="margin-bottom:6px;font-size:15px;padding:10px 14px;border-color:var(--gold2);" autocomplete="off" />
     <input class="form-input" id="pmIndSearch" placeholder="個体番号で検索（例: TGC-08-T）" oninput="pmSearchIndividuals()" style="margin-bottom:6px;font-size:15px;padding:10px 14px;" />
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;font-size:12px;">
       <span style="color:var(--text3);align-self:center;">クイック:</span>
@@ -2252,15 +2235,22 @@ async function openQrLabelModal() {
   await qrLabelPrefill();
 }
 
-// 1個体分のラベルデータ（QR文字列・大表示・補足）を返す
+// 1個体分のラベルデータ（バーコード文字列・大表示・補足）を返す
 function qrLabelCellData(sp, n) {
   if (sp === 'イノシシ') {
-    return { qr: 'TGC#' + n, big: '#' + String(n).padStart(3, '0'), sub: 'イノシシ 通し番号' };
+    return { code: 'TGC#' + n, big: '#' + String(n).padStart(3, '0'), sub: 'イノシシ 通し番号' };
   }
   const yy = (document.getElementById('qrYear').value || reiwaFiscalYY()).padStart(2, '0');
   const ent = QR_SPECIES[sp];
   const nnn = String(n).padStart(3, '0');
-  return { qr: `TGC-${yy}-${ent.code}${nnn}`, big: `${ent.kana}${nnn}`, sub: `令和${parseInt(yy,10)}年度 ${sp}` };
+  return { code: `TGC-${yy}-${ent.code}${nnn}`, big: `${ent.kana}${nnn}`, sub: `令和${parseInt(yy,10)}年度 ${sp}` };
+}
+
+// Code128バーコードをPNG data URLで生成（JsBarcode・オフライン可）
+function makeBarcodeDataURL(text) {
+  const canvas = document.createElement('canvas');
+  JsBarcode(canvas, text, { format: 'CODE128', width: 2, height: 70, displayValue: false, margin: 0 });
+  return canvas.toDataURL('image/png');
 }
 
 function qrLabelGenerate() {
@@ -2269,19 +2259,16 @@ function qrLabelGenerate() {
   const to = parseInt(document.getElementById('qrTo').value, 10);
   if (isNaN(from) || isNaN(to) || from < 1 || to < from) { alert('開始・終了の番号を正しく入力してください'); return; }
   if (to - from > 479) { alert('一度に印刷できるのは480件（20枚）までです'); return; }
-  if (typeof qrcode === 'undefined') { alert('QR生成ライブラリが読み込めませんでした。オンライン環境で再度お試しください。'); return; }
+  if (typeof JsBarcode === 'undefined') { alert('バーコード生成ライブラリが読み込めませんでした。オンライン環境で一度開き直してください。'); return; }
   const previewCells = [], sheetCells = [];
   for (let n = from; n <= to; n++) {
     const d = qrLabelCellData(sp, n);
-    const qr = qrcode(0, 'M');
-    qr.addData(d.qr);
-    qr.make();
-    const svg = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
-    previewCells.push(`<div class="qr-cell">${svg}<div class="qr-num">${d.big}</div></div>`);
-    sheetCells.push(`<div class="kml-cell">${svg}<div class="kml-txt"><span class="kml-num">${d.big}</span><span class="kml-sub">${d.sub}</span></div></div>`);
+    const img = makeBarcodeDataURL(d.code);
+    previewCells.push(`<div class="qr-cell"><img src="${img}" alt="${d.code}"><div class="qr-num">${d.big}</div><div class="qr-sub">${d.sub}</div></div>`);
+    sheetCells.push(`<div class="kml-cell"><img src="${img}" alt="${d.code}"><div class="kml-num">${d.big}</div><div class="kml-sub">${d.sub}</div></div>`);
   }
   document.getElementById('qrLabelPreview').innerHTML = previewCells.join('');
-  document.getElementById('qrLabelHint').textContent = `${to - from + 1}件を生成（KML-506 24面／${Math.ceil((to - from + 1) / 24)}枚）。「🖨 印刷」で印刷できます。`;
+  document.getElementById('qrLabelHint').textContent = `${to - from + 1}件を生成（KML-506 24面／${Math.ceil((to - from + 1) / 24)}枚）。「🖨 印刷」で別ウィンドウが開きます。`;
   // KML-506: 24面/枚でシート分割
   let sheets = '';
   for (let i = 0; i < sheetCells.length; i += 24) {
@@ -2290,14 +2277,42 @@ function qrLabelGenerate() {
   document.getElementById('qrPrintArea').innerHTML = sheets;
 }
 
+// KML-506実寸レイアウトのCSS（印刷ウィンドウに注入）
+const KML_PRINT_CSS = `
+@page{size:A4 portrait;margin:0;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Noto Sans JP',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+.kml-sheet{width:210mm;padding:12.9mm 0;page-break-after:always;}
+.kml-sheet:last-child{page-break-after:auto;}
+.kml-grid{display:grid;grid-template-columns:repeat(3,70mm);grid-auto-rows:33.9mm;}
+.kml-cell{width:70mm;height:33.9mm;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1mm;padding:2mm 5mm;overflow:hidden;}
+.kml-cell img{height:12mm;width:auto;max-width:62mm;}
+.kml-num{font-weight:700;font-size:14pt;letter-spacing:.5px;line-height:1;}
+.kml-sub{font-size:7.5pt;color:#333;line-height:1;}
+`;
+
 function qrLabelPrint() {
-  if (!document.getElementById('qrPrintArea').innerHTML.trim()) { qrLabelGenerate(); }
-  if (!document.getElementById('qrPrintArea').innerHTML.trim()) return;
-  document.body.classList.add('qr-print');
-  const cleanup = () => { document.body.classList.remove('qr-print'); window.removeEventListener('afterprint', cleanup); };
-  window.addEventListener('afterprint', cleanup);
-  window.print();
-  setTimeout(cleanup, 1500);
+  const area = document.getElementById('qrPrintArea');
+  if (!area.innerHTML.trim()) { qrLabelGenerate(); }
+  if (!area.innerHTML.trim()) return;
+  const html = '<!doctype html><html><head><meta charset="utf-8"><title>個体バーコードラベル（KML-506）</title>' +
+    '<style>' + KML_PRINT_CSS + '</style></head><body>' + area.innerHTML +
+    '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.focus();window.print();},400);};</scr' + 'ipt>' +
+    '</body></html>';
+  const w = window.open('', '_blank');
+  if (w) {
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  } else {
+    // ポップアップがブロックされた場合はBlob URLで開く
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.target = '_blank';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
 }
 
 /* ===== Dashboard ===== */
