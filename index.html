@@ -1211,6 +1211,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <input class="form-input" id="rad-copy-month" type="month" style="max-width:160px;">
           <button class="btn" onclick="radCopyForDaicho()">📋 台帳転記用にコピー</button>
+          <button class="btn btn-primary" onclick="radGenerateReport()">🖨 検査結果報告書</button>
         </div>
       </div>
       <div style="overflow-x:auto;">
@@ -6942,6 +6943,86 @@ async function radCopyForDaicho() {
     }
   } catch (e) { toast('コピーに失敗しました: ' + sbSafeMsg(e), 'error'); }
 }
+
+// 市役所提出用「放射性物質検査結果」報告書を生成（1枚3個体・台帳の数字シートと同形式）
+async function radGenerateReport() {
+  const month = document.getElementById('rad-copy-month').value;
+  if (!month) { toast('月を選んでください', 'error'); return; }
+  let rows;
+  try {
+    rows = await sb('GET', 'individuals', null,
+      `?radiation_test_date=gte.${month}-01&radiation_test_date=lt.${nextMonthStr(month)}&deleted_at=is.null` +
+      `&select=label_id,serial_number,species,capture_date,capture_city,capture_area,hunter_name,sex,weight_total,radiation_test_date,radiation_result_date,radiation_result` +
+      `&order=serial_number.asc.nullslast,label_id.asc`);
+  } catch (e) { toast('取得に失敗しました: ' + sbSafeMsg(e), 'error'); return; }
+  if (!rows.length) { toast('その月の検査記録はありません', 'error'); return; }
+
+  const esc = s => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const jdate = d => { if (!d) return ''; const [y, m, dd] = String(d).split('-'); return y ? `${y}年${+m}月${+dd}日` : d; };
+  const cell = (label, vals, getter) => `<tr><th>${label}</th>${vals.map(v => `<td>${esc(getter(v))}</td>`).join('')}</tr>`;
+
+  const sheets = [];
+  const [yy, mm] = month.split('-');
+  for (let i = 0; i < rows.length; i += 3) {
+    const g = rows.slice(i, i + 3);
+    while (g.length < 3) g.push(null); // 3列そろえる（空欄）
+    const num = Math.floor(i / 3) + 1;
+    const cs = (r) => r ? (r.radiation_result || '検出下限値以下') : '';
+    const sheet = `
+      <div class="rad-sheet">
+        <div class="rad-head">
+          <div class="rad-title">野生鳥獣肉　放射性物質検査結果</div>
+          <div class="rad-sub">館山ジビエセンター（合同会社アルコ）　令和${(+yy) - 2018}年${+mm}月分　No.${num}</div>
+        </div>
+        <table class="rad-table">
+          <tr><th style="width:150px">個体管理番号</th>${g.map(r => `<td class="rad-id">${esc(r ? r.label_id : '')}</td>`).join('')}</tr>
+          ${cell('獣種', g, r => r ? r.species : '')}
+          ${cell('捕獲年月日', g, r => r ? jdate(r.capture_date) : '')}
+          ${cell('捕獲場所', g, r => r ? [r.capture_city, r.capture_area].filter(Boolean).join(' ') : '')}
+          ${cell('捕獲者', g, r => r ? r.hunter_name : '')}
+          ${cell('性別 / 体重', g, r => r ? [r.sex, r.weight_total ? r.weight_total + 'kg' : ''].filter(Boolean).join(' / ') : '')}
+          <tr class="rad-sep"><th>検査日</th>${g.map(r => `<td>${esc(r ? jdate(r.radiation_test_date) : '')}</td>`).join('')}</tr>
+          ${cell('検査機関', g, r => r ? '館山市' : '')}
+          ${cell('結果判明日', g, r => r ? jdate(r.radiation_result_date || r.radiation_test_date) : '')}
+          ${cell('放射性セシウム134 (Bq/kg)', g, cs)}
+          ${cell('放射性セシウム137 (Bq/kg)', g, cs)}
+          ${cell('合計 (Bq/kg)', g, cs)}
+        </table>
+        <div class="rad-note">※ 基準値は100 Bq/kg（一般食品）。「検出下限値以下」は基準値を下回ることを示す。</div>
+      </div>`;
+    sheets.push(sheet);
+  }
+
+  const css = `
+    @page{size:A4 portrait;margin:14mm;}
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Noto Sans JP',sans-serif;color:#000;}
+    .rad-sheet{page-break-after:always;}
+    .rad-sheet:last-child{page-break-after:auto;}
+    .rad-head{text-align:center;margin-bottom:10px;}
+    .rad-title{font-size:18pt;font-weight:700;letter-spacing:2px;}
+    .rad-sub{font-size:10.5pt;margin-top:6px;color:#222;}
+    .rad-table{width:100%;border-collapse:collapse;table-layout:fixed;margin-top:8px;}
+    .rad-table th,.rad-table td{border:1px solid #000;padding:7px 8px;font-size:10.5pt;vertical-align:middle;}
+    .rad-table th{background:#eee;text-align:left;font-weight:600;}
+    .rad-table td{text-align:center;}
+    .rad-id{font-weight:700;font-size:12pt;}
+    .rad-sep th,.rad-sep td{border-top:2px solid #000;}
+    .rad-note{font-size:9pt;color:#333;margin-top:8px;}`;
+
+  const html = '<!doctype html><html><head><meta charset="utf-8"><title>放射性物質検査結果報告書</title><style>' + css +
+    '</style></head><body>' + sheets.join('') +
+    '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.focus();window.print();},400);};</scr' + 'ipt></body></html>';
+  const w = window.open('', '_blank');
+  if (w) { w.document.open(); w.document.write(html); w.document.close(); }
+  else {
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    const a = document.createElement('a'); a.href = url; a.target = '_blank';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+  toast(`${rows.length}頭ぶん（${Math.ceil(rows.length / 3)}枚）の検査結果報告書を作成しました`);
+}
+
 function nextMonthStr(month) {
   const [y, m] = month.split('-').map(Number);
   return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
