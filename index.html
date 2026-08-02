@@ -1740,6 +1740,7 @@ function fmt(d) {
    簡単に書き換え・削除できないようにする。気づいた点はデータ管理のフラグで記録し、
    修正は管理者が行う運用。 */
 function isAdminRole() { return sessionStorage.getItem('tg_role_v1') === 'admin'; }
+function isLoggedIn() { return sessionStorage.getItem('tg_access_v1') === 'ok'; }
 function requireAdmin(actionLabel) {
   if (isAdminRole()) return true;
   const code = prompt('「' + actionLabel + '」は管理者専用の操作です。\n誤操作からデータを守るため、管理者コードを入力してください。\n（気づいた点の共有は「データ管理 → 気になる点フラグ」へ）');
@@ -4850,7 +4851,8 @@ function indGetVal(id) {
 }
 
 async function indSave() {
-  if (indEditId && !requireAdmin('個体情報の編集（既存データの書き換え）')) return;
+  // 手入力の個体データはバイト（スタッフ）も編集可。削除・マスタ編集は管理者のみ（別途requireAdmin）。
+  if (indEditId && !isLoggedIn()) return;
   const btn = document.getElementById('indSaveBtn');
   btn.disabled = true; btn.textContent = '保存中...';
   try {
@@ -5611,16 +5613,27 @@ async function exportCSV(table, label) {
   } catch (err) { toast(`${label} のCSV出力に失敗しました: ` + sbSafeMsg(err), 'error'); }
 }
 
+// "HH:MM"×2 の差（分）。同日前提。両方が有効な時刻でなければ null。
+function minutesBetweenHHMM(a, b) {
+  const re = /^(\d{1,2}):(\d{2})$/;
+  const ma = re.exec((a || '').trim()), mb = re.exec((b || '').trim());
+  if (!ma || !mb) return null;
+  const av = (+ma[1]) * 60 + (+ma[2]), bv = (+mb[1]) * 60 + (+mb[2]);
+  if (av > 23 * 60 + 59 || bv > 23 * 60 + 59) return null;
+  return bv - av;
+}
+
 async function runDataChecks() {
   const out = document.getElementById('check-results');
   out.innerHTML = '<div class="loading"><span class="spin"></span>チェック中...</div>';
   const issues = [];
   try {
-    const [inds, invs, orders, items] = await Promise.all([
-      sb('GET', 'individuals', null, '?select=label_id,species,capture_date,aging_method,aging_started_at,aging_ended_at&deleted_at=is.null&limit=2000'),
+    const [inds, invs, orders, items, hunterRows] = await Promise.all([
+      sb('GET', 'individuals', null, '?select=label_id,species,capture_date,capture_city,capture_area,hunter_name,bleed_time,receive_time,aging_method,aging_started_at,aging_ended_at&deleted_at=is.null&limit=2000'),
       sb('GET', 'inventory', null, '?select=id,ident_code,individual_id,weight,status&deleted_at=is.null&limit=2000'),
       sb('GET', 'orders', null, '?select=id,order_code,status&limit=1000'),
       sb('GET', 'order_items', null, '?select=id,order_id,inventory_id,part_name&limit=2000'),
+      sb('GET', 'hunters', null, '?select=name&deleted_at=is.null&limit=1000'),
     ]);
     // 1. 個体番号の重複
     const seen = new Set();
@@ -5636,6 +5649,24 @@ async function runDataChecks() {
     // 5. 熟成の目安超過
     inds.filter(i => i.aging_method === '熟成' && !i.aging_ended_at && agingDays(i.aging_started_at || i.capture_date, null) > 10)
       .forEach(i => issues.push({ target: `individuals / ${i.label_id}`, msg: `熟成が${agingDays(i.aging_started_at || i.capture_date, null)}日を超えています（目安7日）` }));
+    // 6. 止め刺し（放血）から搬入まで1時間超過（HACCP）
+    const realInds = inds.filter(i => !/^(TGC-TEST|仮-)/i.test(i.label_id || ''));
+    realInds.forEach(i => {
+      const m = minutesBetweenHHMM(i.bleed_time, i.receive_time);
+      if (m != null && m > 60) issues.push({ target: `individuals / ${i.label_id}`, msg: `放血${i.bleed_time}→受入${i.receive_time}が${m}分（1時間超過）。要確認・修正` });
+    });
+    // 7. 地区・捕獲者の区別
+    const CITIES = ['館山市', '南房総市'];
+    const hunterSet = new Set((hunterRows || []).map(h => (h.name || '').trim()).filter(Boolean));
+    realInds.forEach(i => {
+      const city = (i.capture_city || '').trim();
+      if (!city) issues.push({ target: `individuals / ${i.label_id}`, msg: '捕獲地の市区（館山市/南房総市）が未入力' });
+      else if (!CITIES.includes(city)) issues.push({ target: `individuals / ${i.label_id}`, msg: `捕獲地の市区「${city}」が館山市/南房総市以外` });
+      if (!(i.capture_area || '').trim()) issues.push({ target: `individuals / ${i.label_id}`, msg: '捕獲場所（地区）が未入力' });
+      const hn = (i.hunter_name || '').trim();
+      if (!hn) issues.push({ target: `individuals / ${i.label_id}`, msg: '捕獲者が未入力' });
+      else if (!hunterSet.has(hn)) issues.push({ target: `individuals / ${i.label_id}`, msg: `捕獲者「${hn}」が捕獲者マスタに未登録（表記ゆれの可能性）` });
+    });
   } catch (err) {
     out.innerHTML = `<div class="empty-state" style="color:var(--red);">チェックに失敗しました: ${esc2(sbSafeMsg(err))}</div>`;
     return;
