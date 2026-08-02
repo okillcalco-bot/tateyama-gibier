@@ -716,6 +716,21 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="form-group"><label>皮の保管場所</label><input class="form-input" id="ind-f-hide_location" placeholder="例: 冷凍庫F2 / 乾燥棚" /></div>
         <div class="form-group" style="grid-column:1/-1"><label>解体時メモ（気になる点）</label><textarea class="form-input" id="ind-f-processing_notes" rows="2" style="resize:vertical;" placeholder="例: くくり罠の旧傷で右前脚が欠損"></textarea></div>
       </div>
+      <!-- セクション：精肉・買取 -->
+      <div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px;">▌ 精肉・買取（買取価格は自動計算・手修正可）</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px;">
+        <div class="form-group"><label>肉ランク（個体の最終ランク）</label>
+          <select class="form-input" id="ind-f-meat_rank" onchange="recalcBuyback()">
+            <option value="">未定</option><option>並</option><option>上</option><option>極上</option>
+          </select>
+        </div>
+        <div class="form-group"><label>歩留まり率(%)（精肉完了で自動計算）</label><input class="form-input" id="ind-f-yield_rate" type="number" step="0.1" placeholder="例: 32.5" oninput="recalcBuyback()" /></div>
+        <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;"><input type="checkbox" id="ind-f-stopkill_pickup" onchange="recalcBuyback()" style="width:18px;height:18px;accent-color:var(--gold);" /> 止めさし・引取あり（−3,000円）</label>
+        </div>
+        <div class="form-group"><label>買取価格(円)</label><input class="form-input" id="ind-f-buyback_amount" type="number" step="1" placeholder="自動計算" /></div>
+      </div>
+      <div id="buyback-hint" style="font-size:11.5px;color:var(--text2);margin-bottom:14px;line-height:1.6;">体重 × ランク単価(並100/上200/極上300) × 歩留まり係数(3割〜=100% / 2〜3割=50% / 1〜2割=30% / 1割未満=0%) − 止めさし引取3,000円（最低0円）</div>
       <!-- セクション：検査・備考 -->
       <div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px;">▌ 検査・備考</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
@@ -4615,18 +4630,25 @@ async function pmFinishIndividual() {
   if (!confirm(`${pmIndividual.label_id} の精肉を完了しますか？\n${pmCompletedParts.length}部位 登録済み`)) return;
 
   try {
-    // Update individual quality or add a note that processing is complete
-    await sb('PATCH', 'individuals', {
+    // 歩留まり率 = 精肉した肉の総重量 ÷ 体重（精肉完了で自動計算・保存）
+    const totalW = pmCompletedParts.reduce((s,c) => s + c.weight_kg, 0);
+    const indW = parseFloat(pmIndividual.weight_total) || 0;
+    const yieldNum = indW > 0 ? Math.round(totalW / indW * 1000) / 10 : null; // 小数第1位
+    const patch = {
       processing_type: '処理済',
       processing_done_at: new Date().toISOString(),
       memo: (pmIndividual.memo ? pmIndividual.memo + '\n' : '') + `精肉完了: ${new Date().toLocaleDateString('ja-JP')} ${pmCompletedParts.length}部位 担当:${pmCurrentOperator}`
-    }, `?label_id=eq.${encodeURIComponent(pmIndividual.label_id)}`);
+    };
+    if (yieldNum != null) patch.yield_rate = yieldNum;
+    // ランクが確定済みなら買取価格も自動算出（ランク未定なら個体編集で最終決定→自動計算）
+    if (pmIndividual.meat_rank && yieldNum != null) {
+      const bb = calcBuyback(indW, pmIndividual.meat_rank, yieldNum, !!pmIndividual.stopkill_pickup);
+      if (bb != null) patch.buyback_amount = bb;
+    }
+    await sb('PATCH', 'individuals', patch, `?label_id=eq.${encodeURIComponent(pmIndividual.label_id)}`);
 
-    const totalW = pmCompletedParts.reduce((s,c) => s + c.weight_kg, 0);
-    const indW = parseFloat(pmIndividual.weight_total) || 0;
-    const yieldPct = indW > 0 ? (totalW / indW * 100).toFixed(1) : '-';
-
-    toast(`${pmIndividual.label_id} 精肉完了（${pmCompletedParts.length}部位, 歩留まり${yieldPct}%）`);
+    const yieldPct = yieldNum != null ? yieldNum : '-';
+    toast(`${pmIndividual.label_id} 精肉完了（${pmCompletedParts.length}部位, 歩留まり${yieldPct}%）→ 個体編集で肉ランクを確定すると買取価格が出ます`);
     closeProcessingMode();
   } catch(e) {
     toast('更新エラー: ' + e.message, 'error');
@@ -4651,7 +4673,8 @@ const IND_ALL_FIELDS = ['label_id','serial_number','species','sex','age_estimate
   'weather','capture_method','finishing_method','hit_location',
   'bleed_time','gutting','cooling_method','transport_start','receive_time','process_time',
   'recorder','hunter_health_issues','capture_anomalies','organ_anomalies','has_fetus','hunter_health_ok','memo',
-  'intake_method','intake_staff','organs_use','hide_status','hide_location','processing_notes'];
+  'intake_method','intake_staff','organs_use','hide_status','hide_location','processing_notes',
+  'meat_rank','yield_rate','buyback_amount'];
 
 function indSort(col) {
   if (indSortCol === col) indSortAsc = !indSortAsc;
@@ -4821,6 +4844,8 @@ function indOpenNew() {
   indEditId = null;
   document.getElementById('indModalTitle').textContent = '新規個体登録';
   IND_ALL_FIELDS.forEach(f => indSetField(f, ''));
+  document.getElementById('ind-f-stopkill_pickup').checked = false;
+  updateBuybackHint();
   document.getElementById('ind-f-label_id').disabled = false;
   document.getElementById('indModal').style.display = 'block';
   document.getElementById('indModal').scrollTop = 0;
@@ -4835,6 +4860,8 @@ function indOpenEdit(labelId) {
   // bool fields
   indSetField('has_fetus', i.has_fetus == null ? '' : String(i.has_fetus));
   indSetField('hunter_health_ok', i.hunter_health_ok == null ? '' : String(i.hunter_health_ok));
+  document.getElementById('ind-f-stopkill_pickup').checked = !!i.stopkill_pickup;
+  updateBuybackHint();
   document.getElementById('ind-f-label_id').disabled = true;
   document.getElementById('indModal').style.display = 'block';
   document.getElementById('indModal').scrollTop = 0;
@@ -4848,6 +4875,51 @@ function indGetVal(id) {
   const el = document.getElementById('ind-f-' + id);
   if (!el) return null;
   return el.value.trim() || null;
+}
+
+// 買取価格の計算（精肉の価格表とは別建て）
+// base = 体重 × ランク単価(並100/上200/極上300) × 歩留まり係数、−止めさし引取3000、最低0
+const RANK_UNIT = { '並': 100, '上': 200, '極上': 300 };
+function yieldFactor(yieldPct) {
+  if (yieldPct == null || isNaN(yieldPct)) return null;
+  if (yieldPct >= 30) return 1.0;
+  if (yieldPct >= 20) return 0.5;
+  if (yieldPct >= 10) return 0.3;
+  return 0;
+}
+function calcBuyback(weight, rank, yieldPct, stopkillPickup) {
+  const unit = RANK_UNIT[rank];
+  const f = yieldFactor(yieldPct);
+  if (!weight || !unit || f == null) return null;
+  let base = Math.round(weight * unit * f);
+  if (stopkillPickup) base -= 3000;
+  return Math.max(0, base);
+}
+// 入力変更時：買取価格を自動計算して欄に反映
+function recalcBuyback() {
+  const weight = parseFloat(document.getElementById('ind-f-weight_total').value);
+  const rank = document.getElementById('ind-f-meat_rank').value;
+  const yieldPct = parseFloat(document.getElementById('ind-f-yield_rate').value);
+  const stopkill = document.getElementById('ind-f-stopkill_pickup').checked;
+  const v = calcBuyback(weight, rank, yieldPct, stopkill);
+  if (v != null) document.getElementById('ind-f-buyback_amount').value = v;
+  updateBuybackHint();
+}
+function updateBuybackHint() {
+  const el = document.getElementById('buyback-hint');
+  if (!el) return;
+  const weight = parseFloat(document.getElementById('ind-f-weight_total').value);
+  const rank = document.getElementById('ind-f-meat_rank').value;
+  const yieldPct = parseFloat(document.getElementById('ind-f-yield_rate').value);
+  const stopkill = document.getElementById('ind-f-stopkill_pickup').checked;
+  const f = yieldFactor(yieldPct);
+  const unit = RANK_UNIT[rank];
+  let base = 'ランク・歩留まり・体重が揃うと自動計算します';
+  if (weight && unit && f != null) {
+    const g = Math.round(weight * unit * f);
+    base = `${weight}kg × ${unit}円 × ${Math.round(f*100)}% = ${g.toLocaleString()}円` + (stopkill ? ` − 3,000円` : '') + ` → ${calcBuyback(weight,rank,yieldPct,stopkill).toLocaleString()}円`;
+  }
+  el.textContent = base;
 }
 
 async function indSave() {
@@ -4889,6 +4961,10 @@ async function indSave() {
       has_fetus:         boolVal('has_fetus'),
       hunter_health_ok:  boolVal('hunter_health_ok'),
       memo:              indGetVal('memo'),
+      meat_rank:         indGetVal('meat_rank'),
+      yield_rate:        numVal('yield_rate'),
+      buyback_amount:    numVal('buyback_amount'),
+      stopkill_pickup:   document.getElementById('ind-f-stopkill_pickup').checked,
     };
     // 受入・解体情報の追加カラム: 値がある場合のみ送信（カラム未追加のDBでも既存保存を壊さない）
     ['intake_method','intake_staff','organs_use','hide_status','hide_location','processing_notes'].forEach(f => {
