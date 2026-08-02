@@ -390,7 +390,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 #qrPrintArea{display:none;}
 .qr-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
 .qr-cell{border:1px solid #000;border-radius:6px;padding:6px 8px;text-align:center;background:#fff;color:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;}
-.qr-cell img{width:100%;height:auto;max-height:44px;object-fit:contain;}
+.qr-cell svg{width:100%;height:40px;display:block;}
 .qr-cell .qr-num{font-weight:700;font-size:15px;letter-spacing:.5px;}
 .qr-cell .qr-sub{font-size:10px;color:#555;}
 </style>
@@ -2246,11 +2246,33 @@ function qrLabelCellData(sp, n) {
   return { code: `TGC-${yy}-${ent.code}${nnn}`, big: `${ent.kana}${nnn}`, sub: `令和${parseInt(yy,10)}年度 ${sp}` };
 }
 
-// Code128バーコードをPNG data URLで生成（JsBarcode・オフライン可）
-function makeBarcodeDataURL(text) {
-  const canvas = document.createElement('canvas');
-  JsBarcode(canvas, text, { format: 'CODE128', width: 2, height: 70, displayValue: false, margin: 0 });
-  return canvas.toDataURL('image/png');
+// Code128（コードB）自前エンコーダ：外部ライブラリ不要・完全オフライン
+const CODE128_PATTERNS = ['212222','222122','222221','121223','121322','131222','122213','122312','132212','221213','221312','231212','112232','122132','122231','113222','123122','123221','223211','221132','221231','213212','223112','312131','311222','321122','321221','312212','322112','322211','212123','212321','232121','111323','131123','131321','112313','132113','132311','211313','231113','231311','112133','112331','132131','113123','113321','133121','313121','211331','231131','213113','213311','213131','311123','311321','331121','312113','312311','332111','314111','221411','431111','111224','111422','121124','121421','141122','141221','112214','112412','122114','122411','142112','142211','241211','221114','413111','241112','134111','111242','121142','121241','114212','124112','124211','411212','421112','421211','212141','214121','412121','111143','111341','131141','114113','114311','411113','411311','113141','114131','311141','411131','211412','211214','211232','2331112'];
+// テキスト→Code128Bのバー幅列を組み立ててインラインSVGを返す
+function code128SVG(text) {
+  const START_B = 104, STOP = 106;
+  const codes = [START_B];
+  let sum = START_B;
+  for (let i = 0; i < text.length; i++) {
+    const v = text.charCodeAt(i) - 32; // コードB: 値 = ASCII - 32
+    codes.push(v);
+    sum += v * (i + 1);
+  }
+  codes.push(sum % 103); // チェックディジット
+  codes.push(STOP);
+  let total = 0; const runs = [];
+  for (const c of codes) {
+    const pat = CODE128_PATTERNS[c];
+    for (let i = 0; i < pat.length; i++) {
+      const w = parseInt(pat[i], 10);
+      runs.push({ w: w, on: (i % 2 === 0) }); // 偶数=バー(黒)
+      total += w;
+    }
+  }
+  const quiet = 10, width = total + quiet * 2, height = 60;
+  let rects = '', x = quiet;
+  for (const r of runs) { if (r.on) rects += `<rect x="${x}" y="0" width="${r.w}" height="${height}"/>`; x += r.w; }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" shape-rendering="crispEdges"><rect width="${width}" height="${height}" fill="#fff"/><g fill="#000">${rects}</g></svg>`;
 }
 
 function qrLabelGenerate() {
@@ -2259,13 +2281,12 @@ function qrLabelGenerate() {
   const to = parseInt(document.getElementById('qrTo').value, 10);
   if (isNaN(from) || isNaN(to) || from < 1 || to < from) { alert('開始・終了の番号を正しく入力してください'); return; }
   if (to - from > 479) { alert('一度に印刷できるのは480件（20枚）までです'); return; }
-  if (typeof JsBarcode === 'undefined') { alert('バーコード生成ライブラリが読み込めませんでした。オンライン環境で一度開き直してください。'); return; }
   const previewCells = [], sheetCells = [];
   for (let n = from; n <= to; n++) {
     const d = qrLabelCellData(sp, n);
-    const img = makeBarcodeDataURL(d.code);
-    previewCells.push(`<div class="qr-cell"><img src="${img}" alt="${d.code}"><div class="qr-num">${d.big}</div><div class="qr-sub">${d.sub}</div></div>`);
-    sheetCells.push(`<div class="kml-cell"><img src="${img}" alt="${d.code}"><div class="kml-num">${d.big}</div><div class="kml-sub">${d.sub}</div></div>`);
+    const svg = code128SVG(d.code);
+    previewCells.push(`<div class="qr-cell">${svg}<div class="qr-num">${d.big}</div><div class="qr-sub">${d.sub}</div></div>`);
+    sheetCells.push(`<div class="kml-cell">${svg}<div class="kml-num">${d.big}</div><div class="kml-sub">${d.sub}</div></div>`);
   }
   document.getElementById('qrLabelPreview').innerHTML = previewCells.join('');
   document.getElementById('qrLabelHint').textContent = `${to - from + 1}件を生成（KML-506 24面／${Math.ceil((to - from + 1) / 24)}枚）。「🖨 印刷」で別ウィンドウが開きます。`;
@@ -2286,7 +2307,7 @@ body{font-family:'Noto Sans JP',sans-serif;-webkit-print-color-adjust:exact;prin
 .kml-sheet:last-child{page-break-after:auto;}
 .kml-grid{display:grid;grid-template-columns:repeat(3,70mm);grid-auto-rows:33.9mm;}
 .kml-cell{width:70mm;height:33.9mm;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1mm;padding:2mm 5mm;overflow:hidden;}
-.kml-cell img{height:12mm;width:auto;max-width:62mm;}
+.kml-cell svg{width:60mm;height:12mm;display:block;}
 .kml-num{font-weight:700;font-size:14pt;letter-spacing:.5px;line-height:1;}
 .kml-sub{font-size:7.5pt;color:#333;line-height:1;}
 `;
