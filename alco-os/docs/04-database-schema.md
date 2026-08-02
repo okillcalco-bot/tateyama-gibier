@@ -45,11 +45,14 @@
 
 | 0028_staff_notify_groups.sql | 搬入連絡のスタッフグループ通知: line_staff_groups（グループID・通知ON/OFF・状態 pending/active/disabled/left・通知回数） |
 
+| 0029_crosspost.sql | FB投稿 横展開（Phase 1）: social_sources / social_source_assets / social_channels / social_style_profiles / social_channel_drafts / social_publications。**制限が要るテーブルは alco_add_member_policy を使わず用途別ポリシー**（RLSはOR条件のため）、承認をまとめて行う `alco_crosspost_approve()`（**唯一の本番承認経路**。generated_draftsへの承認証跡・業務反映・監査ログを同一トランザクションで記録）、投稿済み登録をまとめて行う `alco_crosspost_record_publication()`（同じく唯一の本番経路）、承認INSERTの抜け道を塞ぐトリガー、承認列と確認理由の改ざん防止（approval_draft_id の付け替え禁止・review_reasons は追記のみ）、**承認済みからの引き戻し（approved→editing / published→draft）も owner/manager 限定**、**approved / published への遷移と approved_body・approval_draft_id の設定は所定のRPCの中だけ**（トランザクションローカルの `app.crosspost_*_rpc` で判定。直接UPDATEでの承認は owner/manager でも不可）、差し戻し・却下では承認関連列をすべてNULLへ、識別列（organization_id / social_source_id / channel_key / created_by）はINSERT後 変更不可、下書きの組織・元投稿・媒体の一致検証、媒体8件とスタイルv1のseed |
+
 **適用状況**: 0001〜0020 は本番 Supabase プロジェクト（tateyama-gibier /
 clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（0001〜0011: 2026-07-05、
 0012〜0020: 2026-07-06〜15）。
 **0021〜0026 は本番適用済み**（0021〜0023: PR #52 / 0024〜0026: PR #53）。ジビエ基幹側の `20260726_hunters_rls_hardening.sql` も適用済み。
 0027 も本番適用済み（適用名 `alco_os_0027_capture_form_share`）。
+**0029 は未適用**（FB投稿 横展開 Phase 1）。
 **0028 は未適用**（搬入連絡のスタッフグループ通知）。
 なお 0027 は当初、関数定義が `capture_place` の列追加より前にあり素のPostgresでは
 適用に失敗する順序だった。**本番へは順序を直したSQLで適用済み**で、
@@ -84,6 +87,17 @@ deleted_at       timestamptz                            -- ソフトデリート
 tasks, files, knowledge_docs は特定モジュールに依存しないよう
 `related_table` + `related_id` の汎用参照を使う（FKなし）。
 モジュール固有の強い整合性が必要な場合のみ専用FKカラムを足す。
+
+## RLSポリシーの注意（重要）
+
+PostgreSQL の通常ポリシーは **OR 条件**で評価される。
+`alco_add_member_policy()` は「組織メンバーに全CRUD」を許可する `FOR ALL` ポリシーを作るため、
+**あとから owner/manager 限定のポリシーを足しても制限にならない**。
+
+権限を絞りたいテーブルでは `alco_add_member_policy()` を**使わず**、
+`SELECT` / `INSERT` / `UPDATE` を用途ごとに明示すること（0029 が実例）。
+また、UPDATE トリガーだけでは **INSERT で最初から承認済みにする抜け道**が残るため、
+BEFORE INSERT トリガーとポリシーの `with check` で二重に塞ぐ。
 
 ## 1ファイル内のSQLの並び順（重要）
 

@@ -27,7 +27,35 @@
 | generate_advisor_brief | 士業相談（分野+相談文） | advisor_brief | advisor_consultations.approved_content（論点整理・専門家への質問リスト。**法的助言ではない**） |
 | parse_field_note | 現場メモ（音声文字起こし・走り書き） | field_note_result | （承認のみ。観察記録の確定は人が /nature/quick で行う）**種を確定しない・危険語はサーバー側でも保護側に倒す** — docs/10 |
 | classify_hunter_message | 捕獲者からのLINE本文（+ 照合済み氏名・位置情報の有無） | hunter_message_result | tasks + line_inbound_messages.status + capture_reports.ai_suggestion（**候補のみ。individuals / hunters には書き込まない**）|
+| analyze_crosspost_source | FB投稿の原文 | crosspost_fact_sheet | social_sources.fact_sheet（事実・数値・引用を1回だけ固定）|
+| generate_crosspost_drafts | 事実シート + 媒体2〜3件 + スタイル設定 | crosspost_ai_output | social_channel_drafts.ai_body（**承認対象ではない**。再生成すると置き換わるが、過去のAI出力は generated_drafts に残る）|
+| （承認時に生成） | 人が編集した本文のスナップショット | crosspost_approval | social_channel_drafts.approved_body |
 | summarize_meeting | （プロンプト定義のみ。実装は次段） | meeting_minutes | - |
+
+FB横展開（0029）は AI を2段階で呼ぶ。事実整理を1回だけ実行して媒体間で数値がぶれないようにし、
+媒体別の生成は2〜3件ずつのバッチに分ける。**1バッチが失敗しても成功した媒体は残り**、
+失敗した媒体だけ作り直せる。文字数が上限を超えても生成全体は失敗させず、その媒体だけ要確認にする。
+センシティブ判定は `domain/social/crosspost/sensitive.ts` の辞書が最終権限で、
+AIが「問題なし」と言っても辞書に当たれば要確認になる。
+
+**Crosspostの承認は `alco_crosspost_approve()` を唯一の本番承認経路とする。**
+これは運用上の約束ではなく **DB側で強制**している。承認関数は
+`set_config('app.crosspost_approval_rpc', 'on', true)` でトランザクション内だけ
+有効な印を立て、トリガーはこの印があるときしか `approved` への遷移・
+`approved_body` の設定・`approval_draft_id` の設定を通さない。
+owner/manager がテーブルを直接 UPDATE しても承認済みにはできない。
+投稿済み（`published`）も同じ仕組みで
+`alco_crosspost_record_publication()` の中だけに限っている。
+`generated_drafts` への承認証跡、業務反映（`social_channel_drafts` の
+`approved_body` / `approved_at` / `approved_by` / `approval_draft_id`）、監査ログを
+**同一トランザクション**で記録する。同様に、投稿済みの登録は
+`alco_crosspost_record_publication()` が唯一の本番経路で、投稿履歴・下書きの状態・
+監査ログを同一トランザクションで記録する。
+
+`draft-service.ts` / `publication-service.ts` の逐次処理は
+**テスト用フォールバック**であり、`rpc` 引数を渡さなかった場合にだけ動く。
+本番コード（`src/app/crosspost/actions.ts`）は常に `rpc` を渡すため、
+**テスト用フォールバックは本番コードから呼べない**。
 
 共有ボードのタグ付けは AI ではなく辞書ベース（domain/board/board-service の
 TAG_RULES）。AI提案タグを足す場合も必ずドラフト承認フローを通すこと。

@@ -36,6 +36,19 @@ export default async function SocialPage() {
         title="発信（投稿一括更新）"
         description="メモやFB投稿を、HP・Instagram・Facebook・YouTube向けに書き分けて承認 → 投稿。"
       />
+      <Card className="mb-4 border-green-300 bg-green-50">
+        <p className="text-base text-green-900">
+          Facebookの投稿を8媒体へ横展開する新しい画面ができました。
+          媒体ごとに承認できます。
+        </p>
+        <Link
+          href="/crosspost"
+          className="mt-2 inline-flex min-h-[56px] items-center rounded-xl bg-green-700 px-4 text-base font-bold text-white"
+        >
+          🔁 FB横展開をひらく
+        </Link>
+      </Card>
+
       <NewSocialProjectForm />
       <div className="mt-4 space-y-3">
         {!projects?.length ? (

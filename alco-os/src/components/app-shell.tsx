@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { href: "/projects", label: "プロジェクト", icon: "🏗" },
   { href: "/media", label: "メディア", icon: "🎬" },
   { href: "/social", label: "発信", icon: "📣" },
+  { href: "/crosspost", label: "FB横展開", icon: "🔁" },
   { href: "/hr", label: "勤怠・シフト", icon: "🕒" },
   { href: "/orders", label: "受注", icon: "📦" },
   { href: "/billing", label: "帳票センター", icon: "🧾" },

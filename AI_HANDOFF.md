@@ -73,6 +73,7 @@ AIは提案者であり、判断者・承認者ではない。迷ったときの
 | `/orders` | 受注管理（タノム参考）。既存 orders の status 更新のみ（語彙: 受注/確認済/発送済/納品完了/キャンセル — order-portal.html と共通、変更禁止）+ 集計 + CSV |
 | `/orders` 内 帳票 | 請求書/納品書/領収書（0014 billing_documents）。月毎種類毎自動採番 INV/DN/RC-YYYYMM-001、発行時スナップショット、取消=欠番、内税逆算8/10/0%。印刷ページ=/orders/documents/[id] |
 | `/media` | プレゼン（承認後PPTX: /api/media/[id]/pptx、pptxgenjs）/ YouTube動画プラン（台本・メタデータ + ブラウザ内WebM書き出し + SRT + 動画ID手動登録） |
+| `/crosspost` | **FB投稿 横展開**（Phase 1）。沖代表のFB投稿を登録 → 8媒体の下書きをAIが生成 → 媒体ごとに編集・承認・却下 → 投稿済みURLを登録。**AI出力（ai_body。再生成で置き換わる／過去分は generated_drafts に残る）と人が承認した本文（approved_body）を別々に保存**。承認は `alco_crosspost_approve()` が**唯一の経路（DB側で強制。直接UPDATEでの承認は owner/manager でも不可）**（generated_drafts(crosspost_approval) への承認証跡・業務反映・監査ログを同一トランザクションで記録）。投稿済み登録も `alco_crosspost_record_publication()` で同様。ドメイン層の逐次処理は**テスト用フォールバック**で、本番コードは常にRPCを渡すため呼ばれない。外部投稿APIは未実装（publisherアダプタのみ）|
 | `/social` | 投稿一括更新。一次データ → HP/Instagram/FB/YouTube向け原稿AI生成 → 承認 → コピー投稿 + 投稿済み管理 |
 | `/billing` | 帳票センター（Misoca代替）。見積/納品/請求/領収の自由入力発行・書類変換（明細引き継ぎ・source_document_id で系譜）・Misoca CSVインポート（source='misoca'、金額原本保持） |
 | `/ledger` | 売上伝票（手売り/解体体験/イベント。SL-YYYYMM-###自動採番、取消=欠番、月次集計、税理士用CSV=/api/ledger/csv） |
@@ -131,7 +132,7 @@ satoyama_os / quests_support）。詳細と適用日は docs/04-database-schema.
 
 0021〜0023 は PR #52 で main にマージ済み（**本番DBへの適用は沖代表の承認後**）。
 0021〜0026 は本番適用済み（PR #52 / #53）。ジビエ基幹側の `20260726_hunters_rls_hardening.sql` も適用済み。
-0027 も本番適用済み。**0028 は未適用**（搬入連絡のスタッフグループ通知）。
+0027 も本番適用済み。**0028 / 0029 は未適用**（0028 搬入連絡のスタッフグループ通知 / 0029 FB投稿 横展開 Phase 1）。
 
 ## 未完・段階2（docs/08 Phase 2-3 参照）
 
@@ -157,6 +158,6 @@ satoyama_os / quests_support）。詳細と適用日は docs/04-database-schema.
 
 1. `alco-os/CLAUDE.md` と `docs/07` を読む
 2. 変更は小さく。domain経由・監査ログ・承認フローを迂回しない
-3. `pnpm typecheck && pnpm test`（現在255件）→ `pnpm build`
+3. `pnpm typecheck && pnpm test`（現在284件）→ `pnpm build`
 4. docs/ と /manual を更新 → PR（main直pushしない）
 5. 報告: 変更概要 / ファイル / テスト / マイグレーション / リスク
