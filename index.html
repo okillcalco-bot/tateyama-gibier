@@ -387,19 +387,28 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .pc-error{font-size:13px;color:var(--red);min-height:18px;text-align:center;}
 .pc-hint{font-size:11px;color:var(--text3);text-align:center;margin-top:4px;}
 
-/* 通し番号QRラベル */
+/* 個体QRラベル（KML-506 / A4 24面 3列×8段・1片70×33.9mm・左右フチなし・上下余白12.9mm） */
 #qrPrintArea{display:none;}
+/* 画面プレビュー（内容確認用・実寸ではない簡易表示） */
 .qr-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
 .qr-cell{border:1px solid #000;border-radius:6px;padding:6px 4px;text-align:center;background:#fff;color:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;}
 .qr-cell svg{width:100%;height:auto;max-width:120px;}
 .qr-cell .qr-num{font-weight:700;font-size:15px;margin-top:3px;letter-spacing:.5px;}
+/* KML-506 実寸面付け */
+.kml-sheet{width:210mm;box-sizing:border-box;padding:12.9mm 0 12.9mm 0;background:#fff;}
+.kml-grid{display:grid;grid-template-columns:repeat(3,70mm);grid-auto-rows:33.9mm;}
+.kml-cell{width:70mm;height:33.9mm;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:3mm;padding:2mm 3mm;overflow:hidden;color:#000;}
+.kml-cell svg{width:24mm;height:24mm;flex:none;}
+.kml-cell .kml-txt{display:flex;flex-direction:column;line-height:1.25;}
+.kml-cell .kml-num{font-weight:700;font-size:15pt;letter-spacing:.5px;}
+.kml-cell .kml-sub{font-size:8pt;color:#333;}
 @media print{
   body.qr-print > *:not(#qrPrintArea){display:none !important;}
   body.qr-print #qrPrintArea{display:block !important;}
-  body.qr-print #qrPrintArea .qr-grid{grid-template-columns:repeat(5,1fr);gap:4mm;}
-  body.qr-print .qr-cell{page-break-inside:avoid;}
-  body.qr-print{ }
-  @page{size:A4 portrait;margin:10mm;}
+  body.qr-print .kml-sheet{page-break-after:always;padding-top:12.9mm;}
+  body.qr-print .kml-sheet:last-child{page-break-after:auto;}
+  body.qr-print .kml-cell{page-break-inside:avoid;}
+  @page{size:A4 portrait;margin:0;}
 }
 </style>
 </head>
@@ -924,29 +933,43 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     </div>
   </div>
 
-  <!-- 通し番号QRラベル印刷モーダル -->
+  <!-- 個体QRラベル印刷モーダル（KML-506 / A4 24面） -->
   <div id="qrLabelModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
     <div style="max-width:680px;margin:24px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:22px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <div style="font-size:17px;font-weight:700;color:var(--gold);">🏷️ 通し番号QRラベル印刷</div>
+        <div style="font-size:17px;font-weight:700;color:var(--gold);">🏷️ 個体QRラベル印刷（KML-506・24面）</div>
         <button onclick="document.getElementById('qrLabelModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
       </div>
       <div style="font-size:12.5px;color:var(--text2);margin-bottom:14px;line-height:1.7;">
-        通し番号のQRラベルを<strong>先に印刷</strong>しておけます。搬入時に個体へ貼り、精肉モードの「QRラベルをスキャン」で読み取ると、その通し番号に紐づく個体が開きます。<br>
-        <span style="color:var(--text3);">※ 台帳の通し番号（個体登録時の「通し番号」）と一致させてください。QRの中身は <code>TGC#番号</code> です。</span>
+        個体QRラベルを<strong>先に印刷</strong>しておけます。搬入時に貼り、精肉モードの「QRラベルをスキャン」で読み取ると該当個体が開きます。<br>
+        <span style="color:var(--text3);">用紙: <strong>KML-506（A4・24面 3列×8段）</strong>。イノシシは通し番号、その他は「年度＋獣種＋番号」でラベルになります。</span>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
-        <div class="form-group" style="flex:1;min-width:120px;"><label>開始 通し番号</label><input class="form-input" id="qrFrom" type="number" min="1" /></div>
-        <div class="form-group" style="flex:1;min-width:120px;"><label>終了 通し番号</label><input class="form-input" id="qrTo" type="number" min="1" /></div>
+        <div class="form-group" style="min-width:170px;"><label>獣種</label>
+          <select class="form-input" id="qrSpecies" onchange="qrLabelSpeciesChange()">
+            <option value="イノシシ">イノシシ（通し番号）</option>
+            <option value="シカ">シカ</option>
+            <option value="キョン">キョン</option>
+            <option value="ハクビシン">ハクビシン</option>
+            <option value="アライグマ">アライグマ</option>
+            <option value="タヌキ">タヌキ</option>
+            <option value="ノウサギ">ノウサギ</option>
+          </select>
+        </div>
+        <div class="form-group" id="qrYearGroup" style="min-width:110px;display:none;"><label>年度（令和）</label><input class="form-input" id="qrYear" type="number" min="1" max="99" /></div>
+        <div class="form-group" style="flex:1;min-width:100px;"><label id="qrFromLabel">開始 通し番号</label><input class="form-input" id="qrFrom" type="number" min="1" /></div>
+        <div class="form-group" style="flex:1;min-width:100px;"><label id="qrToLabel">終了 通し番号</label><input class="form-input" id="qrTo" type="number" min="1" /></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
         <button class="btn" onclick="qrLabelGenerate()">プレビュー生成</button>
-        <button class="btn btn-primary" onclick="qrLabelPrint()">🖨 印刷</button>
+        <button class="btn btn-primary" onclick="qrLabelPrint()">🖨 印刷（KML-506）</button>
       </div>
       <div id="qrLabelHint" style="font-size:12px;color:var(--text3);margin:8px 0;"></div>
       <div id="qrLabelPreview" class="qr-grid" style="margin-top:8px;"></div>
     </div>
   </div>
 
-  <!-- 印刷専用エリア（通し番号QRラベル） -->
+  <!-- 印刷専用エリア（個体QRラベル） -->
   <div id="qrPrintArea"></div>
 
   <!-- Product Movement Modal -->
@@ -1504,7 +1527,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <div id="pmSetup" class="pm-setup">
     <div class="pm-setup-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;"><span>🔪 精肉モード セットアップ</span>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button onclick="openQrLabelModal()" style="font-size:12px;padding:5px 12px;border-radius:10px;border:1px solid var(--gold2);background:var(--surface2);color:var(--gold);cursor:pointer;">🏷️ 通し番号QRラベル印刷</button>
+        <button onclick="openQrLabelModal()" style="font-size:12px;padding:5px 12px;border-radius:10px;border:1px solid var(--gold2);background:var(--surface2);color:var(--gold);cursor:pointer;">🏷️ 個体QRラベル印刷</button>
         <button onclick="connDiag()" style="font-size:12px;padding:5px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;">🔧 はかり・ラベラー接続診断</button>
         <button onclick="closeProcessingMode()" style="font-size:13px;font-weight:600;padding:5px 14px;border-radius:10px;border:1px solid var(--gold2);background:var(--surface);color:var(--gold);cursor:pointer;">← 業務メニューへ戻る</button>
       </div>
@@ -2121,11 +2144,37 @@ async function barcodeLookup(code) {
   }
 }
 
-/* ===== 通し番号QRラベル：コード解決・スキャン・印刷 ===== */
-// TGC#番号 / 数字のみ → serial_number、それ以外 → label_id で個体を引く
+/* ===== 個体QRラベル：コード解決・スキャン・印刷（KML-506 / A4 24面） ===== */
+// 獣種 → label_id内のカナ記号 と QR用ASCIIコード（スキャナー文字化け回避）
+const QR_SPECIES = {
+  'シカ':      { kana: 'シ', code: 'SK' },
+  'キョン':    { kana: 'キ', code: 'KY' },
+  'ハクビシン':{ kana: 'ハ', code: 'HK' },
+  'アライグマ':{ kana: 'ア', code: 'AR' },
+  'タヌキ':    { kana: 'タ', code: 'TN' },
+  'ノウサギ':  { kana: 'ウ', code: 'US' }
+};
+// 現在の年度（令和・4月始まり）を2桁で
+function reiwaFiscalYY() {
+  const d = new Date();
+  const fy = (d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1) - 2018; // 令和 = 西暦-2018
+  return String(fy).padStart(2, '0');
+}
+// TGC#番号/数字 → serial_number（イノシシ）、TGC-YY-<コード>NNN → label_id(カナ)、その他 → label_idそのまま
 async function resolveIndividualByCode(code) {
   code = String(code || '').trim();
   if (!code) return null;
+  // 他獣種：ASCIIコード（TGC-08-SK024）→ カナlabel_id（TGC-08-シ024）
+  const rm = code.match(/^TGC-(\d+)-([A-Za-z]{2})0*(\d+)$/);
+  if (rm) {
+    const ent = Object.values(QR_SPECIES).find(s => s.code === rm[2].toUpperCase());
+    if (ent) {
+      const labelId = `TGC-${rm[1]}-${ent.kana}${String(rm[3]).padStart(3, '0')}`;
+      const inds = await sb('GET', 'individuals', null, `?label_id=eq.${encodeURIComponent(labelId)}&deleted_at=is.null&select=*`);
+      return inds[0] || null;
+    }
+  }
+  // イノシシ：通し番号
   let serial = null;
   const m = code.match(/^TGC#0*(\d+)$/i);
   if (m) serial = parseInt(m[1], 10);
@@ -2136,6 +2185,7 @@ async function resolveIndividualByCode(code) {
     const pending = inds.filter(i => !i.processing_done_at);
     return pending[0] || inds[0];
   }
+  // それ以外はlabel_idそのまま（カナ入りQRを直接読んだ場合など）
   const inds = await sb('GET', 'individuals', null, `?label_id=eq.${encodeURIComponent(code)}&deleted_at=is.null&select=*`);
   return inds[0] || null;
 }
@@ -2154,41 +2204,90 @@ async function pmScanSelect(code) {
   }
 }
 
-async function openQrLabelModal() {
-  document.getElementById('qrLabelModal').style.display = 'block';
+function qrLabelSpeciesChange() {
+  const sp = document.getElementById('qrSpecies').value;
+  const isBoar = sp === 'イノシシ';
+  document.getElementById('qrYearGroup').style.display = isBoar ? 'none' : '';
+  document.getElementById('qrFromLabel').textContent = isBoar ? '開始 通し番号' : '開始 番号';
+  document.getElementById('qrToLabel').textContent = isBoar ? '終了 通し番号' : '終了 番号';
   document.getElementById('qrLabelPreview').innerHTML = '';
-  document.getElementById('qrLabelHint').textContent = '';
+  document.getElementById('qrPrintArea').innerHTML = '';
+  if (!isBoar && !document.getElementById('qrYear').value) document.getElementById('qrYear').value = reiwaFiscalYY();
+  qrLabelPrefill();
+}
+
+async function qrLabelPrefill() {
+  const sp = document.getElementById('qrSpecies').value;
+  const hint = document.getElementById('qrLabelHint');
   try {
-    const r = await sb('GET', 'individuals', null, '?select=serial_number&serial_number=not.is.null&order=serial_number.desc&limit=1');
-    const max = (r[0] && r[0].serial_number) || 0;
-    document.getElementById('qrFrom').value = max + 1;
-    document.getElementById('qrTo').value = max + 50;
-    document.getElementById('qrLabelHint').textContent = max ? ('現在の最大通し番号: ' + max + '（次の分をプリセット）') : '';
+    if (sp === 'イノシシ') {
+      const r = await sb('GET', 'individuals', null, '?select=serial_number&serial_number=not.is.null&order=serial_number.desc&limit=1');
+      const max = (r[0] && r[0].serial_number) || 0;
+      document.getElementById('qrFrom').value = max + 1;
+      document.getElementById('qrTo').value = max + 24;
+      hint.textContent = max ? ('現在の最大通し番号: ' + max + '（次の分をプリセット・24面=1枚）') : '';
+    } else {
+      const yy = (document.getElementById('qrYear').value || reiwaFiscalYY()).padStart(2, '0');
+      const kana = QR_SPECIES[sp].kana;
+      const r = await sb('GET', 'individuals', null, `?select=label_id&label_id=like.TGC-${yy}-${encodeURIComponent(kana)}*&order=label_id.desc&limit=1`);
+      let max = 0;
+      if (r[0] && r[0].label_id) { const mm = r[0].label_id.match(/(\d+)$/); if (mm) max = parseInt(mm[1], 10); }
+      document.getElementById('qrFrom').value = max + 1;
+      document.getElementById('qrTo').value = max + 24;
+      hint.textContent = `令和${parseInt(yy,10)}年度 ${sp}：現在の最大番号 ${max}（次の分をプリセット）`;
+    }
   } catch (e) {
     document.getElementById('qrFrom').value = 1;
-    document.getElementById('qrTo').value = 50;
+    document.getElementById('qrTo').value = 24;
   }
 }
 
+async function openQrLabelModal() {
+  document.getElementById('qrLabelModal').style.display = 'block';
+  document.getElementById('qrLabelPreview').innerHTML = '';
+  document.getElementById('qrPrintArea').innerHTML = '';
+  document.getElementById('qrSpecies').value = 'イノシシ';
+  document.getElementById('qrYear').value = reiwaFiscalYY();
+  qrLabelSpeciesChange();
+  await qrLabelPrefill();
+}
+
+// 1個体分のラベルデータ（QR文字列・大表示・補足）を返す
+function qrLabelCellData(sp, n) {
+  if (sp === 'イノシシ') {
+    return { qr: 'TGC#' + n, big: '#' + String(n).padStart(3, '0'), sub: 'イノシシ 通し番号' };
+  }
+  const yy = (document.getElementById('qrYear').value || reiwaFiscalYY()).padStart(2, '0');
+  const ent = QR_SPECIES[sp];
+  const nnn = String(n).padStart(3, '0');
+  return { qr: `TGC-${yy}-${ent.code}${nnn}`, big: `${ent.kana}${nnn}`, sub: `令和${parseInt(yy,10)}年度 ${sp}` };
+}
+
 function qrLabelGenerate() {
+  const sp = document.getElementById('qrSpecies').value;
   const from = parseInt(document.getElementById('qrFrom').value, 10);
   const to = parseInt(document.getElementById('qrTo').value, 10);
-  if (isNaN(from) || isNaN(to) || from < 1 || to < from) { alert('開始・終了の通し番号を正しく入力してください'); return; }
-  if (to - from > 499) { alert('一度に印刷できるのは500件までです'); return; }
+  if (isNaN(from) || isNaN(to) || from < 1 || to < from) { alert('開始・終了の番号を正しく入力してください'); return; }
+  if (to - from > 479) { alert('一度に印刷できるのは480件（20枚）までです'); return; }
   if (typeof qrcode === 'undefined') { alert('QR生成ライブラリが読み込めませんでした。オンライン環境で再度お試しください。'); return; }
-  let cells = '';
+  const previewCells = [], sheetCells = [];
   for (let n = from; n <= to; n++) {
-    const text = 'TGC#' + n;
+    const d = qrLabelCellData(sp, n);
     const qr = qrcode(0, 'M');
-    qr.addData(text);
+    qr.addData(d.qr);
     qr.make();
-    const svg = qr.createSvgTag({ cellSize: 4, margin: 1, scalable: true });
-    cells += `<div class="qr-cell">${svg}<div class="qr-num">#${String(n).padStart(3, '0')}</div></div>`;
+    const svg = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+    previewCells.push(`<div class="qr-cell">${svg}<div class="qr-num">${d.big}</div></div>`);
+    sheetCells.push(`<div class="kml-cell">${svg}<div class="kml-txt"><span class="kml-num">${d.big}</span><span class="kml-sub">${d.sub}</span></div></div>`);
   }
-  document.getElementById('qrLabelPreview').innerHTML = cells;
-  document.getElementById('qrLabelHint').textContent = (to - from + 1) + '件を生成しました。「🖨 印刷」でA4に印刷できます。';
-  document.getElementById('qrPrintArea').innerHTML =
-    `<div style="text-align:center;font-weight:700;margin-bottom:8px;color:#000;">館山ジビエセンター 通し番号QRラベル（#${String(from).padStart(3, '0')}〜#${String(to).padStart(3, '0')}）</div><div class="qr-grid">${cells}</div>`;
+  document.getElementById('qrLabelPreview').innerHTML = previewCells.join('');
+  document.getElementById('qrLabelHint').textContent = `${to - from + 1}件を生成（KML-506 24面／${Math.ceil((to - from + 1) / 24)}枚）。「🖨 印刷」で印刷できます。`;
+  // KML-506: 24面/枚でシート分割
+  let sheets = '';
+  for (let i = 0; i < sheetCells.length; i += 24) {
+    sheets += `<div class="kml-sheet"><div class="kml-grid">${sheetCells.slice(i, i + 24).join('')}</div></div>`;
+  }
+  document.getElementById('qrPrintArea').innerHTML = sheets;
 }
 
 function qrLabelPrint() {
