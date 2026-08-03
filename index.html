@@ -437,7 +437,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <button class="tab-btn" data-tab="shipping">&#x1F4E4; 出荷処理<span class="nav-badge" id="nav-badge-shipping"></span></button>
   <button class="tab-btn" data-tab="trace">&#x1F50D; トレーサビリティ</button>
   <div class="nav-group">受発注</div>
-  <a class="tab-btn" href="order-admin.html">&#x1F4CB; 受発注管理</a>
+  <a class="tab-btn" href="order-admin.html">&#x1F4CB; 受発注管理<span class="nav-badge" id="nav-badge-orders"></span></a>
   <a class="tab-btn" href="order-portal.html" target="_blank">&#x1F6D2; 注文ポータル（お客様用）</a>
   <div class="nav-group">台帳（管理者のみ）</div>
   <button class="tab-btn" data-tab="hunters">&#x1F3F9; 捕獲者台帳</button>
@@ -1527,7 +1527,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <!-- Shipping -->
   <div class="tab-panel" id="panel-shipping">
     <div class="section" id="ship-workbench">
-      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;"><span>バーコード出荷スキャン（注文あり）</span><button class="btn btn-sm" onclick="manualOpen('shipping')">📖 使い方</button></div>
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;"><span>バーコード出荷スキャン（注文あり）</span><div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-sm" id="ord-notify-btn" onclick="ordEnableNotify()">🔔 通知</button><button class="btn btn-sm" onclick="manualOpen('shipping')">📖 使い方</button></div></div>
       <div style="padding:10px 12px;border:1px dashed var(--gold2);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.9;background:var(--surface2);margin-bottom:10px;">
         📖 <strong style="color:var(--gold);">やり方</strong><br>
         ① 下の<strong>出荷待ち注文一覧</strong>から、出したい注文の「<strong>📌 この注文に割当</strong>」を押す（お店を選ぶイメージ）<br>
@@ -2988,9 +2988,21 @@ function shipScanShowResult(ok, html) {
   el.innerHTML = (ok ? '✅ ' : '⛔ ') + html;
 }
 
-function shipSelectOrder(orderId) {
+async function shipSelectOrder(orderId) {
   shipSelectedOrderId = orderId;
   const cached = shipOrdersCache[orderId];
+  // 新規（受注）を選んだら、その場で受付＝確認済にする（受発注管理を開かなくても発送まで進める）
+  if (cached && cached.order.status === '受注') {
+    try {
+      await sb('PATCH', 'orders', { status: '確認済', updated_at: new Date().toISOString() }, `?id=eq.${orderId}`);
+      cached.order.status = '確認済';
+      toast(`注文 ${shipOrderLabel(cached.order)} を受け付けました（確認済）`);
+      refreshNavBadges();
+      const card = document.getElementById(`order-${orderId}`);
+      const badge = card && card.querySelector('.badge-gold');
+      if (badge) { badge.className = 'badge badge-red'; badge.textContent = '⚠ 在庫を割り当ててください'; }
+    } catch (e) { toast('受付に失敗しました: ' + sbSafeMsg(e), 'error'); }
+  }
   const el = document.getElementById('ship-selected-order');
   if (el && cached) {
     el.style.border = '1px solid var(--gold)';
@@ -3013,7 +3025,8 @@ async function loadShipping() {
     if (dl) dl.innerHTML = custs.map(c => `<option value="${(c.name||'').replace(/"/g,'&quot;')}">`).join('');
   } catch(e) {}
   try {
-    const orders = await sb('GET', 'orders', null, `?status=eq.確認済&select=*&order=delivery_date.asc`);
+    // 受注（新規・未対応）も出す。誰でもここから受付→割当→出荷まで進められるようにするため
+    const orders = await sb('GET', 'orders', null, `?status=in.(受注,確認済)&select=*&order=status.asc,delivery_date.asc`);
     if (!orders.length) {
       shipOrdersCache = {};
       container.innerHTML = '<div class="empty-state">出荷待ちの注文はありません</div>';
@@ -3028,10 +3041,13 @@ async function loadShipping() {
       const assignedCount = items.filter(i => i.inventory_id).length;
       const totalWeight = items.reduce((s, i) => s + (parseFloat(i.weight_kg || i.weight) || 0), 0);
       const allAssigned = items.length > 0 && assignedCount === items.length;
-      const statusHtml = allAssigned
+      const isNew = order.status === '受注';
+      const statusHtml = isNew
+        ? `<span class="badge badge-gold">🆕 新しい注文 — 「この注文に割当」で受付されます</span>`
+        : allAssigned
         ? `<span class="badge badge-green">✅ 全行割当済み — 出荷確定できます</span>`
         : `<span class="badge badge-red">⚠ 未割当 ${items.length - assignedCount}行あり</span>`;
-      html += `<div class="order-card" id="order-${order.id}">
+      html += `<div class="order-card" id="order-${order.id}"${isNew ? ' style="border-color:var(--gold2);"' : ''}>
         <div class="order-card-header">
           <div>
             <div class="order-code">🏪 ${order.customer_name || '出荷先未設定'} <span style="font-size:12px;color:var(--text2);font-weight:400;">${shipOrderLabel(order)}</span></div>
@@ -3039,7 +3055,7 @@ async function loadShipping() {
             <div class="order-meta" style="margin-top:4px;">割当 <strong>${assignedCount} / ${items.length}行</strong> ・ 必要重量合計 <strong>${totalWeight.toFixed(1)}kg</strong> ${statusHtml}</div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;">
-            <button class="btn btn-sm" onclick="shipSelectOrder('${order.id}')">📌 この注文に割当</button>
+            <button class="btn btn-sm${isNew ? ' btn-primary' : ''}" onclick="shipSelectOrder('${order.id}')">📌 この注文に割当</button>
             <button class="btn btn-sm" onclick="waybillOpenFromOrder('${order.id}')">🚚 送り状</button>
             <button class="btn btn-primary btn-sm" onclick="shipOrder('${order.id}')" id="ship-btn-${order.id}" disabled>出荷確定</button>
           </div>
@@ -7608,12 +7624,14 @@ const MANUALS = [
       { h: '売上は自動で反映', d: '3道の駅の売上は毎晩メールから自動取込。手で入れるときは「販売報告」。' },
       { h: '在庫がずれたら直す', d: '在庫数をタップすると、その場で正しい数に直せます。' },
     ], caution: 'とみうら・枇杷倶楽部は、バーコードを事前にセンターで打ち出して商品に貼ってから納品します。' },
-  { id: 'shipping', icon: '📤', title: '⑦ 出荷処理（注文・BASE）', who: 'スタッフ', when: '注文が入ったら', where: '業務トップ →「出荷処理」',
+  { id: 'shipping', icon: '📤', title: '⑦ 出荷処理（注文・BASE）', who: 'スタッフ全員', when: '注文が入ったら', where: '業務トップ →「出荷処理」',
     steps: [
-      { h: '注文に割り当てる', d: '注文一覧から対象を選び「この注文に割当」。' },
-      { h: '商品をスキャン', d: '商品のバーコードを読む（コード入力も可）。' },
+      { h: '通知をONにしておく', d: '出荷処理タブの「🔔 通知」を一度押すと、この端末に新しい注文をお知らせします（音＋通知）。端末ごとに1回押せばOK。' },
+      { h: '新しい注文を受け付ける', d: '一覧の🆕が付いた注文で「📌 この注文に割当」を押すと、その場で受付（確認済）になります。受発注管理を開く必要はありません。' },
+      { h: '商品をスキャン', d: '出す商品のラベルのバーコードを読む（コード入力も可）。行が自動で割り当たります。' },
+      { h: '「出荷確定」を押す', d: '全行が割当済みになったら押します。在庫が出荷済みになり、注文は発送済みになります。' },
       { h: 'BASE注文の発送', d: '「BASE注文」欄に出る注文に送り状番号を入れて「発送処理」。在庫が自動で引かれ、BASEも発送済みになります（購入者に発送メール）。' },
-    ], caution: '革製品だけの注文はジビエ管轄外のため一覧に出ません。' },
+    ], caution: '受付から出荷確定まで、この画面だけで完了できます。革製品だけの注文はジビエ管轄外のため一覧に出ません。' },
   { id: 'cleaning', icon: '🧹', title: '⑧ 清掃記録（HACCP）', who: 'スタッフ', when: '清掃したら', where: '業務トップ →「清掃記録」',
     steps: [
       { h: '清掃した部屋をタップ', d: '解体室・精肉室・冷蔵冷凍庫・前室・トイレ・施設外周。' },
@@ -7893,7 +7911,11 @@ async function loadTodayTodos() {
     });
     add(wait, '精肉がまだの個体（直近2週間）', 'processing', false);
   } catch (e) {}
-  try { const o = await sb('GET', 'orders', null, '?status=eq.確認済&select=id'); add(o.length, '出荷待ちの注文', 'shipping', false); } catch (e) {}
+  try {
+    const o = await sb('GET', 'orders', null, '?status=in.(受注,確認済)&select=id,status');
+    add(o.filter(x => x.status === '受注').length, '🆕 新しい注文（受付して発送へ）', 'shipping', true);
+    add(o.filter(x => x.status === '確認済').length, '出荷待ちの注文', 'shipping', false);
+  } catch (e) {}
   try {
     const r = await sb('POST', 'rpc/base_orders', { p_limit: 20 });
     const list = (r && r.orders) ? r.orders : [];
@@ -8169,10 +8191,11 @@ async function refreshNavBadges() {
     setBadge('nav-badge-intake', intakeN);
     setCard('dc-aging', agingN);
   } catch (e) { setCard('dc-aging', '-'); }
-  // 出荷待ち注文
+  // 出荷待ち注文（新規＋確認済）／新規注文は受発注管理にも出す
   try {
-    const orders = await sb('GET', 'orders', null, '?status=eq.確認済&select=id');
+    const orders = await sb('GET', 'orders', null, '?status=in.(受注,確認済)&select=id,status');
     setBadge('nav-badge-shipping', orders.length);
+    setBadge('nav-badge-orders', orders.filter(o => o.status === '受注').length, true);
   } catch (e) {}
   // 資材の発注点割れ
   try {
@@ -8202,9 +8225,111 @@ async function refreshNavBadges() {
   } catch (e) {}
 }
 
+/* ───────── 新着注文の通知（画面を開いている間ポーリング） ───────── */
+const ORD_NOTIFIED_KEY = 'tg_notified_orders_v1';   // 通知済みの注文ID（端末ごと）
+const ORD_NOTIFY_ON_KEY = 'tg_order_notify_v1';     // 通知の有効/無効
+let ordNotifyTimer = null;
+
+function ordNotifyEnabled() { return localStorage.getItem(ORD_NOTIFY_ON_KEY) !== 'off'; }
+function ordNotifiedSet() {
+  try { return new Set(JSON.parse(localStorage.getItem(ORD_NOTIFIED_KEY) || '[]')); } catch (e) { return new Set(); }
+}
+function ordNotifiedSave(set) {
+  try { localStorage.setItem(ORD_NOTIFIED_KEY, JSON.stringify([...set].slice(-300))); } catch (e) {}
+}
+
+// 注文が来たときの音（スキャン音と区別できる3音のチャイム）
+function playOrderChime() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    if (!playOrderChime._ctx) playOrderChime._ctx = new Ctx();
+    const ctx = playOrderChime._ctx;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    [[784, 0], [988, 0.18], [1319, 0.36]].forEach(([f, t]) => {
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = f;
+      gain.gain.setValueAtTime(0.28, ctx.currentTime + t);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.32);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(ctx.currentTime + t); osc.stop(ctx.currentTime + t + 0.32);
+    });
+  } catch (e) {}
+}
+
+async function ordEnableNotify() {
+  localStorage.setItem(ORD_NOTIFY_ON_KEY, 'on');
+  if ('Notification' in window && Notification.permission === 'default') {
+    try { await Notification.requestPermission(); } catch (e) {}
+  }
+  playOrderChime(); // 音の確認＆AudioContextの解錠（ユーザー操作が必要なため）
+  ordRenderNotifyBtn();
+  toast('新着注文の通知をONにしました');
+  checkNewOrders(true);
+}
+function ordDisableNotify() {
+  localStorage.setItem(ORD_NOTIFY_ON_KEY, 'off');
+  ordRenderNotifyBtn();
+  toast('新着注文の通知をOFFにしました');
+}
+function ordRenderNotifyBtn() {
+  const el = document.getElementById('ord-notify-btn');
+  if (!el) return;
+  const on = ordNotifyEnabled();
+  const perm = ('Notification' in window) ? Notification.permission : 'unsupported';
+  el.textContent = on ? (perm === 'granted' ? '🔔 通知ON' : '🔔 通知ON（画面表示のみ）') : '🔕 通知OFF';
+  el.onclick = on ? ordDisableNotify : ordEnableNotify;
+  el.title = on
+    ? (perm === 'granted' ? 'この端末に新着注文を通知します' : 'ブラウザ通知が未許可です。押してもう一度許可すると、他の画面を見ていても届きます')
+    : '押すと新着注文をお知らせします';
+}
+
+async function checkNewOrders(silent) {
+  if (!ordNotifyEnabled()) return;
+  try {
+    const orders = await sb('GET', 'orders', null, '?status=eq.受注&select=id,order_code,customer_name,delivery_date,total_amount,created_at&order=created_at.desc&limit=30');
+    const seen = ordNotifiedSet();
+    const fresh = orders.filter(o => !seen.has(o.id));
+    // 初回（この端末で一度も見ていない）は既存分を通知せず、既読として記録するだけ
+    const first = !localStorage.getItem(ORD_NOTIFIED_KEY);
+    orders.forEach(o => seen.add(o.id));
+    ordNotifiedSave(seen);
+    refreshNavBadges();
+    if (first || silent || !fresh.length) return;
+
+    playOrderChime();
+    fresh.slice(0, 5).forEach(o => {
+      const body = `${o.customer_name || 'お客様'} / 納品希望 ${o.delivery_date || '未定'} / ¥${Number(o.total_amount || 0).toLocaleString()}`;
+      toast(`🆕 新しい注文: ${body}`);
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          const n = new Notification('🆕 新しい注文が入りました', { body: body + '\n出荷処理タブから受付できます', tag: 'order-' + o.id });
+          n.onclick = () => { window.focus(); const b = document.querySelector('[data-tab=shipping]'); if (b) b.click(); n.close(); };
+        } catch (e) {}
+      }
+    });
+    if (fresh.length > 5) toast(`ほか${fresh.length - 5}件の新しい注文があります`);
+    loadTodayTodos();
+    if (document.getElementById('panel-shipping').classList.contains('active')) loadShipping();
+  } catch (e) { /* 通信エラーは黙って次回に回す */ }
+}
+
+function ordStartNotifyLoop() {
+  ordRenderNotifyBtn();
+  checkNewOrders(true);                       // 起動時は既読合わせのみ
+  if (ordNotifyTimer) clearInterval(ordNotifyTimer);
+  ordNotifyTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') checkNewOrders(false);
+  }, 60000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') checkNewOrders(false);
+  });
+}
+
 /* ===== Init ===== */
 loadDashboard();
 refreshNavBadges();
+ordStartNotifyLoop();
 loadFreezerOptions();
 loadMasterDatalists();
 loadStaffNames();

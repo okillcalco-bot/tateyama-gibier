@@ -167,6 +167,7 @@ th,td{padding:8px 6px;font-size:.8rem}
     </nav>
   </div>
   <div class="header-right">
+    <button class="btn btn-outline" id="ord-notify-btn" onclick="ordEnableNotify()">&#x1f514; 通知</button>
     <button class="btn btn-gold" onclick="openManualOrder()">+ 手入力注文</button>
     <button class="btn btn-outline" onclick="refreshAll()">&#x1f504; 更新</button>
   </div>
@@ -2069,6 +2070,76 @@ function invExportCSV(){
   a.click();URL.revokeObjectURL(a.href);
 }
 
+// ── 新着注文の通知（画面を開いている間ポーリング。業務アプリと同じ仕組み） ──
+const ORD_NOTIFIED_KEY='tg_notified_orders_v1';
+const ORD_NOTIFY_ON_KEY='tg_order_notify_v1';
+let ordNotifyTimer=null;
+function ordNotifyEnabled(){return localStorage.getItem(ORD_NOTIFY_ON_KEY)!=='off';}
+function ordNotifiedSet(){try{return new Set(JSON.parse(localStorage.getItem(ORD_NOTIFIED_KEY)||'[]'));}catch(e){return new Set();}}
+function ordNotifiedSave(s){try{localStorage.setItem(ORD_NOTIFIED_KEY,JSON.stringify([...s].slice(-300)));}catch(e){}}
+function playOrderChime(){
+  try{
+    const Ctx=window.AudioContext||window.webkitAudioContext; if(!Ctx)return;
+    if(!playOrderChime._ctx) playOrderChime._ctx=new Ctx();
+    const ctx=playOrderChime._ctx;
+    if(ctx.state==='suspended') ctx.resume().catch(()=>{});
+    [[784,0],[988,.18],[1319,.36]].forEach(([f,t])=>{
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.type='sine';o.frequency.value=f;
+      g.gain.setValueAtTime(.28,ctx.currentTime+t);
+      g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+t+.32);
+      o.connect(g).connect(ctx.destination);
+      o.start(ctx.currentTime+t);o.stop(ctx.currentTime+t+.32);
+    });
+  }catch(e){}
+}
+async function ordEnableNotify(){
+  localStorage.setItem(ORD_NOTIFY_ON_KEY,'on');
+  if('Notification' in window && Notification.permission==='default'){ try{await Notification.requestPermission();}catch(e){} }
+  playOrderChime();
+  ordRenderNotifyBtn();
+  checkNewOrders(true);
+}
+function ordDisableNotify(){ localStorage.setItem(ORD_NOTIFY_ON_KEY,'off'); ordRenderNotifyBtn(); }
+function ordRenderNotifyBtn(){
+  const el=document.getElementById('ord-notify-btn'); if(!el)return;
+  const on=ordNotifyEnabled();
+  const perm=('Notification' in window)?Notification.permission:'unsupported';
+  el.textContent=on?(perm==='granted'?'🔔 通知ON':'🔔 通知ON（画面表示のみ）'):'🔕 通知OFF';
+  el.onclick=on?ordDisableNotify:ordEnableNotify;
+  el.title=on?(perm==='granted'?'この端末に新着注文を通知します':'ブラウザ通知が未許可です。押してもう一度許可すると、他の画面を見ていても届きます'):'押すと新着注文をお知らせします';
+}
+async function checkNewOrders(silent){
+  if(!ordNotifyEnabled()) return;
+  try{
+    const rows=await sb('GET','orders','','?status=eq.受注&select=id,order_code,customer_name,delivery_date,total_amount,created_at&order=created_at.desc&limit=30');
+    const seen=ordNotifiedSet();
+    const fresh=rows.filter(o=>!seen.has(o.id));
+    const first=!localStorage.getItem(ORD_NOTIFIED_KEY);
+    rows.forEach(o=>seen.add(o.id));
+    ordNotifiedSave(seen);
+    if(first||silent||!fresh.length) return;
+    playOrderChime();
+    fresh.slice(0,5).forEach(o=>{
+      const body=`${o.customer_name||'お客様'} / 納品希望 ${o.delivery_date||'未定'} / ¥${Number(o.total_amount||0).toLocaleString()}`;
+      if('Notification' in window && Notification.permission==='granted'){
+        try{
+          const n=new Notification('🆕 新しい注文が入りました',{body:body+'\n出荷処理から受付できます',tag:'order-'+o.id});
+          n.onclick=()=>{window.focus();n.close();};
+        }catch(e){}
+      }
+    });
+    await loadOrders();
+  }catch(e){}
+}
+function ordStartNotifyLoop(){
+  ordRenderNotifyBtn();
+  checkNewOrders(true);
+  if(ordNotifyTimer) clearInterval(ordNotifyTimer);
+  ordNotifyTimer=setInterval(()=>{ if(document.visibilityState==='visible') checkNewOrders(false); },60000);
+  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') checkNewOrders(false); });
+}
+
 // ── Utils ──
 function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=s;return d.innerHTML}
 function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
@@ -2078,6 +2149,7 @@ function tomorrow(){const d=new Date();d.setDate(d.getDate()+1);return `${d.getF
 function fmtDate(d){return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
 
 init();
+ordStartNotifyLoop();
 </script>
 </body>
 </html>
