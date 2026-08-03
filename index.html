@@ -1637,6 +1637,16 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <div style="font-size:11px;color:var(--gold);font-weight:600;letter-spacing:.05em;">✅ 直前登録</div>
           <div id="pmLastActionBody" style="font-size:13px;line-height:1.6;margin-top:2px;"></div>
         </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0;padding:8px 10px;border:1px solid var(--gold2);border-radius:var(--radius);background:var(--surface2);">
+          <span style="font-size:12.5px;color:var(--text2);font-weight:600;">肉ランク:</span>
+          <div style="display:flex;gap:5px;" id="pmRankBtns">
+            <button type="button" class="pm-rank-btn" data-rank="並" onclick="pmSetMeatRank('並')" style="font-size:14px;font-weight:700;padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;">並</button>
+            <button type="button" class="pm-rank-btn" data-rank="上" onclick="pmSetMeatRank('上')" style="font-size:14px;font-weight:700;padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;">上</button>
+            <button type="button" class="pm-rank-btn" data-rank="極上" onclick="pmSetMeatRank('極上')" style="font-size:14px;font-weight:700;padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;">極上</button>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;"><input type="checkbox" id="pmStopkill" onchange="pmToggleStopkill()" style="width:17px;height:17px;"> 止めさし・引取（−3,000円）</label>
+          <span id="pmBuybackPreview" style="font-size:13px;color:var(--gold);font-weight:700;margin-left:auto;"></span>
+        </div>
         <div class="pm-completed-section">
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <div style="font-size:13px;color:var(--gold);font-weight:600;">登録済み <span id="pmCompletedCount">(0件)</span></div>
@@ -3572,6 +3582,7 @@ async function pmResumeSession(op) {
   pmRenderHeaderOps();
   pmRenderParts();
   pmRenderCompleted();
+  pmInitRankUI();
   pmResetWeight();
   pmRenderOptions();
   refocusScaleInput();
@@ -3912,6 +3923,7 @@ async function pmSelectIndividual(labelId) {
 
     pmRenderParts();
     pmRenderCompleted();
+    pmInitRankUI();
     pmResetWeight();
     refocusScaleInput();
   } catch(e) {
@@ -4496,6 +4508,7 @@ async function pmOnWeightReceived(weight_kg) {
 function pmRenderCompleted() {
   const grid = document.getElementById('pmCompletedGrid');
   document.getElementById('pmCompletedCount').textContent = `(${pmCompletedParts.length}件)`;
+  pmUpdateBuybackPreview();
 
   if (!pmCompletedParts.length) {
     grid.innerHTML = '<div style="color:var(--text3);font-size:13px;">まだ登録された部位はありません</div>';
@@ -4643,6 +4656,40 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
 }
 
 // ── 全部位完了 ──
+// ── 精肉モード：個体の肉ランク・止めさし引取・買取プレビュー ──
+function pmSetMeatRank(r) {
+  if (!pmIndividual) return;
+  pmIndividual.meat_rank = r;
+  pmInitRankUI();
+}
+function pmToggleStopkill() {
+  if (!pmIndividual) return;
+  pmIndividual.stopkill_pickup = document.getElementById('pmStopkill').checked;
+  pmUpdateBuybackPreview();
+}
+function pmInitRankUI() {
+  const r = pmIndividual && pmIndividual.meat_rank;
+  document.querySelectorAll('#pmRankBtns .pm-rank-btn').forEach(b => {
+    const on = b.dataset.rank === r;
+    b.style.background = on ? 'var(--gold)' : 'var(--surface)';
+    b.style.color = on ? '#fff' : 'var(--text)';
+    b.style.borderColor = on ? 'var(--gold2)' : 'var(--border)';
+  });
+  const cb = document.getElementById('pmStopkill');
+  if (cb) cb.checked = !!(pmIndividual && pmIndividual.stopkill_pickup);
+  pmUpdateBuybackPreview();
+}
+function pmUpdateBuybackPreview() {
+  const el = document.getElementById('pmBuybackPreview');
+  if (!el || !pmIndividual) return;
+  const w = parseFloat(pmIndividual.weight_total) || 0;
+  const totalW = pmCompletedParts.reduce((s, c) => s + c.weight_kg, 0);
+  const y = w > 0 ? Math.round(totalW / w * 1000) / 10 : null;
+  if (!pmIndividual.meat_rank || !w || y == null) { el.textContent = ''; return; }
+  const bb = calcBuyback(w, pmIndividual.meat_rank, y, !!pmIndividual.stopkill_pickup);
+  el.textContent = `歩留まり ${y}％ ／ 買取 ¥${(bb || 0).toLocaleString()}（暫定）`;
+}
+
 async function pmFinishIndividual() {
   if (!pmIndividual) return;
   if (!pmCompletedParts.length) {
@@ -4662,7 +4709,9 @@ async function pmFinishIndividual() {
       memo: (pmIndividual.memo ? pmIndividual.memo + '\n' : '') + `精肉完了: ${new Date().toLocaleDateString('ja-JP')} ${pmCompletedParts.length}部位 担当:${pmCurrentOperator}`
     };
     if (yieldNum != null) patch.yield_rate = yieldNum;
-    // ランクが確定済みなら買取価格も自動算出（ランク未定なら個体編集で最終決定→自動計算）
+    // 精肉時に選んだ肉ランク・止めさし引取を保存し、買取価格を自動算出（積算）
+    if (pmIndividual.meat_rank) patch.meat_rank = pmIndividual.meat_rank;
+    patch.stopkill_pickup = !!pmIndividual.stopkill_pickup;
     if (pmIndividual.meat_rank && yieldNum != null) {
       const bb = calcBuyback(indW, pmIndividual.meat_rank, yieldNum, !!pmIndividual.stopkill_pickup);
       if (bb != null) patch.buyback_amount = bb;
@@ -4670,7 +4719,10 @@ async function pmFinishIndividual() {
     await sb('PATCH', 'individuals', patch, `?label_id=eq.${encodeURIComponent(pmIndividual.label_id)}`);
 
     const yieldPct = yieldNum != null ? yieldNum : '-';
-    toast(`${pmIndividual.label_id} 精肉完了（${pmCompletedParts.length}部位, 歩留まり${yieldPct}%）→ 個体編集で肉ランクを確定すると買取価格が出ます`);
+    const bbMsg = (pmIndividual.meat_rank && yieldNum != null)
+      ? `／ ${pmIndividual.meat_rank}・買取¥${(calcBuyback(indW, pmIndividual.meat_rank, yieldNum, !!pmIndividual.stopkill_pickup) || 0).toLocaleString()}`
+      : '（肉ランク未選択→個体編集で確定すると買取が出ます）';
+    toast(`${pmIndividual.label_id} 精肉完了（${pmCompletedParts.length}部位, 歩留まり${yieldPct}% ${bbMsg}）`);
     closeProcessingMode();
   } catch(e) {
     toast('更新エラー: ' + e.message, 'error');
