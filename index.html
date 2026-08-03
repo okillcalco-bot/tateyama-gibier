@@ -3759,6 +3759,27 @@ function connDiag() {
     ④ ブラウザを再起動して精肉モードを開き直す → 「🖨 b-PAC OK」になれば完了<br>
     ※b-PACが無くても登録はでき、ラベルはブラウザの印刷ダイアログから出せます。<strong>印刷ダイアログにプリンタが出てこない場合は、①のドライバがこのPCに未インストール</strong>です（タブレットで印刷できていた場合も、PCには別途ドライバが必要です）。</p>`;
   }
+  // 作業中に切れたときのケーススタディ（スリープ解除で済むのか／再起動が要るのか）
+  html += `<div style="font-size:13px;color:var(--gold);font-weight:600;border-bottom:1px solid var(--border);padding-bottom:4px;margin:14px 0 6px;">▌ 🔌 作業中に切れたときの対処（よくあるケース）</div>
+  <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.85;">
+    <div style="font-weight:700;margin-bottom:4px;">まず“軽い順”に試す（登録済みデータは消えません）</div>
+    <div>① <strong>画面を1回タップ</strong>（精肉画面のどこでも）→ はかり入力の焦点が戻ります。<br>
+    ② <strong>はかり／プリンタの電源を確認</strong>（省電力で勝手にOFF・スリープになります）→ 入れ直す。<br>
+    ③ PC/画面が寝ていたら<strong>マウスを動かしてスリープ解除</strong>→「⚖️ はかり」を押して<strong>COMポートを選び直す</strong>。<br>
+    ④ 直らなければ<strong>ページを再読み込み（Ctrl+R）</strong>。<br>
+    ⑤ それでもダメなら<strong>Chromeを閉じて開き直す</strong>。<br>
+    ⑥ 最後の手段が<strong>PCの再起動</strong>（めったに不要）。</div>
+
+    <div style="font-weight:700;margin:10px 0 3px;">ケース別の答え</div>
+    <div>・<u>少し放置したら はかりの数字が入らない</u> → まず<strong>画面タップ</strong>。それでもダメなら<strong>はかりの電源ON</strong>（自動OFF）→ 肉を載せて本体「プリント」。<span style="color:var(--green)">※スリープ解除／電源入れ直しでOK。<strong>PC再起動は不要</strong>。</span><br>
+    ・<u>はかりの表示は出るのに画面に入らない</u> → ほぼ<strong>焦点外れ</strong>。<strong>画面タップ</strong>で戻ります（別タブを触ったのが原因のことも）。<br>
+    ・<u>「⚖️ はかり未接続」でポート候補が出ない</u> → はかりの電源とBluetoothのペアリングを確認（切れていたら再ペアリング）→ ダメなら<strong>ページ再読み込み</strong>。<br>
+    ・<u>ラベルが出ない</u> → <strong>プリンタの電源・ケーブル・用紙</strong>を確認して入れ直す → b-PACが「未検出」なら<strong>ページ再読み込み</strong>→ 直らなければChrome再起動。<span style="color:var(--green)">※たいていプリンタの電源入れ直し＋再読み込みで復帰。</span></div>
+
+    <div style="font-weight:700;margin:10px 0 3px;">迷ったときの合言葉</div>
+    <div>「<strong>タップ → 電源 → スリープ解除＆ポート選び直し → 再読み込み → Chrome → 最後にPC</strong>」。<br>途中でやめても<strong>登録済みの部位データは保存されています</strong>。</div>
+  </div>`;
+
   html += `<p style="font-size:11.5px;color:var(--text2);margin-top:10px;">それでも繋がらない場合は、この画面のスクリーンショットと「端末の種類・はかりの型番・プリンタの型番」を送ってください。</p>`;
 
   document.getElementById('connDiagBody').innerHTML = html;
