@@ -431,7 +431,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <button class="tab-btn" data-tab="individuals">&#x1FAA4; 捕獲受入・個体<span class="nav-badge" id="nav-badge-intake"></span></button>
   <button class="tab-btn" data-tab="aging" style="display:none;">&#x1F969; 熟成管理<span class="nav-badge" id="nav-badge-aging"></span></button>
   <button class="tab-btn" data-tab="processing">&#x1F52A; 精肉入力<span class="nav-badge" id="nav-badge-processing"></span></button>
-  <button class="tab-btn" data-tab="products">&#x1F6CD; 加工処理<span class="nav-badge" id="nav-badge-products"></span></button>
+  <button class="tab-btn" data-tab="kakou">&#x1F356; 加工処理<span class="nav-badge" id="nav-badge-kakou"></span></button>
+  <button class="tab-btn" data-tab="products">&#x1F6CD; 加工調理<span class="nav-badge" id="nav-badge-products"></span></button>
   <button class="tab-btn" data-tab="inventory">&#x1F4E6; 在庫一覧</button>
   <button class="tab-btn" data-tab="shipping">&#x1F4E4; 出荷処理<span class="nav-badge" id="nav-badge-shipping"></span></button>
   <button class="tab-btn" data-tab="trace">&#x1F50D; トレーサビリティ</button>
@@ -851,10 +852,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <div class="tab-panel" id="panel-products">
     <div class="section">
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-        <span>加工処理・完成品在庫</span>
+        <span>加工調理・完成品在庫</span>
         <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-sm" onclick="manualOpen('product')">📖 使い方</button><button class="btn btn-primary" onclick="productOpenNew()">＋ 商品を追加</button></div>
       </div>
-      <div style="font-size:12.5px;color:var(--text2);margin-bottom:12px;">精肉を加工して作った卸売・小売商品の完成個数をここで記録します（ホワイトボードの置き換え）。完成したら「＋完成」、イベント等へ持ち出したら「−持ち出し」。BASEネットショップの商品と対応しています。</div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:12px;">味付け肉・ソーセージ等、<strong>調理・味付けして作った</strong>卸売・小売商品の完成個数をここで記録します（ホワイトボードの置き換え）。完成したら「＋完成」、イベント等へ持ち出したら「−持ち出し」。BASEネットショップの商品と対応しています。<br><span style="color:var(--text3);">※スライス・ミンチなど「精肉ブロックを切り分ける加工」は <strong>加工処理</strong> タブで記録します。</span></div>
       <div id="products-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;"></div>
     </div>
     <div class="section">
@@ -886,6 +887,97 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <tbody id="product-moves-body"></tbody>
         </table>
       </div>
+    </div>
+  </div>
+
+  <!-- 加工処理（スライス・ミンチ） -->
+  <div class="tab-panel" id="panel-kakou">
+    <div class="section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>🍖 加工処理（スライス・ミンチ）</span>
+        <button class="btn btn-sm" onclick="manualOpen('kakou')">📖 使い方</button>
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:14px;line-height:1.8;">
+        精肉ブロックをスライス肉・ミンチ肉に加工した記録をここで残します。<br>
+        ① ハンディスキャナで<strong>原料ブロック</strong>を読む（在庫→加工済）→ ② 完成した<strong>1パックの重さ×個数</strong>を入力 → ③「記録してラベル発行」で、パックごとに固有番号のラベルが出て在庫に置き換わります。
+      </div>
+
+      <!-- ①作業者・加工の種類 -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
+        <div class="form-group" style="min-width:150px;"><label>作業者</label>
+          <select class="form-input" id="kk-operator"><option value="">選択...</option></select>
+        </div>
+        <div class="form-group" style="min-width:130px;"><label>加工の種類</label>
+          <select class="form-input" id="kk-type" onchange="kkTypeChange()">
+            <option value="ミンチ">ミンチ</option>
+            <option value="スライス">スライス</option>
+          </select>
+        </div>
+        <div class="form-group" id="kk-mince-opt" style="min-width:130px;"><label>挽き方</label>
+          <select class="form-input" id="kk-grind"><option value="細挽き">細挽き</option><option value="粗挽き">粗挽き</option></select>
+        </div>
+        <div class="form-group" id="kk-slice-opt" style="min-width:130px;display:none;"><label>厚さ(mm)</label>
+          <select class="form-input" id="kk-thick">
+            <option value="1">1mm</option><option value="2" selected>2mm</option><option value="3">3mm</option><option value="5">5mm</option><option value="10">10mm</option><option value="__other">その他</option>
+          </select>
+          <input class="form-input" id="kk-thick-other" type="number" step="0.5" min="0.5" placeholder="mm" style="display:none;margin-top:4px;" />
+        </div>
+        <div class="form-group" style="min-width:150px;"><label>保存場所（任意）</label>
+          <select class="form-input" id="kk-location"><option value="">未選択</option></select>
+        </div>
+      </div>
+
+      <!-- ②原料ブロックのスキャン -->
+      <div style="border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:12px;background:var(--surface2);">
+        <div style="font-weight:600;margin-bottom:6px;">① 原料ブロックをスキャン</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+          <div class="form-group" style="flex:1;min-width:200px;margin:0;"><label>バーコード（識別コード）</label>
+            <input class="form-input" id="kk-scan" placeholder="スキャナで読む / 例: TGC-08-T176-11" autocomplete="off" />
+          </div>
+          <button class="btn" onclick="kkScanAdd()">追加</button>
+          <button class="btn btn-sm" onclick="kkPickFromStock()" style="color:var(--text2);">📦 在庫から選ぶ</button>
+        </div>
+        <div id="kk-materials" style="margin-top:10px;"></div>
+        <div id="kk-materials-total" style="text-align:right;font-weight:700;color:var(--gold);margin-top:6px;"></div>
+      </div>
+
+      <!-- ③完成品 -->
+      <div style="border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:12px;">
+        <div style="font-weight:600;margin-bottom:6px;">② 完成品（パック）</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+          <div class="form-group" style="min-width:140px;"><label>1パックの重さ(kg)</label><input class="form-input" id="kk-pack-w" type="number" step="0.1" min="0.01" placeholder="例: 1" oninput="kkUpdateSummary()" /></div>
+          <div class="form-group" style="min-width:120px;"><label>個数</label><input class="form-input" id="kk-pack-n" type="number" step="1" min="1" placeholder="例: 10" oninput="kkUpdateSummary()" /></div>
+          <div class="form-group" style="flex:1;min-width:160px;"><label>完成品名（自動）</label><input class="form-input" id="kk-prod-name" readonly style="background:var(--surface2);" /></div>
+        </div>
+        <div id="kk-summary" style="font-size:12.5px;color:var(--text2);margin-top:8px;"></div>
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+        <button class="btn btn-primary" style="font-size:15px;padding:11px 26px;" onclick="kkSubmit()">✅ 記録してラベル発行</button>
+      </div>
+      <div style="font-size:11.5px;color:var(--text3);margin-top:8px;">「記録」を押すと、原料ブロックは<strong>加工済</strong>になり、完成パックが<strong>個数分の在庫</strong>として登録され、パックごとに固有のバーコードラベルが印刷されます。</div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">最近の加工処理</div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>日時</th><th>加工</th><th>原料</th><th>完成品</th><th>作業者</th></tr></thead>
+          <tbody id="kk-log-body"><tr><td colspan="5" class="empty-state">読み込み中...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 加工処理：在庫から原料を選ぶモーダル -->
+  <div id="kkStockModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:640px;margin:24px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:22px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);">📦 在庫から原料を選ぶ</div>
+        <button onclick="document.getElementById('kkStockModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <input class="form-input" id="kk-stock-search" placeholder="識別コード・個体番号・部位で絞り込み" oninput="kkRenderStockPick()" style="margin-bottom:10px;" />
+      <div id="kk-stock-list" style="max-height:50vh;overflow-y:auto;"></div>
     </div>
   </div>
 
@@ -1820,6 +1912,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'shipping') { loadShipping(); loadBaseOrders(); setTimeout(maintainShippingScannerFocus, 50); }
     if (btn.dataset.tab === 'punch') loadPunch();
     if (btn.dataset.tab === 'products') loadProducts();
+    if (btn.dataset.tab === 'kakou') loadKakou();
     if (btn.dataset.tab === 'aging') loadAging();
     if (btn.dataset.tab === 'hunters') loadHunters();
     if (btn.dataset.tab === 'customers') loadCustomersReg();
@@ -1861,7 +1954,7 @@ async function loadBaseOrders() {
   try {
     const r = await sb('POST', 'rpc/base_orders', { p_limit: 20 });
     if (r && r.error === 'not_connected') {
-      box.innerHTML = '<div class="empty-state" style="font-size:13px;">BASE未接続です。加工処理タブの「⚙ BASE連携」から接続してください。</div>';
+      box.innerHTML = '<div class="empty-state" style="font-size:13px;">BASE未接続です。加工調理タブの「⚙ BASE連携」から接続してください。</div>';
       return;
     }
     const list = (r && r.orders) ? r.orders : [];
@@ -5974,6 +6067,364 @@ async function productMoveSave() {
   } catch (err) { playFeedbackSound(false); toast('記録に失敗しました: ' + sbSafeMsg(err), 'error'); }
 }
 
+/* ───────── 加工処理（スライス・ミンチ：精肉ブロック→加工品） ───────── */
+let kkMaterials = [];       // 原料ブロック（tier2 inventory 行）
+let kkStockCache = [];      // 「在庫から選ぶ」用の在庫キャッシュ
+
+async function loadKakou() {
+  // 作業者
+  const op = document.getElementById('kk-operator');
+  if (op) op.innerHTML = '<option value="">選択...</option>' + PM_OPERATORS.map(n => `<option>${esc2(n)}</option>`).join('');
+  // 保存場所（冷凍庫）
+  const loc = document.getElementById('kk-location');
+  if (loc) {
+    loc.innerHTML = '<option value="">未選択</option>';
+    try {
+      const fr = await sb('GET', 'freezers', null, '?select=*&order=code.asc');
+      loc.innerHTML += fr.map(f => `<option value="${esc2(f.code)}">${esc2(f.code)} ${esc2(f.name && f.name !== f.code ? f.name : '')}</option>`).join('');
+    } catch (e) { /* freezers未作成でも壊さない */ }
+  }
+  // 変更でラベル名を更新
+  ['kk-grind', 'kk-thick', 'kk-thick-other'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && !el._kkBound) { el.addEventListener('change', kkOnThickChange); el.addEventListener('input', kkUpdateProdName); el._kkBound = true; }
+  });
+  const scan = document.getElementById('kk-scan');
+  if (scan && !scan._kkBound) { scan.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); kkScanAdd(); } }); scan._kkBound = true; }
+  kkTypeChange();
+  kkRenderMaterials();
+  kkUpdateSummary();
+  loadKakouLog();
+  setTimeout(() => { const s = document.getElementById('kk-scan'); if (s) s.focus(); }, 200);
+}
+
+function kkTypeChange() {
+  const type = document.getElementById('kk-type').value;
+  document.getElementById('kk-mince-opt').style.display = type === 'ミンチ' ? '' : 'none';
+  document.getElementById('kk-slice-opt').style.display = type === 'スライス' ? '' : 'none';
+  kkUpdateProdName();
+}
+function kkOnThickChange() {
+  const sel = document.getElementById('kk-thick');
+  const other = document.getElementById('kk-thick-other');
+  if (other) other.style.display = sel.value === '__other' ? '' : 'none';
+  kkUpdateProdName();
+}
+function kkThicknessMm() {
+  const sel = document.getElementById('kk-thick');
+  if (!sel) return null;
+  if (sel.value === '__other') { const v = parseFloat(document.getElementById('kk-thick-other').value); return isFinite(v) && v > 0 ? v : null; }
+  return parseFloat(sel.value);
+}
+function kkProdName() {
+  const type = document.getElementById('kk-type').value;
+  if (type === 'ミンチ') return `ミンチ肉（${document.getElementById('kk-grind').value}）`;
+  const mm = kkThicknessMm();
+  return `スライス肉（${mm != null ? mm : '?'}mm）`;
+}
+function kkUpdateProdName() {
+  const el = document.getElementById('kk-prod-name');
+  if (el) el.value = kkProdName();
+}
+
+// 原料の鳥獣種・産地をまとめる
+function kkBlendSpecies() {
+  const set = [...new Set(kkMaterials.map(m => m.species).filter(Boolean))];
+  return set.length === 1 ? set[0] : (set.length ? 'ミックス' : '');
+}
+function kkOriginOf(individualId) {
+  const s = (individualId || '').toUpperCase();
+  if (s.startsWith('M') || s.includes('-M')) return '南房総産';
+  if (s.startsWith('T') || s.includes('-T')) return '館山産';
+  return '';
+}
+function kkBlendOrigin() {
+  const set = [...new Set(kkMaterials.map(m => kkOriginOf(m.individual_id)).filter(Boolean))];
+  return set.length === 1 ? set[0] : '千葉県産';
+}
+
+async function kkScanAdd() {
+  const input = document.getElementById('kk-scan');
+  const code = (input.value || '').trim();
+  if (!code) return;
+  input.value = '';
+  if (kkMaterials.some(m => m.ident_code === code)) { toast('すでに追加済みです', 'error'); input.focus(); return; }
+  try {
+    const rows = await sb('GET', 'inventory', null, `?ident_code=eq.${encodeURIComponent(code)}&deleted_at=is.null&select=id,ident_code,part_name,weight,weight_kg,species,individual_id,status,tier`);
+    if (!rows.length) { toast(`在庫に見つかりません: ${code}`, 'error'); playFeedbackSound(false); input.focus(); return; }
+    const inv = rows[0];
+    if (inv.status === '加工済') { toast('この肉はすでに加工済です', 'error'); playFeedbackSound(false); input.focus(); return; }
+    if (inv.status === '出荷済') { toast('この肉は出荷済です', 'error'); playFeedbackSound(false); input.focus(); return; }
+    kkMaterials.push(inv);
+    playFeedbackSound(true);
+    toast(`原料に追加: ${inv.ident_code}（${inv.part_name || '-'} ${inv.weight || inv.weight_kg || '?'}kg）`);
+    kkRenderMaterials();
+    kkUpdateSummary();
+  } catch (e) { toast('読み取りエラー: ' + sbSafeMsg(e), 'error'); }
+  input.focus();
+}
+
+function kkMatWeight(m) { return parseFloat(m.weight != null ? m.weight : m.weight_kg) || 0; }
+
+function kkRenderMaterials() {
+  const box = document.getElementById('kk-materials');
+  const tot = document.getElementById('kk-materials-total');
+  if (!box) return;
+  if (!kkMaterials.length) {
+    box.innerHTML = '<div style="color:var(--text3);font-size:13px;">まだ原料がありません。バーコードを読むか「在庫から選ぶ」で追加してください。</div>';
+    if (tot) tot.textContent = '';
+    return;
+  }
+  box.innerHTML = kkMaterials.map((m, i) => `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);margin-bottom:4px;">
+    <span style="color:var(--gold);font-weight:600;font-size:13px;">${esc2(m.ident_code || '-')}</span>
+    <span style="font-size:12.5px;color:var(--text2);">${esc2(m.species || '')} ${esc2(m.part_name || '')}</span>
+    <span style="margin-left:auto;font-weight:600;">${kkMatWeight(m).toFixed(2)}kg</span>
+    <button class="btn btn-sm" style="color:var(--red);padding:2px 8px;" onclick="kkRemoveMaterial(${i})">✕</button>
+  </div>`).join('');
+  const total = kkMaterials.reduce((s, m) => s + kkMatWeight(m), 0);
+  if (tot) tot.textContent = `原料 ${kkMaterials.length}点 / 合計 ${total.toFixed(2)}kg`;
+}
+function kkRemoveMaterial(i) { kkMaterials.splice(i, 1); kkRenderMaterials(); kkUpdateSummary(); }
+
+function kkUpdateSummary() {
+  kkUpdateProdName();
+  const el = document.getElementById('kk-summary');
+  if (!el) return;
+  const packW = parseFloat(document.getElementById('kk-pack-w').value) || 0;
+  const packN = parseInt(document.getElementById('kk-pack-n').value) || 0;
+  const matTotal = kkMaterials.reduce((s, m) => s + kkMatWeight(m), 0);
+  const outTotal = packW * packN;
+  if (!packW || !packN) { el.textContent = ''; return; }
+  let html = `完成: ${packW}kg × ${packN}パック = <strong>${outTotal.toFixed(2)}kg</strong>`;
+  if (matTotal > 0) {
+    const yld = Math.round(outTotal / matTotal * 1000) / 10;
+    const loss = (matTotal - outTotal);
+    html += `　／　原料 ${matTotal.toFixed(2)}kg（歩留まり ${yld}％・端材等 ${loss.toFixed(2)}kg）`;
+    if (outTotal > matTotal) html += ` <span style="color:var(--red);">※完成量が原料を超えています</span>`;
+  }
+  el.innerHTML = html;
+}
+
+// 在庫から原料を選ぶ
+async function kkPickFromStock() {
+  const modal = document.getElementById('kkStockModal');
+  const list = document.getElementById('kk-stock-list');
+  document.getElementById('kk-stock-search').value = '';
+  list.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
+  modal.style.display = 'block';
+  try {
+    kkStockCache = await sb('GET', 'inventory', null, `?status=eq.在庫&tier=eq.2&deleted_at=is.null&select=id,ident_code,part_name,weight,weight_kg,species,individual_id,status,tier&order=created_at.desc&limit=500`);
+    kkRenderStockPick();
+  } catch (e) { list.innerHTML = `<div class="empty-state">読み込みエラー: ${esc2(sbSafeMsg(e))}</div>`; }
+}
+function kkRenderStockPick() {
+  const list = document.getElementById('kk-stock-list');
+  const q = (document.getElementById('kk-stock-search').value || '').toLowerCase();
+  const added = new Set(kkMaterials.map(m => m.ident_code));
+  let rows = kkStockCache.filter(r => !added.has(r.ident_code));
+  if (q) rows = rows.filter(r => (r.ident_code || '').toLowerCase().includes(q) || (r.individual_id || '').toLowerCase().includes(q) || (r.part_name || '').toLowerCase().includes(q) || (r.species || '').toLowerCase().includes(q));
+  if (!rows.length) { list.innerHTML = '<div class="empty-state">該当する在庫がありません</div>'; return; }
+  list.innerHTML = rows.map(r => `<div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--border);">
+    <div style="flex:1;min-width:0;">
+      <div style="color:var(--gold);font-weight:600;font-size:13px;">${esc2(r.ident_code || '-')}</div>
+      <div style="font-size:12px;color:var(--text2);">${esc2(r.species || '')} ${esc2(r.part_name || '')} ・ ${kkMatWeight(r).toFixed(2)}kg</div>
+    </div>
+    <button class="btn btn-sm btn-primary" onclick="kkAddFromStock('${r.id}')">追加</button>
+  </div>`).join('');
+}
+function kkAddFromStock(id) {
+  const inv = kkStockCache.find(r => String(r.id) === String(id));
+  if (!inv) return;
+  if (kkMaterials.some(m => m.ident_code === inv.ident_code)) { toast('すでに追加済みです', 'error'); return; }
+  kkMaterials.push(inv);
+  kkRenderMaterials();
+  kkUpdateSummary();
+  kkRenderStockPick();
+}
+
+// 加工品の識別コードを採番（TGC-MI/SL-YYYYMMDD-連番）
+async function kkNextCodeBase(pc) {
+  const d = new Date();
+  const date = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  const prefix = `TGC-${pc}-${date}-`;
+  let max = 0;
+  try {
+    const rows = await sb('GET', 'inventory', null, `?ident_code=like.${prefix}*&select=ident_code`);
+    rows.forEach(r => { const m = (r.ident_code || '').match(/-(\d+)$/); if (m) { const n = parseInt(m[1], 10); if (n > max) max = n; } });
+  } catch (e) { /* 続行 */ }
+  return { prefix, date, start: max + 1 };
+}
+
+async function kkSubmit() {
+  const operator = document.getElementById('kk-operator').value;
+  const type = document.getElementById('kk-type').value;
+  const packW = parseFloat(document.getElementById('kk-pack-w').value);
+  const packN = parseInt(document.getElementById('kk-pack-n').value);
+  if (!operator) { toast('作業者を選択してください', 'error'); return; }
+  if (!kkMaterials.length) { toast('原料ブロックを1つ以上スキャンしてください', 'error'); return; }
+  if (!packW || packW <= 0) { toast('1パックの重さを入力してください', 'error'); return; }
+  if (!packN || packN < 1) { toast('個数を入力してください', 'error'); return; }
+  if (type === 'スライス' && kkThicknessMm() == null) { toast('スライスの厚さを入力してください', 'error'); return; }
+
+  const prodName = kkProdName();
+  const processType = prodName;
+  const pc = type === 'ミンチ' ? 'MI' : 'SL';
+  const species = kkBlendSpecies();
+  const origin = kkBlendOrigin();
+  const location = document.getElementById('kk-location').value || null;
+  const matTotal = kkMaterials.reduce((s, m) => s + kkMatWeight(m), 0);
+  const outTotal = packW * packN;
+
+  if (!confirm(`加工処理を記録します。\n\n加工: ${prodName}\n原料: ${kkMaterials.length}点 / ${matTotal.toFixed(2)}kg\n完成: ${packW}kg × ${packN}パック = ${outTotal.toFixed(2)}kg\n作業者: ${operator}\n\n原料は「加工済」になり、完成パックが${packN}件の在庫として登録されます。よろしいですか？`)) return;
+
+  try {
+    const { prefix, date, start } = await kkNextCodeBase(pc);
+    const batchCode = `TGC-${pc}B-${date}-${String(start).padStart(3, '0')}`;
+    const nowIso = new Date().toISOString();
+    const firstParentId = kkMaterials[0].id;
+
+    // 1. 完成パックを在庫登録（個数分・固有コード）
+    const packs = [];
+    const packRows = [];
+    for (let i = 0; i < packN; i++) {
+      const identCode = prefix + String(start + i).padStart(3, '0');
+      packs.push({ ident_code: identCode, weight: packW });
+      packRows.push({
+        individual_id: null,
+        individual_code: batchCode,
+        species: species,
+        part_name: prodName,
+        ident_code: identCode,
+        weight: packW,
+        weight_kg: packW,
+        status: '在庫',
+        operator: operator,
+        processed_by: operator,
+        processed_at: nowIso,
+        tier: 3,
+        parent_inventory_id: firstParentId,
+        process_type: processType,
+        location_code: location
+      });
+    }
+    await sb('POST', 'inventory', packRows);
+
+    // 2. 原料ブロックを加工済に
+    for (const m of kkMaterials) {
+      await sb('PATCH', 'inventory', { status: '加工済', processed_by: operator, processed_at: nowIso, process_type: processType, updated_at: nowIso }, `?id=eq.${m.id}`);
+    }
+
+    // 3. トレーサビリティ記録（原料→バッチ→完成品の2段）
+    const logRows = [];
+    kkMaterials.forEach(m => logRows.push({
+      parent_ident_code: m.ident_code, child_ident_code: batchCode,
+      weight: kkMatWeight(m), process_type: processType, operator: operator, individual_id: m.individual_id || null
+    }));
+    packs.forEach(p => logRows.push({
+      parent_ident_code: batchCode, child_ident_code: p.ident_code,
+      result_weight_kg: packW, process_type: processType, operator: operator
+    }));
+    try { await sb('POST', 'processing_log', logRows); } catch (e) { /* ログ失敗は業務を止めない */ }
+
+    // 4. ラベル印刷
+    kkPrintLabels(packs, prodName, species, origin, kkMaterials);
+
+    playFeedbackSound(true);
+    toast(`加工処理を記録しました（${prodName} ${packN}パック / 原料${kkMaterials.length}点を加工済に）`);
+
+    // リセット
+    kkMaterials = [];
+    document.getElementById('kk-pack-w').value = '';
+    document.getElementById('kk-pack-n').value = '';
+    kkRenderMaterials();
+    kkUpdateSummary();
+    loadKakouLog();
+    document.getElementById('kk-scan').focus();
+  } catch (e) { playFeedbackSound(false); toast('記録に失敗しました: ' + sbSafeMsg(e), 'error'); }
+}
+
+// 加工品パックのラベル（40mm×60mm・複数ページ一括印刷）
+function kkPrintLabels(packs, prodName, species, origin, materials) {
+  const speciesName = (species || '').includes('イノシシ') ? 'イノシシ肉' :
+    ((species || '').includes('鹿') || (species || '').includes('シカ')) ? '鹿肉' : (species || '');
+  const expiry = new Date(); expiry.setFullYear(expiry.getFullYear() + 1);
+  const expiryStr = expiry.toLocaleDateString('ja-JP');
+  const origins = [...new Set((materials || []).map(m => m.individual_id).filter(Boolean))];
+  const rawLine = origins.length ? '原料 ' + origins.slice(0, 4).join('・') + (origins.length > 4 ? ' 他' : '') : '';
+
+  const css = `
+    @page { size: 40mm 60mm; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    .lb { width:40mm; height:60mm; font-family:'Meiryo','Yu Gothic',sans-serif;
+          padding:3mm 2mm 4mm; display:flex; flex-direction:column; overflow:hidden; page-break-after:always; }
+    .o  { font-size:9pt; font-weight:bold; border-bottom:.5pt solid #000; padding-bottom:.5mm; white-space:nowrap; }
+    .p  { font-size:12pt; font-weight:bold; margin-top:1mm; }
+    .w  { font-size:17pt; font-weight:bold; line-height:1.1; margin-top:.5mm; }
+    .wu { font-size:10pt; }
+    .ex { font-size:7pt; font-weight:bold; margin-top:.5mm; }
+    .tmp{ font-size:6pt; color:#333; }
+    .rw { font-size:5pt; color:#444; margin-top:.4mm; }
+    .bc { flex:1; display:flex; align-items:center; justify-content:center; min-height:0; }
+    .bc svg { display:block; width:36mm !important; height:10mm !important; }
+    .bct{ font-size:5pt; text-align:center; font-family:monospace; }
+    .mk { font-size:5pt; color:#444; margin-top:.3mm; }
+    .ad { font-size:5pt; color:#444; }
+  `;
+  const body = packs.map(p => `<div class="lb">
+    <div class="o">${esc2(origin)}　${esc2(speciesName)}</div>
+    <div class="p">${esc2(prodName)}</div>
+    <div class="w">${Number(p.weight).toFixed(3)}<span class="wu"> kg</span></div>
+    <div class="ex">消費期限　${expiryStr}</div>
+    <div class="tmp">保存温度　-18℃以下</div>
+    ${rawLine ? `<div class="rw">${esc2(rawLine)}</div>` : ''}
+    <div class="bc">${makeCode128SVG(p.ident_code)}</div>
+    <div class="bct">${esc2(p.ident_code)}</div>
+    <div class="mk">館山ジビエセンター</div>
+    <div class="ad">千葉県館山市西長田1163-5</div>
+  </div>`).join('');
+
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;border:none;opacity:0;';
+  document.body.appendChild(iframe);
+  const doc = iframe.contentDocument || iframe.contentWindow.document;
+  doc.open();
+  doc.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${css}</style></head><body>${body}</body></html>`);
+  doc.close();
+  iframe.contentWindow.focus();
+  iframe.contentWindow.print();
+  window.addEventListener('afterprint', () => { try { iframe.remove(); } catch (_) {} }, { once: true });
+  setTimeout(() => { try { iframe.remove(); } catch (_) {} }, 8000);
+}
+
+async function loadKakouLog() {
+  const body = document.getElementById('kk-log-body');
+  if (!body) return;
+  try {
+    const logs = await sb('GET', 'processing_log', null, `?process_type=not.is.null&order=created_at.desc&limit=40`);
+    // バッチ（child が TGC-xxB-）を1行にまとめる
+    const rows = logs.filter(l => /-(MI|SL)B-/.test(l.child_ident_code || ''));
+    if (!rows.length) { body.innerHTML = '<tr><td colspan="5" class="empty-state">記録がありません</td></tr>'; return; }
+    // child_ident_code(バッチ)ごとに原料数を集計
+    const batchMats = {};
+    logs.forEach(l => { if (/-(MI|SL)B-/.test(l.child_ident_code || '')) { (batchMats[l.child_ident_code] = batchMats[l.child_ident_code] || []).push(l.parent_ident_code); } });
+    const seen = new Set();
+    let html = '';
+    rows.forEach(l => {
+      if (seen.has(l.child_ident_code)) return;
+      seen.add(l.child_ident_code);
+      const mats = batchMats[l.child_ident_code] || [];
+      html += `<tr>
+        <td>${fmtDt(l.created_at)}</td>
+        <td>${esc2(l.process_type || '-')}</td>
+        <td style="font-size:12px;color:var(--text2);">${esc2(mats.slice(0, 3).join('・'))}${mats.length > 3 ? ' 他' : ''}（${mats.length}点）</td>
+        <td style="color:var(--gold);font-size:12px;">${esc2(l.child_ident_code || '-')}</td>
+        <td>${esc2(l.operator || '-')}</td>
+      </tr>`;
+    });
+    body.innerHTML = html || '<tr><td colspan="5" class="empty-state">記録がありません</td></tr>';
+  } catch (e) { body.innerHTML = '<tr><td colspan="5" class="empty-state">読み込みエラー</td></tr>'; }
+}
+
 /* ── 道の駅の店頭在庫（納品・販売報告） ── */
 let outletList = [];
 let outletRetailProducts = [];
@@ -7136,9 +7587,16 @@ const MANUALS = [
       { h: '保存場所を選ぶ', d: '冷凍庫（F1〜）を選ぶと在庫一覧に反映されます。' },
       { h: '「精肉完了」', d: '完了した個体は別表示になります。途中でやめても登録済みは保存されています。' },
     ] },
-  { id: 'product', icon: '🛍', title: '⑤ 加工処理・完成品在庫', who: 'スタッフ', when: '味付け肉・スライス等を作ったとき', where: '業務トップ →「加工処理」',
+  { id: 'kakou', icon: '🍖', title: '⑤ 加工処理（スライス・ミンチ）', who: 'スタッフ', when: '精肉ブロックをスライス肉・ミンチ肉に加工したとき', where: '業務トップ →「加工処理」',
     steps: [
-      { h: '商品カードの「＋完成」を押す', d: '味付けみそ・スライス2mm など、作った商品のカードを選びます。' },
+      { h: '作業者と加工の種類を選ぶ', d: 'ミンチ（細挽き／粗挽き）か、スライス（厚さmm）を選びます。' },
+      { h: '原料ブロックをスキャン', d: 'ハンディスキャナで加工する精肉ブロックのバーコードを読みます（複数OK）。読むと在庫→加工済に変わります。' },
+      { h: '完成品を入力', d: '1パックの重さ（例 1kg）× 個数（例 10）を入力します。' },
+      { h: '「記録してラベル発行」', d: 'パックごとに固有番号のラベルが出て、その数だけ在庫に置き換わります。原料ブロックは加工済になります。' },
+    ], caution: '原料ブロックは加工済になり在庫から外れます。完成パックは新しい在庫として登録されます。' },
+  { id: 'product', icon: '🛍', title: '⑥ 加工調理・完成品在庫', who: 'スタッフ', when: '味付け肉・ソーセージ等を作ったとき', where: '業務トップ →「加工調理」',
+    steps: [
+      { h: '商品カードの「＋完成」を押す', d: '味付けみそ・味噌漬け など、調理・味付けして作った商品のカードを選びます。' },
       { h: '完成数などを入力', d: '完成した数・作業者・元にした個体番号を入れて「記録する」。' },
       { h: '在庫が増える', d: 'この完成品在庫が、道の駅納品やBASE販売の元になります。' },
     ], caution: '道の駅やBASEに出す前に、ここで完成数を入れておいてください。' },
