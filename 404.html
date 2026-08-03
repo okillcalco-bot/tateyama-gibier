@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ページが見つかりません - 館山ジビエセンター</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f5f6f2; --surface:#ffffff; --surface2:#eff1ea;
+  --border:#dfe3d6; --border2:#c7ccba;
+  --gold:#8d6a1d; --gold2:#97772a;
+  --text:#23271c; --text2:#626854; --text3:#9aa08c;
+  --radius:8px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);
+     min-height:100vh;line-height:1.7;font-size:15px;
+     display:flex;align-items:center;justify-content:center;padding:20px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+      max-width:520px;width:100%;padding:28px 24px}
+h1{font-size:19px;color:var(--gold);margin-bottom:6px}
+.sub{font-size:13.5px;color:var(--text2);margin-bottom:20px}
+.hint{background:var(--surface2);border:1px dashed var(--border2);border-radius:var(--radius);
+      padding:12px 14px;font-size:13px;color:var(--text2);line-height:1.9;margin-bottom:20px}
+.hint b{color:var(--text)}
+.links{display:flex;flex-direction:column;gap:10px}
+a.item{display:flex;align-items:center;gap:12px;padding:14px 16px;border:1px solid var(--border);
+       border-radius:var(--radius);text-decoration:none;color:var(--text);background:var(--surface);
+       transition:all .15s}
+a.item:hover,a.item:active{border-color:var(--gold2);background:var(--surface2)}
+a.item .ico{font-size:22px;line-height:1}
+a.item .t{font-weight:700;font-size:15px}
+a.item .d{font-size:12px;color:var(--text2)}
+a.primary{border-color:var(--gold2);background:linear-gradient(135deg,rgba(141,106,29,.07),rgba(151,119,42,.03))}
+.foot{margin-top:18px;font-size:11.5px;color:var(--text3);line-height:1.9;text-align:center}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>ページが見つかりませんでした</h1>
+  <div class="sub">リンクの前後に記号（**など）が入っていたか、アドレスが途中で切れた可能性があります。</div>
+
+  <div class="hint">
+    LINEなどからリンクを開いたときは、<b>URLの前後に「*」や空白</b>が混ざることがあります。<br>
+    下のボタンから開きなおしてください。アクセスコードは <b>1357</b>（スタッフ）です。
+  </div>
+
+  <div class="links">
+    <a class="item primary" href="/index.html?tab=individuals">
+      <span class="ico">&#x1FAA4;</span>
+      <span><span class="t">個体入力（捕獲受入・個体）</span><br><span class="d">捕獲日・場所・捕獲者・体重などを入力</span></span>
+    </a>
+    <a class="item" href="/capture-form.html">
+      <span class="ico">&#x1F4DD;</span>
+      <span><span class="t">捕獲票入力</span><br><span class="d">新しい捕獲をゼロから登録</span></span>
+    </a>
+    <a class="item" href="/punch.html">
+      <span class="ico">&#x1F551;</span>
+      <span><span class="t">出退勤打刻</span><br><span class="d">出勤・退勤・体調チェック</span></span>
+    </a>
+    <a class="item" href="/manual-app.html">
+      <span class="ico">&#x1F4D6;</span>
+      <span><span class="t">使い方マニュアル</span><br><span class="d">各画面の手順・困ったときの対処</span></span>
+    </a>
+    <a class="item" href="/index.html">
+      <span class="ico">&#x1F3E0;</span>
+      <span><span class="t">業務トップ</span><br><span class="d">すべての機能はこちらから</span></span>
+    </a>
+  </div>
+
+  <div class="foot">館山ジビエセンター / 合同会社アルコ<br>うまく開けないときは事務所までご連絡ください。</div>
+</div>
+</body>
+</html>

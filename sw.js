@@ -1,13 +1,16 @@
 // Service Worker for 館山ジビエセンター アプリ
-const CACHE = 'gibier-v2';
-const STATIC_ASSETS = ['manual-app.html','manifest.json'];
+// v3: 同一オリジンのGETだけを扱う（Supabase等のAPIには一切さわらない）。
+//     正常応答(res.ok)のみキャッシュし、404などのエラー応答は残さない。
+const CACHE = 'gibier-v3';
+const STATIC_ASSETS = ['manual-app.html', 'manifest.json'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(STATIC_ASSETS)));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(STATIC_ASSETS)).catch(() => {}));
   self.skipWaiting();
 });
 
 self.addEventListener('activate', e => {
+  // 旧キャッシュ（誤って保存された404などを含む）をここで破棄する
   e.waitUntil(
     caches.keys().then(keys =>
       Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
@@ -16,20 +19,35 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
+function cachePut(req, res) {
+  if (!res || !res.ok) return res;   // 404・500などは保存しない
+  const copy = res.clone();
+  caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
+  return res;
+}
+
 self.addEventListener('fetch', e => {
-  var url = e.request.url;
-  if (url.includes('.html') || url.endsWith('/')) {
+  const req = e.request;
+  // 登録・更新（POST/PATCH等）と、Supabaseなど外部ドメインへの通信は素通しにする
+  if (req.method !== 'GET') return;
+  let url;
+  try { url = new URL(req.url); } catch (_) { return; }
+  if (url.origin !== self.location.origin) return;
+
+  const isPage = req.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('.html');
+
+  if (isPage) {
+    // 画面は必ずネットワーク優先。つながらないときだけキャッシュを出す
     e.respondWith(
-      fetch(e.request)
-        .then(res => { caches.open(CACHE).then(c => c.put(e.request, res.clone())); return res; })
-        .catch(() => caches.match(e.request))
+      fetch(req)
+        .then(res => cachePut(req, res))
+        .catch(() => caches.match(req).then(c => c || caches.match('manual-app.html')))
     );
-  } else {
-    e.respondWith(
-      caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
-        caches.open(CACHE).then(c => c.put(e.request, res.clone()));
-        return res;
-      }))
-    );
+    return;
   }
+
+  // 静的ファイルはキャッシュ優先
+  e.respondWith(
+    caches.match(req).then(cached => cached || fetch(req).then(res => cachePut(req, res)))
+  );
 });
