@@ -715,6 +715,11 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="form-group"><label>内臓の活用</label><input class="form-input" id="ind-f-organs_use" placeholder="例: 心臓・レバーを販売用に保管" /></div>
         <div class="form-group"><label>皮の状態</label><select class="form-input" id="ind-f-hide_status"><option value="">選択...</option><option>販売可</option><option>保管中</option><option>加工中</option><option>廃棄</option></select></div>
         <div class="form-group"><label>皮の保管場所</label><input class="form-input" id="ind-f-hide_location" placeholder="例: 冷凍庫F2 / 乾燥棚" /></div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>解体担当者（複数選択可・もう一度押すと解除）</label>
+          <div id="ind-f-butcher_staff-box" style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 0;"></div>
+          <input type="hidden" id="ind-f-butcher_staff" />
+        </div>
         <div class="form-group" style="grid-column:1/-1"><label>解体時メモ（気になる点）</label><textarea class="form-input" id="ind-f-processing_notes" rows="2" style="resize:vertical;" placeholder="例: くくり罠の旧傷で右前脚が欠損"></textarea></div>
       </div>
       <!-- セクション：精肉・買取 -->
@@ -3329,6 +3334,19 @@ async function shipOrderConfirmed(orderId, dropdownAssignments) {
 let PM_OPERATORS = ['沖浩志','田口和利','白石秀一','大和田薫','渡邊恵','相川武士','川島幸子','大橋直人','石橋早奈恵','黒川珠絵','今泉貴雄','吉田友美']; // 正式名簿（DB読込前のフォールバック）
 let STAFF_MASTER = []; // {id, name} スタッフマスタ（作業者選択はここから）
 
+/* 作業頻度の高い人を前に出すためのチーム分け（名前はスタッフマスタと一致させる）
+   ここに載っていない人は自動的に「その他」として区切り線の後ろに回る */
+const TEAM_SEIKA  = ['田口和利', '白石秀一', '渡邊恵', '吉田友美', '石橋早奈恵'];           // 精肉
+const TEAM_KAITAI = ['沖浩志', '大和田薫', '今泉貴雄', '川島幸子', '大橋直人', '相川武士']; // 解体
+
+// 指定チームを前に、それ以外を後ろに分ける（在籍者＝PM_OPERATORS のみ）
+function staffSplitByTeam(team) {
+  const active = PM_OPERATORS;
+  const front = team.filter(n => active.includes(n));
+  const rest = active.filter(n => !front.includes(n));
+  return { front, rest };
+}
+
 // 作業者はスタッフマスタ（staffテーブル）から必ず選択する
 async function loadStaffNames() {
   try {
@@ -3569,20 +3587,27 @@ function pmRenderHeaderOps() {
   const pauseHtml = pmIndividual
     ? '<button class="pm-op-btn" style="background:rgba(232,164,74,0.2);border-color:var(--accent);color:var(--accent);margin-right:8px;" onclick="pmPauseIndividual()">⏸ 一時保管</button>'
     : '';
-  c.innerHTML = pauseHtml + PM_OPERATORS.map(op => {
+  const btn = op => {
     const hasSess = !!pmSessions[op];
     const isActive = op === pmCurrentOperator;
     return `<button class="pm-op-btn ${isActive ? 'active' : ''}" onclick="pmSwitchOperator('${op}')">${op}${hasSess && !isActive ? '<span class="session-dot"></span>' : ''}</button>`;
-  }).join('');
+  };
+  const { front, rest } = staffSplitByTeam(TEAM_SEIKA);
+  const sep = (front.length && rest.length)
+    ? '<span style="width:1px;align-self:stretch;background:var(--border2);margin:0 4px;"></span>' : '';
+  c.innerHTML = pauseHtml + front.map(btn).join('') + sep + rest.map(btn).join('');
 }
 
 // ── セットアップ作業者ボタン描画 ──
 function pmRenderSetupOps() {
   const c = document.getElementById('pmSetupOpGrid');
   if (!c) return;
-  c.innerHTML = PM_OPERATORS.map(op => `
-    <button class="pm-setup-op-btn ${op === pmCurrentOperator ? 'selected' : ''}" onclick="pmSetupSelectOp('${op}')">${op}</button>
-  `).join('');
+  const btn = op => `<button class="pm-setup-op-btn ${op === pmCurrentOperator ? 'selected' : ''}" onclick="pmSetupSelectOp('${op}')">${op}</button>`;
+  const { front, rest } = staffSplitByTeam(TEAM_SEIKA);
+  // 精肉に多い人を前に、区切り線を挟んでその他
+  const sep = (front.length && rest.length)
+    ? '<div style="flex-basis:100%;height:0;"></div><div style="flex-basis:100%;height:1px;background:var(--border2);margin:2px 0 6px;"></div>' : '';
+  c.innerHTML = front.map(btn).join('') + sep + rest.map(btn).join('');
   // セッション一覧
   const activeOps = Object.keys(pmSessions).filter(op => pmSessions[op]?.individual);
   const sec = document.getElementById('pmSessionSection');
@@ -4856,7 +4881,7 @@ const IND_ALL_FIELDS = ['label_id','serial_number','species','sex','age_estimate
   'weather','capture_method','finishing_method','hit_location',
   'bleed_time','gutting','cooling_method','transport_start','receive_time','process_time',
   'recorder','hunter_health_issues','capture_anomalies','organ_anomalies','has_fetus','hunter_health_ok','memo',
-  'intake_method','intake_staff','organs_use','hide_status','hide_location','processing_notes',
+  'intake_method','intake_staff','organs_use','hide_status','hide_location','processing_notes','butcher_staff',
   'meat_rank','yield_rate','buyback_amount'];
 
 function indSort(col) {
@@ -5023,11 +5048,42 @@ function indSetField(id, val) {
   el.value = val;
 }
 
+/* ── 解体担当者（複数選択・解体に多い人を前に、区切り線でその他と分ける） ── */
+function indButcherList() {
+  const v = (document.getElementById('ind-f-butcher_staff')?.value || '').trim();
+  return v ? v.split(',').map(s => s.trim()).filter(Boolean) : [];
+}
+function indRenderButcherStaff() {
+  const box = document.getElementById('ind-f-butcher_staff-box');
+  if (!box) return;
+  const picked = indButcherList();
+  const btn = n => {
+    const on = picked.includes(n);
+    return `<button type="button" class="pm-op-btn ${on ? 'active' : ''}" style="padding:7px 14px;font-size:13px;" onclick="indToggleButcher('${n.replace(/'/g, "\\'")}')">${esc2(n)}</button>`;
+  };
+  const { front, rest } = staffSplitByTeam(TEAM_KAITAI);
+  const sep = (front.length && rest.length)
+    ? '<div style="flex-basis:100%;height:1px;background:var(--border2);margin:4px 0;"></div>' : '';
+  box.innerHTML = front.map(btn).join('') + sep + rest.map(btn).join('');
+}
+function indToggleButcher(name) {
+  const picked = indButcherList();
+  const i = picked.indexOf(name);
+  if (i >= 0) picked.splice(i, 1); else picked.push(name);
+  // 表示順（解体チーム→その他）に揃えて保存する
+  const { front, rest } = staffSplitByTeam(TEAM_KAITAI);
+  const order = front.concat(rest);
+  picked.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  document.getElementById('ind-f-butcher_staff').value = picked.join(',');
+  indRenderButcherStaff();
+}
+
 function indOpenNew() {
   indEditId = null;
   document.getElementById('indModalTitle').textContent = '新規個体登録';
   IND_ALL_FIELDS.forEach(f => indSetField(f, ''));
   document.getElementById('ind-f-stopkill_pickup').checked = false;
+  indRenderButcherStaff();
   updateBuybackHint();
   document.getElementById('ind-f-label_id').disabled = false;
   document.getElementById('indModal').style.display = 'block';
@@ -5044,6 +5100,7 @@ function indOpenEdit(labelId) {
   indSetField('has_fetus', i.has_fetus == null ? '' : String(i.has_fetus));
   indSetField('hunter_health_ok', i.hunter_health_ok == null ? '' : String(i.hunter_health_ok));
   document.getElementById('ind-f-stopkill_pickup').checked = !!i.stopkill_pickup;
+  indRenderButcherStaff();
   updateBuybackHint();
   document.getElementById('ind-f-label_id').disabled = true;
   document.getElementById('indModal').style.display = 'block';
@@ -5154,6 +5211,9 @@ async function indSave() {
       const el = document.getElementById('ind-f-' + f);
       if (el && el.value && el.value.trim() !== '') payload[f] = el.value.trim();
     });
+    // 解体担当者は全員外した場合も反映させたいので、空のときはnullを送る
+    const bs = document.getElementById('ind-f-butcher_staff');
+    if (bs) payload.butcher_staff = bs.value.trim() || null;
     if (indEditId) {
       await sb('PATCH', 'individuals', payload, '?label_id=eq.' + encodeURIComponent(indEditId));
       toast('保存しました');
