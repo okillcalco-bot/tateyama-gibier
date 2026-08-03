@@ -300,6 +300,37 @@ th,td{padding:8px 6px;font-size:.8rem}
           </div>
         </div>
         <div id="invEditBanner" style="display:none;background:rgba(240,192,64,.14);border:1px solid #c9a52c;border-radius:var(--radius);padding:8px 12px;font-size:.8rem;margin-bottom:10px"></div>
+        <div id="invLinkedNote" style="display:none;background:rgba(90,140,216,.10);border:1px solid #2f66b5;border-radius:var(--radius);padding:8px 12px;font-size:.8rem;margin-bottom:10px"></div>
+
+        <!-- 注文から取り込む（締め請求） -->
+        <div style="border:1px dashed var(--border2);border-radius:var(--radius);padding:12px;background:var(--surface2);margin:16px 0">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <strong style="font-size:.9rem">📦 注文から取り込む（締め請求）</strong>
+            <span style="font-size:.72rem;color:var(--text2)">納品済みの注文をまとめて1枚の請求書に</span>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
+            <div class="form-group" style="margin:0;min-width:130px"><label>期間</label>
+              <select id="invPullPeriod" onchange="invPullSearch()">
+                <option value="thisMonth">今月</option>
+                <option value="lastMonth">先月</option>
+                <option value="all">すべて（未請求）</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0;flex:1;min-width:140px"><label>&nbsp;</label>
+              <button class="btn btn-outline" style="width:100%" onclick="invPullSearch()">🔍 対象の注文を探す</button>
+            </div>
+            <label style="font-size:.75rem;color:var(--text2);display:flex;align-items:center;gap:4px;padding-bottom:9px">
+              <input type="checkbox" id="invPullShowBilled" onchange="invPullSearch()"> 請求済みも表示
+            </label>
+          </div>
+          <div id="invPullResult" style="margin-top:8px;font-size:.8rem;color:var(--text2)">請求先を選んでから「対象の注文を探す」を押してください。</div>
+          <div id="invPullList" style="max-height:230px;overflow-y:auto;margin-top:6px"></div>
+          <div id="invPullActions" style="display:none;margin-top:8px;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-gold btn-sm" onclick="invPullApply()">選んだ注文を明細に入れる</button>
+            <button class="btn btn-outline btn-sm" onclick="invPullToggleAll(true)">全て選択</button>
+            <button class="btn btn-outline btn-sm" onclick="invPullToggleAll(false)">選択解除</button>
+          </div>
+        </div>
 
         <h3 style="color:var(--gold);margin:16px 0 8px">明細 <span style="font-size:.72rem;color:var(--text2);font-weight:400">肉・食品は軽減税率8%、加工賃・送料などは10%</span></h3>
         <div style="display:grid;grid-template-columns:1fr 64px 56px 88px 78px 88px 26px;gap:6px;font-size:.72rem;color:var(--text2);padding:0 2px 4px">
@@ -1514,6 +1545,7 @@ function invCollect(){
     due:invGv('invDue')||'',
     memo:(invGv('invMemo')||'').trim(),
     customer_id:invGv('invCustomerId')||null,
+    order_ids:invLinkedOrderIds.slice(),
     bank:invGv('invBank')||s.bank||'',
     issuer:{issuer_name:s.issuer_name,issuer_sub:s.issuer_sub,postal:s.postal,address:s.address,tel:s.tel,email:s.email,reg_number:s.reg_number},
     seal:(invSealBuffer!==null?invSealBuffer:s.seal_data_url)||'',
@@ -1526,6 +1558,7 @@ function invCollect(){
 
 function invResetForm(){
   invEditingId=null;
+  invLinkedOrderIds=[];
   ['invCustomerInput','invCustomerId','invName','invSubject','invAddress','invMemo'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   document.getElementById('invHonorific').value='御中';
   document.getElementById('invDate').value=today();
@@ -1533,6 +1566,11 @@ function invResetForm(){
   invLines=[newInvLine()];
   renderInvLines();
   invUpdateEditBanner();
+  invUpdateLinkedNote();
+  const pr=document.getElementById('invPullResult'), pl=document.getElementById('invPullList'), pa=document.getElementById('invPullActions');
+  if(pr) pr.textContent='請求先を選んでから「対象の注文を探す」を押してください。';
+  if(pl) pl.innerHTML='';
+  if(pa) pa.style.display='none';
 }
 function invUpdateEditBanner(){
   const b=document.getElementById('invEditBanner');
@@ -1544,6 +1582,124 @@ function invUpdateEditBanner(){
     b.style.display='none'; b.innerHTML='';
   }
 }
+
+// ── 注文から取り込む（締め請求・二重請求防止） ──
+let invPullOrders=[];            // 検索結果
+let invLinkedOrderIds=[];        // この請求書に紐付ける注文ID
+const INV_BILLABLE=['発送済','納品完了'];
+
+function invPullRange(){
+  const v=document.getElementById('invPullPeriod').value;
+  const now=new Date();
+  if(v==='thisMonth') return {from:fmtDate(new Date(now.getFullYear(),now.getMonth(),1)),to:fmtDate(new Date(now.getFullYear(),now.getMonth()+1,0))};
+  if(v==='lastMonth') return {from:fmtDate(new Date(now.getFullYear(),now.getMonth()-1,1)),to:fmtDate(new Date(now.getFullYear(),now.getMonth(),0))};
+  return null; // all
+}
+
+async function invPullSearch(){
+  const res=document.getElementById('invPullResult');
+  const list=document.getElementById('invPullList');
+  const acts=document.getElementById('invPullActions');
+  const custId=document.getElementById('invCustomerId').value;
+  if(!custId){
+    res.textContent='先に「請求先」で顧客を選んでください（自由入力の宛名では注文を取り込めません）。';
+    list.innerHTML=''; acts.style.display='none'; return;
+  }
+  res.textContent='検索中…'; list.innerHTML=''; acts.style.display='none';
+  try{
+    let q=`?customer_id=eq.${custId}&status=in.(${INV_BILLABLE.join(',')})&select=*,order_items(*)&order=delivery_date.asc,order_date.asc`;
+    const r=invPullRange();
+    if(r) q+=`&order_date=gte.${r.from}&order_date=lte.${r.to}`;
+    const orders=await sb('GET','orders','',q);
+    // 既に請求書に紐付いている注文を除外（取消された請求書の分は再請求できる）
+    let billed=new Set();
+    if(orders.length){
+      const ids=orders.map(o=>o.id);
+      const links=await sb('GET','document_orders','',`?order_id=in.(${ids.join(',')})&select=order_id,document_id`);
+      if(links.length){
+        const docIds=[...new Set(links.map(l=>l.document_id))];
+        const docs=await sb('GET','documents','',`?id=in.(${docIds.join(',')})&select=id,status,doc_number`);
+        const alive=new Map(docs.filter(d=>d.status!=='取消').map(d=>[d.id,d.doc_number]));
+        links.forEach(l=>{ if(alive.has(l.document_id)) billed.add(l.order_id); });
+      }
+    }
+    const showBilled=document.getElementById('invPullShowBilled').checked;
+    invPullOrders=orders.map(o=>({...o,_billed:billed.has(o.id)})).filter(o=>showBilled||!o._billed);
+    if(!invPullOrders.length){
+      res.textContent=billed.size?'未請求の注文はありません（請求済みを見るにはチェックを入れてください）。':'対象期間に納品済みの注文がありません。';
+      return;
+    }
+    const sum=invPullOrders.filter(o=>!o._billed).reduce((s,o)=>s+Number(o.total_amount||0),0);
+    res.innerHTML=`未請求 <strong>${invPullOrders.filter(o=>!o._billed).length}件</strong>（合計 &yen;${sum.toLocaleString()}）${billed.size?` ／ 請求済み ${billed.size}件`:''}`;
+    list.innerHTML=invPullOrders.map((o,i)=>{
+      const items=(o.order_items||[]).map(t=>`${t.species||''} ${t.part_name||''}`).filter(x=>x.trim()).join('、');
+      return `<label style="display:flex;gap:8px;align-items:flex-start;padding:7px 6px;border-bottom:1px solid var(--border);${o._billed?'opacity:.55':''}">
+        <input type="checkbox" class="inv-pull-cb" data-i="${i}" ${o._billed?'':'checked'} style="margin-top:3px;accent-color:var(--gold)">
+        <span style="flex:1;min-width:0">
+          <strong style="font-size:.82rem">${esc(o.order_code||'')}</strong>
+          <span style="color:var(--text2);font-size:.75rem"> ${o.delivery_date||o.order_date||''} ・ ${esc(o.status||'')}</span>
+          ${o._billed?'<span style="font-size:.68rem;background:rgba(106,158,90,.15);color:#3d7a34;border-radius:4px;padding:1px 5px;margin-left:4px">請求済</span>':''}
+          <br><span style="font-size:.73rem;color:var(--text2)">${esc(items)}</span>
+          <span style="float:right;font-weight:700;font-size:.8rem">&yen;${Number(o.total_amount||0).toLocaleString()}</span>
+        </span>
+      </label>`;
+    }).join('');
+    acts.style.display='flex';
+  }catch(e){ res.textContent='検索エラー: '+e.message; }
+}
+
+function invPullToggleAll(on){
+  document.querySelectorAll('.inv-pull-cb').forEach(cb=>{cb.checked=on;});
+}
+
+function invPullApply(){
+  const picked=[];
+  document.querySelectorAll('.inv-pull-cb:checked').forEach(cb=>{const o=invPullOrders[parseInt(cb.dataset.i,10)];if(o)picked.push(o);});
+  if(!picked.length){alert('取り込む注文を選んでください');return}
+  const dup=picked.filter(o=>o._billed);
+  if(dup.length && !confirm(`請求済みの注文が${dup.length}件含まれています。二重請求になる可能性があります。続けますか？`)) return;
+
+  // 既存の空行を捨てて、注文明細を積む
+  const keep=invLines.filter(l=>(l.name||'').trim()!==''||invLineAmount(l)>0);
+  picked.forEach(o=>{
+    (o.order_items||[]).forEach(it=>{
+      const qty=it.weight_kg!=null?it.weight_kg:it.weight;
+      const price=it.unit_price;
+      const amt=Number(it.subtotal!=null?it.subtotal:it.amount)||0;
+      keep.push({
+        name:[it.species||'',it.part_name||''].filter(Boolean).join(' ')||'商品',
+        qty:qty!=null?qty:'', unit:qty!=null?'kg':'式',
+        // 単価が無い/合わない場合は金額から逆算して明細金額を一致させる
+        price:price!=null?price:(qty?Math.round(amt/qty):amt),
+        tax:8
+      });
+    });
+    if(!invLinkedOrderIds.includes(o.id)) invLinkedOrderIds.push(o.id);
+  });
+  invLines=keep.length?keep:[newInvLine()];
+  renderInvLines();
+
+  // 件名・宛名・期間を補完
+  const sub=document.getElementById('invSubject');
+  if(sub && !sub.value.trim()){
+    const d=new Date((document.getElementById('invDate').value||today())+'T00:00:00');
+    const pv=document.getElementById('invPullPeriod').value;
+    const m=pv==='lastMonth'?new Date(d.getFullYear(),d.getMonth()-1,1):d;
+    sub.value=`${m.getFullYear()}年${m.getMonth()+1}月分`;
+  }
+  invUpdateLinkedNote();
+  alert(`${picked.length}件の注文を明細に取り込みました。`);
+}
+
+function invUpdateLinkedNote(){
+  const el=document.getElementById('invLinkedNote');
+  if(!el) return;
+  if(invLinkedOrderIds.length){
+    el.style.display='';
+    el.innerHTML=`🔗 この請求書には <strong>${invLinkedOrderIds.length}件の注文</strong> が紐付いています（発行すると請求済みになり、二重請求を防ぎます）。 <a href="javascript:void(0)" onclick="invClearLinked()" style="font-weight:700">紐付けを外す</a>`;
+  }else{ el.style.display='none'; el.innerHTML=''; }
+}
+function invClearLinked(){ invLinkedOrderIds=[]; invUpdateLinkedNote(); }
 
 // ── 印刷（発行・再印刷・プレビュー共通。ペイロードから描画＝発行後はスナップショットで不変） ──
 function invRenderPrint(p,number,opts){
@@ -1721,6 +1877,13 @@ async function invIssue(){
             unit_price:l.price,tax_rate:l.tax!=null?l.tax:8,amount:l.amount||0
           })));
         }catch(e){console.error('明細保存エラー',e)}
+        // 取り込んだ注文を紐付け（二重請求防止）
+        if(p.order_ids && p.order_ids.length){
+          try{
+            await sb('DELETE','document_orders','',`?document_id=eq.${docId}`);
+            await sb('POST','document_orders',p.order_ids.map(oid=>({document_id:docId,order_id:oid})));
+          }catch(e){console.error('注文紐付けエラー',e)}
+        }
       }
       invRenderPrint(p,number,{});
       invResetForm();
@@ -1823,7 +1986,10 @@ function invFillFormFrom(r,asCopy){
   document.getElementById('invDue').value=asCopy?endOfNextMonth(today()):(p.due||r.due_date||'');
   invLines=(p.lines&&p.lines.length?p.lines:[]).map(l=>({name:l.name||'',qty:l.qty!=null?l.qty:'',unit:l.unit||'',price:l.price!=null?l.price:'',tax:l.tax!=null?l.tax:8}));
   if(!invLines.length) invLines=[newInvLine()];
+  // 複製時は注文の紐付けを引き継がない（同じ注文を二重請求しないため）
+  invLinkedOrderIds=asCopy?[]:((p.order_ids||[]).slice());
   renderInvLines();
+  invUpdateLinkedNote();
 }
 function invEdit(id){
   const r=invListRows.find(x=>x.id===id);
