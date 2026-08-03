@@ -989,15 +989,15 @@ async function refreshIndividualNumber() {
   // ── 通し番号を取得 ──
   let nextSerial;
   if (species === 'イノシシ') {
-    const lsKey = 'tgc_next_serial_イノシシ';
-    nextSerial = parseInt(localStorage.getItem(lsKey) || '0');
-    if (!nextSerial || nextSerial < 1) {
-      try {
-        const rows = await sb('GET', 'individuals', null,
-          `?species=eq.イノシシ&select=serial_number&order=serial_number.desc&limit=1`);
-        nextSerial = rows.length > 0 ? (rows[0].serial_number || 0) + 1 : 1;
-      } catch(e) { nextSerial = 1; }
-    }
+    // DBの最大通し番号+1を基準に（取り込み・手動追加後もズレない）。手動カウンタ(localStorage)が先行していればそちらを優先。
+    let dbNext = 1;
+    try {
+      const rows = await sb('GET', 'individuals', null,
+        `?species=eq.イノシシ&serial_number=not.is.null&select=serial_number&order=serial_number.desc&limit=1`);
+      dbNext = rows.length > 0 ? (rows[0].serial_number || 0) + 1 : 1;
+    } catch(e) { dbNext = 1; }
+    const lsVal = parseInt(localStorage.getItem('tgc_next_serial_イノシシ') || '0') || 0;
+    nextSerial = Math.max(dbNext, lsVal);
   } else {
     const lsKey = `tgc_next_serial_${prefix}`;
     nextSerial = parseInt(localStorage.getItem(lsKey) || '0');
@@ -1713,9 +1713,20 @@ async function handleSubmit() {
     const serial = parseInt(document.getElementById('indSerial').value) || 1;
     if (!labelId && !window.hunterMode) { alert('個体管理番号が生成されていません。種別と市町村を選択してください。'); btn.disabled=false; btn.textContent='登録する'; return; }
 
+    // 通し番号（連番）はイノシシのみ。新規登録時にDBの最大+1を自動採番（この次から連番）。
+    let serialForSave = window.hunterMode ? null : serial;
+    if (!editRecordId && state.species === 'イノシシ') {
+      try {
+        const rows = await sb('GET', 'individuals', null, '?species=eq.イノシシ&serial_number=not.is.null&select=serial_number&order=serial_number.desc&limit=1');
+        const dbNext = rows.length ? ((rows[0].serial_number || 0) + 1) : 1;
+        serialForSave = Math.max(dbNext, serial || 0) || dbNext;
+        const sf = document.getElementById('indSerial'); if (sf) sf.value = serialForSave; // 表示・ラベルと一致させる
+      } catch (e) { serialForSave = window.hunterMode ? null : (serial || null); }
+    }
+
     const record = {
       label_id: window.hunterMode ? ('仮-' + Date.now().toString(36).toUpperCase()) : labelId,
-      serial_number: window.hunterMode ? null : serial,
+      serial_number: serialForSave,
       intake_status: window.hunterMode ? '搬入待ち' : (window.receiveMode ? null : undefined),
       species: state.species,
       sex: state.sex,
