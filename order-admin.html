@@ -265,6 +265,9 @@ th,td{padding:8px 6px;font-size:.8rem}
       <button class="btn btn-outline btn-sm" onclick="document.getElementById('custCsvFile').click()">⬆ CSVインポート</button>
       <input type="file" id="custCsvFile" accept=".csv,text/csv" style="display:none" onchange="importCustomersCSV(this)">
     </div>
+    <div style="font-size:12.5px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:12px;line-height:1.8;">
+      この名簿は<a href="index.html?tab=customers" style="font-weight:700;">業務アプリの「顧客台帳」</a>と<strong>同じデータ</strong>です。どちらで直しても両方に反映されます。価格パターン（スタンダード／ローカル／スタートメンバー）も共通で、<a href="javascript:void(0)" onclick="switchTab('pricing')" style="font-weight:700;">価格マスタ</a>の単価と対応しています。
+    </div>
     <div class="table-wrap">
       <table class="customer-table">
         <thead><tr><th>コード</th><th>名前</th><th>カナ</th><th>電話</th><th>住所</th><th>価格ランク</th><th>操作</th></tr></thead>
@@ -1014,7 +1017,20 @@ function renderCustomers(){
   pag.innerHTML=ph;
 }
 
-function openAddCustomer(){
+/* 顧客コードの採番（業務アプリの顧客台帳と共通の C0001 形式）。
+   どちらの画面から登録しても連番が続くよう、必ずDBの最新から最大+1を採る */
+async function custNextCode(){
+  let max=0;
+  try{
+    const rows=await sb('GET','customers','','?select=code&limit=5000');
+    rows.forEach(r=>{const m=String(r.code||'').match(/^C(\d{1,6})$/);if(m){const n=parseInt(m[1],10);if(n>max)max=n;}});
+  }catch(e){
+    max=allCustomers.reduce((m,c)=>{const mm=String(c.code||'').match(/^C(\d{1,6})$/);const n=mm?parseInt(mm[1],10):0;return n>m?n:m},0);
+  }
+  return 'C'+String(max+1).padStart(4,'0');
+}
+
+async function openAddCustomer(){
   document.getElementById('custModalTitle').textContent='顧客追加';
   document.getElementById('custEditId').value='';
   ['cfName','cfKana','cfPhone','cfAddress','cfBuilding','cfContact','cfEmail','cfCompany1','cfCompany2','cfReqCode','cfReqPhone','cfPassword','cfDefaultItem','cfLoginId'].forEach(id=>document.getElementById(id).value='');
@@ -1023,8 +1039,8 @@ function openAddCustomer(){
   document.getElementById('cfTimeZone').value='0000';
   document.getElementById('cfRank').value='standard';
   document.getElementById('cfActive').value='true';
-  const maxCode=allCustomers.reduce((m,c)=>{const n=parseInt((c.code||'').replace('C',''));return n>m?n:m},0);
-  document.getElementById('cfCode').value='C'+String(maxCode+1).padStart(4,'0');
+  // 業務アプリの顧客台帳と同じ採番規則（C0001…）。最新のDBを見てから採る
+  document.getElementById('cfCode').value=await custNextCode();
   openModal('custModal');
 }
 
@@ -2150,6 +2166,19 @@ function fmtDate(d){return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.ge
 
 init();
 ordStartNotifyLoop();
+
+/* 顧客・価格マスタは業務アプリの顧客台帳と同じデータを見ている。
+   別画面で編集されている可能性があるので、この画面に戻ってきたら読み直す */
+document.addEventListener('visibilitychange',async()=>{
+  if(document.visibilityState!=='visible') return;
+  try{
+    await Promise.all([loadCustomers(),loadProducts()]);
+    populateCustomerDropdowns();
+    const act=document.querySelector('.tab.active')?.dataset.tab;
+    if(act==='pricing') renderPricing();
+    if(act==='invoice'){ populateInvCustomerDatalist(); populateInvItemDatalist(); }
+  }catch(e){}
+});
 </script>
 </body>
 </html>
