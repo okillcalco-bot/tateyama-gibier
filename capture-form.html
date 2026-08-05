@@ -1053,6 +1053,17 @@ function getLabelKey(species, city) {
   return `tgc_next_serial_${prefix}`; // 他種は通し番号=管理番号
 }
 
+/* ── 採番の開始番号（全端末で共有。app_settings に保存） ──
+   実際の採番は「DBの最大+1」「この端末のカウンタ」「ここで設定した開始番号」の
+   いちばん大きい値を使う。端末を変えても番号がずれない。 */
+let numStartSettings = {};
+function numStart(key) { const v = parseInt(numStartSettings[key], 10); return isNaN(v) ? 0 : v; }
+async function loadNumStart() {
+  try {
+    const rows = await sb('GET', 'app_settings', null, '?key=eq.capture_numbering&select=value');
+    numStartSettings = (rows[0] && rows[0].value) || {};
+  } catch (e) { numStartSettings = {}; }
+}
 async function refreshIndividualNumber() {
   const species = state.species;
   const city = state.capture_city;
@@ -1077,7 +1088,7 @@ async function refreshIndividualNumber() {
       dbNext = rows.length > 0 ? (rows[0].serial_number || 0) + 1 : 1;
     } catch(e) { dbNext = 1; }
     const lsVal = parseInt(localStorage.getItem('tgc_next_serial_イノシシ') || '0') || 0;
-    nextSerial = Math.max(dbNext, lsVal);
+    nextSerial = Math.max(dbNext, lsVal, numStart('serial_start'));
   } else {
     const lsKey = `tgc_next_serial_${prefix}`;
     nextSerial = parseInt(localStorage.getItem(lsKey) || '0');
@@ -1106,7 +1117,7 @@ async function refreshIndividualNumber() {
       }
     } catch (e) { dbLabelNext = 1; }
     const lsLabel = parseInt(localStorage.getItem(lsLabelKey) || '0') || 0;
-    labelNum = Math.max(dbLabelNext, lsLabel);
+    labelNum = Math.max(dbLabelNext, lsLabel, numStart('label_start_' + prefix));
   } else {
     labelNum = nextSerial;
   }
@@ -1143,8 +1154,11 @@ function openSerialSettings() {
     {label:'タヌキ', key:'tgc_next_serial_タ', example:'TGC-08-タ###'},
     {label:'ノウサギ', key:'tgc_next_serial_ウ', example:'TGC-08-ウ###'},
   ];
+  const shared = { 'tgc_next_serial_イノシシ': 'serial_start', 'tgc_next_label_T': 'label_start_T', 'tgc_next_label_M': 'label_start_M' };
   const rows = ALL_PREFIXES.map(p => {
-    const cur = localStorage.getItem(p.key) || '';
+    // イノシシは全端末共通の設定値、それ以外は従来どおり端末の値を出す
+    const sv = shared[p.key] ? numStart(shared[p.key]) : 0;
+    const cur = sv ? String(sv) : (localStorage.getItem(p.key) || '');
     return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
       <span style="flex:1;font-size:13px;">${p.label}<br><span style="font-size:11px;color:var(--text2)">${p.example}</span></span>
       <input type="number" min="1" step="1" value="${cur || ''}" placeholder="自動"
@@ -1158,8 +1172,11 @@ function openSerialSettings() {
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9000;display:flex;align-items:center;justify-content:center;';
   overlay.innerHTML = `
     <div style="background:var(--bg2);border:1px solid var(--gold2);border-radius:12px;padding:20px;width:320px;max-height:80vh;overflow-y:auto;">
-      <div style="font-size:16px;font-weight:bold;color:var(--gold);margin-bottom:16px;">開始番号設定</div>
-      <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">空欄にするとDBから自動取得します。</div>
+      <div style="font-size:16px;font-weight:bold;color:var(--gold);margin-bottom:6px;">開始番号設定</div>
+      <div id="serialCurrent" style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.8;">台帳の状況を確認中…</div>
+      <div style="font-size:11.5px;color:var(--text2);margin-bottom:12px;line-height:1.7;">
+        空欄にするとDBから自動（最大＋1）。<strong>この設定はすべての端末で共通</strong>です。
+      </div>
       ${rows}
       <div style="display:flex;gap:8px;margin-top:16px;">
         <button onclick="saveSerialSettings()"
@@ -1169,17 +1186,47 @@ function openSerialSettings() {
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  showSerialCurrent();
 }
 
-function saveSerialSettings() {
+/* いま台帳に入っている最大番号を出す（どこまで入力済みか分かるように） */
+async function showSerialCurrent() {
+  const el = document.getElementById('serialCurrent');
+  if (!el) return;
+  try {
+    const [sr, tr, mr] = await Promise.all([
+      sb('GET', 'individuals', null, '?species=eq.イノシシ&serial_number=not.is.null&select=serial_number&order=serial_number.desc&limit=1'),
+      sb('GET', 'individuals', null, '?label_id=like.TGC-08-T*&select=label_id&order=label_id.desc&limit=1'),
+      sb('GET', 'individuals', null, '?label_id=like.TGC-08-M*&select=label_id&order=label_id.desc&limit=1'),
+    ]);
+    const n = (rows, pre) => rows.length ? (parseInt(String(rows[0].label_id).replace(pre, ''), 10) || 0) : 0;
+    const s = sr.length ? (sr[0].serial_number || 0) : 0, t = n(tr, 'TGC-08-T'), m = n(mr, 'TGC-08-M');
+    el.innerHTML = `台帳に入っている最大: 通し <strong>${s}</strong> ／ 館山 <strong>T${t}</strong> ／ 南房総 <strong>M${m}</strong><br>`
+      + `→ 次は 通し <strong style="color:var(--gold)">${s + 1}</strong> ／ <strong style="color:var(--gold)">T${t + 1}</strong> ／ <strong style="color:var(--gold)">M${m + 1}</strong>`;
+  } catch (e) { el.textContent = '台帳の状況を取得できませんでした'; }
+}
+
+async function saveSerialSettings() {
   const overlay = document.getElementById('serialSettingsOverlay');
   if (!overlay) return;
+  const val = Object.assign({}, numStartSettings);
   overlay.querySelectorAll('input[data-lskey]').forEach(inp => {
     const key = inp.dataset.lskey;
-    const val = inp.value.trim();
-    if (val) localStorage.setItem(key, val);
-    else localStorage.removeItem(key);
+    const v = inp.value.trim();
+    // 端末側のカウンタは使わない（端末ごとに番号がずれる原因になるため）
+    localStorage.removeItem(key);
+    // 全端末で共有する設定に入れ直す
+    const mapped = key === 'tgc_next_serial_イノシシ' ? 'serial_start'
+      : key === 'tgc_next_label_T' ? 'label_start_T'
+      : key === 'tgc_next_label_M' ? 'label_start_M' : null;
+    if (mapped) val[mapped] = v ? (parseInt(v, 10) || 0) : 0;
+    else if (v) localStorage.setItem(key, v);   // イノシシ以外は従来どおり端末保存
   });
+  val.note = `設定日 ${new Date().toLocaleDateString('ja-JP')}`;
+  try {
+    await sb('PATCH', 'app_settings', { value: val }, '?key=eq.capture_numbering');
+    numStartSettings = val;
+  } catch (e) { alert('共有設定の保存に失敗しました（この端末には反映します）: ' + (e.message || e)); }
   overlay.remove();
   refreshIndividualNumber();
 }
@@ -1234,6 +1281,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const now = new Date();
   document.getElementById('captureDate').value = formatDate(now);
   document.getElementById('captureTime').value = formatTime(now);
+  // 採番の開始番号（全端末共通）は、番号を作り始める前に読む
+  await loadNumStart();
   setupToggles();
   setupCheckboxes();
   setupTabs();
