@@ -1,0 +1,14 @@
+{
+  "name": "館山ジビエ 捕獲票入力",
+  "short_name": "捕獲票",
+  "description": "館山ジビエセンター 捕獲票入力（タブレット・スマホ共用）",
+  "start_url": "capture-form.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#16311A",
+  "theme_color": "#336831",
+  "icons": [
+    { "src": "icons/capture-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/capture-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

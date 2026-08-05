@@ -5187,10 +5187,12 @@ async function indShowNextNumbers() {
   if (!hint) return;
   hint.textContent = '次の番号を確認中…';
   try {
+    // 削除済みも含めて見る。番号は削除しても解放されないため、
+    // 生きている行だけで計算すると「使用済みの番号」を案内してしまう
     const [sr, tr, mr] = await Promise.all([
-      sb('GET', 'individuals', null, '?species=eq.イノシシ&serial_number=not.is.null&deleted_at=is.null&select=serial_number&order=serial_number.desc&limit=1'),
-      sb('GET', 'individuals', null, '?label_id=like.TGC-08-T*&deleted_at=is.null&select=label_id&order=label_id.desc&limit=1'),
-      sb('GET', 'individuals', null, '?label_id=like.TGC-08-M*&deleted_at=is.null&select=label_id&order=label_id.desc&limit=1'),
+      sb('GET', 'individuals', null, '?species=eq.イノシシ&serial_number=not.is.null&select=serial_number&order=serial_number.desc&limit=1'),
+      sb('GET', 'individuals', null, '?label_id=like.TGC-08-T*&select=label_id&order=label_id.desc&limit=1'),
+      sb('GET', 'individuals', null, '?label_id=like.TGC-08-M*&select=label_id&order=label_id.desc&limit=1'),
     ]);
     const nextNum = (rows, pre) => {
       if (!rows.length) return 1;
@@ -5216,6 +5218,7 @@ function indFillNext(serial, labelId) {
    ・形式ちがい: 獣種の記号が抜けている（TGC-08-243 のような番号）を弾く
    ・重複: すでに同じ番号・同じ通し番号が登録されていないか調べ、分かる言葉で知らせる */
 function numValRaw(id) { const el = document.getElementById('ind-f-' + id); const n = parseInt(el && el.value, 10); return isNaN(n) ? null : n; }
+let indRestoredLabel = null;   // 削除済みから復元した個体管理番号（保存を上書きに切り替えるため）
 async function indValidateNumbers(labelId, serial, editingId) {
   // 例: TGC-08-T243 / TGC-08-M141 / TGC-08-Tシ001 / 仮-xxxx
   if (!/^仮-/.test(labelId) && !/^TGC-\d{2}-[A-Zア-ンー]+\d{1,4}$/.test(labelId)) {
@@ -5226,8 +5229,26 @@ async function indValidateNumbers(labelId, serial, editingId) {
       + `※「TGC-08-243」のように T / M が無いと、別の個体として二重に登録されてしまいます。`;
   }
   try {
-    const dup = await sb('GET', 'individuals', null,
-      `?label_id=eq.${encodeURIComponent(labelId)}&deleted_at=is.null&select=label_id,serial_number,capture_date,hunter_name&limit=1`);
+    // 削除済みも含めて調べる。番号は削除しても解放されないため（在庫・加工ログが番号で紐づくため）
+    const all = await sb('GET', 'individuals', null,
+      `?label_id=eq.${encodeURIComponent(labelId)}&select=label_id,serial_number,capture_date,hunter_name,deleted_at&limit=1`);
+    const dup = all.filter(d => !d.deleted_at);
+    const trashed = all.filter(d => d.deleted_at);
+    if (trashed.length && !dup.length && trashed[0].label_id !== editingId) {
+      const d = trashed[0];
+      const ok = confirm(`個体管理番号「${labelId}」は 削除済みの個体で使われています。\n\n`
+        + `　通し番号 ${d.serial_number ?? '-'} ／ 捕獲日 ${d.capture_date || '-'} ／ 捕獲者 ${d.hunter_name || '-'}\n\n`
+        + `この番号は在庫や加工の記録とつながっているため、そのままでは使えません。\n\n`
+        + `［OK］削除済みの個体を復元して、今の内容で上書きする\n`
+        + `［キャンセル］別の番号で登録する`);
+      if (!ok) return `別の番号を入力してください。`;
+      try {
+        await sb('PATCH', 'individuals', { deleted_at: null }, `?label_id=eq.${encodeURIComponent(labelId)}`);
+        indRestoredLabel = labelId;   // 保存を「新規」ではなく「上書き」に切り替える
+        toast(`削除済みの ${labelId} を復元しました。続けて保存します`);
+        return null;
+      } catch (e) { return '復元に失敗しました。通信を確認してください。'; }
+    }
     if (dup.length && dup[0].label_id !== editingId) {
       const d = dup[0];
       return `個体管理番号「${labelId}」は すでに登録されています。\n\n`
@@ -5307,6 +5328,11 @@ async function indSave() {
     if (indEditId) {
       await sb('PATCH', 'individuals', payload, '?label_id=eq.' + encodeURIComponent(indEditId));
       toast('保存しました');
+    } else if (indRestoredLabel === label_id) {
+      // 削除済みだった個体を復元した場合は、新規ではなく上書きになる
+      await sb('PATCH', 'individuals', payload, '?label_id=eq.' + encodeURIComponent(label_id));
+      toast(`${label_id} を復元して登録しました`);
+      indRestoredLabel = null;
     } else {
       payload.label_id = label_id;
       await sb('POST', 'individuals', payload);
