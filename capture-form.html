@@ -538,6 +538,12 @@ textarea { min-height: 80px; resize: vertical; }
       </div>
       <div class="form-row">
         <label class="form-label">捕獲者名</label>
+        <!-- センター職員モード: 打ち間違い防止のため一覧から選ぶ（既定）。
+             捕獲者モード（?hunter=）ではこの選択欄を隠し、氏名の手入力にする。
+             保存は常に #hunterName の値を使う（保存処理は変更しない） -->
+        <select class="input" id="hunterSelect" style="display:none">
+          <option value="">― 捕獲者を選んでください ―</option>
+        </select>
         <input type="text" class="input" id="hunterName" placeholder="氏名" list="hunterList" autocomplete="off">
         <datalist id="hunterList">
           <option value="小谷忠雄"><option value="石渡裕"><option value="諏訪文二"><option value="押元修一"><option value="正木敏順">
@@ -1287,7 +1293,62 @@ async function refreshAutocomplete() {
     const names = [...new Set(hs.filter(h => !['逝去', '返納'].includes(h.memo)).map(h => h.name).filter(Boolean))];
     const hl = document.getElementById('hunterList');
     if (hl && names.length) hl.innerHTML = names.map(h => '<option value="' + h + '">').join('');
+    // センター職員モードの選択欄にも同じ名簿を入れる（捕獲者モードでは使わない）
+    if (!window.hunterMode) fillHunterSelect(names);
   } catch(e) { /* オフライン時はHTMLの固定リストのまま */ }
+}
+
+/* 捕獲者名の選択欄（センター職員モード）。
+   一覧に無い人のときだけ手入力に切り替えられるようにして、現場が止まらないようにする。 */
+function fillHunterSelect(names) {
+  const sel = document.getElementById('hunterSelect');
+  const input = document.getElementById('hunterName');
+  if (!sel || !input) return;
+  const current = input.value;
+  sel.innerHTML = '<option value="">― 捕獲者を選んでください ―</option>'
+    + names.map(n => '<option value="' + n + '">' + n + '</option>').join('')
+    + '<option value="__manual__">― 一覧にない（手入力）―</option>';
+  if (current && names.includes(current)) {
+    sel.value = current;
+    input.style.display = 'none';
+  } else if (current) {
+    // 既存データの氏名が名簿に無い場合は手入力のまま見せる（値を消さない）
+    sel.value = '__manual__';
+    input.style.display = '';
+  } else {
+    input.style.display = 'none';
+  }
+  sel.style.display = '';
+  sel.onchange = function() {
+    if (sel.value === '__manual__') {
+      input.value = '';
+      input.style.display = '';
+      input.focus();
+    } else {
+      input.value = sel.value;
+      input.style.display = 'none';
+    }
+  };
+}
+
+/* 既存データを読み込んだあと、選択欄を氏名に合わせる（センター職員モードのみ） */
+function syncHunterSelect() {
+  if (window.hunterMode) return;
+  const sel = document.getElementById('hunterSelect');
+  const input = document.getElementById('hunterName');
+  if (!sel || !input) return;
+  const name = input.value;
+  const known = [...sel.options].some(o => o.value === name && o.value !== '__manual__');
+  if (name && known) {
+    sel.value = name;
+    input.style.display = 'none';
+  } else if (name) {
+    sel.value = '__manual__';   // 名簿に無い氏名。値は消さずに手入力欄で見せる
+    input.style.display = '';
+  } else {
+    sel.value = '';
+    input.style.display = 'none';
+  }
 }
 
 /* ── OCR Scan ── */
@@ -1379,7 +1440,7 @@ function applyScanToForm() {
   const ft = document.querySelector('.tab[data-tab="form"]'); if (ft) ft.classList.add('active');
   const fp = document.getElementById('panel-form'); if (fp) fp.classList.add('active');
   const sv = (id,val) => { const el=document.getElementById(id); if(el&&val) el.value=val; };
-  sv('captureDate',fv('scan_date')); sv('hunterName',fv('scan_hunter')); sv('captureArea',fv('scan_area'));
+  sv('captureDate',fv('scan_date')); sv('hunterName',fv('scan_hunter')); syncHunterSelect(); sv('captureArea',fv('scan_area'));
   sv('weight',fv('scan_weight')); if(fv('scan_serial')) sv('serialNumber',fv('scan_serial'));
   if(fv('scan_label')) sv('labelId',fv('scan_label'));
 }
@@ -1660,6 +1721,7 @@ function loadForEdit(rec) {
     document.getElementById('areaPickedRow').style.display = '';
   }
   sv('hunterName', rec.hunter_name);
+  syncHunterSelect();   // センター職員モードの選択欄を、読み込んだ氏名に合わせる
   sv('bleedTime', rec.bleed_time);
   sv('receiveTime', rec.receive_time);
   sv('transportStart', rec.transport_start);
@@ -1924,6 +1986,7 @@ function resetForm() {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  syncHunterSelect();   // 捕獲者名の選択欄も未選択に戻す
   document.getElementById('captureArea').value = '';
   document.getElementById('captureOldTown').value = '';
   document.getElementById('districtRow').style.display = 'none';
@@ -2056,12 +2119,28 @@ document.getElementById('weight').addEventListener('focus', function() {
 (function(){
   const params = new URLSearchParams(location.search);
   const h = params.get('hunter');
-  if (h) { const el = document.getElementById('hunterName'); if (el && !el.value) el.value = h; }
+  if (h) { const el = document.getElementById('hunterName'); if (el && !el.value) { el.value = h; if (typeof syncHunterSelect === 'function') syncHunterSelect(); } }
 
   // ── 捕獲者入力モード（?hunter= 付き・スタッフ項目を隠して仮登録） ──
   if (h !== null && !params.get('receive')) {
     window.hunterMode = true;
     const hide = el => { if (el) el.style.display = 'none'; };
+
+    // 捕獲者名は「手入力」にする（プルダウンにしない）。
+    // 他の捕獲者の氏名が候補に出ないよう、名簿（datalist・選択欄）も外す。
+    (function(){
+      const input = document.getElementById('hunterName');
+      const sel = document.getElementById('hunterSelect');
+      const dl = document.getElementById('hunterList');
+      if (sel) sel.remove();
+      if (dl) dl.remove();
+      if (input) {
+        input.removeAttribute('list');
+        input.style.display = '';
+        input.placeholder = 'ご自分のお名前';
+      }
+    })();
+
     hide(document.getElementById('indSerial')?.closest('.form-row'));
     ['receiveTime', 'processTime'].forEach(id => {
       const el = document.getElementById(id);
