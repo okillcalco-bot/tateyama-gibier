@@ -698,8 +698,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           </select>
         </div>
         <div class="form-group"><label>搬送開始</label><input class="form-input" id="ind-f-transport_start" type="text" placeholder="例: 09:00" /></div>
-        <div class="form-group"><label>施設受入時刻</label><input class="form-input" id="ind-f-receive_time" type="text" placeholder="例: 10:00" /></div>
-        <div class="form-group"><label>処理開始時刻</label><input class="form-input" id="ind-f-process_time" type="text" placeholder="例: 10:30" /></div>
+        <div class="form-group"><label>施設受入時刻</label><input class="form-input" id="ind-f-receive_time" type="text" placeholder="例: 10:00" oninput="indSyncProcessTime()" /></div>
+        <div class="form-group"><label>処理開始時刻<span style="color:var(--text3);font-size:11px;">（受入時刻＋10分を自動入力）</span></label><input class="form-input" id="ind-f-process_time" type="text" placeholder="例: 10:10" oninput="this.dataset.autofill=''" /></div>
         <div class="form-group"><label>記録者<span style="color:var(--text3);font-size:11px;">（解体施設で入力した人）</span></label><input class="form-input" id="ind-f-recorder" list="dl-recorder" placeholder="記録者名" autocomplete="off" oninput="indSyncChecker()" /></div>
         <div class="form-group"><label>異常確認者<span style="color:var(--text3);font-size:11px;">（基本は記録者と同じ）</span></label><input class="form-input" id="ind-f-hunter_health_issues" list="dl-recorder" placeholder="記録者と同じなら空欄でOK" autocomplete="off" /></div>
       </div>
@@ -5098,8 +5098,36 @@ async function indRestore(labelId) {
 function indSetField(id, val) {
   const el = document.getElementById('ind-f-' + id);
   if (!el) return;
+  // 前に開いたときの「自動入力した値」の目印は持ち越さない（保存済みの値を勝手に書き換えないため）
+  if (el.dataset) el.dataset.autofill = '';
   if (val == null) { el.value = ''; return; }
   el.value = val;
+}
+
+/* "10:00"/"1000" に分を足して "HH:MM" を返す。読めない書き方なら null */
+function addMinutesToTime(hhmm, add) {
+  const s = String(hhmm || '').trim().replace(/[：]/g, ':');
+  const m = /^(\d{1,2}):(\d{1,2})$/.exec(s) || /^(\d{2})(\d{2})$/.exec(s);
+  if (!m) return null;
+  const h = parseInt(m[1], 10), mi = parseInt(m[2], 10);
+  if (h > 23 || mi > 59) return null;
+  const t = ((h * 60 + mi + add) % 1440 + 1440) % 1440;
+  return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0');
+}
+
+/* 処理開始時刻は受入時刻の10分後が現場の基本。受入時刻を入れたら自動で入れる
+   （実際の時刻が違うときは、そのまま上書きして入力すればよい） */
+const PROCESS_AFTER_RECEIVE_MIN = 10;
+function indSyncProcessTime() {
+  const rec = document.getElementById('ind-f-receive_time');
+  const prc = document.getElementById('ind-f-process_time');
+  if (!rec || !prc) return;
+  // 手で入れた値は上書きしない
+  if (prc.value.trim() && prc.dataset.autofill !== '1') return;
+  const t = addMinutesToTime(rec.value, PROCESS_AFTER_RECEIVE_MIN);
+  if (t === null) return;
+  prc.value = t;
+  prc.dataset.autofill = '1';
 }
 
 /* 異常確認者は基本「記録者と同じ」。記録者を入れたとき、空欄なら自動で追従させる

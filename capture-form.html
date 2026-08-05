@@ -680,7 +680,7 @@ textarea { min-height: 80px; resize: vertical; }
           </div>
         </div>
         <div style="flex:1;">
-          <label class="form-label">処理時刻</label>
+          <label class="form-label">処理時刻<span style="opacity:.7;font-size:11px;">（受入＋10分）</span></label>
           <div class="time-wrap">
             <input type="text" inputmode="numeric" class="input" id="processTime" placeholder="HH:MM" maxlength="5">
             <button type="button" class="now-btn" onclick="setNow('processTime')">今</button>
@@ -1314,9 +1314,39 @@ function formatTime(d) {
   return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
 }
 function setNow(id) {
-  document.getElementById(id).value = formatTime(new Date());
+  const el = document.getElementById(id);
+  el.value = formatTime(new Date());
+  // 「今」で入れたものは手入力あつかい（自動計算で上書きしない）
+  if (el.dataset) el.dataset.autofill = '';
   // elapsedの再計算が必要な場合
   if (id === 'bleedTime' || id === 'receiveTime') calcElapsed();
+  if (id === 'receiveTime') syncProcessTime();
+}
+
+/* "10:00"/"1000" に分を足して "HH:MM" を返す。読めない書き方なら null */
+function addMinutesToTime(hhmm, add) {
+  const s = String(hhmm || '').trim().replace(/[：]/g, ':');
+  const m = /^(\d{1,2}):(\d{1,2})$/.exec(s) || /^(\d{2})(\d{2})$/.exec(s);
+  if (!m) return null;
+  const h = parseInt(m[1], 10), mi = parseInt(m[2], 10);
+  if (h > 23 || mi > 59) return null;
+  const t = ((h * 60 + mi + add) % 1440 + 1440) % 1440;
+  return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0');
+}
+
+/* 処理時刻は受入時刻の10分後が現場の基本。受入時刻を入れたら自動で入れる
+   （実際の時刻が違うときは、そのまま上書きして入力すればよい） */
+const PROCESS_AFTER_RECEIVE_MIN = 10;
+function syncProcessTime() {
+  const rec = document.getElementById('receiveTime');
+  const prc = document.getElementById('processTime');
+  if (!rec || !prc) return;
+  // 手で入れた値は上書きしない
+  if (prc.value.trim() && prc.dataset.autofill !== '1') return;
+  const t = addMinutesToTime(rec.value, PROCESS_AFTER_RECEIVE_MIN);
+  if (t === null) return;
+  prc.value = t;
+  prc.dataset.autofill = '1';
 }
 // 時刻入力: 数字4桁 or コロン区切り を自動整形
 function setupTimeInputs() {
@@ -1333,6 +1363,11 @@ function setupTimeInputs() {
       if (el.value && !/^\d{2}:\d{2}$/.test(el.value)) el.value = '';
     });
   });
+  // 受入時刻→処理時刻の自動入力。上の整形が終わったあとに動かしたいので後から登録する
+  const rec = document.getElementById('receiveTime');
+  if (rec) { rec.addEventListener('input', syncProcessTime); rec.addEventListener('blur', syncProcessTime); }
+  const prc = document.getElementById('processTime');
+  if (prc) prc.addEventListener('input', () => { prc.dataset.autofill = ''; });
 }
 function today() { return formatDate(new Date()); }
 
@@ -1789,7 +1824,12 @@ async function searchForEdit() {
 }
 function loadForEdit(rec) {
   editMode = true; editRecordId = rec.id; editRecord = rec;
-  const sv = function(id, v) { const el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; };
+  // 登録済みの値を入れ直す。自動入力の目印は消して、保存済みの時刻を勝手に書き換えないようにする
+  const sv = function(id, v) {
+    const el = document.getElementById(id); if (!el) return;
+    if (el.dataset) el.dataset.autofill = '';
+    if (v != null && v !== '') el.value = v;
+  };
   sv('captureDate', rec.capture_date);
   sv('captureTime', rec.capture_time);
   sv('captureArea', rec.capture_area);
@@ -2471,7 +2511,7 @@ function resetForm() {
   ['weight','age','hunterName','bleedTime','receiveTime',
    'transportStart','processTime','healthIssues','memo','recorder'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.value = '';
+    if (el) { el.value = ''; if (el.dataset) el.dataset.autofill = ''; }
   });
   document.getElementById('captureArea').value = '';
   document.getElementById('captureOldTown').value = '';
