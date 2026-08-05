@@ -637,7 +637,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <!-- セクション：基本情報 -->
       <div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px;">▌ 基本情報</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-        <div class="form-group" style="grid-column:1/-1"><label>個体管理番号 *</label><input class="form-input" id="ind-f-label_id" placeholder="例: TGC-08-T002" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>個体管理番号 *<span style="color:var(--text3);font-size:11px;">（館山市=T / 南房総市=M を必ず入れる）</span></label><input class="form-input" id="ind-f-label_id" placeholder="例: TGC-08-T002" />
+          <div id="ind-next-hint" style="font-size:11.5px;color:var(--text2);margin-top:4px;line-height:1.9;"></div>
+        </div>
         <div class="form-group"><label>通し番号</label><input class="form-input" id="ind-f-serial_number" type="number" placeholder="例: 017" /></div>
         <div class="form-group"><label>種別</label>
           <select class="form-input" id="ind-f-species">
@@ -5102,6 +5104,7 @@ function indOpenNew() {
   indRenderButcherStaff();
   updateBuybackHint();
   document.getElementById('ind-f-label_id').disabled = false;
+  indShowNextNumbers();
   document.getElementById('indModal').style.display = 'block';
   document.getElementById('indModal').scrollTop = 0;
 }
@@ -5178,6 +5181,74 @@ function updateBuybackHint() {
   el.textContent = base;
 }
 
+/* 新規登録を開いたとき、次に使う番号を出しておく（既に使われている番号を打ち込まないため） */
+async function indShowNextNumbers() {
+  const hint = document.getElementById('ind-next-hint');
+  if (!hint) return;
+  hint.textContent = '次の番号を確認中…';
+  try {
+    const [sr, tr, mr] = await Promise.all([
+      sb('GET', 'individuals', null, '?species=eq.イノシシ&serial_number=not.is.null&deleted_at=is.null&select=serial_number&order=serial_number.desc&limit=1'),
+      sb('GET', 'individuals', null, '?label_id=like.TGC-08-T*&deleted_at=is.null&select=label_id&order=label_id.desc&limit=1'),
+      sb('GET', 'individuals', null, '?label_id=like.TGC-08-M*&deleted_at=is.null&select=label_id&order=label_id.desc&limit=1'),
+    ]);
+    const nextNum = (rows, pre) => {
+      if (!rows.length) return 1;
+      const n = parseInt(String(rows[0].label_id).replace(pre, ''), 10);
+      return isNaN(n) ? 1 : n + 1;
+    };
+    const s = sr.length ? (sr[0].serial_number || 0) + 1 : 1;
+    const t = nextNum(tr, 'TGC-08-T'), m = nextNum(mr, 'TGC-08-M');
+    hint.innerHTML = `次に使う番号 → 通し番号 <strong>${s}</strong>／`
+      + `館山市 <strong>TGC-08-T${String(t).padStart(3, '0')}</strong>／`
+      + `南房総市 <strong>TGC-08-M${String(m).padStart(3, '0')}</strong>`
+      + `<button class="btn btn-sm" style="margin-left:8px;" onclick="indFillNext(${s},'TGC-08-T${String(t).padStart(3, '0')}')">館山で埋める</button>`
+      + `<button class="btn btn-sm" style="margin-left:4px;" onclick="indFillNext(${s},'TGC-08-M${String(m).padStart(3, '0')}')">南房総で埋める</button>`;
+  } catch (e) { hint.textContent = '次の番号を取得できませんでした（通信を確認してください）'; }
+}
+function indFillNext(serial, labelId) {
+  document.getElementById('ind-f-serial_number').value = serial;
+  document.getElementById('ind-f-label_id').value = labelId;
+  toast(`通し番号 ${serial} / ${labelId} を入れました`);
+}
+
+/* 個体管理番号・通し番号の検証（手入力なので保存前に必ず確認する）
+   ・形式ちがい: 獣種の記号が抜けている（TGC-08-243 のような番号）を弾く
+   ・重複: すでに同じ番号・同じ通し番号が登録されていないか調べ、分かる言葉で知らせる */
+function numValRaw(id) { const el = document.getElementById('ind-f-' + id); const n = parseInt(el && el.value, 10); return isNaN(n) ? null : n; }
+async function indValidateNumbers(labelId, serial, editingId) {
+  // 例: TGC-08-T243 / TGC-08-M141 / TGC-08-Tシ001 / 仮-xxxx
+  if (!/^仮-/.test(labelId) && !/^TGC-\d{2}-[A-Zア-ンー]+\d{1,4}$/.test(labelId)) {
+    return `個体管理番号「${labelId}」の形式が正しくありません。\n\n`
+      + `獣種の記号が抜けていませんか？\n`
+      + `　館山市のイノシシ … TGC-08-T243\n`
+      + `　南房総市のイノシシ … TGC-08-M141\n\n`
+      + `※「TGC-08-243」のように T / M が無いと、別の個体として二重に登録されてしまいます。`;
+  }
+  try {
+    const dup = await sb('GET', 'individuals', null,
+      `?label_id=eq.${encodeURIComponent(labelId)}&deleted_at=is.null&select=label_id,serial_number,capture_date,hunter_name&limit=1`);
+    if (dup.length && dup[0].label_id !== editingId) {
+      const d = dup[0];
+      return `個体管理番号「${labelId}」は すでに登録されています。\n\n`
+        + `　通し番号 ${d.serial_number ?? '-'} ／ 捕獲日 ${d.capture_date || '-'} ／ 捕獲者 ${d.hunter_name || '-'}\n\n`
+        + `新しい個体なら別の番号にしてください。\n`
+        + `この個体の内容を直したい場合は、一覧から「編集」で開いてください。`;
+    }
+    if (serial != null) {
+      const ds = await sb('GET', 'individuals', null,
+        `?serial_number=eq.${serial}&deleted_at=is.null&select=label_id,capture_date,hunter_name&limit=1`);
+      if (ds.length && ds[0].label_id !== (editingId || labelId)) {
+        const d = ds[0];
+        return `通し番号 ${serial} は すでに ${d.label_id} で使われています。\n\n`
+          + `　捕獲日 ${d.capture_date || '-'} ／ 捕獲者 ${d.hunter_name || '-'}\n\n`
+          + `続きの番号で登録してください（同じ通し番号を2件作らないため）。`;
+      }
+    }
+  } catch (e) { /* 通信できないときは検証を飛ばして保存を優先する */ }
+  return null;
+}
+
 async function indSave() {
   // 手入力の個体データはバイト（スタッフ）も編集可。削除・マスタ編集は管理者のみ（別途requireAdmin）。
   if (indEditId && !isLoggedIn()) return;
@@ -5186,6 +5257,9 @@ async function indSave() {
   try {
     const label_id = (document.getElementById('ind-f-label_id').value || '').trim();
     if (!label_id) { toast('個体管理番号は必須です', 'error'); btn.disabled=false; btn.textContent='保存'; return; }
+    // 手入力なので、形式ちがい（例: TGC-08-243 とTが抜ける）と重複を保存前に止める
+    const vErr = await indValidateNumbers(label_id, numValRaw('serial_number'), indEditId);
+    if (vErr) { alert(vErr); btn.disabled = false; btn.textContent = '保存'; return; }
     const numVal = id => { const v = indGetVal(id); return v !== null ? parseFloat(v) || null : null; };
     const boolVal = id => { const v = indGetVal(id); return v === 'true' ? true : v === 'false' ? false : null; };
     const payload = {
