@@ -795,6 +795,72 @@ textarea { min-height: 80px; resize: vertical; }
     </div>
   </div>
 
+  <!-- 市役所の調査票（任意） -->
+  <div style="border:2px dashed var(--gold,#8d6a1d);border-radius:10px;padding:14px;margin:16px 0;background:#fffdf6;">
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:16px;font-weight:700;">
+      <input type="checkbox" id="surveyOn" onchange="surveyToggle()" style="width:22px;height:22px;">
+      🏛 市役所の調査票も作る
+    </label>
+    <div style="font-size:12.5px;color:var(--text2);margin-top:6px;line-height:1.7;">
+      紙で出す方はチェック不要です。チェックすると<strong>有害鳥獣捕獲票</strong>（票＋地図の2ページ）と<strong>写真票</strong>のPDFが作れます。入力済みの内容はそのまま引き継ぎます。
+    </div>
+
+    <div id="surveyBox" style="display:none;margin-top:14px;">
+      <div class="form-row"><label class="form-label">捕獲票提出者名</label>
+        <input type="text" class="input" id="svSubmitter" placeholder="空欄 = 捕獲者と同じ"></div>
+      <div class="form-row"><label class="form-label">捕獲場所（小字）</label>
+        <input type="text" class="input" id="svKoaza" placeholder="任意"></div>
+      <div class="form-row"><label class="form-label">体長（cm）<span style="color:var(--text2);font-size:11px;">※票の「体長・体重」欄</span></label>
+        <input type="number" class="input" id="svBodyLen" step="1" min="0" inputmode="decimal" placeholder="例: 105"></div>
+      <div class="form-row"><label class="form-label">幼獣ですか</label>
+        <div class="toggle-group" data-field="is_juvenile">
+          <div class="toggle-btn" data-val="成獣">成獣</div>
+          <div class="toggle-btn" data-val="幼獣">幼獣</div>
+        </div></div>
+      <div class="form-row"><label class="form-label">箱わな番号<span style="color:var(--text2);font-size:11px;">※市貸与の箱わなのとき</span></label>
+        <input type="text" class="input" id="svTrapNo" placeholder="例: 3-12"></div>
+      <div class="form-row"><label class="form-label">餌の種類<span style="color:var(--text2);font-size:11px;">※箱わなのとき</span></label>
+        <input type="text" class="input" id="svBait" placeholder="例: 米ぬか"></div>
+      <div class="form-row"><label class="form-label">わな設置日</label>
+        <input type="date" class="input" id="svTrapSet"></div>
+      <div class="form-row"><label class="form-label">捕獲個体の処理方法</label>
+        <select class="input" id="svDisposal">
+          <option value="販売（館山ジビエセンター）">販売（館山ジビエセンター）</option>
+          <option value="販売（ジビエ堂）">販売（ジビエ堂）</option>
+          <option value="販売（ヴィルトファクトリー）">販売（ヴィルトファクトリー）</option>
+          <option value="焼却施設搬入">焼却施設搬入</option>
+          <option value="埋却">埋却</option>
+          <option value="自家消費">自家消費</option>
+          <option value="その他">その他</option>
+        </select></div>
+      <div class="form-row"><label class="form-label">捕獲者の電話番号</label>
+        <input type="text" class="input" id="svHunterTel" placeholder="例: 070-1410-8808"></div>
+      <div class="form-row"><label class="form-label">止め刺し者の電話番号</label>
+        <input type="text" class="input" id="svFinisherTel" placeholder="空欄 = 捕獲者と同じ"></div>
+      <div class="form-row"><label class="form-label">その他特記事項</label>
+        <input type="text" class="input" id="svNotes" placeholder="例: 協力員等"></div>
+
+      <div style="border-top:1px solid var(--border,#ddd);margin:14px 0 10px;padding-top:12px;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:4px;">📷 写真票の写真</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.7;">
+          <strong>従事者証（名札）が写るように</strong>撮ってください。アップロード時に自動で軽く圧縮します。<br>
+          PDFを出してから1週間後に、写真は自動で削除されます（保存容量を増やさないため）。
+        </div>
+        <div class="form-row"><label class="form-label">① 尾を切る前</label>
+          <input type="file" accept="image/*" id="svPhoto1" onchange="svPickPhoto(this,'before')"></div>
+        <div class="form-row"><label class="form-label">② 尾を切った後</label>
+          <input type="file" accept="image/*" id="svPhoto2" onchange="svPickPhoto(this,'after')"></div>
+        <div class="form-row"><label class="form-label">③ その他（任意）</label>
+          <input type="file" accept="image/*" id="svPhoto3" onchange="svPickPhoto(this,'extra')"></div>
+        <div id="svPhotoPreview" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;"></div>
+      </div>
+
+      <div style="font-size:12.5px;color:var(--text2);line-height:1.8;background:#f4f6f0;border-radius:8px;padding:10px 12px;">
+        ⚠️ 地図ページには<strong>「🗺 地図で指定」で記録した捕獲地点</strong>が朱色の✕で入ります。位置が未記録だと地図ページは出せません。
+      </div>
+    </div>
+  </div>
+
   <div id="missingBox" style="display:none;border-radius:10px;padding:12px 14px;margin:14px 0;font-size:14px;line-height:1.8;"></div>
 
   <button type="button" onclick="toggleEditSearch()" style="background:#6c757d;color:#fff;border:none;border-radius:8px;padding:12px 18px;font-size:15px;cursor:pointer;margin-right:8px;">&#9998; 既存データを修正</button>
@@ -1171,6 +1237,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupFilterChips();
   loadTodayCount();
   syncPending();
+  // 捕獲者の電話番号（調査票で使う）を控えておく
+  try { window._huntersCache = await sb('GET', 'hunters', null, '?select=name,phone&deleted_at=is.null&limit=500'); } catch (e) { window._huntersCache = []; }
+  // 提出から一定期間たった写真を自動削除（保存容量を増やさないため）
+  svCleanupOldPhotos();
   // 未入力チェックを常時表示（入力・選択のたびに更新）
   renderMissing();
   document.addEventListener('input', renderMissing);
@@ -1709,6 +1779,359 @@ function cancelEditMode() {
   const bar = document.getElementById('editModeBar'); if (bar) bar.style.display = 'none';
   resetForm();
 }
+/* ═══════════ 市役所の調査票（有害鳥獣捕獲票・写真票） ═══════════ */
+const SV_BUCKET = 'capture-photos';
+const SV_KEEP_DAYS = 7;          // PDFを出してから写真を残す日数
+let svPhotos = { before: null, after: null, extra: null };  // {dataUrl, blob}
+
+function surveyToggle() {
+  const on = document.getElementById('surveyOn').checked;
+  document.getElementById('surveyBox').style.display = on ? 'block' : 'none';
+  if (on) {
+    // 入力済みの内容を引き継ぐ
+    const sub = document.getElementById('svSubmitter');
+    if (!sub.value) sub.value = document.getElementById('hunterName').value || '';
+    const tel = document.getElementById('svHunterTel');
+    if (!tel.value) tel.value = svLookupPhone(document.getElementById('hunterName').value) || '';
+  }
+}
+function svLookupPhone(name) {
+  try {
+    const list = window._huntersCache || [];
+    const h = list.find(x => x.name === name);
+    return h ? (h.phone || '') : '';
+  } catch (e) { return ''; }
+}
+
+/* 写真は端末側で縮小してからアップロードする（元のままだと1枚3〜5MBあり容量を圧迫するため） */
+function svCompress(file, maxPx, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const fr = new FileReader();
+    fr.onload = () => { img.src = fr.result; };
+    fr.onerror = reject;
+    img.onload = () => {
+      let { width: w, height: h } = img;
+      const scale = Math.min(1, maxPx / Math.max(w, h));
+      w = Math.round(w * scale); h = Math.round(h * scale);
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      cv.getContext('2d').drawImage(img, 0, 0, w, h);
+      cv.toBlob(b => {
+        if (!b) return reject(new Error('画像を変換できませんでした'));
+        resolve({ blob: b, dataUrl: cv.toDataURL('image/jpeg', quality) });
+      }, 'image/jpeg', quality);
+    };
+    img.onerror = () => reject(new Error('画像を読み込めませんでした'));
+    fr.readAsDataURL(file);
+  });
+}
+
+async function svPickPhoto(input, kind) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  try {
+    const before = f.size;
+    const r = await svCompress(f, 1600, 0.82);
+    svPhotos[kind] = r;
+    svRenderPhotos();
+    const pct = Math.round((1 - r.blob.size / before) * 100);
+    console.log(`写真を圧縮: ${Math.round(before / 1024)}KB → ${Math.round(r.blob.size / 1024)}KB (${pct}%減)`);
+  } catch (e) { alert('写真を読み込めませんでした: ' + e.message); }
+}
+function svRenderPhotos() {
+  const box = document.getElementById('svPhotoPreview');
+  if (!box) return;
+  const labels = { before: '尾を切る前', after: '尾を切った後', extra: 'その他' };
+  box.innerHTML = Object.keys(labels).filter(k => svPhotos[k]).map(k =>
+    `<div style="text-align:center;font-size:11px;color:var(--text2);">
+       <img src="${svPhotos[k].dataUrl}" style="width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid #ddd;display:block;">
+       ${labels[k]}<br>${Math.round(svPhotos[k].blob.size / 1024)}KB
+     </div>`).join('');
+}
+
+async function svUpload(labelId, kind) {
+  const p = svPhotos[kind];
+  if (!p) return null;
+  const path = `${labelId}/${kind}-${Date.now()}.jpg`;
+  const res = await fetch(`${SB_URL}/storage/v1/object/${SV_BUCKET}/${path}`, {
+    method: 'POST',
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'image/jpeg', 'x-upsert': 'true' },
+    body: p.blob,
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return path;
+}
+function svPublicUrl(path) {
+  return path ? `${SB_URL}/storage/v1/object/public/${SV_BUCKET}/${path}` : '';
+}
+
+/* 調査票に必要な項目を集める（保存用のパッチ） */
+function svCollectPatch() {
+  const g = id => (document.getElementById(id)?.value || '').trim();
+  const num = v => { const n = parseFloat(v); return isFinite(n) ? n : null; };
+  const juv = document.querySelector('[data-field="is_juvenile"] .toggle-btn.active')?.dataset.val;
+  return {
+    submitter_name: g('svSubmitter') || null,
+    capture_koaza: g('svKoaza') || null,
+    body_length_cm: num(g('svBodyLen')),
+    is_juvenile: juv ? (juv === '幼獣') : null,
+    trap_number: g('svTrapNo') || null,
+    bait_type: g('svBait') || null,
+    trap_set_date: g('svTrapSet') || null,
+    disposal_method: g('svDisposal') || null,
+    special_notes: g('svNotes') || null,
+  };
+}
+
+/* ── 印刷用ウィンドウ（PDFはブラウザの「PDFに保存」で出す） ── */
+function svOpenPrint(title, bodyHtml, extraCss) {
+  const html = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>${svEsc(title)}</title>
+<style>
+  @page { size: A4 portrait; margin: 12mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Noto Sans JP','Hiragino Kaku Gothic ProN',sans-serif; color:#000; font-size:11px; margin:0; padding:8px; }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .noprint { text-align:center; margin:16px 0; }
+  .noprint button { font-size:14px; padding:10px 22px; margin:0 6px; cursor:pointer; border:1px solid #888; border-radius:6px; background:#f7f7f2; }
+  @media print { .noprint { display:none } body { padding:0 } }
+  ${extraCss || ''}
+</style></head><body>${bodyHtml}
+<div class="noprint">
+  <button onclick="window.print()">🖨 PDFに保存 / 印刷</button>
+  <button onclick="window.close()">閉じる</button>
+</div></body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { alert('ポップアップがブロックされました。ブラウザの設定で許可してください。'); return false; }
+  w.document.open(); w.document.write(html); w.document.close();
+  return true;
+}
+function svEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function svReiwa(dstr) {
+  if (!dstr) return { y: '', m: '', d: '' };
+  const d = new Date(dstr + 'T00:00:00');
+  if (isNaN(d)) return { y: '', m: '', d: '' };
+  return { y: d.getFullYear() - 2018, m: d.getMonth() + 1, d: d.getDate() };
+}
+function svFileStamp(dstr) { return (dstr || '').replace(/-/g, ''); }
+const CK = on => on ? '■' : '□';
+
+/* 有害鳥獣捕獲票（1ページ目＝票、2ページ目＝地図） */
+function svBuildCaptureSheet(r) {
+  const sp = r.species || '';
+  const rw = svReiwa(r.capture_date);
+  const ts = svReiwa(r.trap_set_date);
+  const cm = r.capture_method || '';
+  const fm = r.finishing_method || '';
+  const disp = r.disposal_method || '';
+  const isSale = disp.startsWith('販売');
+  const juv = r.is_juvenile === true;
+  const male = r.sex === 'オス', female = r.sex === 'メス';
+  const tel = r.hunter_tel || '';
+  const ftel = r.finisher_tel || tel;
+
+  const css = `
+    table { width:100%; border-collapse:collapse; }
+    td, th { border:1px solid #000; padding:4px 6px; font-size:11px; vertical-align:middle; }
+    .ttl { text-align:center; font-size:17px; font-weight:700; margin-bottom:2px; }
+    .sub { text-align:center; font-size:11px; margin-bottom:10px; }
+    .hd { width:110px; text-align:center; background:#fff; }
+    .note { font-size:10px; line-height:1.7; margin-top:8px; }
+    .note b { font-weight:700; }
+    .mapbox { position:relative; width:100%; height:200mm; overflow:hidden; border:1px solid #000; }
+    .mapbox img { position:absolute; width:256px; height:256px; }
+    .xmark { position:absolute; font-size:30px; font-weight:900; color:#e02020; text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 5px #fff; }
+  `;
+  const page1 = `<div class="page">
+    <div class="ttl">有害鳥獣捕獲票</div>
+    <div class="sub">（イノシシ等獣類別捕獲用）</div>
+    <table style="margin-bottom:6px;"><tr>
+      <td class="hd" style="width:70px;">捕獲番号</td>
+      <td style="height:34px;">&nbsp;<span style="float:right;font-size:10px;">号<br>（事務局で記入）</span></td>
+    </tr></table>
+    <div style="font-size:10px;margin-bottom:3px;">※太枠内を記入してください。</div>
+    <table>
+      <tr><td class="hd">箱わな番号<br>（摘要5）</td><td style="width:180px;">${svEsc(r.trap_number || '')}　番</td>
+          <td class="hd">捕獲票提出者名</td><td>${svEsc(r.submitter_name || r.hunter_name || '')}</td></tr>
+      <tr><td class="hd">捕獲個体</td><td colspan="3">
+        ${CK(sp === 'イノシシ')} イノシシ　${CK(sp === 'シカ')} ニホンジカ　${CK(sp === 'キョン')} キョン　${CK(sp === 'ハクビシン')} ハクビシン　${CK(sp === 'アライグマ')} アライグマ<br>
+        ${CK(false)} アカゲザル　${CK(false)} ニホンザル　${CK(sp === 'タヌキ')} タヌキ　${CK(sp === 'ノウサギ')} ノウサギ
+      </td></tr>
+      <tr><td class="hd">捕獲年月日</td><td colspan="3">令和 ${rw.y} 年 　${rw.m} 月 　${rw.d} 日</td></tr>
+      <tr><td class="hd">捕獲場所</td><td colspan="3">（大字）　${svEsc(r.capture_area || '')}　　　（小字）　${svEsc(r.capture_koaza || '')}</td></tr>
+      <tr><td class="hd">性別</td><td colspan="3">
+        ${CK(male)} オス（${CK(male && juv)} 幼 ）　　${CK(female)} メス（${CK(female && juv)} 幼 ）　　　胎児：${CK(r.has_fetus === true)} 有　${CK(r.has_fetus === false)} 無　${CK(r.has_fetus == null)} 不明
+      </td></tr>
+      <tr><td class="hd">体長・体重</td><td colspan="3">　　${r.body_length_cm != null ? r.body_length_cm : ''}　cm　　　　　　${r.weight_total != null ? r.weight_total : ''}　kg</td></tr>
+      <tr><td class="hd">捕獲方法</td><td colspan="3">
+        ${CK(cm === '銃猟')} 銃器　　${CK(cm === 'くくり罠')} くくりわな　　${CK(cm === '箱罠')} 箱わな　　${CK(cm === 'その他')} その他（　　　　　　）
+      </td></tr>
+      <tr><td class="hd">餌の種類<br>（摘要5）</td><td colspan="3" style="height:26px;">${svEsc(r.bait_type || '')}</td></tr>
+      <tr><td class="hd">わな設置日</td><td colspan="3">${ts.y ? `令和 　${ts.y} 年 　${ts.m} 月 　${ts.d} 日` : ''}</td></tr>
+      <tr><td class="hd">捕獲個体の<br>処理方法</td><td colspan="3">
+        ${CK(disp === '焼却施設搬入')} 焼却施設搬入　　${CK(disp === '埋却')} 埋却　　${CK(disp === '自家消費')} 自家消費　　${CK(disp === 'その他')} その他<br>
+        ${CK(isSale)} 販売（ ${CK(disp.includes('館山ジビエセンター'))} 館山ジビエセンター　 ${CK(disp.includes('ジビエ堂'))} ジビエ堂　 ${CK(disp.includes('ヴィルトファクトリー'))} ヴィルトファクトリー ）
+      </td></tr>
+      <tr><td class="hd">捕獲者<br>（わな設置者）</td><td style="width:40px;text-align:center;">氏 名</td>
+          <td>${svEsc(r.hunter_name || '')}</td><td style="width:210px;">電話番号　${svEsc(tel)}</td></tr>
+      <tr><td class="hd">止め刺し者</td><td style="text-align:center;">氏 名</td>
+          <td>${svEsc(r.finisher_name || r.hunter_name || '')}</td><td>電話番号　${svEsc(ftel)}</td></tr>
+      <tr><td class="hd">止め刺し方法</td><td colspan="3">
+        ${CK(fm === '銃')} 射殺（銃）　　${CK(fm === 'ナイフ' || fm === '電気' || fm === 'その他')} 刺殺（竹槍・ナイフなど）　　${CK(fm === '既に死亡')} 既に死亡
+      </td></tr>
+      <tr><td class="hd">その他<br>特記事項</td><td colspan="3" style="height:30px;">${svEsc(r.special_notes || '')}</td></tr>
+    </table>
+    <div class="note">
+      （摘要）<br>
+      1　捕獲1頭につき1枚提出すること<br>
+      2　<b>捕獲後おおむね3日以内に提出すること</b>。ただし、土日および祝日を除く。<br>
+      3　捕獲者及び止め刺し者は、館山市有害鳥獣捕獲員に限る。<br>
+      4　任意の地図に、捕獲場所を朱色×印にて記入すること。<br>
+      5　市から貸与の箱わなで捕獲した場合、<b>番号札（ ）内の数字を記入すること。</b><br>
+      　　例：20220314－（3－12）－217 ⇒ 3－12番<br>
+      6　餌の種類は、箱わなを使用して捕獲した場合に記入すること。<br>
+      7　<b>添付品：捕獲獣の尾（1頭分ずつ、ジプロックに封入して提出すること）</b>
+    </div>
+    <table style="margin-top:6px;"><tr>
+      <td style="text-align:center;height:36px;">館山有害鳥獣対策協議会</td>
+      <td class="hd" style="width:60px;">確認</td><td style="width:110px;"></td>
+    </tr></table>
+  </div>`;
+
+  const page2 = svBuildMapPage(r);
+  return { html: page1 + page2, css };
+}
+
+/* 2ページ目: 国土地理院の地形図タイルを並べ、捕獲地点に朱色の✕ */
+function svBuildMapPage(r) {
+  const lat = parseFloat(r.capture_lat), lng = parseFloat(r.capture_lng);
+  if (!isFinite(lat) || !isFinite(lng)) {
+    return `<div class="page"><div style="text-align:center;padding:60px 20px;font-size:13px;">
+      捕獲地点の位置情報が記録されていないため、地図を出力できません。<br>
+      入力画面の「🗺 地図で指定」で場所を記録してください。</div></div>`;
+  }
+  const z = 15, W = 640, H = 750;   // A4縦にちょうど収まる大きさ
+  const cx = _lngX(lng, z) * _TZ, cy = _latY(lat, z) * _TZ;
+  const left = cx - W / 2, top = cy - H / 2;
+  let tiles = '';
+  for (let tx = Math.floor(left / _TZ); tx <= Math.floor((left + W) / _TZ); tx++)
+    for (let ty = Math.floor(top / _TZ); ty <= Math.floor((top + H) / _TZ); ty++)
+      tiles += `<img src="https://cyberjapandata.gsi.go.jp/xyz/std/${z}/${tx}/${ty}.png" style="left:${Math.round(tx * _TZ - left)}px;top:${Math.round(ty * _TZ - top)}px;">`;
+  const mx = cx - left, my = cy - top;
+  return `<div class="page">
+    <div style="font-size:14px;font-weight:700;margin-bottom:4px;">捕獲場所（朱色×印）</div>
+    <div style="font-size:11px;margin-bottom:6px;">
+      ${svEsc(r.capture_city || '')} ${svEsc(r.capture_area || '')} ${svEsc(r.capture_koaza || '')}　／
+      捕獲年月日 ${svEsc(r.capture_date || '')}　／　捕獲者 ${svEsc(r.hunter_name || '')}<br>
+      緯度 ${lat.toFixed(5)} ／ 経度 ${lng.toFixed(5)}
+    </div>
+    <div class="mapbox" style="width:${W}px;height:${H}px;">
+      ${tiles}<div class="xmark" style="left:${Math.round(mx - 15)}px;top:${Math.round(my - 20)}px;">✕</div>
+    </div>
+    <div style="font-size:10px;margin-top:4px;">出典：国土地理院ウェブサイト（地理院タイル）</div>
+  </div>`;
+}
+
+/* 写真票（縦に並べて1ページ） */
+function svBuildPhotoSheet(r, urls) {
+  const items = [
+    { u: urls.before, cap: '① 尾を切る前' },
+    { u: urls.after, cap: '② 尾を切った後' },
+    { u: urls.extra, cap: '③ その他' },
+  ].filter(x => x.u);
+  const css = `
+    .ph { text-align:center; margin-bottom:6mm; }
+    .ph img { max-width:100%; max-height:78mm; object-fit:contain; border:1px solid #999; }
+    .ph .cap { font-size:11px; margin-top:2px; }
+    .hdr { font-size:15px; font-weight:700; text-align:center; margin-bottom:4px; }
+    .meta { font-size:11px; text-align:center; margin-bottom:10px; }
+  `;
+  const body = `<div class="page">
+    <div class="hdr">有害鳥獣捕獲　写真票</div>
+    <div class="meta">
+      捕獲年月日 ${svEsc(r.capture_date || '')}　／　捕獲個体 ${svEsc(r.species || '')}　／　捕獲場所 ${svEsc(r.capture_area || '')} ${svEsc(r.capture_koaza || '')}<br>
+      捕獲者 ${svEsc(r.hunter_name || '')}　／　個体管理番号 ${svEsc(r.label_id || '')}
+    </div>
+    ${items.length ? items.map(x => `<div class="ph"><img src="${x.u}"><div class="cap">${x.cap}</div></div>`).join('')
+      : '<div style="text-align:center;padding:40px;">写真が登録されていません。</div>'}
+  </div>`;
+  return { html: body, css };
+}
+
+/* 保存済みの個体から調査票を出す */
+async function svMakeSheets(rec, uploaded) {
+  const r = Object.assign({}, rec, uploaded || {});
+  const stamp = svFileStamp(r.capture_date);
+  const who = (r.hunter_name || '捕獲者不明').replace(/[\\/:*?"<>|]/g, '_');
+  const sheet = svBuildCaptureSheet(r);
+  svOpenPrint(`捕獲票_${stamp}_${who}`, sheet.html, sheet.css);
+  const urls = {
+    before: svPublicUrl(r.photo_tail_before), after: svPublicUrl(r.photo_tail_after), extra: svPublicUrl(r.photo_extra),
+  };
+  if (urls.before || urls.after || urls.extra) {
+    const ph = svBuildPhotoSheet(r, urls);
+    setTimeout(() => svOpenPrint(`写真票_${stamp}_${who}`, ph.html, ph.css), 600);
+  }
+  // 出力した日時を記録（この日から SV_KEEP_DAYS 後に写真を消す）
+  if (r.label_id) {
+    try { await sb('PATCH', 'individuals', { survey_downloaded_at: new Date().toISOString() }, '?label_id=eq.' + encodeURIComponent(r.label_id)); } catch (e) {}
+  }
+}
+
+/* 登録が終わったあとに、調査票の項目・写真を保存してPDFを出す */
+async function svAfterSave(rec) {
+  const on = document.getElementById('surveyOn');
+  if (!on || !on.checked) return;
+  const labelId = rec.label_id || document.getElementById('indLabelId').value;
+  if (!labelId) { alert('個体管理番号が無いため調査票を作れませんでした。'); return; }
+  const patch = svCollectPatch();
+  const uploaded = {};
+  try {
+    for (const kind of ['before', 'after', 'extra']) {
+      if (!svPhotos[kind]) continue;
+      const path = await svUpload(labelId, kind);
+      if (kind === 'before') { patch.photo_tail_before = path; uploaded.photo_tail_before = path; }
+      if (kind === 'after') { patch.photo_tail_after = path; uploaded.photo_tail_after = path; }
+      if (kind === 'extra') { patch.photo_extra = path; uploaded.photo_extra = path; }
+    }
+  } catch (e) { alert('写真のアップロードに失敗しました。票だけ作ります。\n' + String(e.message || e).slice(0, 120)); }
+  try { await sb('PATCH', 'individuals', patch, '?label_id=eq.' + encodeURIComponent(labelId)); } catch (e) {}
+  const merged = Object.assign({}, rec, patch, uploaded, {
+    label_id: labelId,
+    hunter_tel: (document.getElementById('svHunterTel')?.value || '').trim(),
+    finisher_tel: (document.getElementById('svFinisherTel')?.value || '').trim(),
+  });
+  await svMakeSheets(merged, uploaded);
+  // 次の個体のために写真の選択をクリア
+  svPhotos = { before: null, after: null, extra: null };
+  ['svPhoto1', 'svPhoto2', 'svPhoto3'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  svRenderPhotos();
+}
+
+/* 提出後の写真を自動で片付ける（保存容量を増やさないため） */
+async function svCleanupOldPhotos() {
+  try {
+    const cutoff = new Date(Date.now() - SV_KEEP_DAYS * 86400000).toISOString();
+    const rows = await sb('GET', 'individuals', null,
+      `?survey_downloaded_at=lt.${cutoff}&or=(photo_tail_before.not.is.null,photo_tail_after.not.is.null,photo_extra.not.is.null)&select=label_id,photo_tail_before,photo_tail_after,photo_extra&limit=50`);
+    for (const r of rows) {
+      const paths = [r.photo_tail_before, r.photo_tail_after, r.photo_extra].filter(Boolean);
+      if (!paths.length) continue;
+      try {
+        await fetch(`${SB_URL}/storage/v1/object/${SV_BUCKET}`, {
+          method: 'DELETE',
+          headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prefixes: paths }),
+        });
+        await sb('PATCH', 'individuals', { photo_tail_before: null, photo_tail_after: null, photo_extra: null },
+          '?label_id=eq.' + encodeURIComponent(r.label_id));
+      } catch (e) { /* 1件失敗しても他を続ける */ }
+    }
+    if (rows.length) console.log(`調査票の写真を${rows.length}件分 自動削除しました（提出から${SV_KEEP_DAYS}日経過）`);
+  } catch (e) { /* 通信できないときは次回に回す */ }
+}
+
 /* ── 未入力チェック（その場で分かるように常時表示 + 保存前に確認） ──
    台帳に載らない項目（推定年齢・内臓摘出・受入/解体情報など）は対象外。
    「空欄のまま一旦保存」はできるが、何が抜けているかは必ず見えるようにする。 */
@@ -1854,6 +2277,8 @@ async function handleSubmit() {
       document.getElementById('hunterDoneModal').classList.add('show');
       return;
     }
+    // 市役所の調査票がONなら、追加項目と写真を保存してPDFを出す
+    await svAfterSave(saved || record);
     // Skip counter increment when editing
     if (editMode) { cancelEditMode(); showPrintModal(record); loadTodayCount(); return; }
     // Advance localStorage counters
