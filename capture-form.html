@@ -1071,6 +1071,7 @@ async function refreshIndividualNumber() {
     // DBの最大通し番号+1を基準に（取り込み・手動追加後もズレない）。手動カウンタ(localStorage)が先行していればそちらを優先。
     let dbNext = 1;
     try {
+      // 削除済みも含めて最大を見る（番号は削除しても解放されないため）
       const rows = await sb('GET', 'individuals', null,
         `?species=eq.イノシシ&serial_number=not.is.null&select=serial_number&order=serial_number.desc&limit=1`);
       dbNext = rows.length > 0 ? (rows[0].serial_number || 0) + 1 : 1;
@@ -1092,19 +1093,20 @@ async function refreshIndividualNumber() {
   // ── 個体管理番号を取得 ──
   let labelNum;
   if (species === 'イノシシ') {
+    // DBの最大+1を基準にする（端末のカウンタが古いままだと使用済みの番号を出してしまうため）。
+    // 削除済みも含めて見る＝番号は削除しても解放されないため。
     const lsLabelKey = `tgc_next_label_${prefix}`;
-    labelNum = parseInt(localStorage.getItem(lsLabelKey) || '0');
-    if (!labelNum || labelNum < 1) {
-      try {
-        const rows = await sb('GET', 'individuals', null,
-          `?label_id=like.TGC-08-${prefix}*&select=label_id&order=label_id.desc&limit=1`);
-        if (rows.length > 0) {
-          const numStr = rows[0].label_id.replace(`TGC-08-${prefix}`, '');
-          const n = parseInt(numStr);
-          labelNum = isNaN(n) ? 1 : n + 1;
-        } else { labelNum = 1; }
-      } catch(e) { labelNum = 1; }
-    }
+    let dbLabelNext = 1;
+    try {
+      const rows = await sb('GET', 'individuals', null,
+        `?label_id=like.TGC-08-${prefix}*&select=label_id&order=label_id.desc&limit=1`);
+      if (rows.length > 0) {
+        const n = parseInt(String(rows[0].label_id).replace(`TGC-08-${prefix}`, ''), 10);
+        dbLabelNext = isNaN(n) ? 1 : n + 1;
+      }
+    } catch (e) { dbLabelNext = 1; }
+    const lsLabel = parseInt(localStorage.getItem(lsLabelKey) || '0') || 0;
+    labelNum = Math.max(dbLabelNext, lsLabel);
   } else {
     labelNum = nextSerial;
   }
