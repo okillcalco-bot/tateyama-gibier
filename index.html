@@ -585,6 +585,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
         <input class="form-input" id="ind-search" placeholder="個体番号・猟師名で検索" style="max-width:260px;" oninput="indLoad()" />
+        <span id="ind-count" style="font-size:12.5px;color:var(--text2);"></span>
         <select class="form-input" id="ind-filter-species" style="max-width:130px;" onchange="indLoad()">
           <option value="">種別：全て</option>
           <option value="イノシシ">イノシシ</option>
@@ -605,7 +606,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
             <th onclick="indSort('species')" style="cursor:pointer;">種別 <span id="indSortIcon-species"></span></th>
             <th onclick="indSort('sex')" style="cursor:pointer;">性別 <span id="indSortIcon-sex"></span></th>
             <th onclick="indSort('weight_total')" style="cursor:pointer;">体重 <span id="indSortIcon-weight_total"></span></th>
-            <th onclick="indSort('capture_date')" style="cursor:pointer;">捕獲日 <span id="indSortIcon-capture_date">▲</span></th>
+            <th onclick="indSort('capture_date')" style="cursor:pointer;">捕獲日 <span id="indSortIcon-capture_date">▼</span></th>
             <th>捕獲場所</th>
             <th onclick="indSort('hunter_name')" style="cursor:pointer;">捕獲者 <span id="indSortIcon-hunter_name"></span></th>
             <th>品質</th><th>操作</th>
@@ -4881,7 +4882,7 @@ document.getElementById('pmOverlay').addEventListener('click', (e) => {
 let indEditId = null;
 const indCache = new Map();
 let indSortCol = 'capture_date';
-let indSortAsc = true;
+let indSortAsc = false;   // 既定は新しい順（直近入力した個体をすぐ確認できるように）
 const IND_ALL_FIELDS = ['label_id','serial_number','species','sex','age_estimate','weight_total','quality',
   'capture_date','capture_time','capture_city','capture_area','hunter_name',
   'weather','capture_method','finishing_method','hit_location',
@@ -4947,16 +4948,56 @@ async function loadPendingIntake() {
     if (!rows.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
     box.style.display = 'block';
     box.innerHTML = `<div class="section" style="border:1px solid var(--gold2);background:rgba(200,164,90,.05);">
-      <div class="section-title">🚚 搬入待ち（捕獲者からの連絡） <span class="badge badge-red">${rows.length}件</span></div>
+      <div class="section-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span>🚚 搬入待ち（捕獲者からの連絡）</span> <span class="badge badge-red">${rows.length}件</span>
+        <button class="btn btn-sm" style="margin-left:auto;color:var(--red);border:1px solid var(--red);font-weight:normal;" onclick="pendingDeleteAll()">🗑 まとめて削除</button>
+      </div>
       ${rows.map(r => `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);margin-bottom:8px;">
         <div style="font-size:14px;line-height:1.7;">
           <strong>${speciesIcon(r.species)} ${r.species || '獣種未定'} ${r.weight_total ? r.weight_total + 'kg' : ''}</strong>
           <span style="color:var(--text2);"> / ${r.hunter_name || '捕獲者不明'} / ${fmt(r.capture_date)} ${r.capture_time || ''} / ${[r.capture_city, r.capture_area].filter(Boolean).join(' ') || '-'} / ${r.capture_method || '-'}</span>
         </div>
-        <a class="btn btn-primary btn-sm" href="capture-form.html?receive=${r.id}">✅ 受入する（個体番号を付ける）</a>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <a class="btn btn-primary btn-sm" href="capture-form.html?receive=${r.id}">✅ 受入する（個体番号を付ける）</a>
+          <button class="btn btn-sm" style="color:var(--red);border:1px solid var(--red);" onclick="pendingDelete('${r.id}')">🗑 削除</button>
+        </div>
       </div>`).join('')}
+      <div style="font-size:11.5px;color:var(--text3);margin-top:4px;">※テスト入力や取り下げ分は「🗑 削除」で消せます（削除履歴から戻せます）。</div>
     </div>`;
   } catch(e) { box.style.display = 'none'; }
+}
+
+/* 搬入待ち（捕獲者からの連絡）を取り下げる。テスト入力・キャンセル分の片付け用 */
+async function pendingDelete(id) {
+  if (!requireAdmin('搬入待ちの削除')) return;
+  let r = null;
+  try {
+    const rows = await sb('GET', 'individuals', null, `?id=eq.${id}&select=label_id,species,weight_total,hunter_name,capture_date`);
+    r = rows[0];
+  } catch (e) {}
+  const who = r ? `${r.species || '獣種未定'} ${r.weight_total ? r.weight_total + 'kg ' : ''}/ ${r.hunter_name || '捕獲者不明'} / ${fmt(r.capture_date)}` : 'この連絡';
+  if (!confirm(`搬入待ちの連絡を削除しますか？\n\n${who}\n\n削除履歴に入るので、あとから戻せます。`)) return;
+  try {
+    await sb('PATCH', 'individuals', { deleted_at: new Date().toISOString() }, `?id=eq.${id}`);
+    toast('搬入待ちの連絡を削除しました');
+    loadPendingIntake();
+    refreshNavBadges();
+  } catch (e) { toast('削除に失敗しました: ' + sbSafeMsg(e), 'error'); }
+}
+
+/* まとめて削除（テスト入力の片付け用） */
+async function pendingDeleteAll() {
+  if (!requireAdmin('搬入待ちの一括削除')) return;
+  let rows = [];
+  try { rows = await sb('GET', 'individuals', null, '?intake_status=eq.搬入待ち&deleted_at=is.null&select=id'); } catch (e) {}
+  if (!rows.length) { toast('搬入待ちはありません'); return; }
+  if (!confirm(`搬入待ちの ${rows.length}件 をすべて削除しますか？\n\n削除履歴に入るので、あとから戻せます。`)) return;
+  try {
+    await sb('PATCH', 'individuals', { deleted_at: new Date().toISOString() }, '?intake_status=eq.搬入待ち&deleted_at=is.null');
+    toast(`搬入待ち ${rows.length}件 を削除しました`);
+    loadPendingIntake();
+    refreshNavBadges();
+  } catch (e) { toast('削除に失敗しました: ' + sbSafeMsg(e), 'error'); }
 }
 
 async function indLoad() {
@@ -4967,8 +5008,10 @@ async function indLoad() {
   if (!body) return;
   body.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
   try {
-    let qs = '?select=*&deleted_at=is.null&order=capture_date.asc,serial_number.asc&limit=500';
-    if (q) qs = '?select=*&deleted_at=is.null&or=(label_id.ilike.*' + encodeURIComponent(q) + '*,hunter_name.ilike.*' + encodeURIComponent(q) + '*)&order=capture_date.asc,serial_number.asc&limit=500';
+    // 新しい順で取得する。古い順＋件数制限だと、増えたときに最新分が切れて表示されないため
+    const ORDER = '&order=capture_date.desc.nullslast,serial_number.desc.nullslast&limit=3000';
+    let qs = '?select=*&deleted_at=is.null' + ORDER;
+    if (q) qs = '?select=*&deleted_at=is.null&or=(label_id.ilike.*' + encodeURIComponent(q) + '*,hunter_name.ilike.*' + encodeURIComponent(q) + '*)' + ORDER;
     let data = await sb('GET', 'individuals', null, qs);
     if (sp) data = data.filter(i => i.species === sp);
     indCache.clear();
@@ -4976,6 +5019,11 @@ async function indLoad() {
     // 搬入待ち（仮登録）は上のバナーに出すため一覧からは除外
     indAllData = data.filter(i => i.intake_status !== '搬入待ち');
     indRender();
+    const cnt = document.getElementById('ind-count');
+    if (cnt) {
+      const mx = indAllData.reduce((m, i) => Math.max(m, i.serial_number || 0), 0);
+      cnt.textContent = `${indAllData.length}件を表示中${mx ? `（通し番号 最大 ${mx}）` : ''}`;
+    }
   } catch(e) { body.innerHTML = '<tr><td colspan="11" style="color:var(--red);">読み込みエラー: ' + e.message + '</td></tr>'; }
 }
 
