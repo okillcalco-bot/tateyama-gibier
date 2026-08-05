@@ -697,15 +697,15 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="form-group"><label>搬送開始</label><input class="form-input" id="ind-f-transport_start" type="text" placeholder="例: 09:00" /></div>
         <div class="form-group"><label>施設受入時刻</label><input class="form-input" id="ind-f-receive_time" type="text" placeholder="例: 10:00" /></div>
         <div class="form-group"><label>処理開始時刻</label><input class="form-input" id="ind-f-process_time" type="text" placeholder="例: 10:30" /></div>
-        <div class="form-group"><label>記録者</label><input class="form-input" id="ind-f-recorder" list="dl-recorder" placeholder="記録者名" autocomplete="off" /></div>
-        <div class="form-group"><label>異常確認者</label><input class="form-input" id="ind-f-hunter_health_issues" list="dl-recorder" placeholder="異常確認者名" autocomplete="off" /></div>
+        <div class="form-group"><label>記録者<span style="color:var(--text3);font-size:11px;">（解体施設で入力した人）</span></label><input class="form-input" id="ind-f-recorder" list="dl-recorder" placeholder="記録者名" autocomplete="off" oninput="indSyncChecker()" /></div>
+        <div class="form-group"><label>異常確認者<span style="color:var(--text3);font-size:11px;">（基本は記録者と同じ）</span></label><input class="form-input" id="ind-f-hunter_health_issues" list="dl-recorder" placeholder="記録者と同じなら空欄でOK" autocomplete="off" /></div>
       </div>
       <!-- datalists -->
       <datalist id="dl-city"><option>館山市</option><option>南房総市</option><option>鴨川市</option><option>鋸南町</option></datalist>
       <datalist id="dl-area"><option>神余</option><option>乙浜</option><option>竹原</option><option>黄羽</option><option>下井</option><option>坂田</option><option>童岡</option><option>犬石</option><option>土見</option><option>三坂</option><option>上直良</option><option>白浜町白浜</option><option>白浜町坂浜</option><option>白浜町沼</option><option>和田町黒岩</option><option>和田町和田</option></datalist>
       <datalist id="dl-hunter"><option>山田千代子</option><option>須田茂</option><option>山藤忍</option><option>橋渡仁二</option><option>鈴木正人</option><option>石井英夫</option><option>小川勝己</option><option>今田順孝</option><option>飯田渚之助</option><option>南岡好幸</option><option>福留拓也</option><option>山下等一</option><option>山下洋一</option><option>越元修一</option><option>岩浪優</option><option>白石泰一</option><option>井上定男</option><option>早川菊象</option><option>安西和安</option><option>村田光夫</option><option>岩畳正</option><option>岩渡倭</option></datalist>
       <datalist id="dl-weather"><option>晴れ</option><option>曇り</option><option>雨</option><option>霧</option><option>雪</option></datalist>
-      <datalist id="dl-hit"><option>頭部</option><option>首</option><option>胴体</option><option>肩</option><option>脚</option><option>腹部</option></datalist>
+      <datalist id="dl-hit"><option>頭部</option><option>首</option><option>胸部（心臓）</option><option>胴体</option><option>肩</option><option>脚</option><option>腹部</option></datalist>
       <datalist id="dl-recorder"><option>沖</option><option>大和田</option><option>鳥居</option></datalist>
       <!-- セクション：受入・解体情報 -->
       <div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px;">▌ 受入・解体情報</div>
@@ -5048,6 +5048,18 @@ function indSetField(id, val) {
   el.value = val;
 }
 
+/* 異常確認者は基本「記録者と同じ」。記録者を入れたとき、空欄なら自動で追従させる
+   （別の人が確認した場合は、そのまま上書きして入力すればよい） */
+function indSyncChecker() {
+  const rec = document.getElementById('ind-f-recorder');
+  const chk = document.getElementById('ind-f-hunter_health_issues');
+  if (!rec || !chk) return;
+  if (!chk.value.trim() || chk.dataset.autofill === '1') {
+    chk.value = rec.value;
+    chk.dataset.autofill = rec.value ? '1' : '';
+  }
+}
+
 /* ── 解体担当者（複数選択・解体に多い人を前に、区切り線でその他と分ける） ── */
 function indButcherList() {
   const v = (document.getElementById('ind-f-butcher_staff')?.value || '').trim();
@@ -8207,6 +8219,13 @@ async function loadMasterDatalists() {
   try {
     const as = await sb('GET', 'area_master', null, '?select=oaza&order=sort_order.asc&limit=300');
     if (as.length) document.getElementById('dl-area').innerHTML = [...new Set(as.map(a => a.oaza).filter(Boolean))].map(a => `<option>${esc2(a)}</option>`).join('');
+  } catch (e) {}
+  // 記録者・異常確認者の候補はスタッフマスタから作る（固定リストだと入社した人が出ないため）
+  try {
+    if (!STAFF_MASTER.length) await loadStaffNames();
+    const names = PM_OPERATORS;
+    const el = document.getElementById('dl-recorder');
+    if (el && names.length) el.innerHTML = names.map(n => `<option>${esc2(n)}</option>`).join('');
   } catch (e) {}
 }
 
