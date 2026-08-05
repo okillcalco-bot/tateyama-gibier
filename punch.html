@@ -25,11 +25,27 @@ h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600;
 .name-btn { font-family: inherit; font-size: 20px; font-weight: 600; padding: 24px 8px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
 .name-btn:active { background: var(--surface2); }
 .panel { background: var(--surface); border: 1px solid var(--gold2); border-radius: var(--radius); padding: 22px; margin-top: 14px; }
-.who { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
-.status { font-size: 16px; line-height: 1.9; margin-bottom: 16px; }
-.big-btn { font-family: inherit; display: block; width: 100%; font-size: 26px; font-weight: 700; padding: 22px; border-radius: var(--radius); border: none; cursor: pointer; color: #fff; margin-top: 10px; }
-.btn-in { background: var(--green); }
-.btn-out { background: var(--red); }
+.who { font-size: 22px; font-weight: 700; margin-bottom: 10px; }
+
+/* 状態バッジ: 画面を切り替えず、色と文字で今の状態を示す */
+.state { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 700; padding: 12px 14px; border-radius: var(--radius); border: 2px solid var(--border); background: var(--surface2); color: var(--text2); margin-bottom: 14px; line-height: 1.6; }
+.state.loading { border-color: var(--border); color: var(--text3); }
+.state.before  { border-color: var(--text3); color: var(--text2); }
+.state.working { border-color: var(--green); background: rgba(61,122,52,.10); color: var(--green); }
+.state.done    { border-color: var(--gold2); background: rgba(141,106,29,.10); color: var(--gold); }
+.state .sub { display: block; font-size: 14px; font-weight: 400; color: var(--text2); }
+
+/* 出勤・退勤を常に横並びで表示し、押せる方だけ色を付ける */
+.punch-row { display: flex; gap: 12px; margin-top: 16px; }
+.big-btn { font-family: inherit; flex: 1; font-size: 25px; font-weight: 700; padding: 26px 8px; border-radius: var(--radius); border: 3px solid transparent; cursor: pointer; color: #fff; line-height: 1.3; transition: transform .06s; }
+.big-btn .cap { display: block; font-size: 13px; font-weight: 600; opacity: .95; margin-top: 4px; }
+.big-btn:active { transform: scale(.97); }
+.btn-in  { background: var(--green); border-color: #2e5e27; }
+.btn-out { background: var(--red);   border-color: #8f2f2f; }
+/* 押せないほうは灰色。消さずに残すことで「どちらを押しているか」が分かる */
+.big-btn.dim { background: #e3e6dd; color: #9aa08c; border-color: #d3d7ca; }
+.big-btn.dim .cap { opacity: 1; }
+
 .btn-back { background: none; border: 1px solid var(--border); color: var(--text2); font-size: 15px; padding: 10px 18px; border-radius: 10px; cursor: pointer; font-family: inherit; margin-top: 16px; }
 .health { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-top: 12px; background: var(--surface2); }
 .health-title { font-size: 14px; font-weight: 600; color: var(--text2); margin-bottom: 8px; }
@@ -41,25 +57,49 @@ h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600;
 .brk { margin-top: 12px; }
 .brk label { font-size: 14px; color: var(--text2); display: block; margin-bottom: 6px; }
 .brk input { width: 130px; font-size: 22px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; font-family: inherit; }
+
+/* 今日の報告（作業内容・清掃） */
+.report { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-top: 12px; background: var(--surface2); }
+.report h3 { font-size: 15px; color: var(--text2); margin-bottom: 4px; }
+.report .hint { font-size: 12.5px; color: var(--text3); margin-bottom: 10px; line-height: 1.6; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font-family: inherit; font-size: 15px; padding: 12px 16px; border-radius: 22px; border: 2px solid var(--border); background: var(--surface); color: var(--text2); cursor: pointer; }
+.chip.on { border-color: var(--gold2); background: rgba(141,106,29,.12); color: var(--gold); font-weight: 700; }
+.rooms { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.room { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 10px; border: 2px solid var(--green); background: rgba(61,122,52,.08); cursor: pointer; font-size: 15px; }
+.room.off { border-color: var(--border); background: var(--surface); color: var(--text3); }
+.room .mark { font-size: 20px; width: 24px; text-align: center; }
+.room input[type=text] { width: 68px; font-family: inherit; font-size: 15px; padding: 6px; border: 1px solid var(--border); border-radius: 8px; margin-left: auto; }
+
 .done { text-align: center; padding: 30px 10px; }
 .done .mark { font-size: 64px; }
 .done .msg { font-size: 22px; font-weight: 700; margin: 10px 0 4px; }
-.done .sub { color: var(--text2); }
-.toast { position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%); background: var(--red); color: #fff; padding: 12px 22px; border-radius: 10px; font-size: 15px; display: none; z-index: 10; }
-.footer-note { text-align: center; color: var(--text3); font-size: 12px; margin-top: 26px; }
+.done .sub { color: var(--text2); line-height: 1.8; }
+.toast { position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%); background: var(--red); color: #fff; padding: 14px 22px; border-radius: 10px; font-size: 16px; display: none; z-index: 10; max-width: 90%; text-align: center; line-height: 1.6; }
+.footer-note { text-align: center; color: var(--text3); font-size: 12px; margin-top: 26px; line-height: 1.9; }
+.admin-bar { background: #fdf6e3; border: 2px solid var(--gold2); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 14px; font-size: 14px; color: var(--gold); line-height: 1.8; }
+.admin-bar input[type=date], .admin-bar input[type=time] { font-family: inherit; font-size: 16px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; }
+.link-btn { background: none; border: none; color: var(--text3); font-size: 12px; text-decoration: underline; cursor: pointer; font-family: inherit; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="clock"><div class="time" id="clock-time">--:--</div><div class="date" id="clock-date"></div></div>
   <h1>🐗 館山ジビエセンター 出退勤打刻 — 自分の名前を押してください</h1>
+
+  <div class="admin-bar" id="admin-bar" style="display:none;">
+    ⚙ <strong>管理者モード</strong>（過去の日にさかのぼって入力できます）<br>
+    記録する日: <input type="date" id="admin-date" onchange="onAdminDateChange()">
+    <button class="btn-back" style="margin:0;padding:8px 14px;" onclick="adminExit()">通常に戻る</button>
+  </div>
+
   <div id="today-shift" style="display:none;text-align:center;font-size:14px;color:var(--text2);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:14px;line-height:1.8;"></div>
 
   <div class="names" id="names"></div>
 
   <div class="panel" id="panel" style="display:none;">
     <div class="who" id="who"></div>
-    <div class="status" id="status"></div>
+    <div class="state loading" id="state"><span>⏳</span><span>確認中…</span></div>
 
     <div class="health" id="health-box">
       <div class="health-title">体調チェック（該当する方を押してください）</div>
@@ -84,9 +124,33 @@ h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600;
       <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:14px;cursor:pointer;"><input type="checkbox" id="brk-set-default" style="width:18px;height:18px;"> この休憩時間を次回からの初期値にする</label>
     </div>
 
-    <button class="big-btn btn-in" id="btn-in" onclick="punchIn()">🟢 出勤する</button>
-    <button class="big-btn btn-out" id="btn-out" onclick="punchOut()">🔴 退勤する</button>
-    <button class="btn-back" onclick="goHome()">← 名前の選択に戻る</button>
+    <!-- 退勤時の報告（作業内容・清掃） -->
+    <div class="report" id="report-box" style="display:none;">
+      <h3>📋 今日やった作業（やったものを押す）</h3>
+      <div class="hint">複数選べます。押すと色が付きます。</div>
+      <div class="chips" id="work-chips"></div>
+
+      <h3 style="margin-top:16px;">🧹 清掃（できていない所だけチェックを外す）</h3>
+      <div class="hint">最初は<strong>すべて実施済み</strong>になっています。やっていない所だけ押して外してください。</div>
+      <div class="rooms" id="room-list"></div>
+      <div style="margin-top:10px;">
+        <label style="font-size:13px;color:var(--text2);display:block;margin-bottom:4px;">気づいたこと・異常（任意）</label>
+        <textarea id="report-note" rows="2" style="width:100%;padding:10px;font-family:inherit;font-size:15px;border:1px solid var(--border);border-radius:10px;" placeholder="例: 前室の石鹸が残りわずか"></textarea>
+      </div>
+    </div>
+
+    <div class="admin-bar" id="admin-time-box" style="display:none;margin-top:14px;">
+      さかのぼり入力の時刻：出勤 <input type="time" id="admin-in"> ／ 退勤 <input type="time" id="admin-out">
+    </div>
+
+    <div class="punch-row">
+      <button class="big-btn btn-in" id="btn-in" onclick="punchIn()">🟢 出勤<span class="cap" id="cap-in">する</span></button>
+      <button class="big-btn btn-out" id="btn-out" onclick="punchOut()">🔴 退勤<span class="cap" id="cap-out">する</span></button>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <button class="btn-back" onclick="goHome()">← 名前の選択に戻る</button>
+      <button class="btn-back" id="report-only-btn" style="display:none;" onclick="saveReportOnly()">🧹 報告だけ保存する</button>
+    </div>
   </div>
 
   <div class="panel done" id="done" style="display:none;">
@@ -95,7 +159,10 @@ h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600;
     <div class="sub" id="done-sub"></div>
   </div>
 
-  <div class="footer-note">このページはタブレット常時表示用です。体調に異常がある場合は必ず「異常あり」を選び、責任者に報告してください。</div>
+  <div class="footer-note">
+    このページはタブレット常時表示用です。体調に異常がある場合は必ず「異常あり」を選び、責任者に報告してください。<br>
+    <button class="link-btn" onclick="adminEnter()">⚙ 管理者（過去の日を入力する）</button>
+  </div>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -116,7 +183,8 @@ const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g,
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.style.display = 'block';
-  setTimeout(() => t.style.display = 'none', 4500);
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => t.style.display = 'none', 4500);
 }
 function beep(ok) {
   try {
@@ -130,6 +198,7 @@ function beep(ok) {
     o.connect(g).connect(c.destination); o.start(); o.stop(c.currentTime + 0.4);
   } catch (e) {}
 }
+function ymd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 
 /* 時計 */
 function tick() {
@@ -139,11 +208,29 @@ function tick() {
 }
 setInterval(tick, 1000); tick();
 
+/* 作業内容・清掃場所（清掃場所は業務アプリの清掃記録と同じ区分・項目） */
+const WORK_TYPES = ['解体', '精肉', '加工処理（スライス・ミンチ）', '加工調理', '出荷', '清掃', '事務', 'その他'];
+const ROOMS = [
+  { key: '解体室', icon: '🔪', items: ['床・排水溝の洗浄', '懸吊フック・レールの洗浄', '作業台・シンクの洗浄・消毒', 'ナイフ・器具の洗浄（83℃以上の温湯消毒）', '残渣・廃棄物の処理'] },
+  { key: '精肉室', icon: '🥩', items: ['床・排水溝の洗浄', '作業台・まな板の洗浄・消毒', 'スライサー等機械の分解洗浄', 'ナイフ・器具の温湯消毒', '包材・資材の整理整頓'] },
+  { key: '冷蔵・冷凍庫', icon: '❄️', items: ['庫内温度の確認・記録', '庫内の整理・清掃', 'ドアパッキン・取手の消毒'], temp: true },
+  { key: '前室・更衣室', icon: '🚪', items: ['手洗い場の清掃・石鹸/消毒液の補充', '長靴・エプロンの洗浄消毒', '更衣室の整理清掃'] },
+  { key: 'トイレ', icon: '🚻', items: ['便器・床の清掃・消毒', '手洗い設備の点検・ペーパー補充'] },
+  { key: '施設外周', icon: '🏠', items: ['搬入口まわりの清掃', '防虫・防鼠の点検', '排水・臭気の確認'] },
+];
+
 let staffList = [];
 let selected = null;
 let todayRec = null;
 let healthOK = true;
 let busy = false;
+let loading = false;        // 勤怠データ取得中は打刻させない
+let workPicked = [];        // 今日の作業
+let roomsDone = {};         // 清掃: key -> true(実施)
+let adminMode = false;
+let workDate = ymd(new Date());
+
+function isToday() { return workDate === ymd(new Date()); }
 
 async function loadNames() {
   try {
@@ -154,7 +241,7 @@ async function loadNames() {
 }
 
 function goHome() {
-  selected = null; todayRec = null;
+  selected = null; todayRec = null; loading = false;
   document.getElementById('panel').style.display = 'none';
   document.getElementById('done').style.display = 'none';
   document.getElementById('names').style.display = 'grid';
@@ -167,11 +254,118 @@ function setHealth(ok) {
   document.getElementById('health-ng').classList.toggle('active', !ok);
   document.getElementById('health-note').style.display = ok ? 'none' : 'block';
 }
-
 function healthValue() {
   if (healthOK) return '異常なし';
   const note = document.getElementById('health-note').value.trim();
   return note ? '異常あり: ' + note : '異常あり';
+}
+
+/* ── 今日の報告（作業内容・清掃）── */
+function renderWorkChips() {
+  document.getElementById('work-chips').innerHTML = WORK_TYPES.map(w =>
+    `<button type="button" class="chip${workPicked.includes(w) ? ' on' : ''}" onclick="toggleWork('${esc(w)}')">${esc(w)}</button>`).join('');
+}
+function toggleWork(w) {
+  const i = workPicked.indexOf(w);
+  if (i >= 0) workPicked.splice(i, 1); else workPicked.push(w);
+  renderWorkChips();
+}
+function renderRooms() {
+  document.getElementById('room-list').innerHTML = ROOMS.map(r => {
+    const on = roomsDone[r.key] !== false;
+    return `<div class="room${on ? '' : ' off'}" onclick="toggleRoom('${esc(r.key)}',event)">
+      <span class="mark">${on ? '✅' : '⬜'}</span>
+      <span>${r.icon} ${esc(r.key)}</span>
+      ${r.temp ? `<input type="text" id="temp-input" placeholder="℃" onclick="event.stopPropagation()" ${on ? '' : 'disabled'}>` : ''}
+    </div>`;
+  }).join('');
+}
+function toggleRoom(key, ev) {
+  if (ev && ev.target && ev.target.tagName === 'INPUT') return;
+  roomsDone[key] = (roomsDone[key] === false);
+  renderRooms();
+}
+function resetReport() {
+  workPicked = [];
+  roomsDone = {};
+  ROOMS.forEach(r => roomsDone[r.key] = true);   // 既定は「すべて実施済み」
+  const n = document.getElementById('report-note'); if (n) n.value = '';
+  renderWorkChips(); renderRooms();
+}
+
+// 清掃記録を保存（実施した場所のみ cleaning_logs へ）
+async function saveCleaning() {
+  const done = ROOMS.filter(r => roomsDone[r.key] !== false);
+  if (!done.length) return 0;
+  const note = (document.getElementById('report-note').value || '').trim() || null;
+  const tempEl = document.getElementById('temp-input');
+  const temp = tempEl ? (tempEl.value || '').trim() : '';
+  // さかのぼり入力のときは、その日の日中の時刻で記録する
+  const at = isToday() ? new Date().toISOString() : new Date(workDate + 'T17:00:00').toISOString();
+  const rows = done.map(r => ({
+    room: r.key,
+    staff_name: selected.name,
+    cleaned_at: at,
+    items: r.items.join('、'),
+    temperature: r.temp ? (temp || null) : null,
+    note: note,
+  }));
+  await sb('POST', 'cleaning_logs', rows);
+  return rows.length;
+}
+
+/* ── 状態の描画（画面は切り替えず、色と文字で示す）── */
+function renderState() {
+  const st = document.getElementById('state');
+  const bin = document.getElementById('btn-in');
+  const bout = document.getElementById('btn-out');
+  const capIn = document.getElementById('cap-in');
+  const capOut = document.getElementById('cap-out');
+  const brk = document.getElementById('brk-box');
+  const brkDef = document.getElementById('brk-default-box');
+  const health = document.getElementById('health-box');
+  const report = document.getElementById('report-box');
+  const reportOnly = document.getElementById('report-only-btn');
+  const dateLabel = isToday() ? '' : `<span class="sub">📅 ${workDate} の記録として入力します</span>`;
+
+  if (loading) {
+    st.className = 'state loading';
+    st.innerHTML = `<span>⏳</span><span>確認中…<span class="sub">読み込みが終わるまでお待ちください</span></span>`;
+    bin.classList.add('dim'); bout.classList.add('dim');
+    capIn.textContent = 'お待ちください'; capOut.textContent = 'お待ちください';
+    brk.style.display = 'none'; brkDef.style.display = 'none'; health.style.display = 'none';
+    report.style.display = 'none'; reportOnly.style.display = 'none';
+    return;
+  }
+  const def = (selected && selected.default_break_min != null) ? selected.default_break_min : 60;
+
+  if (!todayRec || !todayRec.clock_in) {
+    // 未出勤 → 出勤だけ押せる
+    st.className = 'state before';
+    st.innerHTML = `<span>⚪</span><span>まだ出勤していません<span class="sub">体調を確認して、左の緑の「出勤」を押してください</span>${dateLabel}</span>`;
+    bin.classList.remove('dim'); bout.classList.add('dim');
+    capIn.textContent = 'する'; capOut.textContent = '出勤前です';
+    brk.style.display = 'none'; brkDef.style.display = 'block'; health.style.display = 'block';
+    report.style.display = 'none'; reportOnly.style.display = 'none';
+  } else if (!todayRec.clock_out) {
+    // 出勤中 → 退勤だけ押せる
+    st.className = 'state working';
+    st.innerHTML = `<span>🟢</span><span>出勤中（出勤 ${esc(todayRec.clock_in)}）<span class="sub">休憩・体調・今日の報告を確認して、右の赤い「退勤」を押してください</span>${dateLabel}</span>`;
+    bin.classList.add('dim'); bout.classList.remove('dim');
+    capIn.textContent = '出勤済み'; capOut.textContent = 'する';
+    brk.style.display = 'block'; brkDef.style.display = 'none'; health.style.display = 'block';
+    document.getElementById('brk-min').value = (todayRec.break_minutes != null && todayRec.break_minutes !== 0) ? todayRec.break_minutes : def;
+    report.style.display = 'block'; reportOnly.style.display = 'inline-block';
+  } else {
+    // 退勤済み → どちらも押せない
+    st.className = 'state done';
+    st.innerHTML = `<span>✅</span><span>本日は退勤済みです<span class="sub">出勤 ${esc(todayRec.clock_in)} ／ 退勤 ${esc(todayRec.clock_out)} ／ 休憩 ${todayRec.break_minutes || 0}分</span>${dateLabel}</span>`;
+    bin.classList.add('dim'); bout.classList.add('dim');
+    capIn.textContent = '記録済み'; capOut.textContent = '記録済み';
+    brk.style.display = 'none'; brkDef.style.display = 'none'; health.style.display = 'none';
+    report.style.display = 'block'; reportOnly.style.display = 'inline-block';
+  }
+  document.getElementById('admin-time-box').style.display = (adminMode && !isToday()) ? 'block' : 'none';
 }
 
 async function select(id) {
@@ -183,31 +377,27 @@ async function select(id) {
   document.getElementById('who').textContent = `👤 ${selected.name} さん`;
   setHealth(true);
   document.getElementById('health-note').value = '';
-  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('brk-set-default').checked = false;
+  resetReport();
+  // 読み込み中は両方のボタンを押せなくする（読込前の誤操作を防ぐ）
+  loading = true; todayRec = null;
+  renderState();
+  await refreshRecord();
+}
+
+async function refreshRecord() {
+  loading = true; renderState();
   try {
-    const rows = await sb('GET', 'attendance', null, `?staff_id=eq.${selected.id}&work_date=eq.${today}&select=*`);
+    const rows = await sb('GET', 'attendance', null, `?staff_id=eq.${selected.id}&work_date=eq.${workDate}&select=*`);
     todayRec = rows[0] || null;
-  } catch (e) { showToast('勤怠の読み込みに失敗しました'); todayRec = null; }
-  const st = document.getElementById('status');
-  const bin = document.getElementById('btn-in');
-  const bout = document.getElementById('btn-out');
-  const brk = document.getElementById('brk-box');
-  const brkDef = document.getElementById('brk-default-box');
-  const health = document.getElementById('health-box');
+  } catch (e) {
+    showToast('勤怠の読み込みに失敗しました。通信を確認してもう一度名前を押してください。');
+    todayRec = null;
+  }
   const def = (selected.default_break_min != null) ? selected.default_break_min : 60;
   document.getElementById('brk-default').value = def;
-  document.getElementById('brk-set-default').checked = false;
-  if (!todayRec || !todayRec.clock_in) {
-    st.textContent = '本日はまだ出勤していません。体調を確認して「出勤する」を押してください。';
-    bin.style.display = 'block'; bout.style.display = 'none'; brk.style.display = 'none'; brkDef.style.display = 'block'; health.style.display = 'block';
-  } else if (!todayRec.clock_out) {
-    st.innerHTML = `🟢 出勤中（出勤 <strong>${todayRec.clock_in}</strong>）。休憩時間を確認し、体調をチェックして「退勤する」を押してください。`;
-    bin.style.display = 'none'; bout.style.display = 'block'; brk.style.display = 'block'; brkDef.style.display = 'none'; health.style.display = 'block';
-    document.getElementById('brk-min').value = (todayRec.break_minutes != null && todayRec.break_minutes !== 0) ? todayRec.break_minutes : def;
-  } else {
-    st.innerHTML = `✅ 本日は退勤済みです。<br>出勤 <strong>${todayRec.clock_in}</strong> / 退勤 <strong>${todayRec.clock_out}</strong> / 休憩 ${todayRec.break_minutes || 0}分`;
-    bin.style.display = 'none'; bout.style.display = 'none'; brk.style.display = 'none'; brkDef.style.display = 'none'; health.style.display = 'none';
-  }
+  loading = false;
+  renderState();
 }
 
 async function saveDefaultBreak() {
@@ -227,44 +417,106 @@ function showDone(msg, sub, warn) {
   document.getElementById('done').style.display = 'block';
   document.getElementById('done-mark').textContent = warn ? '🤒' : '✅';
   document.getElementById('done-msg').textContent = msg;
-  document.getElementById('done-sub').textContent = sub;
+  document.getElementById('done-sub').innerHTML = sub;
   beep(true);
   setTimeout(goHome, 6000); // 6秒後に名前選択へ自動で戻る（次の人用）
 }
 
+function nowTime() { return new Date().toTimeString().slice(0, 5); }
+
 async function punchIn() {
-  if (busy || !selected) return;
+  if (!selected) return;
+  // 押せない状態のときは黙って無視せず、理由を必ず知らせる
+  if (loading) { showToast('読み込み中です。1〜2秒待ってからもう一度押してください。'); return; }
+  if (busy) return;
+  if (todayRec && todayRec.clock_in && !todayRec.clock_out) { showToast(`すでに ${todayRec.clock_in} に出勤済みです。帰るときは右の赤い「退勤」を押してください。`); return; }
+  if (todayRec && todayRec.clock_out) { showToast('この日はすでに退勤まで記録されています。'); return; }
   busy = true;
-  const t = new Date().toTimeString().slice(0, 5);
+  const t = (adminMode && !isToday()) ? (document.getElementById('admin-in').value || '09:00') : nowTime();
   const hv = healthValue();
   try {
-    await sb('POST', 'attendance', {
+    const rows = await sb('POST', 'attendance', {
       staff_id: selected.id, staff_name: selected.name,
-      work_date: new Date().toISOString().slice(0, 10),
-      clock_in: t, break_minutes: 0, health_in: hv,
+      work_date: workDate, clock_in: t, break_minutes: 0, health_in: hv,
     });
-    showDone(`${selected.name}さん おはようございます`, `出勤 ${t} ／ 体調: ${hv}`, !healthOK);
+    todayRec = rows[0] || { clock_in: t };
+    showDone(`${selected.name}さん おはようございます`, `出勤 <strong>${t}</strong> ／ 体調: ${esc(hv)}`, !healthOK);
     if (!healthOK) showToast('体調異常が記録されました。責任者に必ず報告してください。');
-  } catch (e) { beep(false); showToast('出勤の記録に失敗しました。もう一度押してください。'); }
+  } catch (e) { beep(false); showToast('出勤の記録に失敗しました。通信を確認して、もう一度押してください。'); }
   busy = false;
 }
 
 async function punchOut() {
-  if (busy || !selected || !todayRec) return;
+  if (!selected) return;
+  if (loading) { showToast('読み込み中です。1〜2秒待ってからもう一度押してください。'); return; }
+  if (busy) return;
+  if (!todayRec || !todayRec.clock_in) { showToast('まだ出勤が記録されていません。先に左の緑の「出勤」を押してください。'); return; }
+  if (todayRec.clock_out) { showToast(`すでに ${todayRec.clock_out} に退勤済みです。`); return; }
   busy = true;
-  const t = new Date().toTimeString().slice(0, 5);
+  const t = (adminMode && !isToday()) ? (document.getElementById('admin-out').value || '17:00') : nowTime();
   const brk = parseInt(document.getElementById('brk-min').value) || 0;
   const hv = healthValue();
+  const works = workPicked.join('、');
   try {
-    await sb('PATCH', 'attendance', { clock_out: t, break_minutes: brk, health_out: hv, updated_at: new Date().toISOString() }, `?id=eq.${todayRec.id}`);
-    // 「この休憩時間を初期値にする」がオンなら本人の既定値も更新
+    await sb('PATCH', 'attendance', {
+      clock_out: t, break_minutes: brk, health_out: hv,
+      work_types: works || null, updated_at: new Date().toISOString(),
+    }, `?id=eq.${todayRec.id}`);
     if (document.getElementById('brk-set-default').checked) {
       try { await sb('PATCH', 'staff', { default_break_min: brk }, `?id=eq.${selected.id}`); selected.default_break_min = brk; } catch (_e) {}
     }
-    showDone(`${selected.name}さん お疲れさまでした`, `退勤 ${t} ／ 休憩 ${brk}分 ／ 体調: ${hv}`, !healthOK);
+    let cleanMsg = '';
+    try {
+      const n = await saveCleaning();
+      const skipped = ROOMS.filter(r => roomsDone[r.key] === false).map(r => r.key);
+      cleanMsg = `<br>清掃 ${n}か所を記録` + (skipped.length ? `（未実施: ${esc(skipped.join('・'))}）` : '');
+    } catch (e) { cleanMsg = '<br><span style="color:#b93d3d;">※清掃記録の保存に失敗しました。業務アプリから入力してください。</span>'; }
+    showDone(`${selected.name}さん お疲れさまでした`,
+      `退勤 <strong>${t}</strong> ／ 休憩 ${brk}分 ／ 体調: ${esc(hv)}` + (works ? `<br>作業: ${esc(works)}` : '') + cleanMsg, !healthOK);
     if (!healthOK) showToast('体調異常が記録されました。責任者に必ず報告してください。');
-  } catch (e) { beep(false); showToast('退勤の記録に失敗しました。もう一度押してください。'); }
+  } catch (e) { beep(false); showToast('退勤の記録に失敗しました。通信を確認して、もう一度押してください。'); }
   busy = false;
+}
+
+// 打刻とは別に、清掃・作業の報告だけ保存する
+async function saveReportOnly() {
+  if (!selected || busy) return;
+  busy = true;
+  try {
+    const n = await saveCleaning();
+    if (todayRec && todayRec.id && workPicked.length) {
+      await sb('PATCH', 'attendance', { work_types: workPicked.join('、'), updated_at: new Date().toISOString() }, `?id=eq.${todayRec.id}`);
+    }
+    beep(true);
+    showToast(`報告を保存しました（清掃 ${n}か所）`);
+  } catch (e) { beep(false); showToast('報告の保存に失敗しました。通信を確認してください。'); }
+  busy = false;
+}
+
+/* ── 管理者モード（過去日の入力）── */
+function adminEnter() {
+  const c = prompt('管理者コードを入力してください');
+  if (c === null) return;
+  if (c !== '2468') { showToast('コードが違います'); return; }
+  adminMode = true;
+  document.getElementById('admin-bar').style.display = 'block';
+  document.getElementById('admin-date').value = workDate;
+  document.getElementById('admin-in').value = '09:00';
+  document.getElementById('admin-out').value = '17:00';
+  showToast('管理者モードです。日付を選ぶとその日の記録を入力できます。');
+}
+function adminExit() {
+  adminMode = false;
+  workDate = ymd(new Date());
+  document.getElementById('admin-bar').style.display = 'none';
+  goHome();
+}
+function onAdminDateChange() {
+  const v = document.getElementById('admin-date').value;
+  if (!v) return;
+  workDate = v;
+  if (selected) refreshRecord(); else renderState();
+  showToast(`${workDate} の記録を入力します`);
 }
 
 loadNames();
@@ -282,9 +534,9 @@ keepAwake();
 (async()=>{
   try{
     const d=new Date();
-    const ymd=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const y=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
     const [shifts,staff]=await Promise.all([
-      sb('GET','shifts',null,`?date=eq.${ymd}&select=staff_id,shift_type`),
+      sb('GET','shifts',null,`?date=eq.${y}&select=staff_id,shift_type`),
       sb('GET','staff',null,'?select=id,name&deleted_at=is.null&is_active=eq.true')
     ]);
     if(!shifts.length) return;
