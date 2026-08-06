@@ -790,6 +790,10 @@ function showOrderDetail(id){
         </label>
         <span id="odShipArea" style="font-size:13px;color:var(--text2);"></span>
         <strong id="odShipFee" style="font-size:17px;color:var(--gold);"></strong>
+        <select id="odShipTax" style="padding:8px;font-size:15px;border:1px solid var(--border);border-radius:6px;">
+          <option value="incl">税込で入れる</option>
+          <option value="excl">税抜で入れる</option>
+        </select>
         <button class="btn btn-outline btn-sm" onclick="odAddShipping('${o.id}')">この送料を明細に入れる</button>
       </div>
       <div style="font-size:12px;color:var(--text2);margin-top:6px;">
@@ -938,8 +942,9 @@ const SHIP_RATES_DEFAULT={
         '200':{'北海道':4350,'北東北':3990,'南東北':3380,'関東':3380,'信越':3380,'北陸':3380,'中部':3380,'関西':3990,'中国':4110,'四国':4110,'九州':4350,'沖縄':6150}
       },
       limits:{'コンパクト':'専用箱','60':'60cm・2kgまで','80':'80cm・5kgまで','100':'100cm・10kgまで','120':'120cm・15kgまで','140':'140cm・20kgまで','160':'160cm・25kgまで','180':'180cm・30kgまで','200':'200cm・30kgまで'},
-      cool_add:{'コンパクト':0,'60':220,'80':220,'100':440,'120':660,'140':880,'160':1100,'180':0,'200':0},
-      cool_note:'※ クール加算は契約運賃表に無いため目安。実額に直すこと'
+      // 契約の付加料金（税抜）。クール宅急便は120サイズまで（140以上は空欄＝対象外）
+      cool_add:{'コンパクト':null,'60':250,'80':300,'100':400,'120':650,'140':null,'160':null,'180':null,'200':null},
+      cool_note:'※ 付加料金表より（クール宅急便は120サイズまで）'
     },
     sagawa:{
       label:'佐川急便（飛脚宅配便）',
@@ -1033,8 +1038,15 @@ function odCalcShippingValue(o){
   const area=(hit&&hit.area)?hit.area:'関東';
   const base=(c.sizes[size]||{})[area];
   if(base==null) return { unavailable:true, area:area, carrierLabel:c.label };
-  const cool=(document.getElementById('odShipCool')||{}).checked?(c.cool_add[size]||0):0;
-  return { size:size, area:area, cool:!!cool, fee:base+cool, carrierLabel:c.label };
+  const wantCool=(document.getElementById('odShipCool')||{}).checked;
+  const coolRate=c.cool_add[size];
+  // クール便に対応していないサイズ（契約表が空欄）は、そのまま計算しない
+  if(wantCool && (coolRate===null||coolRate===undefined))
+    return { coolUnavailable:true, size:size, area:area, carrierLabel:c.label };
+  const cool=wantCool?(coolRate||0):0;
+  const net=base+cool;
+  return { size:size, area:area, cool:wantCool, base:base, coolFee:cool,
+           fee:net, feeWithTax:Math.round(net*1.1), carrierLabel:c.label };
 }
 
 function odCalcShipping(orderId){
@@ -1047,9 +1059,14 @@ function odCalcShipping(orderId){
     feeEl.innerHTML=`<span style="color:#c0392b;font-size:14px;">${r.area}は${r.carrierLabel}の運賃表にありません（別途見積り）</span>`;
     return;
   }
-  // 契約運賃表は税抜。税込の目安も並べて出す（どちらで請求するかは運用で選ぶ）
-  const withTax=Math.round(r.fee*1.1);
-  feeEl.innerHTML=`¥${r.fee.toLocaleString()}<span style="font-size:12px;font-weight:400;color:var(--text2);">（税抜）／税込 ¥${withTax.toLocaleString()}</span>`;
+  if(r.coolUnavailable){
+    feeEl.innerHTML=`<span style="color:#c0392b;font-size:14px;">${r.size}サイズはクール便に対応していません（${r.carrierLabel}）</span>`;
+    return;
+  }
+  // 契約運賃表は税抜。内訳と税込も出す（実際の請求は税込で来る）
+  feeEl.innerHTML=`¥${r.fee.toLocaleString()}<span style="font-size:12px;font-weight:400;color:var(--text2);">（税抜: 運賃${r.base.toLocaleString()}`
+    +(r.coolFee?`＋クール${r.coolFee.toLocaleString()}`:'')
+    +`）</span> <strong style="color:var(--text);">／ 税込 ¥${r.feeWithTax.toLocaleString()}</strong>`;
 }
 
 /** 計算した送料を明細に1行として入れる（請求書にもそのまま載る） */
@@ -1058,20 +1075,23 @@ async function odAddShipping(orderId){
   const r=odCalcShippingValue(o);
   if(!r){ alert('サイズを選んでください'); return; }
   if(r.unavailable){ alert(`${r.area}は${r.carrierLabel}の運賃表にありません。金額を直接入力してください。`); return; }
+  if(r.coolUnavailable){ alert(`${r.size}サイズはクール便に対応していません。サイズを選び直してください。`); return; }
+  const taxMode=(document.getElementById('odShipTax')||{}).value||'incl';
+  const fee=taxMode==='incl'?r.feeWithTax:r.fee;
   const sizeLabel=(r.size==='コンパクト')?'宅急便コンパクト':(r.size==='140-30k'?'140サイズ30kg':`${r.size}サイズ`);
   const carrierShort=(r.carrierLabel||'').replace(/（.*/,'');
-  const name=`送料（${carrierShort} ${sizeLabel}${r.cool?' クール':''} ${r.area}・税抜）`;
-  if(!confirm(`この送料を明細に入れますか？\n\n${name}\n¥${r.fee.toLocaleString()}`))return;
+  const name=`送料（${carrierShort} ${sizeLabel}${r.cool?' クール':''} ${r.area}・${taxMode==='incl'?'税込':'税抜'}）`;
+  if(!confirm(`この送料を明細に入れますか？\n\n${name}\n¥${fee.toLocaleString()}`))return;
   try{
     const exist=(o.order_items||[]).find(i=>(i.part_name||'').indexOf('送料')===0);
     if(exist){
-      await sb('PATCH','order_items',{part_name:name,unit_price:r.fee,subtotal:r.fee,amount:r.fee,weight_kg:null,weight:null},`?id=eq.${exist.id}`);
+      await sb('PATCH','order_items',{part_name:name,unit_price:fee,subtotal:fee,amount:fee,weight_kg:null,weight:null},`?id=eq.${exist.id}`);
     }else{
-      await sb('POST','order_items',{order_id:orderId,part_name:name,unit_price:r.fee,subtotal:r.fee,amount:r.fee});
+      await sb('POST','order_items',{order_id:orderId,part_name:name,unit_price:fee,subtotal:fee,amount:fee});
     }
     const others=(o.order_items||[]).filter(i=>(i.part_name||'').indexOf('送料')!==0)
       .reduce((sum,i)=>sum+Number(i.subtotal||i.amount||0),0);
-    await sb('PATCH','orders',{total_amount:others+r.fee,updated_at:new Date().toISOString()},`?id=eq.${orderId}`);
+    await sb('PATCH','orders',{total_amount:others+fee,updated_at:new Date().toISOString()},`?id=eq.${orderId}`);
     await loadOrders(); closeModal('orderDetailModal');
     alert('送料を明細に入れました');
   }catch(e){alert('送料を入れられませんでした: '+e.message)}
