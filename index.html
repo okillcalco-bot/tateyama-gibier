@@ -1766,13 +1766,23 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="pm-completed-section">
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <div style="font-size:13px;color:var(--gold);font-weight:600;">登録済み <span id="pmCompletedCount">(0件)</span></div>
-            <button class="btn btn-danger btn-sm" onclick="pmFinishIndividual()">全部位完了</button>
           </div>
           <div class="pm-completed-grid" id="pmCompletedGrid"></div>
           <div class="pm-yield-summary" id="pmYieldSummary" style="display:none;">
             合計: <strong id="pmYieldTotal">0 kg</strong>
             / 個体: <span id="pmYieldIndWeight">0</span> kg
             → 歩留まり: <strong id="pmYieldPct">0%</strong>
+          </div>
+          <!-- 完了ボタン: 作業の最後に押す。手袋でも押せるよう大きく・赤のまま -->
+          <button id="pmFinishBtn" onclick="pmFinishIndividual()"
+            style="width:100%;min-height:68px;margin-top:14px;background:var(--red);color:#fff;
+                   border:none;border-radius:12px;font-size:21px;font-weight:800;letter-spacing:.02em;
+                   cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25);display:flex;
+                   align-items:center;justify-content:center;gap:10px;">
+            &#9989; この個体の精肉を完了する<span id="pmFinishCount" style="font-size:17px;font-weight:700;opacity:.9;"></span>
+          </button>
+          <div style="text-align:center;font-size:12.5px;color:var(--text3);margin-top:6px;">
+            押すと「精肉完了」になり、未処理の一覧から外れます
           </div>
         </div>
       </div>
@@ -4864,6 +4874,8 @@ async function pmUndoPart(identCode) {
 function pmRenderCompleted() {
   const grid = document.getElementById('pmCompletedGrid');
   document.getElementById('pmCompletedCount').textContent = `(${pmCompletedParts.length}件)`;
+  const finishCount = document.getElementById('pmFinishCount');
+  if (finishCount) finishCount.textContent = pmCompletedParts.length ? `（${pmCompletedParts.length}部位）` : '';
   pmUpdateBuybackPreview();
 
   if (!pmCompletedParts.length) {
