@@ -24,7 +24,8 @@ export type WorkflowName =
   | "parse_field_note"
   | "classify_hunter_message"
   | "analyze_crosspost_source"
-  | "generate_crosspost_drafts";
+  | "generate_crosspost_drafts"
+  | "parse_receipt";
 
 interface ModelConfig {
   model: string;
@@ -51,6 +52,8 @@ const WORKFLOW_CONFIG: Record<WorkflowName, Partial<ModelConfig>> = {
   analyze_crosspost_source: { maxTokens: 4096 },
   // 媒体2〜3件ぶんの本文。バッチで呼ぶので極端には伸ばさない
   generate_crosspost_drafts: { maxTokens: 8192 },
+  // レシート1枚の読み取り。項目数が決まっているので短くてよい
+  parse_receipt: { maxTokens: 2048 },
 };
 
 export function resolveModelConfig(workflow: WorkflowName): ModelConfig {

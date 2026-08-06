@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import type { AiProvider } from "../types";
 import type { WorkflowName } from "../model-router";
+import type { ImageInput } from "../types";
 import { resolveModelConfig } from "../model-router";
 import type { DbPort, Row } from "@/lib/db/port";
 
@@ -28,6 +29,8 @@ export interface RunWorkflowParams<TOutput> {
   outputSchema: z.ZodType<TOutput, z.ZodTypeDef, unknown>;
   /** ai_runs.input_summary に入れる短い要約。個人情報の生データは渡さない */
   inputSummary: string;
+  /** 画像を読ませる場合のみ（レシート写真など）。ai_runs には保存しない */
+  images?: ImageInput[];
   draft: {
     draftType: string;
     sourceTable?: string;
@@ -74,6 +77,7 @@ export async function runWorkflow<TOutput>(
       user: params.user,
       model: config.model,
       maxTokens: config.maxTokens,
+      images: params.images,   // レシート写真など。指定がなければ従来どおり文字だけ
     });
   } catch (error) {
     await ctx.db.insert("ai_runs", {
