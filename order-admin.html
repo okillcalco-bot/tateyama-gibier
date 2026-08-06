@@ -778,6 +778,8 @@ function showOrderDetail(id){
     <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin:12px 0;background:rgba(0,0,0,.02);">
       <div style="font-weight:700;margin-bottom:8px;">&#128666; 送料</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <select id="odShipCarrier" onchange="odFillSizes('${o.id}')"
+          style="padding:8px;font-size:15px;border:1px solid var(--border);border-radius:6px;min-width:190px;"></select>
         <select id="odShipSize" onchange="odCalcShipping('${o.id}')"
           style="padding:8px;font-size:15px;border:1px solid var(--border);border-radius:6px;min-width:190px;">
           <option value="">サイズを選ぶ</option>
@@ -872,92 +874,167 @@ async function odDeleteOrder(orderId){
 /* ===== 送料マスタ（地域別 × サイズ）=====
    app_settings（key/value jsonb）に置く。DBのスキーマは変えない。 */
 
-const SHIP_AREAS=['北海道','北東北','南東北','関東','信越','北陸','中部','関西','中国','四国','九州','沖縄'];
-const PREF_AREA={
-  '北海道':'北海道',
-  '青森県':'北東北','秋田県':'北東北','岩手県':'北東北',
-  '宮城県':'南東北','山形県':'南東北','福島県':'南東北',
-  '茨城県':'関東','栃木県':'関東','群馬県':'関東','埼玉県':'関東','千葉県':'関東','東京都':'関東','神奈川県':'関東','山梨県':'関東',
-  '新潟県':'信越','長野県':'信越',
-  '富山県':'北陸','石川県':'北陸','福井県':'北陸',
-  '静岡県':'中部','愛知県':'中部','三重県':'中部','岐阜県':'中部',
-  '大阪府':'関西','京都府':'関西','滋賀県':'関西','奈良県':'関西','和歌山県':'関西','兵庫県':'関西',
-  '岡山県':'中国','広島県':'中国','山口県':'中国','鳥取県':'中国','島根県':'中国',
-  '徳島県':'四国','香川県':'四国','愛媛県':'四国','高知県':'四国',
-  '福岡県':'九州','佐賀県':'九州','長崎県':'九州','熊本県':'九州','大分県':'九州','宮崎県':'九州','鹿児島県':'九州',
-  '沖縄県':'沖縄'
-};
-// 合同会社アルコの**ヤマト契約運賃（税抜）**をそのまま初期値にしている。
-// 出典: ヤマトビジネスメンバーズ「ご契約運賃のご確認」（関東エリアからの発送）。
-// 運賃改定があったら「送料表を編集」から直す。
-// ※ クール便の加算額は契約運賃表に載っていないため一般的な目安。実額に直して使う。
+/* 配送業者ごとの契約運賃。地帯区分もクール加算の考え方も業者で違うため、
+   業者ごとに 地帯区分（areas）・運賃（sizes）・クール加算（cool_add）を持つ。 */
+
+// 共通の都道府県一覧（地帯判定に使う）
+const PREFS=['北海道','青森県','岩手県','秋田県','宮城県','山形県','福島県','茨城県','栃木県','群馬県','埼玉県','千葉県','東京都','神奈川県','山梨県','新潟県','長野県','富山県','石川県','福井県','岐阜県','静岡県','愛知県','三重県','滋賀県','京都府','大阪府','兵庫県','奈良県','和歌山県','鳥取県','島根県','岡山県','広島県','山口県','徳島県','香川県','愛媛県','高知県','福岡県','佐賀県','長崎県','熊本県','大分県','宮崎県','鹿児島県','沖縄県'];
+
+function mkAreas(map){ const o={}; Object.keys(map).forEach(area=>map[area].forEach(p=>{o[p]=area;})); return o; }
+
+// ── ヤマト運輸（宅急便）: ヤマトビジネスメンバーズ「ご契約運賃のご確認」関東エリア発・税抜 ──
+const YAMATO_AREAS=mkAreas({
+  '北海道':['北海道'],
+  '北東北':['青森県','岩手県','秋田県'],
+  '南東北':['宮城県','山形県','福島県'],
+  '関東':['茨城県','栃木県','群馬県','埼玉県','千葉県','東京都','神奈川県','山梨県'],
+  '信越':['新潟県','長野県'],
+  '北陸':['富山県','石川県','福井県'],
+  '中部':['岐阜県','静岡県','愛知県','三重県'],
+  '関西':['滋賀県','京都府','大阪府','兵庫県','奈良県','和歌山県'],
+  '中国':['鳥取県','島根県','岡山県','広島県','山口県'],
+  '四国':['徳島県','香川県','愛媛県','高知県'],
+  '九州':['福岡県','佐賀県','長崎県','熊本県','大分県','宮崎県','鹿児島県'],
+  '沖縄':['沖縄県']
+});
+
+// ── 佐川急便（飛脚宅配便）: 見積契約管理 運賃表 鴨川営業所・税抜 ──
+//    地帯区分がヤマトと違う（東海/南九州・北九州に分かれる、沖縄は表になく別途見積り）
+const SAGAWA_AREAS=mkAreas({
+  '北海道':['北海道'],
+  '北東北':['青森県','岩手県','秋田県'],
+  '南東北':['宮城県','山形県','福島県'],
+  '関東':['茨城県','栃木県','群馬県','埼玉県','千葉県','東京都','神奈川県','山梨県'],
+  '信越':['新潟県','長野県'],
+  '東海':['岐阜県','静岡県','愛知県','三重県'],
+  '北陸':['富山県','石川県','福井県'],
+  '関西':['滋賀県','京都府','大阪府','兵庫県','奈良県','和歌山県'],
+  '中国':['鳥取県','島根県','岡山県','広島県','山口県'],
+  '四国':['徳島県','香川県','愛媛県','高知県'],
+  '北九州':['福岡県','佐賀県','長崎県','大分県'],
+  '南九州':['熊本県','宮崎県','鹿児島県'],
+  '沖縄':['沖縄県']
+});
+
 const SHIP_RATES_DEFAULT={
   updated_at:null,
-  tax_mode:'excluded',   // この表は税抜
-  note:'ヤマト契約運賃（税抜・関東エリア発）。クール加算は目安なので実額に直すこと。',
-  sizes:{
-    'コンパクト':{'北海道':790,'北東北':640,'南東北':590,'関東':590,'信越':590,'北陸':590,'中部':590,'関西':640,'中国':690,'四国':690,'九州':790,'沖縄':790},
-    '60' :{'北海道':850,'北東北':620,'南東北':550,'関東':550,'信越':550,'北陸':550,'中部':550,'関西':620,'中国':700,'四国':700,'九州':850,'沖縄':1320},
-    '80' :{'北海道':1020,'北東北':790,'南東北':720,'関東':720,'信越':720,'北陸':720,'中部':720,'関西':790,'中国':880,'四国':880,'九州':1020,'沖縄':1880},
-    '100':{'北海道':1210,'北東北':970,'南東北':900,'関東':900,'信越':900,'北陸':900,'中部':900,'関西':970,'中国':1010,'四国':1010,'九州':1210,'沖縄':2460},
-    '120':{'北海道':1400,'北東北':1160,'南東北':1090,'関東':1090,'信越':1090,'北陸':1090,'中部':1090,'関西':1160,'中国':1240,'四国':1240,'九州':1400,'沖縄':3050},
-    '140':{'北海道':1600,'北東北':1370,'南東北':1290,'関東':1290,'信越':1290,'北陸':1290,'中部':1290,'関西':1370,'中国':1440,'四国':1440,'九州':1600,'沖縄':3660},
-    '160':{'北海道':1790,'北東北':1560,'南東北':1480,'関東':1480,'信越':1480,'北陸':1480,'中部':1480,'関西':1560,'中国':1630,'四国':1630,'九州':1790,'沖縄':4250},
-    '180':{'北海道':3750,'北東北':3390,'南東北':2780,'関東':2780,'信越':2780,'北陸':2780,'中部':2780,'関西':3390,'中国':3510,'四国':3510,'九州':3750,'沖縄':5450},
-    '200':{'北海道':4350,'北東北':3990,'南東北':3380,'関東':3380,'信越':3380,'北陸':3380,'中部':3380,'関西':3990,'中国':4110,'四国':4110,'九州':4350,'沖縄':6150}
-  },
-  // サイズごとの目安（3辺計 / 重量）。画面に出して選び間違いを防ぐ
-  limits:{'コンパクト':'専用箱','60':'60cm・2kgまで','80':'80cm・5kgまで','100':'100cm・10kgまで',
-          '120':'120cm・15kgまで','140':'140cm・20kgまで','160':'160cm・25kgまで',
-          '180':'180cm・30kgまで','200':'200cm・30kgまで'},
-  cool_add:{'コンパクト':0,'60':220,'80':220,'100':440,'120':660,'140':880,'160':1100,'180':0,'200':0}
+  default_carrier:'yamato',
+  carriers:{
+    yamato:{
+      label:'ヤマト運輸（宅急便）',
+      tax_mode:'excluded',
+      note:'ヤマト契約運賃（税抜・関東エリア発）。クール加算は目安なので実額に直すこと。',
+      areas:YAMATO_AREAS,
+      order:['北海道','北東北','南東北','関東','信越','北陸','中部','関西','中国','四国','九州','沖縄'],
+      sizes:{
+        'コンパクト':{'北海道':790,'北東北':640,'南東北':590,'関東':590,'信越':590,'北陸':590,'中部':590,'関西':640,'中国':690,'四国':690,'九州':790,'沖縄':790},
+        '60' :{'北海道':850,'北東北':620,'南東北':550,'関東':550,'信越':550,'北陸':550,'中部':550,'関西':620,'中国':700,'四国':700,'九州':850,'沖縄':1320},
+        '80' :{'北海道':1020,'北東北':790,'南東北':720,'関東':720,'信越':720,'北陸':720,'中部':720,'関西':790,'中国':880,'四国':880,'九州':1020,'沖縄':1880},
+        '100':{'北海道':1210,'北東北':970,'南東北':900,'関東':900,'信越':900,'北陸':900,'中部':900,'関西':970,'中国':1010,'四国':1010,'九州':1210,'沖縄':2460},
+        '120':{'北海道':1400,'北東北':1160,'南東北':1090,'関東':1090,'信越':1090,'北陸':1090,'中部':1090,'関西':1160,'中国':1240,'四国':1240,'九州':1400,'沖縄':3050},
+        '140':{'北海道':1600,'北東北':1370,'南東北':1290,'関東':1290,'信越':1290,'北陸':1290,'中部':1290,'関西':1370,'中国':1440,'四国':1440,'九州':1600,'沖縄':3660},
+        '160':{'北海道':1790,'北東北':1560,'南東北':1480,'関東':1480,'信越':1480,'北陸':1480,'中部':1480,'関西':1560,'中国':1630,'四国':1630,'九州':1790,'沖縄':4250},
+        '180':{'北海道':3750,'北東北':3390,'南東北':2780,'関東':2780,'信越':2780,'北陸':2780,'中部':2780,'関西':3390,'中国':3510,'四国':3510,'九州':3750,'沖縄':5450},
+        '200':{'北海道':4350,'北東北':3990,'南東北':3380,'関東':3380,'信越':3380,'北陸':3380,'中部':3380,'関西':3990,'中国':4110,'四国':4110,'九州':4350,'沖縄':6150}
+      },
+      limits:{'コンパクト':'専用箱','60':'60cm・2kgまで','80':'80cm・5kgまで','100':'100cm・10kgまで','120':'120cm・15kgまで','140':'140cm・20kgまで','160':'160cm・25kgまで','180':'180cm・30kgまで','200':'200cm・30kgまで'},
+      cool_add:{'コンパクト':0,'60':220,'80':220,'100':440,'120':660,'140':880,'160':1100,'180':0,'200':0},
+      cool_note:'※ クール加算は契約運賃表に無いため目安。実額に直すこと'
+    },
+    sagawa:{
+      label:'佐川急便（飛脚宅配便）',
+      tax_mode:'excluded',
+      note:'佐川契約運賃（税抜・鴨川営業所）。サイズ上限140・重量上限30kg。沖縄は別途料金。',
+      areas:SAGAWA_AREAS,
+      order:['北海道','北東北','南東北','関東','信越','北陸','東海','関西','中国','四国','北九州','南九州','沖縄'],
+      sizes:{
+        '60'     :{'北海道':640,'北東北':550,'南東北':540,'関東':450,'信越':480,'北陸':510,'東海':500,'関西':530,'中国':560,'四国':550,'北九州':590,'南九州':600,'沖縄':null},
+        '80'     :{'北海道':980,'北東北':760,'南東北':750,'関東':520,'信越':590,'北陸':670,'東海':630,'関西':720,'中国':790,'四国':770,'北九州':860,'南九州':900,'沖縄':null},
+        '100'    :{'北海道':1510,'北東北':1080,'南東北':1050,'関東':580,'信越':730,'北陸':890,'東海':800,'関西':980,'中国':1140,'四国':1160,'北九州':1280,'南九州':1350,'沖縄':null},
+        '140'    :{'北海道':2420,'北東北':1550,'南東北':1490,'関東':650,'信越':840,'北陸':1180,'東海':1010,'関西':1380,'中国':1680,'四国':1560,'北九州':1960,'南九州':2110,'沖縄':null},
+        '140-30k':{'北海道':2681,'北東北':2030,'南東北':1940,'関東':850,'信越':960,'北陸':1460,'東海':1200,'関西':1770,'中国':2220,'四国':2030,'北九州':2620,'南九州':2681,'沖縄':null}
+      },
+      limits:{'60':'2kgまで','80':'5kgまで','100':'10kgまで','140':'20kgまで','140-30k':'140サイズ・30kgまで'},
+      // 佐川のクール加算は「重量」で決まる（付加諸料金表: 2kg250 / 5kg300 / 10kg400 / 20kg800 / 以降10kg増ごと+400）
+      cool_add:{'60':250,'80':300,'100':400,'140':800,'140-30k':1200},
+      cool_note:'※ 付加諸料金表（クール冷蔵・冷凍とも同額）より'
+    }
+  }
 };
 let shipRates=null;
 
 async function odLoadShipRates(){
   if(shipRates) return shipRates;
+  let v=null;
   try{
     const rows=await sb('GET','app_settings',null,'?key=eq.shipping_rates&select=value');
-    shipRates=(rows&&rows.length&&rows[0].value)?rows[0].value:JSON.parse(JSON.stringify(SHIP_RATES_DEFAULT));
-  }catch(e){ shipRates=JSON.parse(JSON.stringify(SHIP_RATES_DEFAULT)); }
+    v=(rows&&rows.length&&rows[0].value)?rows[0].value:null;
+  }catch(e){}
+  if(v&&v.carriers){ shipRates=v; }
+  else if(v&&v.sizes){ // 旧形式（ヤマトのみ）から移行
+    shipRates=JSON.parse(JSON.stringify(SHIP_RATES_DEFAULT));
+    shipRates.carriers.yamato.sizes=v.sizes;
+    if(v.cool_add) shipRates.carriers.yamato.cool_add=v.cool_add;
+  }
+  else{ shipRates=JSON.parse(JSON.stringify(SHIP_RATES_DEFAULT)); }
   return shipRates;
 }
 
-/** 住所から地域を判定（都道府県名の前方一致） */
-function odAreaFromAddress(addr){
+function odCarrier(){
+  const key=(document.getElementById('odShipCarrier')||{}).value||shipRates.default_carrier||'yamato';
+  return shipRates.carriers[key]||shipRates.carriers.yamato;
+}
+
+/** 住所から都道府県 → その業者の地帯を判定 */
+function odAreaFromAddress(addr,carrier){
   if(!addr) return null;
-  for(const pref of Object.keys(PREF_AREA)){ if(addr.indexOf(pref)>=0) return {pref:pref,area:PREF_AREA[pref]}; }
+  const map=(carrier&&carrier.areas)||{};
+  for(const pref of PREFS){ if(addr.indexOf(pref)>=0) return {pref:pref,area:map[pref]||null}; }
   return null;
 }
 
 async function odInitShipping(o){
-  const sel=document.getElementById('odShipSize'); if(!sel) return;
+  const csel=document.getElementById('odShipCarrier'); if(!csel) return;
   const rates=await odLoadShipRates();
-  const limits=rates.limits||{};
+  csel.innerHTML=Object.keys(rates.carriers).map(k=>
+    `<option value="${k}"${k===(rates.default_carrier||'yamato')?' selected':''}>${rates.carriers[k].label}</option>`).join('');
+  odFillSizes(o.id);
+}
+
+/** 業者を変えたらサイズの選択肢と地帯表示を作り直す */
+function odFillSizes(orderId){
+  const o=allOrders.find(x=>x.id===orderId); if(!o) return;
+  const c=odCarrier();
+  const sel=document.getElementById('odShipSize');
+  const limits=c.limits||{};
   sel.innerHTML='<option value="">サイズを選ぶ</option>'
-    +Object.keys(rates.sizes).map(sz=>{
-      const label=(sz==='コンパクト')?'ヤマト 宅急便コンパクト':`ヤマト ${sz}サイズ`;
+    +Object.keys(c.sizes).map(sz=>{
+      const label=(sz==='コンパクト')?'宅急便コンパクト':(sz==='140-30k'?'140サイズ（30kg）':`${sz}サイズ`);
       return `<option value="${sz}">${label}${limits[sz]?'（'+limits[sz]+'）':''}</option>`;
     }).join('');
-  const cust=allCustomers.find(c=>c.id===o.customer_id)||{};
-  const addr=o.delivery_address||cust.address||'';
-  const hit=odAreaFromAddress(addr);
+  const cust=allCustomers.find(x=>x.id===o.customer_id)||{};
+  const hit=odAreaFromAddress(o.delivery_address||cust.address||'',c);
   const areaEl=document.getElementById('odShipArea');
-  if(areaEl) areaEl.textContent=hit?`お届け先: ${hit.pref}（${hit.area}）`:'お届け先の都道府県が読み取れません（関東として計算）';
-  odCalcShipping(o.id);
+  if(areaEl){
+    areaEl.textContent=hit
+      ? (hit.area?`お届け先: ${hit.pref}（${hit.area}）`:`お届け先: ${hit.pref} — この業者の運賃表に地帯がありません`)
+      : 'お届け先の都道府県が読み取れません（関東として計算）';
+  }
+  odCalcShipping(orderId);
 }
 
 function odCalcShippingValue(o){
   if(!shipRates) return null;
   const size=(document.getElementById('odShipSize')||{}).value;
   if(!size) return null;
-  const cust=allCustomers.find(c=>c.id===o.customer_id)||{};
-  const hit=odAreaFromAddress(o.delivery_address||cust.address||'');
-  const area=hit?hit.area:'関東';
-  const base=(shipRates.sizes[size]||{})[area];
-  if(base==null) return null;
-  const cool=(document.getElementById('odShipCool')||{}).checked?(shipRates.cool_add[size]||0):0;
-  return { size:size, area:area, cool:!!cool, fee:base+cool };
+  const c=odCarrier();
+  const cust=allCustomers.find(x=>x.id===o.customer_id)||{};
+  const hit=odAreaFromAddress(o.delivery_address||cust.address||'',c);
+  const area=(hit&&hit.area)?hit.area:'関東';
+  const base=(c.sizes[size]||{})[area];
+  if(base==null) return { unavailable:true, area:area, carrierLabel:c.label };
+  const cool=(document.getElementById('odShipCool')||{}).checked?(c.cool_add[size]||0):0;
+  return { size:size, area:area, cool:!!cool, fee:base+cool, carrierLabel:c.label };
 }
 
 function odCalcShipping(orderId){
@@ -966,6 +1043,10 @@ function odCalcShipping(orderId){
   const feeEl=document.getElementById('odShipFee');
   if(!feeEl) return;
   if(!r){ feeEl.textContent=''; return; }
+  if(r.unavailable){
+    feeEl.innerHTML=`<span style="color:#c0392b;font-size:14px;">${r.area}は${r.carrierLabel}の運賃表にありません（別途見積り）</span>`;
+    return;
+  }
   // 契約運賃表は税抜。税込の目安も並べて出す（どちらで請求するかは運用で選ぶ）
   const withTax=Math.round(r.fee*1.1);
   feeEl.innerHTML=`¥${r.fee.toLocaleString()}<span style="font-size:12px;font-weight:400;color:var(--text2);">（税抜）／税込 ¥${withTax.toLocaleString()}</span>`;
@@ -976,8 +1057,10 @@ async function odAddShipping(orderId){
   const o=allOrders.find(x=>x.id===orderId); if(!o) return;
   const r=odCalcShippingValue(o);
   if(!r){ alert('サイズを選んでください'); return; }
-  const sizeLabel=(r.size==='コンパクト')?'宅急便コンパクト':`${r.size}サイズ`;
-  const name=`送料（ヤマト ${sizeLabel}${r.cool?' クール':''} ${r.area}・税抜）`;
+  if(r.unavailable){ alert(`${r.area}は${r.carrierLabel}の運賃表にありません。金額を直接入力してください。`); return; }
+  const sizeLabel=(r.size==='コンパクト')?'宅急便コンパクト':(r.size==='140-30k'?'140サイズ30kg':`${r.size}サイズ`);
+  const carrierShort=(r.carrierLabel||'').replace(/（.*/,'');
+  const name=`送料（${carrierShort} ${sizeLabel}${r.cool?' クール':''} ${r.area}・税抜）`;
   if(!confirm(`この送料を明細に入れますか？\n\n${name}\n¥${r.fee.toLocaleString()}`))return;
   try{
     const exist=(o.order_items||[]).find(i=>(i.part_name||'').indexOf('送料')===0);
@@ -995,34 +1078,52 @@ async function odAddShipping(orderId){
 }
 
 /** 送料表の編集（地域×サイズ）。app_settings に保存する */
-async function odOpenShipRates(){
+let srEditingCarrier='yamato';
+async function odOpenShipRates(carrierKey){
   const rates=await odLoadShipRates();
-  const sizes=Object.keys(rates.sizes);
-  let html='<div style="overflow-x:auto"><table><thead><tr><th>地域</th>'
-    +sizes.map(sz=>`<th>${sz}</th>`).join('')+'</tr></thead><tbody>'
-    +SHIP_AREAS.map(a=>`<tr><td style="white-space:nowrap">${a}</td>`
-      +sizes.map(sz=>`<td><input type="number" id="sr-${sz}-${a}" value="${rates.sizes[sz][a]!=null?rates.sizes[sz][a]:''}"
-          style="width:78px;padding:5px;border:1px solid var(--border);border-radius:6px;"></td>`).join('')+'</tr>').join('')
-    +'</tbody></table></div>'
-    +'<div style="margin-top:10px"><strong>クール便の加算額</strong><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">'
-    +sizes.map(sz=>`<label style="font-size:14px">${sz}: <input type="number" id="srcool-${sz}" value="${rates.cool_add[sz]!=null?rates.cool_add[sz]:0}"
-        style="width:76px;padding:5px;border:1px solid var(--border);border-radius:6px;"></label>`).join('')+'</div></div>'
-    +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'
-    +'<button class="btn btn-green" onclick="odSaveShipRates()">保存する</button>'
-    +'<button class="btn btn-outline" onclick="closeModal(\'shipRatesModal\')">閉じる</button></div>';
-  document.getElementById('srContent').innerHTML=html;
+  srEditingCarrier=carrierKey||(document.getElementById('odShipCarrier')||{}).value||rates.default_carrier||'yamato';
+  odRenderShipRates();
   openModal('shipRatesModal');
 }
 
+function odRenderShipRates(){
+  const rates=shipRates, c=rates.carriers[srEditingCarrier];
+  const sizes=Object.keys(c.sizes), areas=c.order||Object.keys(c.areas||{});
+  let html='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">'
+    +Object.keys(rates.carriers).map(k=>
+      `<button class="btn ${k===srEditingCarrier?'btn-green':'btn-outline'} btn-sm" onclick="srSwitch('${k}')">${rates.carriers[k].label}</button>`).join('')
+    +'</div>'
+    +`<p style="font-size:13px;color:var(--text2);margin-bottom:8px;">${c.note||''}</p>`
+    +'<div style="overflow-x:auto"><table><thead><tr><th>地帯</th>'
+    +sizes.map(sz=>`<th>${sz}</th>`).join('')+'</tr></thead><tbody>'
+    +areas.map(a=>`<tr><td style="white-space:nowrap">${a}</td>`
+      +sizes.map(sz=>`<td><input type="number" id="sr-${sz}-${a}" value="${c.sizes[sz][a]!=null?c.sizes[sz][a]:''}" placeholder="—"
+          style="width:78px;padding:5px;border:1px solid var(--border);border-radius:6px;"></td>`).join('')+'</tr>').join('')
+    +'</tbody></table></div>'
+    +'<div style="margin-top:10px"><strong>クール便の加算額</strong>'
+    +`<span style="font-size:12px;color:var(--text2);margin-left:6px;">${c.cool_note||''}</span>`
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">'
+    +sizes.map(sz=>`<label style="font-size:14px">${sz}: <input type="number" id="srcool-${sz}" value="${c.cool_add[sz]!=null?c.cool_add[sz]:0}"
+        style="width:76px;padding:5px;border:1px solid var(--border);border-radius:6px;"></label>`).join('')+'</div></div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'
+    +'<button class="btn btn-green" onclick="odSaveShipRates()">この業者の表を保存</button>'
+    +'<button class="btn btn-outline" onclick="closeModal(\'shipRatesModal\')">閉じる</button></div>';
+  document.getElementById('srContent').innerHTML=html;
+}
+
+function srSwitch(k){ srEditingCarrier=k; odRenderShipRates(); }
+
 async function odSaveShipRates(){
   const rates=JSON.parse(JSON.stringify(shipRates));
-  for(const sz of Object.keys(rates.sizes)){
-    for(const a of SHIP_AREAS){
+  const c=rates.carriers[srEditingCarrier];
+  const areas=c.order||Object.keys(c.areas||{});
+  for(const sz of Object.keys(c.sizes)){
+    for(const a of areas){
       const el=document.getElementById(`sr-${sz}-${a}`);
-      if(el) rates.sizes[sz][a]=el.value===''?null:parseInt(el.value)||0;
+      if(el) c.sizes[sz][a]=el.value===''?null:parseInt(el.value)||0;
     }
-    const c=document.getElementById('srcool-'+sz);
-    if(c) rates.cool_add[sz]=parseInt(c.value)||0;
+    const cl=document.getElementById('srcool-'+sz);
+    if(cl) c.cool_add[sz]=parseInt(cl.value)||0;
   }
   rates.updated_at=new Date().toISOString();
   try{
