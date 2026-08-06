@@ -423,6 +423,18 @@ th,td{padding:8px 6px;font-size:.8rem}
   </div>
 </div>
 
+<!-- 送料表（地域別 × サイズ） -->
+<div class="modal-overlay" id="shipRatesModal">
+  <div class="modal modal-wide">
+    <span class="modal-close" onclick="closeModal('shipRatesModal')">&times;</span>
+    <h2>&#128666; 送料表（地域別 × サイズ）</h2>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">
+      実際の契約運賃に合わせて直してください。ここで保存すると、注文詳細の送料計算に使われます。
+    </p>
+    <div id="srContent"></div>
+  </div>
+</div>
+
 <!-- Manual Order Modal -->
 <div class="modal-overlay" id="manualOrderModal">
   <div class="modal modal-wide">
@@ -743,17 +755,260 @@ function showOrderDetail(id){
     </div>
     ${o.memo?`<div style="margin-bottom:12px;font-size:.85rem"><strong>備考:</strong> ${esc(o.memo)}</div>`:''}
     <div class="table-wrap"><table>
-      <thead><tr><th>種別</th><th>部位</th><th>重量(kg)</th><th>単価</th><th>金額</th></tr></thead>
-      <tbody>${items.map(i=>`<tr><td>${esc(i.species||'')}</td><td>${esc(i.part_name||'')}</td><td>${i.weight_kg||i.weight||'--'}</td><td>&yen;${Number(i.unit_price||0).toLocaleString()}</td><td>&yen;${Number(i.subtotal||i.amount||0).toLocaleString()}</td></tr>`).join('')}</tbody>
+      <thead><tr><th>種別</th><th>部位</th><th>重量(kg)</th><th>単価</th><th>金額</th><th></th></tr></thead>
+      <tbody>${items.map(i=>`<tr>
+        <td>${esc(i.species||'')}</td>
+        <td>${esc(i.part_name||'')}</td>
+        <td><input type="number" step="0.01" min="0" value="${i.weight_kg||i.weight||''}" id="odW-${i.id}"
+              style="width:82px;padding:6px;font-size:15px;border:1px solid var(--border);border-radius:6px;"></td>
+        <td><input type="number" step="1" min="0" value="${Number(i.unit_price||0)}" id="odP-${i.id}"
+              style="width:92px;padding:6px;font-size:15px;border:1px solid var(--border);border-radius:6px;"></td>
+        <td id="odA-${i.id}">&yen;${Number(i.subtotal||i.amount||0).toLocaleString()}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="odDeleteItem('${o.id}','${i.id}')" title="この明細を削除">&#10006;</button></td>
+      </tr>`).join('')}</tbody>
     </table></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin:10px 0;flex-wrap:wrap;">
+      <button class="btn btn-green btn-sm" onclick="odSaveItems('${o.id}')">&#128190; 明細の変更を保存</button>
+    </div>
+
+    <!-- 送料（地域別の価格表から自動計算） -->
+    <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin:12px 0;background:rgba(0,0,0,.02);">
+      <div style="font-weight:700;margin-bottom:8px;">&#128666; 送料</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <select id="odShipSize" onchange="odCalcShipping('${o.id}')"
+          style="padding:8px;font-size:15px;border:1px solid var(--border);border-radius:6px;min-width:190px;">
+          <option value="">サイズを選ぶ</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:6px;font-size:15px;">
+          <input type="checkbox" id="odShipCool" checked onchange="odCalcShipping('${o.id}')" style="width:20px;height:20px;">
+          クール便
+        </label>
+        <span id="odShipArea" style="font-size:13px;color:var(--text2);"></span>
+        <strong id="odShipFee" style="font-size:17px;color:var(--gold);"></strong>
+        <button class="btn btn-outline btn-sm" onclick="odAddShipping('${o.id}')">この送料を明細に入れる</button>
+      </div>
+      <div style="font-size:12px;color:var(--text2);margin-top:6px;">
+        お届け先の都道府県から地域を判定して自動計算します。価格表は「送料表を編集」から直せます。
+        <button class="btn btn-outline btn-sm" onclick="odOpenShipRates()" style="margin-left:6px;">送料表を編集</button>
+      </div>
+    </div>
+
     <div style="text-align:right;font-size:1.1rem;font-weight:700;color:var(--gold);margin:12px 0">合計: &yen;${Number(o.total_amount||0).toLocaleString()}</div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">`;
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap;">`;
   const flow={'受注':'確認済','確認済':'発送済','発送済':'納品完了'};
   if(flow[o.status]) html+=`<button class="btn btn-green" onclick="changeStatus('${o.id}','${flow[o.status]}');closeModal('orderDetailModal')">${flow[o.status]}にする</button>`;
   if(o.status!=='キャンセル'&&o.status!=='納品完了') html+=`<button class="btn btn-danger" onclick="changeStatus('${o.id}','キャンセル');closeModal('orderDetailModal')">キャンセル</button>`;
+  html+=`<button class="btn btn-danger" onclick="odDeleteOrder('${o.id}')" style="margin-left:auto;">&#128465; この注文を削除</button>`;
   html+=`</div>`;
   document.getElementById('odContent').innerHTML=html;
   openModal('orderDetailModal');
+  odInitShipping(o);
+}
+
+/* ===== 注文詳細の編集・削除 =====
+   在庫との整合を壊さないよう、明細を消すときは紐づく在庫を「在庫」に戻す。 */
+
+async function odSaveItems(orderId){
+  const o=allOrders.find(x=>x.id===orderId); if(!o) return;
+  const items=o.order_items||[];
+  try{
+    let total=0;
+    for(const i of items){
+      const wEl=document.getElementById('odW-'+i.id), pEl=document.getElementById('odP-'+i.id);
+      if(!wEl||!pEl) continue;
+      const w=parseFloat(wEl.value)||0, p=parseInt(pEl.value)||0;
+      const amount=Math.round(w>0?w*p:p);   // 重量があれば重量×単価、無ければ単価をそのまま（送料など）
+      total+=amount;
+      await sb('PATCH','order_items',{weight_kg:w||null,weight:w||null,unit_price:p,subtotal:amount,amount:amount},`?id=eq.${i.id}`);
+    }
+    await sb('PATCH','orders',{total_amount:total,updated_at:new Date().toISOString()},`?id=eq.${orderId}`);
+    alert('明細を保存しました（合計 ¥'+total.toLocaleString()+'）');
+    await loadOrders(); closeModal('orderDetailModal');
+  }catch(e){alert('保存に失敗しました: '+e.message)}
+}
+
+async function odDeleteItem(orderId,itemId){
+  const o=allOrders.find(x=>x.id===orderId); if(!o) return;
+  const item=(o.order_items||[]).find(i=>String(i.id)===String(itemId)); if(!item) return;
+  if(!confirm('この明細を削除しますか？\n\n'+(item.part_name||'')+' '+(item.weight_kg||item.weight||'')+'kg\n\n'
+    +(item.inventory_id?'紐づいている在庫は「在庫」に戻します（また売れます）。':'')))return;
+  try{
+    if(item.inventory_id){
+      await sb('PATCH','inventory',{status:'在庫',updated_at:new Date().toISOString()},`?id=eq.${item.inventory_id}`);
+    }
+    await sb('DELETE','order_items',null,`?id=eq.${itemId}`);
+    // 合計を計算し直す
+    const rest=(o.order_items||[]).filter(i=>String(i.id)!==String(itemId));
+    const total=rest.reduce((sum,i)=>sum+Number(i.subtotal||i.amount||0),0);
+    await sb('PATCH','orders',{total_amount:total,updated_at:new Date().toISOString()},`?id=eq.${orderId}`);
+    await loadOrders(); closeModal('orderDetailModal');
+    alert('明細を削除しました');
+  }catch(e){alert('削除に失敗しました: '+e.message)}
+}
+
+async function odDeleteOrder(orderId){
+  const o=allOrders.find(x=>x.id===orderId); if(!o) return;
+  const items=o.order_items||[];
+  const linked=items.filter(i=>i.inventory_id).length;
+  if(!confirm('この注文を削除しますか？\n\n'+(o.order_code||'')+' / '+(o.customer_name||'')+'\n明細 '+items.length+'件'
+    +(linked?'\n\n紐づいている在庫 '+linked+'件は「在庫」に戻します。':'')
+    +'\n\n※ 削除すると元に戻せません。記録を残したいときは「キャンセル」を使ってください。'))return;
+  if(!confirm('本当に削除します。よろしいですか？'))return;
+  try{
+    for(const i of items){
+      if(i.inventory_id) await sb('PATCH','inventory',{status:'在庫',updated_at:new Date().toISOString()},`?id=eq.${i.inventory_id}`);
+    }
+    await sb('DELETE','order_items',null,`?order_id=eq.${orderId}`);
+    try{ await sb('DELETE','shipments',null,`?order_id=eq.${orderId}`); }catch(e){}
+    await sb('DELETE','orders',null,`?id=eq.${orderId}`);
+    await loadOrders(); closeModal('orderDetailModal');
+    alert('注文を削除しました');
+  }catch(e){alert('削除に失敗しました: '+e.message)}
+}
+
+/* ===== 送料マスタ（地域別 × サイズ）=====
+   app_settings（key/value jsonb）に置く。DBのスキーマは変えない。 */
+
+const SHIP_AREAS=['北海道','北東北','南東北','関東','信越','北陸','中部','関西','中国','四国','九州','沖縄'];
+const PREF_AREA={
+  '北海道':'北海道',
+  '青森県':'北東北','秋田県':'北東北','岩手県':'北東北',
+  '宮城県':'南東北','山形県':'南東北','福島県':'南東北',
+  '茨城県':'関東','栃木県':'関東','群馬県':'関東','埼玉県':'関東','千葉県':'関東','東京都':'関東','神奈川県':'関東','山梨県':'関東',
+  '新潟県':'信越','長野県':'信越',
+  '富山県':'北陸','石川県':'北陸','福井県':'北陸',
+  '静岡県':'中部','愛知県':'中部','三重県':'中部','岐阜県':'中部',
+  '大阪府':'関西','京都府':'関西','滋賀県':'関西','奈良県':'関西','和歌山県':'関西','兵庫県':'関西',
+  '岡山県':'中国','広島県':'中国','山口県':'中国','鳥取県':'中国','島根県':'中国',
+  '徳島県':'四国','香川県':'四国','愛媛県':'四国','高知県':'四国',
+  '福岡県':'九州','佐賀県':'九州','長崎県':'九州','熊本県':'九州','大分県':'九州','宮崎県':'九州','鹿児島県':'九州',
+  '沖縄県':'沖縄'
+};
+// 初期値（ヤマト運輸の目安。実際の契約運賃に合わせて「送料表を編集」から直す）
+const SHIP_RATES_DEFAULT={
+  updated_at:null,
+  note:'ヤマト運輸の目安。実際の契約運賃に合わせて編集してください。クール便は加算額。',
+  sizes:{
+    '60':{ '北海道':1610,'北東北':1280,'南東北':1170,'関東':1060,'信越':1060,'北陸':1170,'中部':1170,'関西':1280,'中国':1390,'四国':1390,'九州':1610,'沖縄':1610 },
+    '80':{ '北海道':1900,'北東北':1570,'南東北':1460,'関東':1350,'信越':1350,'北陸':1460,'中部':1460,'関西':1570,'中国':1680,'四国':1680,'九州':1900,'沖縄':1900 },
+    '100':{'北海道':2190,'北東北':1860,'南東北':1750,'関東':1640,'信越':1640,'北陸':1750,'中部':1750,'関西':1860,'中国':1970,'四国':1970,'九州':2190,'沖縄':2190 },
+    '120':{'北海道':2480,'北東北':2150,'南東北':2040,'関東':1930,'信越':1930,'北陸':2040,'中部':2040,'関西':2150,'中国':2260,'四国':2260,'九州':2480,'沖縄':2480 },
+    '140':{'北海道':2770,'北東北':2440,'南東北':2330,'関東':2220,'信越':2220,'北陸':2330,'中部':2330,'関西':2440,'中国':2550,'四国':2550,'九州':2770,'沖縄':2770 }
+  },
+  cool_add:{ '60':220,'80':220,'100':440,'120':440,'140':660 }
+};
+let shipRates=null;
+
+async function odLoadShipRates(){
+  if(shipRates) return shipRates;
+  try{
+    const rows=await sb('GET','app_settings',null,'?key=eq.shipping_rates&select=value');
+    shipRates=(rows&&rows.length&&rows[0].value)?rows[0].value:JSON.parse(JSON.stringify(SHIP_RATES_DEFAULT));
+  }catch(e){ shipRates=JSON.parse(JSON.stringify(SHIP_RATES_DEFAULT)); }
+  return shipRates;
+}
+
+/** 住所から地域を判定（都道府県名の前方一致） */
+function odAreaFromAddress(addr){
+  if(!addr) return null;
+  for(const pref of Object.keys(PREF_AREA)){ if(addr.indexOf(pref)>=0) return {pref:pref,area:PREF_AREA[pref]}; }
+  return null;
+}
+
+async function odInitShipping(o){
+  const sel=document.getElementById('odShipSize'); if(!sel) return;
+  const rates=await odLoadShipRates();
+  sel.innerHTML='<option value="">サイズを選ぶ</option>'
+    +Object.keys(rates.sizes).map(sz=>`<option value="${sz}">ヤマト ${sz}サイズ</option>`).join('');
+  const cust=allCustomers.find(c=>c.id===o.customer_id)||{};
+  const addr=o.delivery_address||cust.address||'';
+  const hit=odAreaFromAddress(addr);
+  const areaEl=document.getElementById('odShipArea');
+  if(areaEl) areaEl.textContent=hit?`お届け先: ${hit.pref}（${hit.area}）`:'お届け先の都道府県が読み取れません（関東として計算）';
+  odCalcShipping(o.id);
+}
+
+function odCalcShippingValue(o){
+  if(!shipRates) return null;
+  const size=(document.getElementById('odShipSize')||{}).value;
+  if(!size) return null;
+  const cust=allCustomers.find(c=>c.id===o.customer_id)||{};
+  const hit=odAreaFromAddress(o.delivery_address||cust.address||'');
+  const area=hit?hit.area:'関東';
+  const base=(shipRates.sizes[size]||{})[area];
+  if(base==null) return null;
+  const cool=(document.getElementById('odShipCool')||{}).checked?(shipRates.cool_add[size]||0):0;
+  return { size:size, area:area, cool:!!cool, fee:base+cool };
+}
+
+function odCalcShipping(orderId){
+  const o=allOrders.find(x=>x.id===orderId); if(!o) return;
+  const r=odCalcShippingValue(o);
+  const feeEl=document.getElementById('odShipFee');
+  if(feeEl) feeEl.textContent=r?`¥${r.fee.toLocaleString()}`:'';
+}
+
+/** 計算した送料を明細に1行として入れる（請求書にもそのまま載る） */
+async function odAddShipping(orderId){
+  const o=allOrders.find(x=>x.id===orderId); if(!o) return;
+  const r=odCalcShippingValue(o);
+  if(!r){ alert('サイズを選んでください'); return; }
+  const name=`送料（ヤマト ${r.size}サイズ${r.cool?' クール':''} ${r.area}）`;
+  if(!confirm(`この送料を明細に入れますか？\n\n${name}\n¥${r.fee.toLocaleString()}`))return;
+  try{
+    const exist=(o.order_items||[]).find(i=>(i.part_name||'').indexOf('送料')===0);
+    if(exist){
+      await sb('PATCH','order_items',{part_name:name,unit_price:r.fee,subtotal:r.fee,amount:r.fee,weight_kg:null,weight:null},`?id=eq.${exist.id}`);
+    }else{
+      await sb('POST','order_items',{order_id:orderId,part_name:name,unit_price:r.fee,subtotal:r.fee,amount:r.fee});
+    }
+    const others=(o.order_items||[]).filter(i=>(i.part_name||'').indexOf('送料')!==0)
+      .reduce((sum,i)=>sum+Number(i.subtotal||i.amount||0),0);
+    await sb('PATCH','orders',{total_amount:others+r.fee,updated_at:new Date().toISOString()},`?id=eq.${orderId}`);
+    await loadOrders(); closeModal('orderDetailModal');
+    alert('送料を明細に入れました');
+  }catch(e){alert('送料を入れられませんでした: '+e.message)}
+}
+
+/** 送料表の編集（地域×サイズ）。app_settings に保存する */
+async function odOpenShipRates(){
+  const rates=await odLoadShipRates();
+  const sizes=Object.keys(rates.sizes);
+  let html='<div style="overflow-x:auto"><table><thead><tr><th>地域</th>'
+    +sizes.map(sz=>`<th>${sz}</th>`).join('')+'</tr></thead><tbody>'
+    +SHIP_AREAS.map(a=>`<tr><td style="white-space:nowrap">${a}</td>`
+      +sizes.map(sz=>`<td><input type="number" id="sr-${sz}-${a}" value="${rates.sizes[sz][a]!=null?rates.sizes[sz][a]:''}"
+          style="width:78px;padding:5px;border:1px solid var(--border);border-radius:6px;"></td>`).join('')+'</tr>').join('')
+    +'</tbody></table></div>'
+    +'<div style="margin-top:10px"><strong>クール便の加算額</strong><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">'
+    +sizes.map(sz=>`<label style="font-size:14px">${sz}: <input type="number" id="srcool-${sz}" value="${rates.cool_add[sz]!=null?rates.cool_add[sz]:0}"
+        style="width:76px;padding:5px;border:1px solid var(--border);border-radius:6px;"></label>`).join('')+'</div></div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'
+    +'<button class="btn btn-green" onclick="odSaveShipRates()">保存する</button>'
+    +'<button class="btn btn-outline" onclick="closeModal(\'shipRatesModal\')">閉じる</button></div>';
+  document.getElementById('srContent').innerHTML=html;
+  openModal('shipRatesModal');
+}
+
+async function odSaveShipRates(){
+  const rates=JSON.parse(JSON.stringify(shipRates));
+  for(const sz of Object.keys(rates.sizes)){
+    for(const a of SHIP_AREAS){
+      const el=document.getElementById(`sr-${sz}-${a}`);
+      if(el) rates.sizes[sz][a]=el.value===''?null:parseInt(el.value)||0;
+    }
+    const c=document.getElementById('srcool-'+sz);
+    if(c) rates.cool_add[sz]=parseInt(c.value)||0;
+  }
+  rates.updated_at=new Date().toISOString();
+  try{
+    const rows=await sb('GET','app_settings',null,'?key=eq.shipping_rates&select=key');
+    if(rows&&rows.length) await sb('PATCH','app_settings',{value:rates,updated_at:rates.updated_at},'?key=eq.shipping_rates');
+    else await sb('POST','app_settings',{key:'shipping_rates',value:rates,updated_at:rates.updated_at});
+    shipRates=rates;
+    alert('送料表を保存しました');
+    closeModal('shipRatesModal');
+  }catch(e){alert('保存に失敗しました: '+e.message)}
 }
 
 // ── B2 CSV Export ──
