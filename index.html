@@ -1306,6 +1306,50 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         </table>
       </div>
     </div>
+    <div class="section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>🐭 ねずみ・衛生害虫の駆除記録</span>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <select class="form-input" id="pest-year" style="max-width:150px;" onchange="loadPest()"></select>
+          <button class="btn btn-primary" onclick="pestOpenNew()">＋ 実施を記録</button>
+          <button class="btn" onclick="pestPrint()">🖨 実施表を印刷</button>
+        </div>
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;">
+        <strong>年2回以上の実施と記録の保存</strong>が求められています（監査指摘事項）。年度は4月〜翌3月で数えます。
+      </div>
+      <div id="pest-status" style="margin-bottom:10px;"></div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>実施日</th><th>対象</th><th>方法</th><th>場所</th><th>実施者・業者</th><th>結果</th><th>操作</th></tr></thead>
+          <tbody id="pest-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ねずみ・衛生害虫 駆除記録の入力 -->
+  <div class="modal" id="pestModal" style="display:none;">
+    <div class="modal-content" style="max-width:560px;">
+      <div class="modal-header"><h2 id="pestModalTitle">駆除の記録</h2><button class="modal-close" onclick="document.getElementById('pestModal').style.display='none'">&times;</button></div>
+      <div class="form-grid">
+        <div class="form-group"><label>実施日 <span style="color:var(--red);">*</span></label><input class="form-input" id="pst-f-done_on" type="date" /></div>
+        <div class="form-group"><label>対象</label><input class="form-input" id="pst-f-target" list="dl-pest-target" placeholder="例: ねずみ・ハエ・ゴキブリ" /></div>
+        <div class="form-group"><label>方法</label><input class="form-input" id="pst-f-method" list="dl-pest-method" placeholder="例: 粘着トラップ設置" /></div>
+        <div class="form-group"><label>実施場所</label><input class="form-input" id="pst-f-area" placeholder="例: 施設全体（放血室・処理室・保管室）" /></div>
+        <div class="form-group"><label>実施業者<span style="color:var(--text3);font-size:11px;">（自社なら空欄）</span></label><input class="form-input" id="pst-f-vendor" placeholder="業者名" /></div>
+        <div class="form-group"><label>実施者</label><input class="form-input" id="pst-f-operator" list="dl-recorder" placeholder="担当者名" /></div>
+        <div class="form-group" style="grid-column:1/-1;"><label>生息状況・結果</label><input class="form-input" id="pst-f-result" placeholder="例: 生息は確認されず" /></div>
+        <div class="form-group" style="grid-column:1/-1;"><label>改善措置</label><input class="form-input" id="pst-f-measure" placeholder="例: 搬入口の隙間をふさいだ" /></div>
+        <div class="form-group" style="grid-column:1/-1;"><label>備考</label><input class="form-input" id="pst-f-note" placeholder="任意" /></div>
+      </div>
+      <datalist id="dl-pest-target"><option>ねずみ</option><option>ハエ</option><option>ゴキブリ</option><option>ねずみ・衛生害虫</option></datalist>
+      <datalist id="dl-pest-method"><option>粘着トラップ設置</option><option>薬剤散布</option><option>ベイト剤設置</option><option>業者施工</option><option>侵入経路の封鎖</option></datalist>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">
+        <button class="btn" onclick="document.getElementById('pestModal').style.display='none'">キャンセル</button>
+        <button class="btn btn-primary" onclick="pestSave()" id="pestSaveBtn">保存</button>
+      </div>
+    </div>
   </div>
 
   <!-- Radiation (放射能検査) -->
@@ -1334,15 +1378,15 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 
     <div class="section">
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-        <span>未検査の個体（受入済み・検査日が未入力）</span>
-        <span style="font-size:12px;color:var(--text2);">タップで上の記録リストに追加</span>
+        <span>未検査の個体 <span id="rad-untested-count" class="badge badge-red" style="font-size:12px;"></span></span>
+        <span style="font-size:12px;color:var(--text2);">通し番号順・全件表示。タップで上の記録リストに追加</span>
       </div>
       <div id="rad-untested" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
     </div>
 
     <div class="section">
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-        <span>最近の検査記録</span>
+        <span>検査済みの個体 <span id="rad-done-count" style="font-size:12.5px;color:var(--text2);font-weight:400;"></span></span>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <input class="form-input" id="rad-copy-month" type="month" style="max-width:160px;">
           <button class="btn" onclick="radCopyForDaicho()">📋 台帳転記用にコピー</button>
@@ -1351,7 +1395,14 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
       <div style="overflow-x:auto;">
         <table>
-          <thead><tr><th>検査日</th><th>個体番号</th><th>種別</th><th>捕獲日</th><th>結果</th></tr></thead>
+          <thead><tr>
+            <th style="cursor:pointer;" onclick="radSort('radiation_test_date')">検査日 <span id="radSortIcon-radiation_test_date">▼</span></th>
+            <th style="cursor:pointer;text-align:right;" onclick="radSort('serial_number')">通し番号 <span id="radSortIcon-serial_number"></span></th>
+            <th style="cursor:pointer;" onclick="radSort('label_id')">個体番号 <span id="radSortIcon-label_id"></span></th>
+            <th>種別</th>
+            <th style="cursor:pointer;" onclick="radSort('capture_date')">捕獲日 <span id="radSortIcon-capture_date"></span></th>
+            <th>結果</th>
+          </tr></thead>
           <tbody id="rad-recent"></tbody>
         </table>
       </div>
@@ -1969,7 +2020,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'hunters') loadHunters();
     if (btn.dataset.tab === 'customers') loadCustomersReg();
     if (btn.dataset.tab === 'staff') loadStaffPanel();
-    if (btn.dataset.tab === 'cleaning') loadCleaning();
+    if (btn.dataset.tab === 'cleaning') { loadCleaning(); loadPest(); }
     if (btn.dataset.tab === 'radiation') loadRadiation();
     if (btn.dataset.tab === 'manual') loadManual();
     if (btn.dataset.tab === 'supplies') loadSupplies();
@@ -6033,6 +6084,149 @@ const CLEAN_ROOMS = [
 let cleanTodayLogs = [];
 let cleanCurrentRoom = null;
 
+/* ── ねずみ・衛生害虫の駆除記録 ──
+   監査で「年2回以上行い、記録を保存しているか」を見られる項目。
+   年度（4月〜翌3月）ごとに回数を数えて、足りていれば足りていると示す。 */
+let pestRows = [];
+let pestEditId = null;
+const PEST_FIELDS = ['done_on', 'target', 'method', 'area', 'vendor', 'operator', 'result', 'measure', 'note'];
+
+function fiscalYearOf(d) {
+  const dt = new Date(d);
+  return dt.getMonth() + 1 >= 4 ? dt.getFullYear() : dt.getFullYear() - 1;
+}
+function pestFillYears() {
+  const sel = document.getElementById('pest-year');
+  if (!sel || sel.options.length) return;
+  const cur = fiscalYearOf(new Date());
+  for (let y = cur; y >= cur - 4; y--) {
+    const o = document.createElement('option');
+    o.value = String(y);
+    o.textContent = `令和${y - 2018}年度（${y}年4月〜${y + 1}年3月）`;
+    sel.appendChild(o);
+  }
+}
+async function loadPest() {
+  pestFillYears();
+  const body = document.getElementById('pest-body');
+  const st = document.getElementById('pest-status');
+  if (!body) return;
+  const y = Number(document.getElementById('pest-year').value || fiscalYearOf(new Date()));
+  try {
+    pestRows = await sb('GET', 'pest_control_logs', null,
+      `?done_on=gte.${y}-04-01&done_on=lt.${y + 1}-04-01&select=*&order=done_on.asc`);
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="7" style="color:var(--red);">読み込みエラー: ${esc2(sbSafeMsg(e))}</td></tr>`;
+    return;
+  }
+  const n = pestRows.length;
+  const ok = n >= 2;
+  st.innerHTML = `<div style="padding:10px 12px;border-radius:var(--radius);line-height:1.7;
+      border:1px solid ${ok ? 'rgba(106,158,90,.45)' : 'var(--red)'};
+      background:${ok ? 'rgba(61,122,52,.08)' : 'rgba(185,61,61,.07)'};
+      color:${ok ? 'var(--green)' : 'var(--red)'};font-size:13.5px;font-weight:700;">
+      ${ok ? '✅' : '⚠️'} 令和${y - 2018}年度の実施 ${n}回 ／ 必要 2回以上
+      ${ok ? '' : `<span style="display:block;font-weight:400;color:var(--text2);">あと ${2 - n}回 の実施と記録が必要です。</span>`}
+    </div>`;
+  body.innerHTML = pestRows.map(r => `<tr>
+    <td style="white-space:nowrap;font-weight:600;">${fmt(r.done_on)}</td>
+    <td>${esc2(r.target || '-')}</td>
+    <td>${esc2(r.method || '-')}</td>
+    <td>${esc2(r.area || '-')}</td>
+    <td>${esc2([r.vendor, r.operator].filter(Boolean).join(' / ') || '-')}</td>
+    <td>${esc2(r.result || '-')}</td>
+    <td style="white-space:nowrap;">
+      <button class="btn btn-sm" onclick="pestOpenEdit('${r.id}')">編集</button>
+      <button class="btn btn-sm" style="color:var(--red);border:1px solid var(--red);" onclick="pestDelete('${r.id}')">🗑</button>
+    </td>
+  </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text3);">この年度の記録はまだありません</td></tr>';
+}
+function pestOpenNew() {
+  if (!requireAdmin('駆除記録の登録')) return;
+  pestEditId = null;
+  document.getElementById('pestModalTitle').textContent = '駆除の記録';
+  PEST_FIELDS.forEach(f => document.getElementById('pst-f-' + f).value = '');
+  document.getElementById('pst-f-done_on').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('pst-f-target').value = 'ねずみ・衛生害虫';
+  document.getElementById('pst-f-area').value = '施設全体';
+  document.getElementById('pestModal').style.display = 'block';
+}
+function pestOpenEdit(id) {
+  if (!requireAdmin('駆除記録の修正')) return;
+  const r = pestRows.find(x => String(x.id) === String(id));
+  if (!r) { toast('データが見つかりません', 'error'); return; }
+  pestEditId = r.id;
+  document.getElementById('pestModalTitle').textContent = '駆除の記録を編集';
+  PEST_FIELDS.forEach(f => document.getElementById('pst-f-' + f).value = r[f] == null ? '' : r[f]);
+  document.getElementById('pestModal').style.display = 'block';
+}
+async function pestSave() {
+  const payload = {};
+  PEST_FIELDS.forEach(f => {
+    const v = document.getElementById('pst-f-' + f).value.trim();
+    payload[f] = v === '' ? null : v;
+  });
+  if (!payload.done_on) { toast('実施日を入れてください', 'error'); return; }
+  const btn = document.getElementById('pestSaveBtn');
+  btn.disabled = true; btn.textContent = '保存中…';
+  try {
+    if (pestEditId) await sb('PATCH', 'pest_control_logs', payload, '?id=eq.' + pestEditId);
+    else await sb('POST', 'pest_control_logs', payload);
+    toast(`${fmt(payload.done_on)} の駆除記録を保存しました`);
+    document.getElementById('pestModal').style.display = 'none';
+    // 実施日の年度に合わせて表示を切り替える
+    document.getElementById('pest-year').value = String(fiscalYearOf(payload.done_on));
+    loadPest();
+  } catch (e) { toast('保存に失敗しました: ' + sbSafeMsg(e), 'error'); }
+  btn.disabled = false; btn.textContent = '保存';
+}
+async function pestDelete(id) {
+  if (!requireAdmin('駆除記録の削除')) return;
+  const r = pestRows.find(x => String(x.id) === String(id));
+  if (!confirm(`${r ? fmt(r.done_on) : 'この'} の駆除記録を削除しますか？\n\n監査で見られる記録です。取り消せません。`)) return;
+  try {
+    await sb('DELETE', 'pest_control_logs', null, '?id=eq.' + id);
+    toast('削除しました');
+    loadPest();
+  } catch (e) { toast('削除に失敗しました: ' + sbSafeMsg(e), 'error'); }
+}
+function pestPrint() {
+  const y = Number(document.getElementById('pest-year').value || fiscalYearOf(new Date()));
+  if (!pestRows.length) { toast('この年度の記録がありません', 'error'); return; }
+  const esc = s => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const jd = d => { if (!d) return ''; const [yy, m, dd] = String(d).split('-'); return `${yy}年${+m}月${+dd}日`; };
+  const rows = pestRows.map((r, i) => `<tr>
+      <td style="text-align:center;">${i + 1}</td><td>${esc(jd(r.done_on))}</td><td>${esc(r.target || '')}</td>
+      <td>${esc(r.method || '')}</td><td>${esc(r.area || '')}</td>
+      <td>${esc([r.vendor, r.operator].filter(Boolean).join(' / '))}</td>
+      <td>${esc(r.result || '')}</td><td>${esc(r.measure || '')}</td></tr>`).join('');
+  const name = `ネズミ・害虫駆除実施表（令和${y - 2018}年度）`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(name)}</title><style>
+    @page{size:A4 landscape;margin:14mm 16mm;}
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Noto Sans JP','Yu Gothic',sans-serif;color:#000;}
+    .ttl{text-align:center;font-size:16pt;font-weight:700;margin-bottom:8px;}
+    .fac{text-align:right;font-size:10pt;margin-bottom:8px;}
+    table{width:100%;border-collapse:collapse;table-layout:fixed;}
+    th,td{border:1px solid #000;padding:7px 8px;font-size:10pt;vertical-align:top;word-wrap:break-word;}
+    th{background:#eee;font-weight:600;text-align:center;}
+    .note{font-size:9pt;margin-top:10px;line-height:1.7;}
+  </style></head><body>
+    <div class="ttl">${esc(name)}</div>
+    <div class="fac">施設名：館山ジビエセンター　／　指定管理者：合同会社アルコ</div>
+    <table>
+      <thead><tr><th style="width:36px;">No</th><th style="width:110px;">実施日</th><th style="width:100px;">対象</th>
+      <th style="width:120px;">方法</th><th style="width:130px;">実施場所</th><th style="width:120px;">実施者・業者</th>
+      <th>生息状況・結果</th><th>改善措置</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="note">※ ねずみ・衛生害虫の駆除は年2回以上実施し、記録を保存すること。本年度の実施回数：${pestRows.length}回</div>
+    <scr${''}ipt>window.onload=function(){setTimeout(function(){window.focus();window.print();},400);};</scr${''}ipt>
+  </body></html>`;
+  const w = window.open('', '_blank');
+  if (w) { w.document.open(); w.document.write(html); w.document.close(); }
+}
+
 async function loadCleaning() {
   const grid = document.getElementById('clean-rooms');
   const mEl = document.getElementById('clean-month');
@@ -7838,23 +8032,61 @@ async function loadRadiation() {
   if (cm && !cm.value) cm.value = new Date().toISOString().slice(0, 7);
   radSetResult(radResult);
   radRenderPending();
-  // 未検査（イノシシ・受入済み・検査日null）
+  // 未検査（イノシシ・検査日null）。件数を絞ると抜けているように見えるので全部出す。
+  // 並びは通し番号順にして、どこが抜けているか目で追えるようにする
   try {
     const un = await sb('GET', 'individuals', null,
-      `?species=eq.イノシシ&radiation_test_date=is.null&or=(intake_status.is.null,intake_status.neq.搬入待ち)&label_id=not.like.仮-*&select=label_id,capture_date&order=capture_date.desc&limit=60`);
+      `?species=eq.イノシシ&radiation_test_date=is.null&or=(intake_status.is.null,intake_status.neq.搬入待ち)&label_id=not.like.仮-*` +
+      `&select=label_id,serial_number,capture_date&order=serial_number.asc.nullslast,label_id.asc&limit=3000`);
+    radUntested = un;
+    const cnt = document.getElementById('rad-untested-count');
+    if (cnt) cnt.textContent = un.length ? `${un.length}頭` : '';
     const box = document.getElementById('rad-untested');
     box.innerHTML = un.length ? un.map(r =>
       `<button class="btn btn-sm" onclick="radPendingAdd('${r.label_id}')">${esc2(r.label_id.replace('TGC-08-', ''))}<span style="color:var(--text2);font-size:11px;margin-left:4px;">${r.capture_date ? r.capture_date.slice(5) : ''}</span></button>`
     ).join('') : '<span style="color:var(--text2);font-size:13px;">未検査の個体はありません 🎉</span>';
   } catch (e) { document.getElementById('rad-untested').innerHTML = '<span style="color:var(--red);font-size:13px;">' + esc2(sbSafeMsg(e)) + '</span>'; }
-  // 最近の検査記録
+  // 検査済み。こちらも全部出して、見出しを押すと並べ替えられるようにする
   try {
-    const rec = await sb('GET', 'individuals', null,
-      `?radiation_test_date=not.is.null&select=label_id,species,capture_date,radiation_test_date,radiation_result&order=radiation_test_date.desc,label_id.asc&limit=60`);
-    document.getElementById('rad-recent').innerHTML = rec.map(r =>
-      `<tr><td>${r.radiation_test_date || ''}</td><td>${esc2(r.label_id.replace('TGC-08-', ''))}</td><td>${esc2(r.species || '')}</td><td>${r.capture_date || ''}</td><td>${esc2(r.radiation_result || '検出下限値以下')}</td></tr>`
-    ).join('') || '<tr><td colspan="5" style="color:var(--text2);">記録はまだありません</td></tr>';
-  } catch (e) { document.getElementById('rad-recent').innerHTML = `<tr><td colspan="5" style="color:var(--red);">${esc2(sbSafeMsg(e))}</td></tr>`; }
+    radDone = await sb('GET', 'individuals', null,
+      `?radiation_test_date=not.is.null&deleted_at=is.null&select=label_id,serial_number,species,capture_date,radiation_test_date,radiation_result&limit=3000`);
+    radRenderDone();
+  } catch (e) { document.getElementById('rad-recent').innerHTML = `<tr><td colspan="6" style="color:var(--red);">${esc2(sbSafeMsg(e))}</td></tr>`; }
+}
+
+/* 検査済みの一覧。既定は検査日の新しい順 */
+let radUntested = [];
+let radDone = [];
+let radSortCol = 'radiation_test_date';
+let radSortAsc = false;
+function radSort(col) {
+  if (radSortCol === col) radSortAsc = !radSortAsc;
+  else { radSortCol = col; radSortAsc = col === 'serial_number'; }
+  radRenderDone();
+}
+function radRenderDone() {
+  const body = document.getElementById('rad-recent');
+  if (!body) return;
+  const data = [...radDone].sort((a, b) => {
+    let va = a[radSortCol] ?? '', vb = b[radSortCol] ?? '';
+    if (radSortCol === 'serial_number') { va = va || 0; vb = vb || 0; }
+    if (va < vb) return radSortAsc ? -1 : 1;
+    if (va > vb) return radSortAsc ? 1 : -1;
+    return (a.serial_number || 0) - (b.serial_number || 0);
+  });
+  document.querySelectorAll('[id^="radSortIcon-"]').forEach(el => el.textContent = '');
+  const ic = document.getElementById('radSortIcon-' + radSortCol);
+  if (ic) ic.textContent = radSortAsc ? '▲' : '▼';
+  const cnt = document.getElementById('rad-done-count');
+  if (cnt) cnt.textContent = `${data.length}頭`;
+  body.innerHTML = data.map(r => `<tr>
+    <td>${r.radiation_test_date || ''}</td>
+    <td style="text-align:right;">${r.serial_number ?? ''}</td>
+    <td style="font-weight:600;">${esc2(r.label_id.replace('TGC-08-', ''))}</td>
+    <td>${esc2(r.species || '')}</td>
+    <td>${r.capture_date || ''}</td>
+    <td>${esc2(r.radiation_result || '検出下限値以下')}</td>
+  </tr>`).join('') || '<tr><td colspan="6" style="color:var(--text2);">記録はまだありません</td></tr>';
 }
 document.addEventListener('DOMContentLoaded', () => {
   const el = document.getElementById('rad-scan');
