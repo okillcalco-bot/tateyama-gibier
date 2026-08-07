@@ -80,6 +80,23 @@ h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600;
 .admin-bar { background: #fdf6e3; border: 2px solid var(--gold2); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 14px; font-size: 14px; color: var(--gold); line-height: 1.8; }
 .admin-bar input[type=date], .admin-bar input[type=time] { font-family: inherit; font-size: 16px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; }
 .link-btn { background: none; border: none; color: var(--text3); font-size: 12px; text-decoration: underline; cursor: pointer; font-family: inherit; }
+/* 押し忘れの直し（本人が直せる） */
+.fix { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-top: 12px; background: var(--surface2); }
+.fix h3 { font-size: 15px; color: var(--text2); margin-bottom: 4px; }
+.fix .hint { font-size: 12.5px; color: var(--text3); margin-bottom: 10px; line-height: 1.6; }
+.fix-day { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); margin-bottom: 8px; font-size: 15px; }
+.fix-day.miss { border-color: var(--red); background: rgba(185,61,61,.06); }
+.fix-day .d { font-weight: 700; min-width: 96px; }
+.fix-day .v { color: var(--text2); }
+.fix-day .warn { color: var(--red); font-weight: 700; }
+.fix-day button { margin-left: auto; font-family: inherit; font-size: 14px; padding: 9px 16px; border-radius: 9px; border: 1px solid var(--gold2); background: var(--surface); color: var(--gold); cursor: pointer; font-weight: 600; }
+.fix-form { border: 2px solid var(--gold2); border-radius: 10px; padding: 14px; margin-top: 10px; background: #fdf6e3; }
+.fix-form label { display: block; font-size: 13.5px; color: var(--text2); margin: 10px 0 4px; }
+.fix-form input[type=time], .fix-form input[type=number], .fix-form select, .fix-form textarea {
+  font-family: inherit; font-size: 17px; padding: 10px; border: 1px solid var(--border); border-radius: 9px; background: #fff; }
+.fix-form textarea { width: 100%; font-size: 15px; }
+.fix-alert { border: 2px solid var(--red); background: rgba(185,61,61,.08); color: var(--red); border-radius: var(--radius); padding: 12px 14px; margin-top: 12px; font-size: 15px; font-weight: 700; line-height: 1.7; }
+.fix-alert .sub { display: block; font-weight: 400; font-size: 13.5px; color: var(--text2); margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -139,6 +156,9 @@ h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600;
       </div>
     </div>
 
+    <!-- 押し忘れのお知らせ（本人にだけ出す） -->
+    <div class="fix-alert" id="fix-alert" style="display:none;"></div>
+
     <div class="admin-bar" id="admin-time-box" style="display:none;margin-top:14px;">
       さかのぼり入力の時刻：出勤 <input type="time" id="admin-in"> ／ 退勤 <input type="time" id="admin-out">
     </div>
@@ -150,6 +170,41 @@ h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600;
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
       <button class="btn-back" onclick="goHome()">← 名前の選択に戻る</button>
       <button class="btn-back" id="report-only-btn" style="display:none;" onclick="saveReportOnly()">🧹 報告だけ保存する</button>
+      <button class="btn-back" id="fix-open-btn" onclick="fixToggle()">⏰ 押し忘れを直す</button>
+    </div>
+
+    <!-- 押し忘れの直し（自分の分だけ・直した記録は管理者に残る） -->
+    <div class="fix" id="fix-box" style="display:none;">
+      <h3>⏰ 押し忘れ・時刻ちがいを直す</h3>
+      <div class="hint">
+        直せるのは<strong>自分の記録の直近14日分</strong>です。押し忘れた日は「打刻なし」と赤く出ます。<br>
+        直した内容は<strong>管理者の画面に履歴として残ります</strong>（いつ・誰が・どこを・なぜ直したか）。あとで消されることはありません。
+      </div>
+      <div id="fix-list"></div>
+      <div class="fix-form" id="fix-form" style="display:none;">
+        <div style="font-size:16px;font-weight:700;color:var(--gold);" id="fix-form-title"></div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;">
+          <div><label>出勤</label><input type="time" id="fix-in"></div>
+          <div><label>退勤</label><input type="time" id="fix-out"></div>
+          <div><label>休憩（分）</label><input type="number" id="fix-break" min="0" step="5" style="width:110px;"></div>
+        </div>
+        <label>直す理由（必ず選んでください）</label>
+        <select id="fix-reason" style="min-width:240px;">
+          <option value="">選択…</option>
+          <option>出勤の押し忘れ</option>
+          <option>退勤の押し忘れ</option>
+          <option>両方の押し忘れ</option>
+          <option>時刻がちがっていた</option>
+          <option>休憩時間がちがっていた</option>
+          <option>その他</option>
+        </select>
+        <label>補足（任意・「その他」のときは書いてください）</label>
+        <textarea id="fix-note" rows="2" placeholder="例: 洗い場から直行したので押せませんでした"></textarea>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
+          <button class="big-btn btn-in" style="font-size:18px;padding:16px 10px;flex:1;" onclick="fixSave()">💾 この内容で直す</button>
+          <button class="btn-back" style="margin-top:0;" onclick="fixCancel()">やめる</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -379,10 +434,14 @@ async function select(id) {
   document.getElementById('health-note').value = '';
   document.getElementById('brk-set-default').checked = false;
   resetReport();
+  fixCancel();
+  document.getElementById('fix-box').style.display = 'none';
+  document.getElementById('fix-alert').style.display = 'none';
   // 読み込み中は両方のボタンを押せなくする（読込前の誤操作を防ぐ）
   loading = true; todayRec = null;
   renderState();
   await refreshRecord();
+  loadFixDays();
 }
 
 async function refreshRecord() {
@@ -398,6 +457,163 @@ async function refreshRecord() {
   document.getElementById('brk-default').value = def;
   loading = false;
   renderState();
+}
+
+/* ── 押し忘れの直し（本人が自分の分だけ直せる。直した履歴は管理者に残る） ── */
+const FIX_DAYS = 14;          // さかのぼって直せる日数
+let fixRows = [];             // 自分の直近の勤怠
+let fixTarget = null;         // いま直している日 { date, rec }
+
+function fixDateList() {
+  const list = [];
+  const base = new Date();
+  for (let i = 0; i < FIX_DAYS; i++) { const d = new Date(base); d.setDate(d.getDate() - i); list.push(ymd(d)); }
+  return list;
+}
+
+async function loadFixDays() {
+  if (!selected) return;
+  const box = document.getElementById('fix-list');
+  const alert = document.getElementById('fix-alert');
+  const days = fixDateList();
+  const from = days[days.length - 1];
+  try {
+    fixRows = await sb('GET', 'attendance', null,
+      `?staff_id=eq.${selected.id}&work_date=gte.${from}&select=*&order=work_date.desc`);
+  } catch (e) { fixRows = []; box.innerHTML = '<div class="hint">記録の読み込みに失敗しました。</div>'; return; }
+
+  // 打刻の抜けがある日（今日はまだ作業中なので数えない）
+  const missing = fixRows.filter(r => r.work_date !== ymd(new Date()) && (!r.clock_in || !r.clock_out));
+  if (missing.length) {
+    alert.style.display = 'block';
+    alert.innerHTML = `⚠️ 打刻が抜けている日が ${missing.length}日 あります（${missing.slice(0, 3).map(r => r.work_date.slice(5).replace('-', '/')).join('・')}${missing.length > 3 ? ' ほか' : ''}）`
+      + `<span class="sub">下の「⏰ 押し忘れを直す」から、ご自分で直せます。</span>`;
+  } else {
+    alert.style.display = 'none';
+  }
+
+  // 記録のある日だけ出す（出勤していない日を並べても選びにくいため）。
+  // まるごと押し忘れた日のために、日付を選んで新しく作る手段も最後に置く
+  const byDate = {}; fixRows.forEach(r => byDate[r.work_date] = r);
+  const rows = days.filter(d => byDate[d]).map(d => {
+    const r = byDate[d];
+    const miss = (!r.clock_in || !r.clock_out) && d !== ymd(new Date());
+    const inTxt = r.clock_in ? esc(r.clock_in) : '<span class="warn">打刻なし</span>';
+    const outTxt = r.clock_out ? esc(r.clock_out) : '<span class="warn">打刻なし</span>';
+    return `<div class="fix-day ${miss ? 'miss' : ''}">
+      <span class="d">${d.slice(5).replace('-', '/')}</span>
+      <span class="v">出勤 ${inTxt} ／ 退勤 ${outTxt} ／ 休憩 ${r.break_minutes != null ? r.break_minutes : 0}分</span>
+      <button onclick="fixOpen('${d}')">直す</button>
+    </div>`;
+  }).join('');
+
+  box.innerHTML = (rows || '<div class="hint">直近14日に記録がありません。</div>')
+    + `<div class="fix-day" style="border-style:dashed;">
+        <span class="d">別の日</span>
+        <span class="v">出勤も退勤も押し忘れた日は、日付を選んで作れます</span>
+        <button onclick="fixOpenNew()">日付を選ぶ</button>
+      </div>`;
+}
+
+function fixToggle() {
+  const box = document.getElementById('fix-box');
+  const open = box.style.display === 'none';
+  box.style.display = open ? 'block' : 'none';
+  document.getElementById('fix-open-btn').textContent = open ? '⏰ 直すのをやめる' : '⏰ 押し忘れを直す';
+  if (open) { loadFixDays(); box.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  else fixCancel();
+}
+
+function fixOpen(date) {
+  const rec = fixRows.find(r => r.work_date === date) || null;
+  fixTarget = { date: date, rec: rec };
+  const def = (selected && selected.default_break_min != null) ? selected.default_break_min : 60;
+  document.getElementById('fix-form-title').textContent = `${date} の記録を直す`;
+  document.getElementById('fix-in').value = (rec && rec.clock_in) || '';
+  document.getElementById('fix-out').value = (rec && rec.clock_out) || '';
+  document.getElementById('fix-break').value = (rec && rec.break_minutes != null) ? rec.break_minutes : def;
+  document.getElementById('fix-reason').value = '';
+  document.getElementById('fix-note').value = '';
+  const f = document.getElementById('fix-form');
+  f.style.display = 'block';
+  f.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function fixOpenNew() {
+  const days = fixDateList();
+  const input = prompt(`直したい日を入れてください（${days[days.length - 1]} 〜 ${days[0]}）\n例: ${days[1]}`, days[1]);
+  if (input === null) return;
+  const d = input.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { showToast('日付は 2026-08-05 のように入れてください'); return; }
+  if (!days.includes(d)) { showToast(`直せるのは ${days[days.length - 1]} 〜 ${days[0]} の間だけです`); return; }
+  fixOpen(d);
+}
+
+function fixCancel() {
+  fixTarget = null;
+  const f = document.getElementById('fix-form');
+  if (f) f.style.display = 'none';
+}
+
+async function fixSave() {
+  if (!fixTarget || !selected) return;
+  const inV = document.getElementById('fix-in').value || null;
+  const outV = document.getElementById('fix-out').value || null;
+  const brkV = parseInt(document.getElementById('fix-break').value);
+  const reason = document.getElementById('fix-reason').value;
+  const note = document.getElementById('fix-note').value.trim();
+
+  if (!reason) { showToast('直す理由を選んでください'); return; }
+  if (!inV && !outV) { showToast('出勤か退勤のどちらかは入れてください'); return; }
+  if (isNaN(brkV) || brkV < 0) { showToast('休憩は0以上の数字で入れてください'); return; }
+  if (inV && outV && outV <= inV) { showToast('退勤が出勤より前になっています。時刻を確認してください'); return; }
+
+  const rec = fixTarget.rec;
+  const before = { i: rec ? rec.clock_in : null, o: rec ? rec.clock_out : null, b: rec ? rec.break_minutes : null };
+  const same = before.i === inV && before.o === outV && (before.b == null ? null : before.b) === brkV;
+  if (same) { showToast('内容が変わっていません'); return; }
+
+  const fmt = v => v || '（なし）';
+  if (!confirm(`${fixTarget.date} の記録を直します。よろしいですか？\n\n`
+    + `出勤 ${fmt(before.i)} → ${fmt(inV)}\n`
+    + `退勤 ${fmt(before.o)} → ${fmt(outV)}\n`
+    + `休憩 ${before.b == null ? '（なし）' : before.b + '分'} → ${brkV}分\n\n`
+    + `理由: ${reason}\n\n※直した記録は管理者の画面に残ります。`)) return;
+
+  const btn = document.querySelector('#fix-form .btn-in');
+  if (btn) { btn.disabled = true; btn.textContent = '保存中…'; }
+  try {
+    const payload = {
+      staff_id: selected.id, staff_name: selected.name, work_date: fixTarget.date,
+      clock_in: inV, clock_out: outV, break_minutes: brkV,
+      updated_at: new Date().toISOString(),
+    };
+    let attId = rec ? rec.id : null;
+    if (rec) {
+      await sb('PATCH', 'attendance', payload, `?id=eq.${rec.id}`);
+    } else {
+      const created = await sb('POST', 'attendance', payload);
+      attId = (created && created[0] && created[0].id) || null;
+    }
+    // 直した履歴を残す（本人が直した分。管理者はこれを見る）
+    await sb('POST', 'attendance_edits', {
+      attendance_id: attId, staff_id: selected.id, staff_name: selected.name, work_date: fixTarget.date,
+      before_in: before.i, before_out: before.o, before_break: before.b,
+      after_in: inV, after_out: outV, after_break: brkV,
+      reason: note ? `${reason}／${note}` : reason,
+      edited_by: '本人', editor_name: selected.name,
+    });
+    beep(true);
+    showToast(`${fixTarget.date} の記録を直しました`);
+    fixCancel();
+    await refreshRecord();
+    await loadFixDays();
+  } catch (e) {
+    beep(false);
+    showToast('保存に失敗しました。通信を確認してもう一度お試しください。');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 この内容で直す'; }
+  }
 }
 
 async function saveDefaultBreak() {

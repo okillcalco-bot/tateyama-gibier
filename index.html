@@ -1242,6 +1242,37 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
     </div>
     <div class="section">
+      <div class="section-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span>⚠️ 打刻もれ（未処理）</span>
+        <span id="att-miss-count" class="badge badge-red" style="display:none;"></span>
+        <button class="btn btn-sm" style="margin-left:auto;font-weight:normal;" onclick="loadAttMissing()">🔄 更新</button>
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;">
+        出勤か退勤のどちらかが入っていない日です。本人が打刻ページの「⏰ 押し忘れを直す」から直せます。急ぐときは上の表で管理者が直してください。
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>日付</th><th>氏名</th><th>出勤</th><th>退勤</th><th>操作</th></tr></thead>
+          <tbody id="att-miss-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span>✏️ 打刻の修正履歴</span>
+        <input class="form-input" id="att-log-month" type="month" style="max-width:170px;margin-left:auto;" onchange="loadAttEditLog()" />
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;">
+        本人が直した分・管理者が直した分の両方が残ります。この履歴は消せません。
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>直した日時</th><th>対象日</th><th>氏名</th><th>直した人</th><th>出勤</th><th>退勤</th><th>休憩</th><th>理由</th></tr></thead>
+          <tbody id="att-log-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="section">
       <div class="section-title">給与明細</div>
       <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:10px;flex-wrap:wrap;">
         <div class="form-group"><label>スタッフ</label><select class="form-input" id="pay-staff" style="min-width:180px;"></select></div>
@@ -1863,6 +1894,11 @@ function playFeedbackSound(ok) {
 function fmt(d) {
   if (!d) return '-';
   return new Date(d).toLocaleDateString('ja-JP');
+}
+
+function fmtDateTime(d) {
+  if (!d) return '-';
+  return new Date(d).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 /* ── コアDB保護: 破壊的操作は管理者コードが必要 ──
@@ -5732,6 +5768,8 @@ async function loadStaffPanel() {
     if (!document.getElementById('pay-month').value) document.getElementById('pay-month').value = new Date().toISOString().slice(0, 7);
     if (!document.getElementById('att-date').value) document.getElementById('att-date').value = new Date().toISOString().slice(0, 10);
     loadAttendance();
+    loadAttMissing();
+    loadAttEditLog();
   } catch (err) {
     body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red);">${esc2(sbSafeMsg(err))}</td></tr>`;
   }
@@ -5808,13 +5846,106 @@ async function attSave(staffId, staffName) {
     break_minutes: parseInt(row.querySelector('.att-break').value) || 0,
     note: row.querySelector('.att-note').value.trim() || null,
   };
+  const existing = attCache.find(x => String(x.staff_id) === String(staffId));
+  // 中身が変わったときだけ修正履歴に残す（保存を押しただけの空打ちは記録しない）
+  const before = {
+    i: existing ? existing.clock_in : null,
+    o: existing ? existing.clock_out : null,
+    b: existing ? existing.break_minutes : null,
+  };
+  const changed = before.i !== payload.clock_in || before.o !== payload.clock_out
+    || (before.b == null ? null : before.b) !== payload.break_minutes;
   try {
-    const existing = attCache.find(x => String(x.staff_id) === String(staffId));
+    let attId = existing ? existing.id : null;
     if (existing) await sb('PATCH', 'attendance', payload, '?id=eq.' + existing.id);
-    else await sb('POST', 'attendance', payload);
+    else {
+      const created = await sb('POST', 'attendance', payload);
+      attId = (created && created[0] && created[0].id) || null;
+    }
+    if (changed) {
+      await sb('POST', 'attendance_edits', {
+        attendance_id: attId, staff_id: staffId, staff_name: staffName, work_date: date,
+        before_in: before.i, before_out: before.o, before_break: before.b,
+        after_in: payload.clock_in, after_out: payload.clock_out, after_break: payload.break_minutes,
+        reason: payload.note || '管理者による修正',
+        edited_by: '管理者', editor_name: '管理者',
+      }).catch(() => {});   // 履歴が残せなくても勤怠の保存は成立させる
+    }
     toast(`${staffName} ${date} の勤怠を保存しました`);
     loadAttendance();
+    loadAttMissing();
+    loadAttEditLog();
   } catch (err) { toast('勤怠の保存に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+/* ── 打刻もれ（出勤か退勤が抜けている日）──
+   本人が打刻ページから直せるが、残っているものを管理者が把握できるようにする */
+async function loadAttMissing() {
+  const body = document.getElementById('att-miss-body');
+  const cnt = document.getElementById('att-miss-count');
+  if (!body) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const from = new Date(); from.setDate(from.getDate() - 60);
+  try {
+    const rows = await sb('GET', 'attendance', null,
+      `?work_date=gte.${from.toISOString().slice(0, 10)}&select=*&order=work_date.desc&limit=1000`);
+    // 今日はまだ勤務中なので「もれ」に数えない
+    const miss = rows.filter(r => r.work_date !== today && (!r.clock_in || !r.clock_out));
+    if (cnt) {
+      cnt.style.display = miss.length ? 'inline-block' : 'none';
+      cnt.textContent = `${miss.length}件`;
+    }
+    body.innerHTML = miss.map(r => `<tr>
+      <td>${fmt(r.work_date)}</td>
+      <td style="font-weight:600;">${esc2(r.staff_name || '-')}</td>
+      <td${r.clock_in ? '' : ' style="color:var(--red);font-weight:700;"'}>${r.clock_in || '打刻なし'}</td>
+      <td${r.clock_out ? '' : ' style="color:var(--red);font-weight:700;"'}>${r.clock_out || '打刻なし'}</td>
+      <td><button class="btn btn-sm" onclick="attJumpTo('${r.work_date}')">この日を開く</button></td>
+    </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text3);">打刻もれはありません</td></tr>';
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="5" style="color:var(--red);">読み込みエラー: ${esc2(sbSafeMsg(e))}</td></tr>`;
+  }
+}
+
+function attJumpTo(date) {
+  const el = document.getElementById('att-date');
+  if (!el) return;
+  el.value = date;
+  loadAttendance();
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+/* ── 打刻の修正履歴（本人・管理者の両方。消せない記録） ── */
+async function loadAttEditLog() {
+  const body = document.getElementById('att-log-body');
+  const mEl = document.getElementById('att-log-month');
+  if (!body || !mEl) return;
+  if (!mEl.value) mEl.value = new Date().toISOString().slice(0, 7);
+  const m = mEl.value;
+  const d1 = m + '-01';
+  const d2 = new Date(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0).toISOString().slice(0, 10);
+  try {
+    const rows = await sb('GET', 'attendance_edits', null,
+      `?work_date=gte.${d1}&work_date=lte.${d2}&select=*&order=created_at.desc&limit=1000`);
+    const cell = (b, a, unit) => {
+      const bs = b == null || b === '' ? '（なし）' : b + (unit || '');
+      const as = a == null || a === '' ? '（なし）' : a + (unit || '');
+      if (bs === as) return `<span style="color:var(--text3);">${esc2(as)}</span>`;
+      return `<span style="color:var(--text3);">${esc2(bs)}</span> → <strong>${esc2(as)}</strong>`;
+    };
+    body.innerHTML = rows.map(r => `<tr>
+      <td style="white-space:nowrap;">${fmtDateTime(r.created_at)}</td>
+      <td style="white-space:nowrap;">${fmt(r.work_date)}</td>
+      <td style="font-weight:600;">${esc2(r.staff_name || '-')}</td>
+      <td><span class="badge ${r.edited_by === '管理者' ? 'badge-gold' : ''}">${esc2(r.edited_by || '-')}</span></td>
+      <td style="white-space:nowrap;">${cell(r.before_in, r.after_in)}</td>
+      <td style="white-space:nowrap;">${cell(r.before_out, r.after_out)}</td>
+      <td style="white-space:nowrap;">${cell(r.before_break, r.after_break, '分')}</td>
+      <td>${esc2(r.reason || '-')}</td>
+    </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text3);">この月の修正はありません</td></tr>';
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="8" style="color:var(--red);">読み込みエラー: ${esc2(sbSafeMsg(e))}</td></tr>`;
+  }
 }
 
 /* ── 給与明細 ── */
@@ -7895,7 +8026,9 @@ const MANUALS = [
       { h: '自分の名前を押す', d: '打刻用スマホは置きっぱなしでOK。自動で起動します。' },
       { h: '体調を選ぶ', d: '「異常なし」／「異常あり」。あれば内容も入れます。' },
       { h: '「出勤」／「退勤」を押す', d: '出勤中・退勤済みが表示されます。' },
-    ], caution: '体調に異常があるときは必ず記録し、責任者に伝えてください（食品衛生）。' },
+      { h: '押し忘れたら自分で直す', d: '名前を押すと、抜けている日が赤で出ます。「⏰ 押し忘れを直す」から直近14日分を自分で直せます。理由の選択が必要です。' },
+      { h: '直した記録は残る', d: 'いつ・誰が・どこを・なぜ直したかが「打刻の修正履歴」に残ります。管理者はスタッフ管理の画面で確認できます。' },
+    ], caution: '体調に異常があるときは必ず記録し、責任者に伝えてください（食品衛生）。押し忘れはその日のうちに直すのがいちばん正確です。' },
   { id: 'cityreport', icon: '🏛', title: '⑩ 市役所提出（月次業務報告書）', who: '責任者', when: '毎月', where: '業務トップ →「書類・帳票」→「市役所提出」',
     steps: [
       { h: '対象月を選ぶ', d: '先に台帳スプレッドシートを最新に同期しておきます。' },
