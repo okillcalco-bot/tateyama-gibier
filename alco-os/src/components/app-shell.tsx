@@ -26,6 +26,7 @@ const NAV_ITEMS = [
   { href: "/hr", label: "勤怠・シフト", icon: "🕒" },
   { href: "/orders", label: "受注", icon: "📦" },
   { href: "/billing", label: "帳票センター", icon: "🧾" },
+  { href: "/billing/customers", label: "顧客の取引履歴", icon: "👥" },
   { href: "/ledger", label: "経理・伝票", icon: "💰" },
   { href: "/advisor", label: "士業相談", icon: "⚖️" },
   { href: "/gibier", label: "ジビエ", icon: "🐗" },
