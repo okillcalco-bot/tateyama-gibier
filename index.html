@@ -7764,8 +7764,16 @@ async function cityReportFiscal() {
 /* ───────── 放射能検査（検査日=判明日をまとめて記録。市役所提出台帳用） ───────── */
 let radPending = [];       // [{label_id, species, capture_date}]
 let radResult = '検出下限値以下';
+/* 全角で入力されても受け付ける。日本語入力のままだと「Ｍ１０６」のように
+   全角になり、そのままでは番号として読めず「個体が見つかりません」になるため */
+function toHankakuLabel(s) {
+  return String(s == null ? '' : s)
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/[－ー―‐‑–—−]/g, '-')
+    .replace(/[\s　]+/g, '');
+}
 function radNormLabel(s) {
-  let v = String(s || '').trim().toUpperCase().replace(/\s+/g, '');
+  let v = toHankakuLabel(s).toUpperCase();
   if (!v) return '';
   // T176 / M077 / 176 → TGC-08-Txxx。数字だけならTと解釈しない（曖昧なので）
   const m = v.match(/^(?:TGC-?0?8-?)?([TM])-?0*(\d{1,3})$/);
@@ -7833,7 +7841,7 @@ async function loadRadiation() {
   // 未検査（イノシシ・受入済み・検査日null）
   try {
     const un = await sb('GET', 'individuals', null,
-      `?species=eq.イノシシ&radiation_test_date=is.null&intake_status=not.eq.搬入待ち&label_id=not.like.仮-*&select=label_id,capture_date&order=capture_date.desc&limit=60`);
+      `?species=eq.イノシシ&radiation_test_date=is.null&or=(intake_status.is.null,intake_status.neq.搬入待ち)&label_id=not.like.仮-*&select=label_id,capture_date&order=capture_date.desc&limit=60`);
     const box = document.getElementById('rad-untested');
     box.innerHTML = un.length ? un.map(r =>
       `<button class="btn btn-sm" onclick="radPendingAdd('${r.label_id}')">${esc2(r.label_id.replace('TGC-08-', ''))}<span style="color:var(--text2);font-size:11px;margin-left:4px;">${r.capture_date ? r.capture_date.slice(5) : ''}</span></button>`
@@ -8708,7 +8716,7 @@ async function refreshNavBadges() {
   // 放射能検査 未実施（イノシシ・受入済み・検査日null）
   try {
     const un = await sb('GET', 'individuals', null,
-      '?species=eq.イノシシ&radiation_test_date=is.null&intake_status=not.eq.搬入待ち&label_id=not.like.仮-*&select=label_id');
+      '?species=eq.イノシシ&radiation_test_date=is.null&or=(intake_status.is.null,intake_status.neq.搬入待ち)&label_id=not.like.仮-*&select=label_id');
     setBadge('nav-badge-radiation', un.length, true);
   } catch (e) {}
 }
