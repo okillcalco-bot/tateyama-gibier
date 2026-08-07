@@ -1346,7 +1346,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <input class="form-input" id="rad-copy-month" type="month" style="max-width:160px;">
           <button class="btn" onclick="radCopyForDaicho()">📋 台帳転記用にコピー</button>
-          <button class="btn btn-primary" onclick="radGenerateReport()">🖨 検査結果報告書</button>
+          <button class="btn btn-primary" onclick="radGenerateReport()">🖨 搬入・処理管理台帳（市役所提出）</button>
         </div>
       </div>
       <div style="overflow-x:auto;">
@@ -1354,6 +1354,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <thead><tr><th>検査日</th><th>個体番号</th><th>種別</th><th>捕獲日</th><th>結果</th></tr></thead>
           <tbody id="rad-recent"></tbody>
         </table>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.7;">
+        ※「搬入・処理管理台帳」は<strong>選んだ月に検査した個体</strong>を通し番号順に、1枚3頭で打ち出します。
+        確認者印は「沖」で入ります。ファイル名は<strong>開始の個体番号〜終了の個体番号</strong>になります。
       </div>
     </div>
   </div>
@@ -7867,7 +7871,9 @@ async function radCopyForDaicho() {
   } catch (e) { toast('コピーに失敗しました: ' + sbSafeMsg(e), 'error'); }
 }
 
-// 市役所提出用「放射性物質検査結果」報告書を生成（1枚3個体・台帳の数字シートと同形式）
+/* 市役所提出用「イノシシの搬入・処理管理台帳」を生成（1枚3個体・台帳の個体別シートと同じ様式）
+   月を選ぶと、その月に検査した個体を通し番号順に並べて打ち出す。
+   ファイル名は 開始の個体番号〜終了の個体番号 */
 async function radGenerateReport() {
   const month = document.getElementById('rad-copy-month').value;
   if (!month) { toast('月を選んでください', 'error'); return; }
@@ -7875,65 +7881,123 @@ async function radGenerateReport() {
   try {
     rows = await sb('GET', 'individuals', null,
       `?radiation_test_date=gte.${month}-01&radiation_test_date=lt.${nextMonthStr(month)}&deleted_at=is.null` +
-      `&select=label_id,serial_number,species,capture_date,capture_city,capture_area,hunter_name,sex,weight_total,radiation_test_date,radiation_result_date,radiation_result` +
+      `&select=label_id,serial_number,species,capture_date,capture_time,capture_city,capture_area,hunter_name,` +
+      `capture_method,finishing_method,bleed_time,sex,weight_total,receive_time,process_time,recorder,` +
+      `radiation_test_date,radiation_result_date,radiation_result` +
       `&order=serial_number.asc.nullslast,label_id.asc`);
   } catch (e) { toast('取得に失敗しました: ' + sbSafeMsg(e), 'error'); return; }
   if (!rows.length) { toast('その月の検査記録はありません', 'error'); return; }
 
   const esc = s => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-  const jdate = d => { if (!d) return ''; const [y, m, dd] = String(d).split('-'); return y ? `${y}年${+m}月${+dd}日` : d; };
-  const cell = (label, vals, getter) => `<tr><th>${label}</th>${vals.map(v => `<td>${esc(getter(v))}</td>`).join('')}</tr>`;
+  // 令和の年月日（2026年 → 令和8年）
+  const jwa = d => { if (!d) return ''; const [y, m, dd] = String(d).split('-'); return y ? `令和${(+y) - 2018}年${+m}月${+dd}日` : ''; };
+  const seireki = d => { if (!d) return ''; const [y, m, dd] = String(d).split('-'); return y ? `${y}年${+m}月${+dd}日` : ''; };
+  // 「08:05」→「午前8時5分」。pad=true なら分を2桁（捕獲日時は台帳が2桁のため）
+  const jtime = (t, pad) => {
+    const m = /^(\d{1,2}):(\d{2})/.exec(String(t || '').trim());
+    if (!m) return '';
+    const h = +m[1], mi = +m[2];
+    const ampm = h < 12 ? '午前' : '午後';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${ampm}${h12}時${pad ? String(mi).padStart(2, '0') : mi}分`;
+  };
+  // 台帳の言い回しに合わせる（箱罠→檻・くくり罠→括り）
+  const METHOD = { '箱罠': '檻', 'くくり罠': '括り', '囲い罠': '囲い' };
+  const stamp = '<span class="stamp">沖</span>';
+  // 検査結果は通常「検出下限値以下」。その場合は台帳と同じく丸で囲う
+  const csCell = (r) => {
+    if (!r) return '<td></td>';
+    const v = (r.radiation_result || '検出下限値以下').trim();
+    const below = !v || v === '検出下限値以下' || v === 'なし';
+    const num = below ? '' : esc(v.replace(/Bq\/kg/i, '').trim());
+    return `<td class="cs">
+      <div>・${below ? '<span class="circled">検出下限値以下</span>' : '検出下限値以下'}</div>
+      <div>・<span class="csnum">${num}</span> Bq/kg</div></td>`;
+  };
+  const row = (label, g, getter, cls) =>
+    `<tr><th>${label}</th>${g.map(r => `<td class="${cls || ''}">${r ? esc(getter(r)) : ''}</td>`).join('')}</tr>`;
+  // 検査の表は「検査結果」の縦見出しがあるぶん列が1つ多い。
+  // 列数がそろっていないと崩れるので、見出しだけの行は colspan で合わせる
+  const row2 = (label, g, getter) =>
+    `<tr><th colspan="2">${label}</th>${g.map(r => `<td>${r ? esc(getter(r)) : ''}</td>`).join('')}</tr>`;
 
   const sheets = [];
-  const [yy, mm] = month.split('-');
   for (let i = 0; i < rows.length; i += 3) {
     const g = rows.slice(i, i + 3);
     while (g.length < 3) g.push(null); // 3列そろえる（空欄）
-    const num = Math.floor(i / 3) + 1;
-    const cs = (r) => r ? (r.radiation_result || '検出下限値以下') : '';
-    const sheet = `
-      <div class="rad-sheet">
-        <div class="rad-head">
-          <div class="rad-title">野生鳥獣肉　放射性物質検査結果</div>
-          <div class="rad-sub">館山ジビエセンター（合同会社アルコ）　令和${(+yy) - 2018}年${+mm}月分　No.${num}</div>
-        </div>
-        <table class="rad-table">
-          <tr><th style="width:150px">個体管理番号</th>${g.map(r => `<td class="rad-id">${esc(r ? r.label_id : '')}</td>`).join('')}</tr>
-          ${cell('獣種', g, r => r ? r.species : '')}
-          ${cell('捕獲年月日', g, r => r ? jdate(r.capture_date) : '')}
-          ${cell('捕獲場所', g, r => r ? [r.capture_city, r.capture_area].filter(Boolean).join(' ') : '')}
-          ${cell('捕獲者', g, r => r ? r.hunter_name : '')}
-          ${cell('性別 / 体重', g, r => r ? [r.sex, r.weight_total ? r.weight_total + 'kg' : ''].filter(Boolean).join(' / ') : '')}
-          <tr class="rad-sep"><th>検査日</th>${g.map(r => `<td>${esc(r ? jdate(r.radiation_test_date) : '')}</td>`).join('')}</tr>
-          ${cell('検査機関', g, r => r ? '館山市' : '')}
-          ${cell('結果判明日', g, r => r ? jdate(r.radiation_result_date || r.radiation_test_date) : '')}
-          ${cell('放射性セシウム134 (Bq/kg)', g, cs)}
-          ${cell('放射性セシウム137 (Bq/kg)', g, cs)}
-          ${cell('合計 (Bq/kg)', g, cs)}
+    sheets.push(`
+      <div class="sheet">
+        <div class="ttl">イノシシの搬入・処理管理台帳</div>
+        <div class="fac">施設名：館山ジビエセンター</div>
+        <table class="t t1">
+          <tr><th>個体管理番号</th>${g.map(r => `<td class="id">${r ? esc(r.label_id) : ''}</td>`).join('')}</tr>
+          <tr><th>捕獲日時</th>${g.map(r => `<td class="dt">${r ? `${esc(jwa(r.capture_date))}<br>${esc(jtime(r.capture_time, true))}` : ''}</td>`).join('')}</tr>
+          ${row('捕獲方法', g, r => METHOD[r.capture_method] || r.capture_method || '')}
+          ${row('捕獲場所', g, r => [r.capture_city, r.capture_area].filter(Boolean).join(''), 'b')}
+          ${row('捕獲者', g, r => r.hunter_name || '', 'b')}
+          ${row('止め刺し方法', g, r => r.finishing_method || '', 'b')}
+          ${row('放血時刻', g, r => jtime(r.bleed_time), 'b')}
+          ${row('放血場所', g, r => r.capture_area || '', 'b sm')}
+          ${row('性別', g, r => r.sex || '', 'b')}
+          ${row('体重', g, r => r.weight_total ? `${r.weight_total}kg` : '', 'r')}
+          ${row('受入時刻', g, r => jtime(r.receive_time), 'b')}
+          ${row('処理日時', g, r => jtime(r.process_time), 'b tall')}
+          ${row('記録者', g, r => r.recorder || '沖')}
+          <tr><th>確認者印</th>${g.map(r => `<td class="st">${r ? stamp : ''}</td>`).join('')}</tr>
         </table>
-        <div class="rad-note">※ 基準値は100 Bq/kg（一般食品）。「検出下限値以下」は基準値を下回ることを示す。</div>
-      </div>`;
-    sheets.push(sheet);
+        <table class="t t2">
+          ${row2('検査日', g, r => seireki(r.radiation_test_date))}
+          ${row2('検査機関', g, () => '館山市')}
+          ${row2('結果判明日', g, r => seireki(r.radiation_result_date || r.radiation_test_date))}
+          <tr class="csrow"><th class="vt" rowspan="3">検<br>査<br>結<br>果</th><th class="sub">セシウム134</th>${g.map(csCell).join('')}</tr>
+          <tr class="csrow"><th class="sub">セシウム137</th>${g.map(csCell).join('')}</tr>
+          <tr class="csrow"><th class="sub">セシウム合計</th>${g.map(csCell).join('')}</tr>
+          <tr><th colspan="2">確認者印</th>${g.map(r => `<td class="st">${r ? stamp : ''}</td>`).join('')}</tr>
+        </table>
+        <table class="t t3">
+          <tr><th>廃棄日</th><td></td><td></td><td></td></tr>
+          <tr><th>廃棄方法</th><td></td><td></td><td></td></tr>
+          <tr><th>確認者印</th><td></td><td></td><td></td></tr>
+          <tr><th>市町村 確認印</th><td></td><td></td><td></td></tr>
+        </table>
+      </div>`);
   }
 
   const css = `
-    @page{size:A4 portrait;margin:14mm;}
+    @page{size:A4 portrait;margin:12mm 14mm;}
     *{box-sizing:border-box;margin:0;padding:0;}
-    body{font-family:'Noto Sans JP',sans-serif;color:#000;}
-    .rad-sheet{page-break-after:always;}
-    .rad-sheet:last-child{page-break-after:auto;}
-    .rad-head{text-align:center;margin-bottom:10px;}
-    .rad-title{font-size:18pt;font-weight:700;letter-spacing:2px;}
-    .rad-sub{font-size:10.5pt;margin-top:6px;color:#222;}
-    .rad-table{width:100%;border-collapse:collapse;table-layout:fixed;margin-top:8px;}
-    .rad-table th,.rad-table td{border:1px solid #000;padding:7px 8px;font-size:10.5pt;vertical-align:middle;}
-    .rad-table th{background:#eee;text-align:left;font-weight:600;}
-    .rad-table td{text-align:center;}
-    .rad-id{font-weight:700;font-size:12pt;}
-    .rad-sep th,.rad-sep td{border-top:2px solid #000;}
-    .rad-note{font-size:9pt;color:#333;margin-top:8px;}`;
+    body{font-family:'Noto Sans JP','Yu Gothic','Hiragino Kaku Gothic ProN',sans-serif;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .sheet{page-break-after:always;}
+    .sheet:last-child{page-break-after:auto;}
+    .ttl{text-align:center;font-size:15pt;font-weight:700;margin-bottom:10px;}
+    .fac{text-align:right;font-size:9.5pt;margin-bottom:5px;}
+    .t{width:100%;border-collapse:collapse;table-layout:fixed;}
+    .t th,.t td{border:1px solid #000;font-size:9.5pt;padding:3px 6px;text-align:center;vertical-align:middle;}
+    .t th{font-weight:400;}
+    .t1 th,.t2 th,.t3 th{width:22%;}
+    .t1 td,.t3 td{width:26%;height:26px;}
+    .t td.b{font-weight:700;}
+    .t td.sm{font-size:8.5pt;}
+    .t td.r{text-align:right;}
+    .t td.id{font-size:10.5pt;letter-spacing:.4px;}
+    .t td.dt{text-align:right;line-height:1.5;height:42px;}
+    .t td.tall{height:40px;}
+    .t2{margin-top:9px;}
+    .t2 th.vt{width:5%;line-height:1.2;font-size:8.5pt;}
+    .t2 th.sub{width:17%;text-align:center;font-size:9pt;white-space:nowrap;}
+    .t2 td{width:26%;}
+    .t3{margin-top:9px;}
+    tr.csrow th,tr.csrow td{height:38px;}
+    td.cs{text-align:left;line-height:1.6;padding:3px 4px;font-size:8.5pt;}
+    .circled{display:inline-block;padding:0 4px;border:1.2px solid #000;border-radius:50%;}
+    .csnum{display:inline-block;min-width:44px;}
+    td.st{height:34px;}
+    .stamp{display:inline-block;width:30px;height:30px;line-height:27px;border:1.6px solid #c00;border-radius:50%;
+      color:#c00;font-size:14px;font-weight:700;text-align:center;}`;
 
-  const html = '<!doctype html><html><head><meta charset="utf-8"><title>放射性物質検査結果報告書</title><style>' + css +
+  // ファイル名は 開始の個体番号〜終了の個体番号（印刷ダイアログの既定名になる）
+  const name = `イノシシの搬入・処理管理台帳 ${rows[0].label_id}〜${rows[rows.length - 1].label_id}`;
+  const html = '<!doctype html><html><head><meta charset="utf-8"><title>' + esc(name) + '</title><style>' + css +
     '</style></head><body>' + sheets.join('') +
     '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.focus();window.print();},400);};</scr' + 'ipt></body></html>';
   const w = window.open('', '_blank');
@@ -7943,12 +8007,14 @@ async function radGenerateReport() {
     const a = document.createElement('a'); a.href = url; a.target = '_blank';
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
-  toast(`${rows.length}頭ぶん（${Math.ceil(rows.length / 3)}枚）の検査結果報告書を作成しました`);
+  toast(`${rows.length}頭ぶん（${Math.ceil(rows.length / 3)}枚）を作成しました：${rows[0].label_id}〜${rows[rows.length - 1].label_id}`);
 }
 
+// 翌月の1日を返す。「2026-09」のような日なしの文字列は日付として読めず
+// 問い合わせがエラーになるため、必ず YYYY-MM-DD の形にする
 function nextMonthStr(month) {
   const [y, m] = month.split('-').map(Number);
-  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+  return m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
 }
 
 /* ───────── 業務マニュアル（画面参照 + A4縦印刷） ───────── */
