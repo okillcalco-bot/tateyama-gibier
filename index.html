@@ -7964,10 +7964,11 @@ async function radGenerateReport() {
   }
 
   const css = `
-    @page{size:A4 portrait;margin:12mm 14mm;}
+    /* 台帳の見本に合わせ、左右にしっかり余白をとる（幅いっぱいにしない） */
+    @page{size:A4 portrait;margin:14mm 20mm;}
     *{box-sizing:border-box;margin:0;padding:0;}
     body{font-family:'Noto Sans JP','Yu Gothic','Hiragino Kaku Gothic ProN',sans-serif;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    .sheet{page-break-after:always;}
+    .sheet{page-break-after:always;max-width:168mm;margin:0 auto;}
     .sheet:last-child{page-break-after:auto;}
     .ttl{text-align:center;font-size:15pt;font-weight:700;margin-bottom:10px;}
     .fac{text-align:right;font-size:9.5pt;margin-bottom:5px;}
@@ -7984,7 +7985,7 @@ async function radGenerateReport() {
     .t td.tall{height:40px;}
     .t2{margin-top:9px;}
     .t2 th.vt{width:5%;line-height:1.2;font-size:8.5pt;}
-    .t2 th.sub{width:17%;text-align:center;font-size:9pt;white-space:nowrap;}
+    .t2 th.sub{width:17%;text-align:center;font-size:8pt;padding:3px 2px;}
     .t2 td{width:26%;}
     .t3{margin-top:9px;}
     tr.csrow th,tr.csrow td{height:38px;}
