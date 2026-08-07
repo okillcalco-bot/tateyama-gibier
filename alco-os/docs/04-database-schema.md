@@ -47,6 +47,8 @@
 
 | 0029_crosspost.sql | FB投稿 横展開（Phase 1）: social_sources / social_source_assets / social_channels / social_style_profiles / social_channel_drafts / social_publications。**制限が要るテーブルは alco_add_member_policy を使わず用途別ポリシー**（RLSはOR条件のため）、承認をまとめて行う `alco_crosspost_approve()`（**唯一の本番承認経路**。generated_draftsへの承認証跡・業務反映・監査ログを同一トランザクションで記録）、投稿済み登録をまとめて行う `alco_crosspost_record_publication()`（同じく唯一の本番経路）、承認INSERTの抜け道を塞ぐトリガー、承認列と確認理由の改ざん防止（approval_draft_id の付け替え禁止・review_reasons は追記のみ）、**承認済みからの引き戻し（approved→editing / published→draft）も owner/manager 限定**、**approved / published への遷移と approved_body・approval_draft_id の設定は所定のRPCの中だけ**（トランザクションローカルの `app.crosspost_*_rpc` で判定。直接UPDATEでの承認は owner/manager でも不可）、差し戻し・却下では承認関連列をすべてNULLへ、識別列（organization_id / social_source_id / channel_key / created_by）はINSERT後 変更不可、下書きの組織・元投稿・媒体の一致検証、媒体8件とスタイルv1のseed |
 
+| 0030_expenses.sql | 経費（レシート）: expenses（**日付・金額・取引先を列として持ち検索できる** = 電子帳簿保存法スキャナ保存の検索要件。物理削除しない = deleted_at のみ。ai_suggestion にAIの読み取り候補を確定値と分けて保持、receipt_file_id で写真を参照、corrected でAIの精度を追跡） |
+
 **適用状況**: 0001〜0020 は本番 Supabase プロジェクト（tateyama-gibier /
 clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（0001〜0011: 2026-07-05、
 0012〜0020: 2026-07-06〜15）。
@@ -54,6 +56,7 @@ clpdyrehdgzgiidbfucj。既存ジビエ基幹と共有）に適用済み（0001�
 0027 も本番適用済み（適用名 `alco_os_0027_capture_form_share`）。
 **0029 は未適用**（FB投稿 横展開 Phase 1）。
 **0028 は未適用**（搬入連絡のスタッフグループ通知）。
+**0030 は未適用**（経費・レシート）。
 なお 0027 は当初、関数定義が `capture_place` の列追加より前にあり素のPostgresでは
 適用に失敗する順序だった。**本番へは順序を直したSQLで適用済み**で、
 リポジトリのファイルも同じ順序に修正した（内容は同一。適用済みDBへの影響なし）。

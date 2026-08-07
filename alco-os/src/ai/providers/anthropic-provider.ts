@@ -17,7 +17,25 @@ export class AnthropicProvider implements AiProvider {
       model: req.model,
       max_tokens: req.maxTokens ?? 4096,
       system: req.system,
-      messages: [{ role: "user", content: req.user }],
+      // 画像があれば「画像 → 指示文」の順で渡す（Anthropicの推奨順）
+      messages: [
+        {
+          role: "user",
+          content: req.images?.length
+            ? [
+                ...req.images.map((img) => ({
+                  type: "image" as const,
+                  source: {
+                    type: "base64" as const,
+                    media_type: img.mediaType,
+                    data: img.base64,
+                  },
+                })),
+                { type: "text" as const, text: req.user },
+              ]
+            : req.user,
+        },
+      ],
     });
 
     const text = response.content

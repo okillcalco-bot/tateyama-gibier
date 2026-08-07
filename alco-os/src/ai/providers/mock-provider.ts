@@ -252,6 +252,22 @@ const DEFAULT_RESPONSES: Record<string, string> = {
     urgency_reason: "（モック）次回の申告時期までに整理すれば足りる想定。",
     missing_information: ["体験プランの内容詳細"],
   }),
+  parse_receipt: JSON.stringify({
+    expense_date: "2026-08-05",
+    amount: 3480,
+    vendor: "（モック）カインズ館山店",
+    category: "消耗品費",
+    payment_method: "現金",
+    tax_rate: 10,
+    tax_amount: 316,
+    invoice_number: "",
+    items: [
+      { name: "軍手 10双", amount: 980 },
+      { name: "ブルーシート", amount: 2500 },
+    ],
+    uncertain_fields: ["invoice_number"],
+    note: "（モック出力）",
+  }),
   summarize_meeting: JSON.stringify({
     title: "打ち合わせ議事録（モック）",
     attendees: [],
