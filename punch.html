@@ -80,6 +80,22 @@ h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600;
 .admin-bar { background: #fdf6e3; border: 2px solid var(--gold2); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 14px; font-size: 14px; color: var(--gold); line-height: 1.8; }
 .admin-bar input[type=date], .admin-bar input[type=time] { font-family: inherit; font-size: 16px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; }
 .link-btn { background: none; border: none; color: var(--text3); font-size: 12px; text-decoration: underline; cursor: pointer; font-family: inherit; }
+/* 施設チェック表（市役所提出用・監査様式） */
+.fc-cycle { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); margin-bottom: 10px; overflow: hidden; }
+.fc-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 12px 14px; background: var(--surface2); cursor: pointer; font-size: 15px; font-weight: 700; }
+.fc-head .fc-sub { font-size: 12px; font-weight: 400; color: var(--text3); }
+.fc-room { padding: 8px 14px 4px; font-size: 13px; font-weight: 700; color: var(--gold); }
+.fc-item { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-top: 1px solid var(--border); cursor: pointer; }
+.fc-item.ng { background: rgba(185,61,61,.07); }
+.fc-item .mark { font-size: 18px; width: 22px; text-align: center; flex: none; }
+.fc-txt { flex: 1; font-size: 14.5px; line-height: 1.4; }
+.fc-hint { display: block; font-size: 11.5px; color: var(--text3); font-weight: 400; }
+.fc-temp { width: 66px; font-family: inherit; font-size: 15px; padding: 6px; border: 1px solid var(--border); border-radius: 8px; flex: none; }
+.fc-flag { font-size: 12px; font-weight: 700; color: var(--green); flex: none; min-width: 40px; text-align: right; }
+.fc-item.ng .fc-flag { color: var(--red); }
+.fc-note { width: calc(100% - 28px); margin: 0 14px 9px; padding: 9px; font-family: inherit; font-size: 14px;
+  border: 1px solid var(--red); border-radius: 8px; }
 /* 押し忘れの直し（本人が直せる） */
 .fix { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-top: 12px; background: var(--surface2); }
 .fix h3 { font-size: 15px; color: var(--text2); margin-bottom: 4px; }
@@ -150,6 +166,13 @@ h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600;
       <h3 style="margin-top:16px;">🧹 清掃（できていない所だけチェックを外す）</h3>
       <div class="hint">最初は<strong>すべて実施済み</strong>になっています。やっていない所だけ押して外してください。</div>
       <div class="rooms" id="room-list"></div>
+
+      <h3 style="margin-top:20px;">🧾 施設チェック表（市役所提出用）</h3>
+      <div class="hint">
+        <strong>問題があった所だけ押して「要改善」に変えてください。</strong>そのとき、気づいたことも書けます。<br>
+        項目名の下に<strong>見るポイント</strong>が書いてあります（温度の基準もそこに出ます）。
+      </div>
+      <div id="fc-cycles"></div>
       <div style="margin-top:10px;">
         <label style="font-size:13px;color:var(--text2);display:block;margin-bottom:4px;">気づいたこと・異常（任意）</label>
         <textarea id="report-note" rows="2" style="width:100%;padding:10px;font-family:inherit;font-size:15px;border:1px solid var(--border);border-radius:10px;" placeholder="例: 前室の石鹸が残りわずか"></textarea>
@@ -224,10 +247,11 @@ h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600;
 <script>
 const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
-async function sb(method, table, body, query = '') {
+async function sb(method, table, body, query = '', prefer = '') {
   const res = await fetch(`${SB_URL}/rest/v1/${table}${query}`, {
     method,
-    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json',
+      'Prefer': 'return=representation' + (prefer ? ',' + prefer : '') },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) throw new Error(await res.text());
@@ -265,6 +289,75 @@ setInterval(tick, 1000); tick();
 
 /* 作業内容・清掃場所（清掃場所は業務アプリの清掃記録と同じ区分・項目） */
 const WORK_TYPES = ['解体', '精肉', '加工処理（スライス・ミンチ）', '加工調理', '出荷', '清掃', '事務', 'その他'];
+/* ── 施設チェック（監査様式）──
+   監査の指摘「日・週・月ごとのチェック表に再整備し、清掃履歴や衛生害虫駆除を
+   記入できるように」「チェック内容に壁面・床面・排水桝を追加」に対応。
+   注意事項は市の施設チェックシートの文言をそのまま使う（何を見ればよいかの答えなので）。
+   c: 区分（日/週/月）, r: 作業室, i: 項目, h: 注意事項, t: 温度を記録する */
+const FACILITY_CHECKS = [
+  // ── 毎日 ──
+  { c: '日', r: '放血室', i: '壁面', h: '血液等による汚染がないか' },
+  { c: '日', r: '放血室', i: '床面', h: '血液等による汚染がないか' },
+  { c: '日', r: '放血室', i: '排水桝', h: '固形物が除去されているか、封水に汚れはないか' },
+  { c: '日', r: '放血室', i: 'シャッター', h: '血液等による汚染がないか、稼働に問題はないか' },
+  { c: '日', r: '放血室', i: '手洗い', h: '血液等による汚染がないか' },
+  { c: '日', r: '放血室', i: 'レール', h: '血液等による汚染がないか' },
+  { c: '日', r: '放血室', i: '電動チェーンブロック', h: '血液等による汚染がないか' },
+  { c: '日', r: '放血室', i: 'ナイフ', h: '錆びていないか、切れ味が劣っていないか' },
+  { c: '日', r: '放血室', i: 'タオル', h: '血液等による汚染がないか' },
+  { c: '日', r: '放血室', i: '電気ポット', h: '83℃以上の温湯が出せるか、汚染がないか' },
+  { c: '日', r: '処理室', i: '壁面', h: '血液等による汚染がないか' },
+  { c: '日', r: '処理室', i: '床面', h: '血液等による汚染がないか' },
+  { c: '日', r: '処理室', i: '排水桝', h: '固形物が除去されているか、封水に汚れはないか' },
+  { c: '日', r: '処理室', i: 'シンク', h: '血液等による汚染がないか' },
+  { c: '日', r: '処理室', i: '高圧洗浄機', h: '血液等による汚染がないか' },
+  { c: '日', r: '処理室', i: '電気湯沸かし器', h: '60℃以上の温湯が出せるか' },
+  { c: '日', r: '懸吊室', i: 'ユニット冷蔵庫', h: '壁面・床面に汚れはないか、-1℃の設定になっているか', t: 1 },
+  { c: '日', r: '懸吊室', i: '単管', h: '血液等による汚染がないか' },
+  { c: '日', r: '懸吊室', i: 'S字フック', h: '血液等による汚染がないか' },
+  { c: '日', r: '懸吊室', i: 'チェーンブロック', h: '血液等による汚染がないか' },
+  { c: '日', r: 'カット室', i: '壁面', h: '血液等による汚染がないか' },
+  { c: '日', r: 'カット室', i: '床面', h: '血液等による汚染がないか' },
+  { c: '日', r: 'カット室', i: 'シンク', h: '血液等による汚染がないか' },
+  { c: '日', r: 'カット室', i: '電気ポット', h: '83℃以上の温湯が出せるか、汚染がないか' },
+  { c: '日', r: 'カット室', i: '電気湯沸かし器', h: '60℃以上の温湯が出せるか' },
+  { c: '日', r: 'カット室', i: 'スライサー', h: '血液等による汚染がないか' },
+  { c: '日', r: 'カット室', i: 'ミンサー', h: '血液等による汚染がないか' },
+  { c: '日', r: 'カット室', i: '真空包装機', h: '血液等による汚染がないか' },
+  { c: '日', r: 'カット室', i: '金属検出機', h: '正しく作動するか' },
+  { c: '日', r: '保管室', i: '壁面', h: '血液等による汚染がないか' },
+  { c: '日', r: '保管室', i: '床面', h: '血液等による汚染がないか' },
+  { c: '日', r: '保管室', i: '冷凍庫1（ホシザキ）', h: '-18℃前後になっているか', t: 1 },
+  { c: '日', r: '保管室', i: '冷凍ストッカー1', h: '-20℃前後になっているか', t: 1 },
+  { c: '日', r: '保管室', i: '冷凍ストッカー2', h: '-20℃前後になっているか', t: 1 },
+  { c: '日', r: '保管室', i: '冷凍ストッカー(-60℃)', h: '-60℃前後になっているか', t: 1 },
+  { c: '日', r: '保管室', i: '大型冷蔵冷凍庫1', h: '-20℃前後になっているか', t: 1 },
+  { c: '日', r: '保管室', i: '大型冷凍庫2', h: '-20℃前後になっているか', t: 1 },
+  { c: '日', r: '使用水', i: '色・におい・濁り・味', h: '毎日点検する（食品衛生）' },
+  // ── 毎週末（大掃除）──
+  { c: '週', r: '駐車場', i: 'グリストラップ', h: 'トラップ内に脂の溜まりがないか' },
+  { c: '週', r: '倉庫', i: '残渣ストッカー', h: '血液等による汚染がないか' },
+  { c: '週', r: '放血室', i: '換気扇', h: 'ほこりが付いていないか' },
+  { c: '週', r: '放血室', i: '照明', h: 'ほこりが付いていないか' },
+  { c: '週', r: '処理室', i: 'クーラー', h: '冷房の効き方に問題はないか、ほこりが付いていないか' },
+  { c: '週', r: '処理室', i: '照明', h: 'ほこりが付いていないか' },
+  { c: '週', r: '懸吊室', i: '稼動部', h: 'ほこりが付いていないか' },
+  { c: '週', r: 'カット室', i: '大型スライサー（分解洗浄）', h: '分解して洗浄したか' },
+  { c: '週', r: 'カット室', i: 'クーラー', h: '冷房の効き方に問題はないか、ほこりが付いていないか' },
+  { c: '週', r: 'カット室', i: '照明', h: 'ほこりが付いていないか' },
+  { c: '週', r: '保管室', i: '大型冷蔵冷凍庫のドレン周辺', h: 'ドレン周辺・結露受けまで清掃したか' },
+  // ── 毎月 ──
+  { c: '月', r: '施設全体', i: '防虫・防鼠の点検', h: 'ねずみ・衛生害虫の形跡がないか（駆除は年2回以上）' },
+  { c: '月', r: '施設全体', i: '備品の点検', h: '備品管理台帳と数・状態が合っているか' },
+  { c: '月', r: '施設全体', i: '整理整頓・不要物', h: '不要な物品を置いていないか、動物が侵入しないか' },
+  { c: '月', r: '従事者', i: '作業服・作業靴・帽子・ゴム手袋', h: '全員が正しく着用しているか' },
+];
+const FC_CYCLES = [
+  { key: '日', label: '毎日', note: '退勤のときに確認します' },
+  { key: '週', label: '毎週末（大掃除）', note: '週に1回以上' },
+  { key: '月', label: '毎月', note: '月に1回以上' },
+];
+
 const ROOMS = [
   { key: '解体室', icon: '🔪', items: ['床・排水溝の洗浄', '懸吊フック・レールの洗浄', '作業台・シンクの洗浄・消毒', 'ナイフ・器具の洗浄（83℃以上の温湯消毒）', '残渣・廃棄物の処理'] },
   { key: '精肉室', icon: '🥩', items: ['床・排水溝の洗浄', '作業台・まな板の洗浄・消毒', 'スライサー等機械の分解洗浄', 'ナイフ・器具の温湯消毒', '包材・資材の整理整頓'] },
@@ -345,10 +438,89 @@ function resetReport() {
   roomsDone = {};
   ROOMS.forEach(r => roomsDone[r.key] = true);   // 既定は「すべて実施済み」
   const n = document.getElementById('report-note'); if (n) n.value = '';
-  renderWorkChips(); renderRooms();
+  fcReset();
+  renderWorkChips(); renderRooms(); renderFacilityChecks();
 }
 
 // 清掃記録を保存（実施した場所のみ cleaning_logs へ）
+/* ── 施設チェック表（監査様式）──
+   既定は全項目「可」。問題のあった所だけ押して「要改善」にする。
+   週次・月次は、その週・その月にまだ記録が無いときだけ開いた状態で出す。 */
+let fcState = {};        // 'cycle|room|item' → { ng:bool, note:string, value:string }
+let fcOpen = { '日': true, '週': false, '月': false };
+const fcKey = c => `${c.c}|${c.r}|${c.i}`;
+
+function fcReset() {
+  fcState = {};
+  fcOpen = { '日': true, '週': false, '月': false };
+}
+function fcGet(c) {
+  const k = fcKey(c);
+  if (!fcState[k]) fcState[k] = { ng: false, note: '', value: '' };
+  return fcState[k];
+}
+function renderFacilityChecks() {
+  const box = document.getElementById('fc-cycles');
+  if (!box) return;
+  box.innerHTML = FC_CYCLES.map(cy => {
+    const items = FACILITY_CHECKS.filter(c => c.c === cy.key);
+    const ng = items.filter(c => fcGet(c).ng).length;
+    const rooms = [];
+    items.forEach(c => { if (!rooms.length || rooms[rooms.length - 1].r !== c.r) rooms.push({ r: c.r, list: [] }); rooms[rooms.length - 1].list.push(c); });
+    const body = !fcOpen[cy.key] ? '' : rooms.map(g => `
+      <div class="fc-room">${esc(g.r)}</div>
+      ${g.list.map(c => {
+        const st = fcGet(c);
+        return `<div class="fc-item${st.ng ? ' ng' : ''}" onclick="fcToggle('${esc(cy.key)}','${esc(c.r)}','${esc(c.i)}',event)">
+          <span class="mark">${st.ng ? '⚠️' : '✅'}</span>
+          <span class="fc-txt"><strong>${esc(c.i)}</strong><span class="fc-hint">${esc(c.h || '')}</span></span>
+          ${c.t ? `<input type="text" inputmode="numeric" class="fc-temp" placeholder="℃" value="${esc(st.value)}"
+              onclick="event.stopPropagation()" oninput="fcSetValue('${esc(cy.key)}','${esc(c.r)}','${esc(c.i)}',this.value)">` : ''}
+          <span class="fc-flag">${st.ng ? '要改善' : '可'}</span>
+        </div>
+        ${st.ng ? `<input type="text" class="fc-note" placeholder="どこがどうだったか（例: 内面の汚れ）" value="${esc(st.note)}"
+            onclick="event.stopPropagation()" oninput="fcSetNote('${esc(cy.key)}','${esc(c.r)}','${esc(c.i)}',this.value)">` : ''}`;
+      }).join('')}`).join('');
+    return `<div class="fc-cycle">
+      <div class="fc-head" onclick="fcToggleCycle('${esc(cy.key)}')">
+        <span>${fcOpen[cy.key] ? '▼' : '▶'} ${esc(cy.label)}</span>
+        <span class="fc-sub">${esc(cy.note)}${ng ? ` ／ 要改善 ${ng}件` : ''}</span>
+      </div>
+      ${body}
+    </div>`;
+  }).join('');
+}
+function fcToggleCycle(cycle) { fcOpen[cycle] = !fcOpen[cycle]; renderFacilityChecks(); }
+function fcToggle(cycle, room, item, ev) {
+  if (ev) ev.stopPropagation();
+  const st = fcGet({ c: cycle, r: room, i: item });
+  st.ng = !st.ng;
+  if (!st.ng) st.note = '';
+  renderFacilityChecks();
+}
+function fcSetNote(cycle, room, item, v) { fcGet({ c: cycle, r: room, i: item }).note = v; }
+function fcSetValue(cycle, room, item, v) { fcGet({ c: cycle, r: room, i: item }).value = v; }
+
+/* 開いている区分だけ保存する（週次・月次を開かずに退勤しても日次は残る） */
+async function saveFacilityChecks() {
+  const cycles = FC_CYCLES.filter(cy => fcOpen[cy.key]).map(cy => cy.key);
+  if (!cycles.length) return 0;
+  const rows = FACILITY_CHECKS.filter(c => cycles.includes(c.c)).map(c => {
+    const st = fcGet(c);
+    return {
+      check_date: workDate, cycle: c.c, room: c.r, item: c.i,
+      result: st.ng ? '要改善' : '可',
+      value: c.t ? (st.value.trim() || null) : null,
+      note: st.note.trim() || null,
+      staff_name: selected ? selected.name : null,
+    };
+  });
+  if (!rows.length) return 0;
+  // 同じ日・同じ項目は上書き（打ち直しても二重にならない）
+  await sb('POST', 'facility_check_logs', rows, '?on_conflict=check_date,cycle,room,item', 'resolution=merge-duplicates');
+  return rows.length;
+}
+
 async function saveCleaning() {
   const done = ROOMS.filter(r => roomsDone[r.key] !== false);
   if (!done.length) return 0;
@@ -684,6 +856,7 @@ async function punchOut() {
     let cleanMsg = '';
     try {
       const n = await saveCleaning();
+      await saveFacilityChecks();
       const skipped = ROOMS.filter(r => roomsDone[r.key] === false).map(r => r.key);
       cleanMsg = `<br>清掃 ${n}か所を記録` + (skipped.length ? `（未実施: ${esc(skipped.join('・'))}）` : '');
     } catch (e) { cleanMsg = '<br><span style="color:#b93d3d;">※清掃記録の保存に失敗しました。業務アプリから入力してください。</span>'; }
@@ -700,11 +873,12 @@ async function saveReportOnly() {
   busy = true;
   try {
     const n = await saveCleaning();
+    const fc = await saveFacilityChecks();
     if (todayRec && todayRec.id && workPicked.length) {
       await sb('PATCH', 'attendance', { work_types: workPicked.join('、'), updated_at: new Date().toISOString() }, `?id=eq.${todayRec.id}`);
     }
     beep(true);
-    showToast(`報告を保存しました（清掃 ${n}か所）`);
+    showToast(`報告を保存しました（清掃 ${n}か所／施設チェック ${fc}項目）`);
   } catch (e) { beep(false); showToast('報告の保存に失敗しました。通信を確認してください。'); }
   busy = false;
 }
