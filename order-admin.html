@@ -268,9 +268,36 @@ th,td{padding:8px 6px;font-size:.8rem}
     <div style="font-size:12.5px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:12px;line-height:1.8;">
       この名簿は<a href="index.html?tab=customers" style="font-weight:700;">業務アプリの「顧客台帳」</a>と<strong>同じデータ</strong>です。どちらで直しても両方に反映されます。価格パターン（スタンダード／ローカル／スタートメンバー）も共通で、<a href="javascript:void(0)" onclick="switchTab('pricing')" style="font-weight:700;">価格マスタ</a>の単価と対応しています。
     </div>
+    <!-- 注文ポータルのご案内（ログイン情報の配布） -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <strong style="color:var(--gold);font-size:13.5px;">&#x1f4e8; 注文ポータルのご案内</strong>
+        <span style="font-size:12px;color:var(--text2);">お客様に送るログインID・パスワードと案内文をまとめて用意します</span>
+      </div>
+      <div id="portalWarn" style="display:none;font-size:12.5px;color:var(--red);background:rgba(200,80,80,.08);border:1px solid var(--red);border-radius:6px;padding:8px 10px;margin-bottom:10px;line-height:1.7;"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <select id="portalChannel" onchange="renderPortalPreview()" style="height:34px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:inherit;padding:0 8px;font-size:13px;">
+          <option value="mail">メール・FAX（正式な文面）</option>
+          <option value="line">LINE・SMS（短い文面）</option>
+          <option value="card">はがき・同梱チラシ</option>
+          <option value="phone">電話で伝える（読み上げ用）</option>
+        </select>
+        <select id="portalScope" onchange="renderPortalPreview()" style="height:34px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:inherit;padding:0 8px;font-size:13px;">
+          <option value="filtered">いま検索で出ているお客様だけ</option>
+          <option value="active">有効なお客様すべて</option>
+          <option value="ordered">注文したことがあるお客様だけ</option>
+        </select>
+        <button class="btn btn-gold btn-sm" onclick="exportPortalCsv()">&#x2b07; 名簿CSV（差し込み用）</button>
+        <button class="btn btn-outline btn-sm" onclick="portalPrintSheets()">&#x1f5a8; 案内文を印刷</button>
+        <label style="font-size:12.5px;color:var(--text2);display:flex;align-items:center;gap:5px;cursor:pointer;">
+          <input type="checkbox" id="portalShowPw" onchange="renderCustomers()"> パスワードを一覧に表示
+        </label>
+      </div>
+      <div id="portalPreview" style="margin-top:10px;font-size:12.5px;color:var(--text2);line-height:1.8;"></div>
+    </div>
     <div class="table-wrap">
       <table class="customer-table">
-        <thead><tr><th>コード</th><th>名前</th><th>カナ</th><th>電話</th><th>住所</th><th>価格ランク</th><th>操作</th></tr></thead>
+        <thead><tr><th>コード</th><th>名前</th><th>カナ</th><th>電話</th><th>住所</th><th>ログインID</th><th>パスワード</th><th>価格ランク</th><th>操作</th></tr></thead>
         <tbody id="custBody"></tbody>
       </table>
     </div>
@@ -579,8 +606,10 @@ function ensureCustAdmin(){
 // ── Init ──
 async function init(){
   try{
-    await Promise.all([loadOrders(),loadCustomers(),loadProducts(),loadInvoiceSettings()]);
+    await Promise.all([loadOrders(),loadCustomers(),loadProducts(),loadInvoiceSettings(),loadOrgInfo()]);
+    orderedCustomerIds=new Set(allOrders.map(o=>o.customer_id).filter(Boolean));
     populateCustomerDropdowns();
+    renderCustomers(); // 会社情報・注文実績がそろってから案内文の見本を出し直す
     const h=(location.hash||'').replace('#','');
     if(h && document.querySelector('.tab[data-tab="'+h+'"]')) switchTab(h);
   }catch(e){console.error(e)}
@@ -990,8 +1019,11 @@ async function generateDoc(type){
 // ── Customers Tab ──
 function renderCustomers(){
   const search=(document.getElementById('custSearch')?.value||'').toLowerCase();
+  const showPw=!!document.getElementById('portalShowPw')?.checked;
   let filtered=allCustomers;
   if(search) filtered=filtered.filter(c=>(c.name||'').toLowerCase().includes(search)||(c.code||'').toLowerCase().includes(search)||(c.phone||'').includes(search)||(c.kana||'').toLowerCase().includes(search));
+  custFiltered=filtered;
+  renderPortalPreview();
   const start=custPage.page*custPage.size;
   const page=filtered.slice(start,start+custPage.size);
   const body=document.getElementById('custBody');
@@ -1003,8 +1035,11 @@ function renderCustomers(){
       <td style="color:var(--text2)">${esc(c.kana||'')}</td>
       <td>${esc(c.phone||'')}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.address||'')}</td>
+      <td style="font-family:monospace">${esc(c.portal_login_id||c.code||'')}</td>
+      <td style="font-family:monospace;letter-spacing:1px">${showPw?esc(c.portal_password||''):'••••••'}</td>
       <td><span class="price-rank ${rankClass}">${rankLabel(c.price_rank)}</span></td>
-      <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="openEditCustomer('${c.id}')">編集</button>
+      <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="portalCopyOne('${c.id}')" title="このお客様あての案内文をコピー">📨</button>
+      <button class="btn btn-outline btn-sm" onclick="openEditCustomer('${c.id}')">編集</button>
       <button class="btn btn-sm" style="color:var(--red)" onclick="deleteCustomer('${c.id}')">🗑</button></td>
     </tr>`}).join('');
   const totalPages=Math.ceil(filtered.length/custPage.size);
@@ -1015,6 +1050,225 @@ function renderCustomers(){
     ph+=`<button class="btn btn-sm ${i===custPage.page?'btn-gold':'btn-outline'}" onclick="custPage.page=${i};renderCustomers()">${i+1}</button>`;
   }
   pag.innerHTML=ph;
+}
+
+/* ══════════ 注文ポータルのご案内（ログイン情報の配布） ══════════
+   お客様へ送る案内文と、ログインID・パスワードの名簿をここでまとめて作る。
+   ログインIDはお客様番号（C0011 など）。お名前でもログインできる。 */
+const PORTAL_URL='https://tateyama-gibier.vercel.app/order-portal.html';
+let orgInfo={name:'館山ジビエセンター',address:'千葉県館山市西長田1163-5',phone:'',email:''};
+let custFiltered=[];
+let orderedCustomerIds=new Set();
+
+async function loadOrgInfo(){
+  try{
+    const rows=await sb('GET','org_settings','','?select=key,value');
+    const m={}; rows.forEach(r=>m[r.key]=r.value);
+    if(m.org_name) orgInfo.name=m.org_name;
+    if(m.org_address) orgInfo.address=m.org_address;
+    // 0470-00-0000 のような仮の番号は、案内文に載せずに警告を出す
+    if(m.org_phone && !/^0470-?00-?0000$/.test(m.org_phone)) orgInfo.phone=m.org_phone;
+    if(m.org_email) orgInfo.email=m.org_email;
+  }catch(e){}
+}
+
+function orgFooter(){
+  const lines=[orgInfo.name];
+  if(orgInfo.address) lines.push(orgInfo.address);
+  if(orgInfo.phone) lines.push('TEL '+orgInfo.phone);
+  if(orgInfo.email) lines.push(orgInfo.email);
+  return lines.join('\n');
+}
+
+// 数字を1桁ずつ読み上げる（電話で伝えるとき用）
+function readDigits(s){
+  const map={'0':'ゼロ','1':'イチ','2':'ニ','3':'サン','4':'ヨン','5':'ゴ','6':'ロク','7':'ナナ','8':'ハチ','9':'キュウ'};
+  return String(s||'').split('').map(ch=>map[ch]||ch.toUpperCase()).join(' ');
+}
+
+function portalAddressee(c){
+  return (c.name||'') + (c.honorific||'様');
+}
+
+/* お客様1件ぶんの案内文を作る。channel は mail / line / card / phone */
+function buildPortalMsg(c,channel){
+  const to=portalAddressee(c);
+  const id=c.portal_login_id||c.code||'';
+  const pw=c.portal_password||'';
+  const tel=orgInfo.phone?('　TEL '+orgInfo.phone):'';
+
+  if(channel==='line'){
+    return [
+      to,
+      'いつもありがとうございます。'+orgInfo.name+'です。',
+      '',
+      'Webからご注文いただけるページをご用意しました。',
+      '在庫を見ながら24時間いつでもご注文いただけます。',
+      '',
+      '▼ご注文ページ',
+      PORTAL_URL,
+      '　ログインID：'+id,
+      '　パスワード：'+pw,
+      '',
+      'お電話・FAXでのご注文も、これまでどおり承ります。',
+      orgInfo.name+(tel?('　'+('TEL '+orgInfo.phone)):'')
+    ].join('\n');
+  }
+
+  if(channel==='card'){
+    return [
+      to,
+      '',
+      'いつも'+orgInfo.name+'をご利用いただき、ありがとうございます。',
+      'ご注文をWebからお受けできるようになりました。',
+      '在庫のある部位をご覧いただきながら、24時間いつでもご注文いただけます。',
+      '',
+      '【ご注文ページ】'+PORTAL_URL,
+      '【ログインID】'+id,
+      '【パスワード】'+pw,
+      '',
+      '※このご案内は大切に保管してください。',
+      '※お電話・FAXでのご注文もこれまでどおり承ります。',
+      '',
+      orgFooter()
+    ].join('\n');
+  }
+
+  if(channel==='phone'){
+    return [
+      '【電話で伝えるときの読み上げ】　'+to,
+      '',
+      '「ご注文用のページをご用意しました。ご案内いたします。」',
+      '',
+      '・ページ： '+PORTAL_URL,
+      '　（お店の名前で検索していただくか、ショートメールでお送りします）',
+      '・ログインID： '+id+'　→ 読み方「'+readDigits(id)+'」',
+      '・パスワード： '+pw+'　→ 読み方「'+readDigits(pw)+'」',
+      '',
+      '「お名前（'+(c.name||'')+'）でもログインいただけます。」',
+      '「パスワードはログイン後の設定でご自由に変更いただけます。」',
+      '「これまでどおり、お電話でのご注文も承ります。」'
+    ].join('\n');
+  }
+
+  // mail（メール・FAX の正式な文面）
+  return [
+    to,
+    '',
+    'いつも'+orgInfo.name+'をご利用いただき、誠にありがとうございます。',
+    '',
+    'このたび、ご注文をWebからいつでもお受けできるよう「注文ポータル」をご用意いたしました。',
+    '在庫のある部位をご覧いただきながら、24時間いつでもご注文いただけます。',
+    '',
+    '■ ご注文ページ',
+    '　'+PORTAL_URL,
+    '',
+    '■ ログイン情報',
+    '　ログインID：'+id,
+    '　パスワード：'+pw,
+    '　※お店のお名前（'+(c.name||'')+'）でもログインいただけます。',
+    '',
+    '■ ご注文の流れ',
+    '　1. 上のページを開く',
+    '　2. ログインIDとパスワードを入れる',
+    '　3. ご希望の部位と数量を選んで注文する',
+    '',
+    'パスワードは、ログイン後の「設定」からいつでも変更いただけます。',
+    'お電話・FAXでのご注文も、これまでどおり承っております。',
+    '',
+    'ご不明な点がございましたら、お気軽にお問い合わせください。',
+    '今後ともよろしくお願いいたします。',
+    '',
+    '────────────────',
+    orgFooter(),
+    '────────────────'
+  ].join('\n');
+}
+
+/* 送る相手を決める */
+function portalTargets(){
+  const scope=document.getElementById('portalScope')?.value||'filtered';
+  if(scope==='active') return allCustomers.filter(c=>c.is_active!==false);
+  if(scope==='ordered') return allCustomers.filter(c=>orderedCustomerIds.has(c.id));
+  return (custFiltered.length?custFiltered:allCustomers).filter(c=>c.is_active!==false);
+}
+
+function renderPortalPreview(){
+  const el=document.getElementById('portalPreview'); if(!el) return;
+  const t=portalTargets();
+  const ch=document.getElementById('portalChannel')?.value||'mail';
+  const noPw=t.filter(c=>!c.portal_password).length;
+  const sample=t[0];
+  // 会社の電話が未設定だと、案内文に連絡先が入らないので先に知らせる
+  const warn=document.getElementById('portalWarn');
+  const msgs=[];
+  if(!orgInfo.phone) msgs.push('会社の電話番号が未設定（または仮の 0470-00-0000）のため、案内文に連絡先が入りません。業務アプリの設定で本当の番号を入れてください。');
+  if(noPw) msgs.push(noPw+'件はパスワードが未発行です。編集画面で発行してください。');
+  if(warn){ warn.innerHTML=msgs.map(m=>'&#x26a0;&#xfe0f; '+esc(m)).join('<br>'); warn.style.display=msgs.length?'block':'none'; }
+
+  el.innerHTML='<div style="margin-bottom:6px;">送る相手：<strong style="color:var(--text)">'+t.length+'件</strong>'+
+    '（ログイン先 '+esc(PORTAL_URL)+'）</div>'+
+    (sample?'<div style="font-size:12px;color:var(--text3);margin-bottom:4px;">↓ '+esc(portalAddressee(sample))+' あての文面（見本）</div>'+
+      '<pre style="white-space:pre-wrap;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 12px;max-height:220px;overflow:auto;font-size:12px;line-height:1.75;color:var(--text2);margin:0;">'+
+      esc(buildPortalMsg(sample,ch))+'</pre>':'<div>対象のお客様がいません</div>');
+}
+
+async function portalCopyOne(id){
+  const c=allCustomers.find(x=>x.id===id); if(!c) return;
+  const ch=document.getElementById('portalChannel')?.value||'mail';
+  const text=buildPortalMsg(c,ch);
+  try{ await navigator.clipboard.writeText(text); alert(portalAddressee(c)+' あての案内文をコピーしました。\nメールやLINEに貼り付けてください。'); }
+  catch(e){
+    const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); ta.remove(); alert('案内文をコピーしました');
+  }
+}
+
+/* 差し込み印刷・郵送ラベル作成用のCSV（Excelでそのまま開ける） */
+function exportPortalCsv(){
+  const t=portalTargets();
+  if(!t.length){alert('対象のお客様がいません');return}
+  const ch=document.getElementById('portalChannel')?.value||'mail';
+  if(!confirm(t.length+'件ぶんのログイン情報を書き出します。\nパスワードが入ったファイルです。取り扱いにご注意ください。\n\n続けますか？')) return;
+  const cols=['お客様番号','お名前','敬称','カナ','ログインID','パスワード','電話','メール','郵便番号・住所','建物名','ご注文ページ','案内文'];
+  const rows=t.map(c=>[
+    c.code||'', c.name||'', c.honorific||'様', c.kana||'',
+    c.portal_login_id||c.code||'', c.portal_password||'',
+    c.phone||'', c.email||'', c.address||'', c.building||'',
+    PORTAL_URL, buildPortalMsg(c,ch)
+  ].map(csvCell).join(','));
+  const csv='﻿'+cols.join(',')+'\n'+rows.join('\n'); // BOM付き＝Excelで開いても文字化けしない
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download='注文ポータル案内_'+t.length+'件_'+today()+'.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+/* 1件1枚で印刷（同梱チラシ・郵送・手渡し用） */
+function portalPrintSheets(){
+  const t=portalTargets();
+  if(!t.length){alert('対象のお客様がいません');return}
+  if(t.length>200 && !confirm(t.length+'件ぶん（'+t.length+'枚）を印刷します。よろしいですか？')) return;
+  const ch=document.getElementById('portalChannel')?.value||'card';
+  const sheets=t.map(c=>
+    '<div class="sheet">'+
+      '<div class="head">'+esc(orgInfo.name)+'　ご注文ポータルのご案内</div>'+
+      '<pre>'+esc(buildPortalMsg(c,ch))+'</pre>'+
+      '<div class="foot">お客様番号 '+esc(c.code||'')+'</div>'+
+    '</div>').join('');
+  const css='@page{size:A4 portrait;margin:20mm;}'+
+    '*{box-sizing:border-box;margin:0;padding:0;}'+
+    'body{font-family:"Yu Gothic","YuGothic","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;color:#000;}'+
+    '.sheet{page-break-after:always;min-height:240mm;}'+
+    '.sheet:last-child{page-break-after:auto;}'+
+    '.head{font-size:13pt;font-weight:700;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:16px;}'+
+    'pre{white-space:pre-wrap;font-family:inherit;font-size:11pt;line-height:2;}'+
+    '.foot{margin-top:24px;font-size:9pt;color:#666;text-align:right;}';
+  const html='<!doctype html><html><head><meta charset="utf-8"><title>注文ポータルのご案内 '+t.length+'件</title>'+
+    '<style>'+css+'</style></head><body>'+sheets+
+    '<scr'+'ipt>window.onload=function(){setTimeout(function(){window.focus();window.print();},400);};</scr'+'ipt></body></html>';
+  const w=window.open('','_blank');
+  if(w){w.document.open();w.document.write(html);w.document.close();}
 }
 
 /* 顧客コードの採番（業務アプリの顧客台帳と共通の C0001 形式）。
