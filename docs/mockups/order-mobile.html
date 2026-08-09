@@ -1,0 +1,132 @@
+<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>注文（案）</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0d0f0a;--surface:#141710;--surface2:#1c1f16;--border:#2a2e22;--border2:#363b2a;
+ --gold:#c8a45a;--gold2:#a07e38;--text:#e8e4d8;--text2:#8a8670;--text3:#5a5848;
+ --red:#c85050;--green:#6a9e5a;--amber:#d8a03a;}
+body{font-family:'Noto Sans JP',system-ui,sans-serif;background:var(--bg);color:var(--text);
+ line-height:1.5;padding-bottom:76px;-webkit-font-smoothing:antialiased}
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;
+ border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:5}
+.hdr b{font-size:15px}
+.hdr button{min-height:44px;min-width:44px;padding:0 12px;background:none;border:1px solid var(--border);
+ border-radius:22px;color:var(--text3);font-size:12px}
+.sec{padding:14px 14px 4px;font-size:13px;font-weight:700;color:var(--gold);display:flex;
+ align-items:center;justify-content:space-between}
+.sec small{font-weight:400;color:var(--text3);font-size:11px}
+/* ── 商品1行（2段・約76px。現行の158pxカードの半分） ── */
+.row{padding:6px 14px 8px;border-bottom:1px solid var(--border)}
+.row.out{opacity:.45}
+.rtop{display:flex;align-items:baseline;gap:8px;min-width:0}
+.rname{flex:1;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rbot{display:flex;align-items:center;gap:6px;margin-top:2px}
+.rusual{flex:1;font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden}
+.mark{font-size:15px;font-weight:700;line-height:1}
+.mark.o{color:var(--green)} .mark.t{color:var(--amber)} .mark.x{color:var(--red)}
+.price{color:var(--gold);font-weight:600}
+.qty{display:flex;align-items:center;gap:0;border:1px solid var(--border2);border-radius:8px;overflow:hidden}
+.qty button{width:44px;height:44px;background:var(--surface2);border:none;color:var(--gold);font-size:19px;font-weight:700}
+.qty span{width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+ font-size:13px;background:var(--surface);font-variant-numeric:tabular-nums}
+.add{min-width:56px;height:44px;padding:0 10px;background:linear-gradient(135deg,var(--gold2),var(--gold));
+ color:#0d0f0a;font-weight:700;font-size:12px;border:none;border-radius:8px}
+.add:disabled{background:var(--surface2);color:var(--text3)}
+.fav{width:44px;height:44px;background:none;border:none;color:var(--text3);font-size:18px}
+.fav.on{color:var(--gold)}
+/* ── 前回の注文 ── */
+.last{margin:6px 14px 10px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:10px}
+.last .d{font-size:11px;color:var(--text3);margin-bottom:4px}
+.last .i{font-size:13px;color:var(--text2);margin-bottom:8px;line-height:1.7}
+.last button{width:100%;min-height:46px;background:rgba(200,164,90,.1);border:1px solid var(--gold2);
+ border-radius:8px;color:var(--gold);font-weight:700;font-size:13px}
+.warn{margin-top:8px;font-size:12px;color:var(--red);background:rgba(200,80,80,.08);
+ border-left:3px solid var(--red);padding:7px 9px;border-radius:4px;line-height:1.6}
+/* ── 種の切替 ── */
+.tabs{display:flex;gap:6px;padding:6px 14px 10px}
+.tabs button{flex:1;min-height:44px;background:var(--surface2);border:1px solid var(--border);
+ border-radius:8px;color:var(--text3);font-size:13px;font-weight:600}
+.tabs button.on{color:var(--gold);border-color:var(--gold2);background:rgba(200,164,90,.07)}
+/* ── 折りたたみ ── */
+details{border-top:1px solid var(--border);margin-top:8px}
+summary{padding:14px;font-size:13px;color:var(--text2);list-style:none;min-height:48px;display:flex;align-items:center}
+summary::-webkit-details-marker{display:none}
+summary::before{content:'▶ ';color:var(--text3);margin-right:4px}
+details[open] summary::before{content:'▼ '}
+/* ── 下部固定バー ── */
+.bar{position:fixed;left:0;right:0;bottom:0;display:flex;align-items:center;gap:10px;
+ padding:10px 14px calc(10px + env(safe-area-inset-bottom));background:var(--surface);
+ border-top:1px solid var(--border2);z-index:10}
+.bar .sum{flex:1;font-size:12px;color:var(--text2);line-height:1.4}
+.bar .sum b{display:block;font-size:16px;color:var(--text);font-variant-numeric:tabular-nums}
+.bar .go{min-height:48px;padding:0 22px;background:linear-gradient(135deg,var(--gold2),var(--gold));
+ color:#0d0f0a;font-weight:700;font-size:14px;border:none;border-radius:10px}
+.note{padding:10px 14px;font-size:11px;color:var(--text3);line-height:1.7}
+</style></head><body>
+
+<div class="hdr"><b>狩野屋 様</b><button>ログアウト</button></div>
+
+<div class="sec">⭐ いつもの商品 <small>これまでのご注文から</small></div>
+
+<div class="row">
+  <div class="rtop"><div class="rname">猪ミンチ 粗挽き</div><span class="mark o">◎</span><span class="price">¥3,200/kg</span></div>
+  <div class="rbot"><span class="rusual">いつも3.0kg</span><div class="qty"><button>−</button><span>3.0</span><button>＋</button></div><button class="add">追加</button><button class="fav on">★</button></div>
+</div>
+
+<div class="row">
+  <div class="rtop"><div class="rname">猪ロース</div><span class="mark t">△</span><span class="price">¥4,750/kg</span></div>
+  <div class="rbot"><span class="rusual">いつも1.5kg</span><div class="qty"><button>−</button><span>1.5</span><button>＋</button></div><button class="add">追加</button><button class="fav">☆</button></div>
+</div>
+
+<div class="row">
+  <div class="rtop"><div class="rname">猪バラ</div><span class="mark o">◎</span><span class="price">¥3,600/kg</span></div>
+  <div class="rbot"><span class="rusual">いつも2.0kg</span><div class="qty"><button>−</button><span>2.0</span><button>＋</button></div><button class="add">追加</button><button class="fav">☆</button></div>
+</div>
+
+<div class="row out">
+  <div class="rtop"><div class="rname">猪ヒレ</div><span class="mark x">×</span><span class="price">¥5,200/kg</span></div>
+  <div class="rbot"><span class="rusual">いつも0.5kg</span><div class="qty"><button>−</button><span>0.5</span><button>＋</button></div><button class="add" disabled>追加</button><button class="fav">☆</button></div>
+</div>
+
+<div class="sec">🔁 前回の注文</div>
+<div class="last">
+  <div class="d">2026-07-28 のご注文</div>
+  <div class="i">猪ミンチ 粗挽き 3.0kg ／ 猪ロース 1.5kg ／ 猪ヒレ 0.5kg</div>
+  <button>同じ内容をカートに入れる</button>
+  <div class="warn">⚠️ 猪ヒレは現在ご用意できません。代替候補をご確認ください。</div>
+</div>
+
+<div class="sec">🐗 全商品</div>
+<div class="tabs"><button class="on">イノシシ</button><button>シカ</button><button>その他</button></div>
+
+<div class="row">
+  <div class="rtop"><div class="rname">猪肩ロース</div><span class="mark t">△</span><span class="price">¥3,900/kg</span></div>
+  <div class="rbot"><span class="rusual"></span><div class="qty"><button>−</button><span>1.0</span><button>＋</button></div><button class="add">追加</button><button class="fav">☆</button></div>
+</div>
+<div class="row">
+  <div class="rtop"><div class="rname">猪カタ（ウデ）</div><span class="mark o">◎</span><span class="price">¥3,400/kg</span></div>
+  <div class="rbot"><span class="rusual"></span><div class="qty"><button>−</button><span>1.0</span><button>＋</button></div><button class="add">追加</button><button class="fav">☆</button></div>
+</div>
+<div class="row">
+  <div class="rtop"><div class="rname">猪スネ</div><span class="mark o">◎</span><span class="price">¥3,600/kg</span></div>
+  <div class="rbot"><span class="rusual"></span><div class="qty"><button>−</button><span>1.0</span><button>＋</button></div><button class="add">追加</button><button class="fav">☆</button></div>
+</div>
+<div class="row">
+  <div class="rtop"><div class="rname">猪ネック</div><span class="mark t">△</span><span class="price">¥3,500/kg</span></div>
+  <div class="rbot"><span class="rusual"></span><div class="qty"><button>−</button><span>1.0</span><button>＋</button></div><button class="add">追加</button><button class="fav">☆</button></div>
+</div>
+
+<details><summary>在庫切れの商品（4件）</summary>
+  <div class="row out"><div class="rmain"><div class="rname">猪モモ</div>
+    <div class="rsub"><span class="mark x">×</span><span class="price">¥4,100/kg</span></div></div>
+    <button class="add" disabled>追加</button><button class="fav">☆</button></div>
+  <div class="row out"><div class="rmain"><div class="rname">猪タン（舌）</div>
+    <div class="rsub"><span class="mark x">×</span><span class="price">¥4,300/kg</span></div></div>
+    <button class="add" disabled>追加</button><button class="fav">☆</button></div>
+</details>
+
+<div class="note">ジビエは現物パック単位のため、ご希望量を下回らない範囲で重量が前後します。請求額は実際に確保した重量で確定します。</div>
+
+<div class="bar"><div class="sum">3点<b>概算 ¥12,400</b></div><button class="go">確認へ</button></div>
+</body></html>

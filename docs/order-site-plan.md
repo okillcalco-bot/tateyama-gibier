@@ -1,343 +1,866 @@
-# 注文サイト（お客様側／センター側）実装計画書
+# 注文サイト 実装計画書（改訂版 v2）
 
-- 対象リポジトリ: `okillcalco-bot/tateyama-gibier`（ルート直下の静的HTML + Supabase 直結PWA群）
-- 作成日: 2026-08-09
-- 前提: `CLAUDE.md` のとおり、ルート直下は**本番稼働中**。DBスキーマ変更は `/migrations` に「追加のみ」のSQLを置く既存流儀に従う。
-- レビュー観点の要望: **§4 の既知の問題**と **§6 の引当設計**を重点的に見てほしい。
+- 対象: `okillcalco-bot/tateyama-gibier`（ルート直下の静的HTML + Supabase 直結PWA群）
+- 改訂日: 2026-08-09 ／ 初版: 2026-08-09（v1）
+- 改訂理由: 施主要望（スマホ前提の再設計・請求書からの購入実績取込・顧客別価格の検証）とレビュー指摘の反映
+- **本計画の提出時点で、本番データへの破壊的変更は行っていません。** DB変更はすべて `/migrations` への追加SQLのみです。
 
 ---
 
-## 1. 目的
+# 第1部 事前調査の報告（要望 §2）
 
-館山ジビエセンターの取引先（飲食店・小売店 718件）が、**いま施設にある在庫の範囲で**Webから注文でき、
-その注文が**センター側の注文一覧に自動で溜まる**状態にする。お客様側とセンター側を同時に成立させる。
+## 1-1. お気に入り・マイリスト・再注文の実装状況
 
-現状は電話・FAX中心。注文ポータル自体は存在するが、後述のとおり**在庫とつながっていない**。
+`order-portal.html` に実装済み。テーブルは `customer_saved_items`。
 
-## 2. 現状（2026-08-09 時点）
+```
+customer_saved_items: id / customer_id / kind / product_id / species / part_name / grade / sort_order / created_at
+```
 
-### 2.1 すでに動いているもの
-
-| 画面 | ファイル | 状態 |
+| 機能 | 関数 | 状態 |
 |---|---|---|
-| 注文ポータル（お客様） | `order-portal.html` (約980行) | ログイン／カート／注文送信／履歴／再注文／マイリスト |
-| 受発注管理（センター） | `order-admin.html` (約2300行) | 注文一覧／発送管理／書類発行／請求書／顧客管理／価格マスタ |
-| 業務アプリ | `index.html` (約9000行) | 個体・在庫・出荷・顧客台帳 |
+| ☆お気に入り | `toggleSaved('favorite', …)` | `kind='favorite'` で登録／解除 |
+| ＋いつもの | `toggleSaved('usual', …)` | `kind='usual'`。**手動登録のみ。自動抽出は無し** |
+| 前回注文の再注文 | `reorderLast()` | 直近1件をカートへ |
+| 履歴からの再注文 | `reorderFromHistory(orderId)` | 履歴の任意の注文をカートへ |
 
-実績: 注文 11件 / 3社（2026-03-23 〜 2026-08-07）。ほぼ未稼働。
+**本番データ: `customer_saved_items` は 0 行**（誰も使っていない）。移行対象の既存マイリストは実質ありませんが、
+設計上は「あれば保持・移行」を満たします（§4-3）。
 
-### 2.2 直近で入れた土台（PR #113, #114）
+**発見した不具合（重要）**
 
-- 顧客管理に「注文ポータルのご案内」— ログインIDの配布と案内文の生成（メール/LINE/はがき/電話）
-- パスワードを `customer_secrets` に bcrypt 保管し、`portal_login()` / `portal_change_password()` /
-  `staff_issue_portal_passwords()`（SECURITY DEFINER）経由に変更。平文はDBから消す直前
-- ポータルにベタ書きされていた代理ログインの合言葉を廃止
+1. `reorderLast()` / `reorderFromHistory()` は、商品がカタログから消えていると
+   `it.unit_price`（**過去の単価**）にフォールバックしてカートに入る。販売停止品・在庫切れの判定も無い。
+   → 要望 §8「過去注文をそのまま複製しない」に真っ向から反する既存挙動。
+2. 「いつもの」と「お気に入り」が `customer_saved_items` の `kind` 違いだけで、
+   自動抽出と手動登録が同じ表に同居する設計になっている（要望 §4 で分離が指示された箇所）。
 
-### 2.3 決まっている方針（施主判断・2026-08-09）
+## 1-2. `customers` と請求書を照合するために使える項目
 
-| 論点 | 決定 |
-|---|---|
-| 在庫の見せ方 | **あり・なしだけ**（◎／△／×）。**重量は出さない**。注文は kg 指定 |
-| 引当のしかた | **注文が入った時点で「引当済」**にして、他のお客様から見えなくする |
-| セキュリティ | 案内の配布より先に直す（進行中） |
+`customers` の全列のうち、名寄せに使えるもの:
 
-## 3. 現状のデータ構造
+| 列 | 充足率（718件中） | 名寄せでの位置づけ |
+|---|---|---|
+| `name` | 718 / 718 | 主キー的だが**同名が4組8件**あり単独では確定不可 |
+| `phone` | **718 / 718** | 最強。表記ゆれ（ハイフン有無）を正規化すれば実質一意 |
+| `address` | 718 / 718（〒込みの1本文字列） | 郵便番号を切り出せる |
+| `code` | 718 / 718（C0011 形式） | 請求書に印字されていれば最強 |
+| `kana` | 一部 | 補助 |
+| `contact_name` | 一部 | 法人名が入っている例あり（例: `株式会社食環境衛生研究所`） |
+| `company1` / `company2` | ほぼ空 | 将来用 |
+| `email` | **1 / 718** | 使えない |
 
-### 3.1 `inventory`（在庫。1行＝1点の現物）
+→ **電話番号の正規化一致を第一キー、郵便番号＋名称の類似を第二キー**とするのが妥当（§5-2）。
 
-```
-id uuid / individual_id text(FK→individuals.label_id) / species text / part_name text
-grade text('並'|'上')  weight numeric  weight_kg numeric   ← 両方 kg。値は同一で冗長
-status text('在庫'|'引当済'|'加工済'|'出荷済')  unit_price int  lot_code / location_code
-tier int  parent_inventory_id uuid  deleted_at
-```
+## 1-3. 現在の顧客別価格の管理方法
 
-現在の在庫（`status='在庫'` かつ `deleted_at is null`）: **111点 / 約124kg**
+2系統が併存しており、**片方が注文単価に反映されていません**。
 
-| 種 | 部位 | 等級 | 点数 | kg |
-|---|---|---|---|---|
-| イノシシ | ミンチ用 | 並 | 20 | 29.94 |
-| イノシシ | ミンチ肉（粗挽き） | 上 | 24 | 24.00 |
-| イノシシ | ペットフード用（なし） | 並 | 18 | 22.43 |
-| イノシシ | ペットフード用（あり） | 並 | 7 | 13.95 |
-| イノシシ | カタ | 並 | 6 | 9.42 |
-| イノシシ | バラ | 並 | 5 | 7.26 |
-| イノシシ | 味肉用 | 並 | 4 | 6.25 |
-| イノシシ | スネ | 並 | 9 | 4.17 |
-| イノシシ | ロース | 並 | 4 | 2.60 |
-| イノシシ | 肩ロース | 並 | 3 | 2.13 |
-| イノシシ | ネック / ヒレ / チチカブ | 並 | 6 | 2.21 |
-| シカ | ロース / モモ（ウチ） | 並 | 4 | 0.98 |
-| キョン | ロース | 並 | 1 | 0.14 |
+| 仕組み | テーブル／列 | 実データ | 注文単価に効くか |
+|---|---|---|---|
+| 価格ランク | `customers.price_rank` → `price_master.price_<rank>` | 718件**すべて `standard`** | ○（`getPrice()`） |
+| 顧客別単価 | `customer_prices(customer_id, species, part_name, unit_price)` | **0 行** | **×** |
 
-1点あたりの重量は **0.05kg 〜 3.53kg**。ばらつきが大きい。
+**確認された不具合（施主のご指摘どおり）**
+`order-portal.html` の価格表表示 `loadPriceTable()` は `customer_prices` を優先して表示しますが、
+カート投入時の単価 `getPrice()` は **`price_master` しか見ていません**。
+`customer_prices` に値を入れると、**画面に出る価格表と実際の注文単価が食い違います**。
 
-### 3.2 `orders` / `order_items`
+現在は `customer_prices` が0行のため実害は出ていませんが、構造的な欠陥です。
 
-```
-orders:      id / order_code / customer_id / customer_name / order_date / delivery_date
-             delivery_time_zone / delivery_* / status('受付'既定) / total_amount
-             price_rank / channel('ポータル'既定) / carrier / memo / notes
-order_items: id / order_id / inventory_id(uuid・単一) / product_id / species / part_name
-             weight numeric / weight_kg numeric / unit_price int / amount int / subtotal numeric
-```
+## 1-4. `price_rank` 以外の個別価格の存在
 
-実際に使われている値:
-- `orders.status` = `受注` / `確認済` / `発送済` / `キャンセル`
-- `orders.channel` = `ポータル` / `BASEネットショップ` / `直販（注文なし）` / `練習`
+`customer_prices` が該当しますが **0 行**。有効期間の概念もありません（`valid_from` / `valid_until` 無し）。
+要望 §7 の `customer_product_prices` 相当は**新規に作る必要があります**（§5-3）。
 
-### 3.3 `price_master`（カタログ）
+## 1-5. 過去注文・請求書から再注文用データを作れるか
 
-`species / part_name / grade('並'|'上'|'極上') / barcode_num / price_standard / price_local /
-price_startmember / price_premium / price_wholesale`
+**DB内の実績はほぼ空です。**
 
-ポータルは `grade='上' and barcode_num is not null` の行だけを商品として出し、
-`customers.price_rank`（現在は全件 `standard`）で単価を選んでいる。
+| 元データ | 件数 | 期間 |
+|---|---|---|
+| `orders` | 11件 / 3社 | 2026-03-23 〜 2026-08-07 |
+| `order_items` | 32行（うち26行が `inventory_id` 有） | 同上 |
+| `documents`（発行済み書類） | **納品書1件のみ**、請求書0件 | 2026-08-05 |
+| `payments` | — | — |
 
----
+→ **「いつもの商品」は事実上100%、Driveの請求書から作ることになります。**
+DB内の11件は補助的に併用します（§5-5）。
 
-## 4. 調査で分かった既知の問題（**要レビュー**）
+## 1-6. 商品名・部位名・等級の表記揺れ
 
-### 4.1 カタログと在庫の部位名が半分しか一致しない ★重要
+カタログ（`price_master` の `grade='上'` かつ `barcode_num` 有＝ポータルが出している商品）と、
+実在庫（`inventory` の `status='在庫'`）を突き合わせた結果:
 
-ポータルが出しているカタログ（`price_master` 上・バーコード有）と、実在庫の `part_name` を突き合わせた結果:
-
-| 判定 | 件数 | 例 |
+| 判定 | 件数 | 中身 |
 |---|---|---|
 | 一致 | 8 | スネ / ネック / バラ / ヒレ / ミンチ用 / ロース / 肩ロース / シカ ロース |
-| **在庫にあるがカタログに無い** | 8 | 在庫`カタ` ↔ カタログ`カタ（ウデ）` ／ 在庫`ミンチ肉（粗挽き）` ↔ カタログ`ミンチ肉` ／ 在庫`ペットフード用（あり）`・`ペットフード用（なし）` ↔ カタログ`ペットフード用` ／ 在庫`味肉用`・`チチカブ`（カタログに該当なし）／ 在庫`シカ モモ（ウチ）` ↔ カタログ`シカ モモ` ／ 在庫`キョン ロース`（キョン自体がカタログに無い） |
+| **在庫にあるがカタログに無い** | 8 | 在庫`カタ`↔カタログ`カタ（ウデ）` ／ 在庫`ミンチ肉（粗挽き）`↔カタログ`ミンチ肉` ／ 在庫`ペットフード用（あり）`・`ペットフード用（なし）`↔カタログ`ペットフード用` ／ 在庫`味肉用`・`チチカブ`（該当なし）／ 在庫`シカ モモ（ウチ）`↔カタログ`シカ モモ` ／ 在庫`キョン ロース`（キョンがカタログに無い） |
 | カタログにあるが在庫なし | 30 | 内臓各種 / 中型獣ほぼ全部 |
 
-**在庫の約6割（kgベース）がカタログに載っていない部位名**である。`part_name` の文字列一致で
-在庫とカタログを結ぶ設計にすると、主力のミンチ・ペットフードが注文できない。
+**在庫の約6割（kgベース）がカタログに無い名前**です。文字列一致で在庫とカタログを結ぶ設計は成立しません。
 
-→ 対応案は §5.1。
+**等級のねじれ**: 在庫111点のうち **87点が `並`**。しかしポータルは `grade='上'` の価格しか出していません。
+上の値段で受注して並を出荷する状態になりえます。
 
-### 4.2 等級のねじれ ★重要
+## 1-7. 請求書取込に利用できる既存処理の有無
 
-在庫は **並が主体**（111点中 87点が `並`）だが、ポータルは `grade='上'` の価格しか出していない。
-「上の値段で注文を受けて、並を出荷する」状態になりうる。
+**ありません。** `order-admin.html` の「請求書作成」は**発行**（HTML→印刷）専用で、取込機能はありません。
+`invoices` / `invoice_items` テーブルも存在しません。
 
-### 4.3 `order_items.inventory_id` が単一UUID
+**この環境で使える道具**
 
-kg 指定の注文は**複数点にまたがる**（例: ロース 2.0kg = 0.65+0.72+0.81kg の3点）。
-1行に1つしか在庫IDを持てないので、引当の記録ができない。
+| 用途 | 可否 |
+|---|---|
+| PDF テキスト抽出 | ○ `pdftotext`（poppler）／ `pypdf` |
+| PDF → 画像 | ○ `pdftoppm` |
+| Excel | ○ `openpyxl` |
+| OCR（tesseract） | **×** 未インストール |
+| 画像の読み取り | ○ **アシスタントの画像認識で読む**（放射能検査の手書き速報19枚を読んだ実績あり） |
+| Drive への直接アクセス | **× 現在ブロック**（MCPが承認待ち。§5-1 に代替手順） |
 
-### 4.4 同時注文の競合
+## 1-8. スマホ幅 390px での現行画面の問題点（実測）
 
-2人が同時に同じ部位を注文すると、素朴な `SELECT → UPDATE` では同じ点を二重に引き当てる。
+Playwright（390×844 / iPhone 12〜14 相当）で `order-portal.html` を計測しました。
 
-### 4.5 `channel` の値がそろっていない（軽微）
+| 項目 | 実測 | 評価 |
+|---|---|---|
+| ログイン後の総ページ高 | **4457px = 5.3画面ぶん** | 縦に長すぎる |
+| 商品カード | 324×**158px**（1行1商品） | 1画面に5商品しか入らない |
+| 最後の商品までのスクロール | **3466px = 4.1画面ぶん** | 18商品で4画面。カタログ全48商品なら10画面超 |
+| 下部固定バー（カート／確認） | **なし** | カート確認のたびに最上部まで戻る |
+| タップ領域 44px 未満 | **73件** | ☆ 30×25px、＋いつもの 78×25px、数量 80×40px、カートに追加 106×40px |
+| 納品日・時間帯・備考 | **商品一覧と同一画面** | 商品を選ぶだけの画面に配送入力が混在 |
+| 横スクロール | なし | ○（唯一の合格点） |
+| 商品説明 | 常時非表示（そもそも表示欄が無い） | 要件を満たすには追加が必要 |
 
-`order-portal.html:934` は `channel:'portal'`（英字）を入れているが、
-DBの既定値と他の実績値は `'ポータル'`（日本語）。受発注管理の絞り込みが効かない。
-
-### 4.6 `weight` と `weight_kg` の二重持ち（軽微）
-
-`inventory` / `order_items` の両方に同義の列がある。値は現状すべて同一（kg）。
-新規コードは `coalesce(weight_kg, weight)` で読み、書くときは両方に入れる（既存画面が `weight` を見ているため）。
-
-### 4.7 まだ残っているセキュリティ上の穴 ★重要
-
-`customers` / `orders` / `order_items` は依然 `anon` に `ALL / qual=true` のRLSポリシーが付いており、
-公開ページに埋め込まれた anon キーで **718件の氏名・住所・電話と全注文履歴が読める**。
-パスワードは PR #114 で切り離したが、ここは未対応。
-
-センター側3画面（`index.html` / `order-admin.html` / `sales-dashboard.html`）が anon キーで
-全権アクセスしているため、**本物のログイン（Supabase Auth）を入れないと塞げない**。
-本計画とは別タスクだが、注文履歴を扱う以上、本番公開前に済ませたい。
+**結論: 既存画面への機能追加では要望を満たせません。スマホ専用の注文導線を新設します（§4）。**
 
 ---
 
-## 5. 設計
+# 第2部 改訂版 実装計画
 
-### 5.1 商品マスタを1枚かませる（4.1 / 4.2 への対応）
+## 2-1. 方針の変更点（v1 → v2）
 
-`price_master` を直接カタログにするのをやめ、**表示用の商品**と**在庫の部位**を結ぶ表を追加する。
+| 論点 | v1 | **v2** |
+|---|---|---|
+| 画面 | 既存ポータルに◎△×を足す | **スマホ専用画面を新設**（`order-portal.html` は残して段階移行） |
+| いつもの商品 | 手動登録のまま | **請求書実績からの自動抽出**。お気に入りとテーブルを分離 |
+| 顧客別価格 | `price_rank` のみ | **`customer_product_prices` を新設**し4段階の優先順位。単価はRPCで決定 |
+| 再注文 | 過去明細をコピー | **現在条件で全項目を再計算**。カート作成まで |
+| 引当 | FIFO＋1.25倍上限 | **超過最小の組み合わせ探索**。パック単位・分割禁止 |
+| セキュリティ | 後工程 | **P0（試験運用前に必須）** |
+| 請求書 | 対象外 | **ステージング経由の取込**を新規に構築 |
+
+## 2-2. 成果物と対応表（要望 §13）
+
+| # | 成果物 | 本書の該当箇所 |
+|---|---|---|
+| 1 | 改訂版実装計画 | 本書全体 |
+| 2 | 390px 画面構成案 | §4 |
+| 3 | テーブル・RPC設計 | §5 |
+| 4 | 請求書取込フロー | §5-1 |
+| 5 | 顧客・商品の名寄せルール | §5-2 |
+| 6 | 顧客別価格の決定ルール | §5-3 |
+| 7 | いつもの商品の抽出ルール | §5-5 |
+| 8 | データ移行・ロールバック計画 | §7 |
+| 9 | セキュリティ対応順序 | §6 |
+| 10 | テスト計画 | §8 |
+| 11 | 未決事項・施主判断が必要な点 | §9 |
+
+---
+
+## §3 全体像
+
+```
+Drive（請求書 PDF/Excel/画像）
+   │  ①取込（ローカル経由・ステージング）
+   ▼
+invoice_imports → invoice_documents → invoice_lines     …未処理/抽出済/要確認/確認済/取込済
+   │  ②名寄せ（顧客・商品）  ─ 確度を記録し、曖昧なものは人が確認
+   ▼
+customer_purchase_facts（確定した購入実績）
+   │  ③集計
+   ├─► customer_usual_items（いつもの商品・自動）
+   └─► price_variance_report（過去実売単価 vs 現在ポータル単価）
+                                    │ 人が確認して
+                                    ▼
+                          customer_product_prices（顧客別価格・手動確定）
+
+portal_products ─┬─ portal_product_parts ── inventory（在庫の実体）
+                 ├─ portal_product_prices（ランク別）
+                 └─ customer_product_prices（顧客別・最優先）
+
+お客様（スマホ） ── portal_sessions ── RPC のみ ──► orders / order_items / inventory_allocations
+```
+
+---
+
+## §4 スマホ注文画面（390px・要望 §3）
+
+新規ファイル **`order.html`**（`order-portal.html` は当面残し、案内のリンク先を段階的に切り替え）。
+
+### 4-1. 3画面で完結
+
+```
+[画面1 選ぶ]  ──→  [画面2 確認]  ──→  [画面3 完了]
+```
+
+商品一覧では **商品の選択以外を入力させません**。納品日・時間帯・配送先・備考はすべて画面2です。
+
+### 4-2. 画面1（選ぶ）の構成
+
+```
+┌────────────────────────────── 390px
+│ 狩野屋様                        [ログアウト]   ← 44px
+├──────────────────────────────
+│ ⭐ いつもの商品                          ← 最大5件・自動抽出
+│ ┌──────────────────────────┐
+│ │ 猪ミンチ 粗挽き        ◎  ¥3,200/kg │  ← 1行56px
+│ │ いつも 3.0kg   [−] 3.0 [+]  [追加] ☆│
+│ └──────────────────────────┘
+│ … （最大5行 = 約280px）
+├──────────────────────────────
+│ 🔁 前回の注文  2026-07-28
+│   猪ミンチ 3.0kg / ロース 1.5kg
+│   [ 同じ内容をカートに入れる ]           ← 確定はしない
+│   ⚠ ロースは現在ご用意できません
+├──────────────────────────────
+│ ★ お気に入り（本人が☆を付けたもの）
+├──────────────────────────────
+│ 🐗 全商品   [イノシシ][シカ][その他]     ← 種の切替
+│   （同じ1行56pxの行が並ぶ）
+├──────────────────────────────
+│ ▶ 在庫切れの商品（3件）                  ← 既定で折りたたみ
+└──────────────────────────────
+┃ 3点 / 概算 ¥12,400   [ 確認へ ]  ┃ ← 下部固定・高さ64px
+```
+
+### 4-3. 商品1行の仕様（縦長カードをやめる）
+
+**動く試作を `docs/mockups/order-mobile.html` に置き、390×844 で実測しました**
+（画面キャプチャ: `docs/mockups/order-mobile-390px.png`）。
+
+| 指標 | 現行 `order-portal.html` | **試作 `order-mobile.html`** |
+|---|---|---|
+| 1商品あたりの高さ | 158px | **87px**（2段組・−／＋を44pxにした上で） |
+| 同じ内容の総ページ高 | 4457px（5.3画面） | **1345px（1.6画面）** |
+| タップ領域 44px 未満 | **73件** | **0件** |
+| 下部固定バー | なし | あり（3点／概算／確認へ） |
+| 横スクロール | なし | なし |
+
+| 要素 | 仕様 |
+|---|---|
+| 行の高さ | **87px**（現行158pxの約55%。1画面に約9商品） |
+| 1段目 | 商品名（省略記号）＋ 在庫記号 ＋ 単価 |
+| 2段目 | いつもの注文量 ＋ [− 数量 ＋] ＋ [追加] ＋ ☆ |
+| 商品名 | 1行・省略記号。タップで説明を展開（既定は非表示） |
+| 在庫記号 | ◎／△／× のみ。**重量は出さない** |
+| 単価 | **その顧客に適用される単価**（`customer_product_prices` → ランク → 標準の順で解決済みの値） |
+| いつもの注文量 | 「いつも3.0kg」。数量の初期値にも使う |
+| − / ＋ | **各44×44px**。`step_kg` 刻み、`min_order_kg` 下限 |
+| 追加 | 56×44px。**1タップでカート投入**（数量が既定のままなら計1タップ） |
+| ☆ | 44×44px。お気に入りの登録／解除 |
+| × の行 | 数量と追加を無効化し、下部の折りたたみへ移す |
+
+### 4-4. 画面2（確認）
+
+- 明細（商品名・希望重量・単価・小計）と **合計は「概算」と明示**
+- 納品希望日 / 時間帯 / 配送先 / 備考
+- **現物重量の注記を必ず表示**:
+  > ジビエは現物パック単位のため、ご希望量を下回らない範囲で重量が前後します。請求額は実際に確保した重量で確定します。
+- **前回と価格が違う明細は差分を表示**（`前回 ¥3,000 → 今回 ¥3,200`）。過去価格は選べません
+- 注文できない明細は赤字で「現在は注文できません／代替候補をご確認ください」。**勝手に別商品へ置き換えません**
+
+### 4-5. 実装上の約束
+
+- タップ領域は全て **44×44px 以上**
+- 下部固定バーは `position:fixed; bottom:0` ＋ `env(safe-area-inset-bottom)`
+- 数量入力はキーボードを出さない（−／＋のみ。直接入力は長押しで開くダイアログ）
+- 390px を基準に Playwright で毎回検証（§8）
+
+---
+
+## §5 テーブル・RPC 設計
+
+すべて `/migrations` への**追加SQL**です。既存テーブルの列削除・改名は行いません。
+
+### 5-1. 請求書取込（要望 §5）
+
+#### テーブル
+
+```sql
+-- 取込の単位（1ファイル＝1行）
+create table invoice_imports (
+  id            uuid primary key default gen_random_uuid(),
+  source        text not null,              -- 'drive' | 'local'
+  source_file_id text,                      -- DriveのファイルID
+  file_name     text not null,
+  mime_type     text,
+  content_hash  text not null,              -- ファイル全体のSHA-256
+  page_count    int,
+  status        text not null default '未処理',
+    -- 未処理 / 抽出済 / 顧客未照合 / 商品未照合 / 要確認 / 確認済 / 取込済 / 除外
+  error_message text,
+  imported_by   text,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
+  unique (content_hash),                    -- 同一ファイルの再取込を防ぐ
+  unique (source, source_file_id)
+);
+
+-- 1ファイルに複数枚の請求書が入りうる
+create table invoice_documents (
+  id             uuid primary key default gen_random_uuid(),
+  import_id      uuid not null references invoice_imports(id) on delete cascade,
+  page_from      int, page_to int,          -- 元資料の該当ページ（追跡用）
+  invoice_number text,
+  invoice_date   date,
+  delivery_date  date,
+  raw_customer_name text,                   -- 請求書に書かれたまま
+  raw_addressee  text,                      -- 宛名
+  raw_address    text,
+  raw_postal     text,
+  raw_phone      text,
+  total_amount   numeric,
+  note           text,
+  customer_id    uuid references customers(id),   -- 名寄せ結果
+  match_confidence numeric,                 -- 0.00〜1.00
+  match_method   text,                      -- phone / postal+name / code / manual
+  match_status   text not null default '未照合',  -- 未照合 / 候補あり / 確定 / 対象外
+  matched_by     text, matched_at timestamptz,
+  created_at     timestamptz not null default now(),
+  unique (import_id, page_from, invoice_number)
+);
+
+create table invoice_lines (
+  id            uuid primary key default gen_random_uuid(),
+  document_id   uuid not null references invoice_documents(id) on delete cascade,
+  line_no       int not null,
+  raw_item_name text not null,              -- 請求書の品名そのまま
+  raw_species   text, raw_part text, raw_grade text,
+  weight_kg     numeric, unit_price numeric, amount numeric,
+  note          text,
+  source_ref    text,                       -- 'p.2 表1 行5' など元資料の該当箇所
+  confidence    numeric,                    -- 読み取りの確からしさ
+  product_id    uuid references portal_products(id),
+  match_confidence numeric, match_method text,
+  match_status  text not null default '未照合',
+  created_at    timestamptz not null default now(),
+  unique (document_id, line_no)
+);
+
+-- 確認済みの購入実績（ここから「いつもの」と価格比較を作る）
+create table customer_purchase_facts (
+  id            uuid primary key default gen_random_uuid(),
+  customer_id   uuid not null references customers(id),
+  product_id    uuid not null references portal_products(id),
+  purchased_on  date not null,
+  weight_kg     numeric not null,
+  unit_price    numeric,
+  amount        numeric,
+  source_kind   text not null,              -- 'invoice' | 'order'
+  source_id     uuid not null,              -- invoice_lines.id または order_items.id
+  created_at    timestamptz not null default now(),
+  unique (source_kind, source_id)           -- 冪等性
+);
+```
+
+#### 状態遷移
+
+```
+未処理 ──抽出──► 抽出済 ──名寄せ──┬─► 顧客未照合 ─┐
+                                  ├─► 商品未照合 ─┼─► 要確認 ──人が確認──► 確認済 ──► 取込済
+                                  └─► （両方確定）─┘                              └──► 除外
+```
+
+**OCR・表抽出の結果を直接 `customer_purchase_facts` へ入れません。** 必ず `invoice_lines` を経由し、
+`確認済` になったものだけを `取込済` に進めます。
+
+#### 冪等性
+
+- ファイル: `content_hash` の一意制約（同じファイルを2度読んでも2行にならない）
+- 請求書: `(import_id, page_from, invoice_number)` の一意制約
+- 実績: `(source_kind, source_id)` の一意制約 ← **再取込しても購入回数が二重に増えません**
+
+#### Drive からの取込手順（**現在Driveがブロックされているため2経路を用意**）
+
+現状: Drive MCP が承認待ち（`MCP tool call requires approval`）でフォルダを開けません。
+承認いただければ経路Aが使えます。使えないままでも経路Bで進みます。
+
+**経路A（Drive直結）**: フォルダ `1HrsJYXbLof6OtZ_sUYFN0gXweYMcWgao` を列挙 →
+`download_file_content` で取得 → 下記の抽出処理へ。
+
+**経路B（ローカル取込・Driveが使えない場合）**
+1. 取込ディレクトリを **`import/invoices/`**（リポジトリには含めず `.gitignore`）に定める
+2. 施主がDriveから一括ダウンロードして配置。または `import/invoices/` に直接置く
+3. `scripts/import-invoices.mjs` を実行
+
+```
+node scripts/import-invoices.mjs --dir import/invoices --dry-run   # 抽出だけ
+node scripts/import-invoices.mjs --dir import/invoices --push      # ステージングへ投入
+```
+
+**形式ごとの抽出**
+
+| 形式 | 方法 | 備考 |
+|---|---|---|
+| Excel (.xlsx) | `openpyxl` | 表がそのまま取れる。最も確実 |
+| テキストPDF | `pdftotext -layout` | 罫線なしのレイアウト保持テキストから列を推定 |
+| 画像PDF・画像 | `pdftoppm` でPNG化 → **画像認識で読み取り** → JSON | tesseract が無いため。1枚ずつ確認できるよう `source_ref` にページを残す |
+
+**実ファイルが揃う前でも検証できるよう、`import/invoices/_samples/` にモック請求書（Excel 3種・
+テキストPDF 2種・画像PDF 1種）を同梱**し、テストはモックで回します。
+
+### 5-2. 名寄せルール（要望 §6）
+
+#### 顧客の名寄せ
+
+**部分一致だけで自動確定しません。** 下記のスコアで候補を出し、確度を記録します。
+
+| 判定 | 条件 | 確度 | 扱い |
+|---|---|---|---|
+| 確定 | `code` が一致 | 1.00 | 自動確定 |
+| 確定 | 正規化電話が完全一致（数字のみ比較）かつ 候補が1件 | 0.95 | 自動確定 |
+| 候補 | 正規化電話が一致するが候補が複数 | 0.70 | **人が確認** |
+| 候補 | 郵便番号一致 ＋ 名称の類似度 ≥ 0.8 | 0.75 | **人が確認** |
+| 候補 | 名称完全一致のみ（電話・住所の裏付け無し） | 0.50 | **人が確認**（同名4組あり） |
+| 候補 | 名称の部分一致のみ | 0.30 | **人が確認** |
+| 未照合 | 上記いずれも無し | 0.00 | 確認一覧へ |
+
+- 名称の正規化: 全角→半角、スペース除去、`株式会社`↔`(株)`↔`㈱`、`有限会社`↔`(有)`、
+  `合同会社`↔`(同)` を吸収。類似度は正規化後の文字bigram Jaccard
+- 電話の正規化: 数字以外を除去。先頭 `+81` → `0`
+- 既存の注文履歴・請求履歴がある顧客はスコアに +0.1（同名の判別材料）
+- **確度 0.95 未満はすべて確認一覧に出し、人が確定するまで `customer_purchase_facts` に入りません**
+
+#### 商品の名寄せ
+
+**名称が似ているだけで統合しません。** 対応表を明示的に持ちます。
+
+```sql
+create table product_name_aliases (
+  id          uuid primary key default gen_random_uuid(),
+  raw_name    text not null,               -- 請求書や在庫に出てくる表記
+  raw_species text, raw_grade text,
+  product_id  uuid references portal_products(id),
+  decision    text not null default '未判定', -- 未判定 / 対応づけ / 別商品 / 対象外
+  decided_by  text, decided_at timestamptz,
+  note        text,
+  unique (raw_name, coalesce(raw_species,''), coalesce(raw_grade,''))
+);
+```
+
+- 初期は**全件 `未判定`**。センター側の「商品の照合候補」画面で1件ずつ決めます
+- 機械は**候補を提示するだけ**。`カタ` / `肩` / `ウデ` / `カタ（ウデ）` のような組は候補に出しますが自動確定しません
+- **価格帯が2割以上違う組み合わせは候補から除外**し、`別商品` の既定にします
+  （`ペットフード用（骨あり）` と `（骨なし）` のように商品性・価格が異なるものを守るため）
+- `未判定` の行がある請求書は `商品未照合` のまま `取込済` に進めません
+
+### 5-3. 顧客別価格の決定ルール（要望 §7）
+
+```sql
+create table customer_product_prices (
+  customer_id uuid not null references customers(id) on delete cascade,
+  product_id  uuid not null references portal_products(id) on delete cascade,
+  unit_price  int  not null check (unit_price >= 0),
+  valid_from  date,
+  valid_until date,
+  note        text,
+  updated_by  text,
+  updated_at  timestamptz not null default now(),
+  primary key (customer_id, product_id)
+);
+```
+
+既存 `customer_prices`（species/part_name ベース・0行）は**残しますが使いません**。
+`portal_products` 基準の上表へ寄せます（`comment on table` で非推奨を明記）。
+
+**決定順位（DB側の関数 `resolve_unit_price(p_customer_id, p_product_id, p_on date)` で一元化）**
+
+| 順 | 出典 | `price_source` |
+|---|---|---|
+| 1 | `customer_product_prices`（`p_on` が有効期間内） | `customer_override` |
+| 2 | `portal_product_prices`（顧客の `price_rank`） | `price_rank` |
+| 3 | `portal_product_prices`（`standard`） | `standard` |
+| 4 | 該当なし | **注文不可**（明細ごとにエラー） |
+
+**注文RPCはクライアントから来た単価を一切見ません。** `resolve_unit_price()` の戻り値だけを使います。
+
+`order_items` に**追加する列**（注文時点のスナップショット）:
+
+```sql
+alter table order_items
+  add column if not exists product_id_v2   uuid references portal_products(id),
+  add column if not exists product_name    text,      -- 表示名のスナップショット
+  add column if not exists grade_snapshot  text,
+  add column if not exists price_rank_applied text,
+  add column if not exists price_source    text,      -- customer_override / price_rank / standard
+  add column if not exists requested_kg    numeric,   -- 注文希望重量
+  add column if not exists allocated_kg    numeric;   -- 実引当重量
+```
+
+既存の `product_id`（`price_master.id` を指していた）とは別列にして、既存データを壊しません。
+
+**価格差比較表**（取込後に出力。§11 の管理画面から閲覧・CSV出力）
+
+| 顧客 | 商品 | 購入回数 | 過去の最新実売単価 | 過去の最頻実売単価 | 現在のポータル単価 | 差額 | 要確認理由 |
+|---|---|---|---|---|---|---|---|
+
+要確認理由の例: `差額 ±5%以上` / `過去単価が複数（最頻と最新が不一致）` / `現在価格が未設定` / `個別価格の期限切れ`
+
+`customers` に `portal_enabled boolean default false` を追加し、**価格差が解消するまで
+その顧客のポータル案内を有効化しない**運用を可能にします（§9-4 で判断を仰ぎます）。
+
+### 5-4. 商品マスタ・在庫・引当
 
 ```sql
 create table portal_products (
-  id            uuid primary key default gen_random_uuid(),
-  species       text not null,            -- イノシシ / シカ / キョン
-  display_name  text not null,            -- お客様に見せる名前（例: 猪ミンチ 粗挽き）
-  sort_order    int  not null default 100,
-  description   text,                     -- 「煮込み向き」等
-  min_order_kg  numeric not null default 0.5,
-  step_kg       numeric not null default 0.5,
-  low_kg        numeric not null default 3.0,   -- これ未満は △
-  is_active     boolean not null default true,
-  created_at    timestamptz default now()
+  id uuid primary key default gen_random_uuid(),
+  species text not null, display_name text not null, description text,
+  sort_order int not null default 100,
+  min_order_kg numeric not null default 0.5,
+  step_kg numeric not null default 0.5,
+  low_kg numeric not null default 3.0,          -- これ未満は △
+  is_active boolean not null default true,      -- 販売停止はここ
+  is_reorderable boolean not null default true, -- 一般商品として再注文可か
+  created_at timestamptz default now()
 );
-
--- 1商品 = 在庫の部位×等級の組み合わせ（複数可）
-create table portal_product_parts (
-  product_id  uuid not null references portal_products(id) on delete cascade,
-  part_name   text not null,
-  grade       text,                       -- null = 等級を問わない
+create table portal_product_parts (            -- 1商品 = 在庫の部位×等級（複数可）
+  product_id uuid not null references portal_products(id) on delete cascade,
+  part_name text not null, grade text,          -- grade null = 等級を問わない
   primary key (product_id, part_name, coalesce(grade,''))
 );
-
--- 商品ごと・価格ランクごとの単価（price_master と切り離す）
 create table portal_product_prices (
   product_id uuid not null references portal_products(id) on delete cascade,
-  price_rank text not null,               -- standard / local / startmember
-  unit_price int  not null,
+  price_rank text not null, unit_price int not null check (unit_price >= 0),
   primary key (product_id, price_rank)
 );
-```
-
-- 初期データは現在の在庫実態から作る（ミンチ用＋ミンチ肉（粗挽き）を1商品にまとめる等）。
-- 受発注管理の「価格マスタ」タブに商品の編集UIを足す。
-- **代案**: `price_master` に `alias` 列を足して文字列を寄せるだけ。安いが、
-  「ミンチ用（並）とミンチ肉（粗挽き）（上）を1つの商品として売る」ができない。→ 採らない。
-
-### 5.2 在庫の◎△×（決定方針: 重量は出さない）
-
-在庫の残量は**ビュー**で出し、しきい値で記号に落とす。
-
-```sql
-create view portal_stock as
-select p.id as product_id, p.species, p.display_name, p.sort_order, p.min_order_kg, p.step_kg,
-       coalesce(sum(i.weight_kg), 0) as avail_kg,   -- ← 画面には出さない
-       count(i.id) as pcs
-  from portal_products p
-  left join portal_product_parts pp on pp.product_id = p.id
-  left join inventory i
-         on i.deleted_at is null
-        and i.status = '在庫'
-        and i.species = p.species
-        and i.part_name = pp.part_name
-        and (pp.grade is null or i.grade = pp.grade)
- where p.is_active
- group by p.id;
-```
-
-記号の決め方（お客様側で `avail_kg` から算出。**APIレスポンスに `avail_kg` を含めない**のが要件）:
-
-| 記号 | 条件 | 表示 |
-|---|---|---|
-| ◎ | `avail_kg >= low_kg` | ご用意できます |
-| △ | `min_order_kg <= avail_kg < low_kg` | 残りわずか |
-| × | `avail_kg < min_order_kg` | 在庫切れ（注文不可） |
-
-→ **`avail_kg` をクライアントに渡さない**ため、記号への変換はDB側（ビュー or RPC）で行い、
-`portal_stock_public`（`product_id, species, display_name, mark, min_order_kg, step_kg, unit_price`）
-だけを返す。ここは要レビュー: 「見せない」を本気でやるならサーバ側で落とす必要がある。
-
-### 5.3 引当（決定方針: 注文時に引当済）★要レビュー
-
-```sql
 create table inventory_allocations (
-  id            uuid primary key default gen_random_uuid(),
+  id uuid primary key default gen_random_uuid(),
   order_item_id uuid not null references order_items(id) on delete cascade,
   inventory_id  uuid not null references inventory(id),
   weight_kg     numeric not null,
-  created_at    timestamptz default now()
+  created_at    timestamptz not null default now()
 );
-create unique index on inventory_allocations(inventory_id)
-  where true;   -- 1点は同時に1注文にしか引き当てない
+create unique index inventory_allocations_one_per_pack on inventory_allocations(inventory_id);
 ```
 
-注文確定は **1本のRPC**（SECURITY DEFINER・トランザクション）で行う:
+#### 在庫記号（重量は返さない）
+
+`portal_stock_public(product_id, mark, min_order_kg, step_kg)` を**関数**で返します。
+`avail_kg` はサーバ内で使うだけで、**APIレスポンスに含めません**（要望「重量は出さない」の担保）。
+
+| 記号 | 条件 |
+|---|---|
+| ◎ | `avail_kg >= low_kg` |
+| △ | `min_order_kg <= avail_kg < low_kg` |
+| × | `avail_kg < min_order_kg` |
+
+#### 引当アルゴリズム（要望 §9・**FIFO＋1.25倍をやめる**）
+
+**未開封パック単位。1在庫点は1注文にのみ。`weight_kg` は元在庫の重量と一致（部分減算しない）。**
 
 ```
-portal_place_order(p_login_token, p_items jsonb, p_delivery_date, p_time_zone, p_memo)
+目的: 合計 >= 希望量 を満たす部分集合のうち
+  第1優先: 超過量 (合計 − 希望量) が最小
+  第2優先: 使用パック数が少ない
+  第3優先: 古い在庫（processed_at 昇順）を多く含む
 ```
 
-処理:
-1. お客様を特定（§5.5 のトークン）
-2. `orders` を1行 INSERT（`status='受注'`, `channel='ポータル'`）
-3. 各明細について:
-   - `select ... from inventory where 部位一致 and status='在庫' and deleted_at is null
-      order by processed_at asc for update skip locked`
-     → **`FOR UPDATE SKIP LOCKED`** で 4.4 の競合を防ぐ
-   - 古い順（先入先出）に積み、**注文kgを下回らない**ところまで取る
-   - 上限ガード: 積み上げが `注文kg × 1.25` を超える点は取らない
-   - 足りなければ **注文全体をロールバック**し、`不足` を返す
-   - 取った点を `status='引当済'` に更新し、`inventory_allocations` に記録
-   - `order_items` の `weight_kg` は**実際に引き当てた合計kg**で書く（注文kgは `notes` 相当に残す）
-4. `orders.total_amount` を再計算して返す
+実装:
+1. `select … from inventory where 部位一致 and status='在庫' and deleted_at is null
+    order by processed_at asc **for update skip locked**` で候補を確保（同時注文の二重引当を防止）
+2. 重量を10g単位の整数に丸め、**部分和のDP**で「希望量以上で最小の合計」を求める
+   （候補25点以下 かつ 希望量30kg以下のとき。DP表は 25×3000 程度で実用範囲）
+3. 候補がそれを超える場合は**貪欲＋局所改善**にフォールバック
+   （降順に積んで達したら、最後の1点をより小さい点に差し替えて超過を詰める）。
+   フォールバックしたことは `orders.notes` に記録
+4. 合計が希望量に届かなければ **注文全体をロールバック**し、`不足` を返す（部分受注しない）
+5. 取った点を `status='引当済'` に更新、`inventory_allocations` に記録、
+   `order_items.allocated_kg` に実重量、`requested_kg` に希望量を保存
+6. 金額は `allocated_kg × 確定単価` で計算
 
-**端数の扱い（要レビュー）**: 現物なので注文2.0kgに対して実引当2.18kgのようになる。
-ジビエの慣行としては現物重量での精算が自然だが、
-「注文より多い量が届いて請求される」ことになるため、以下のどちらかを選ぶ必要がある。
+**小分けが必要な場合**は元在庫を減算せず、業務アプリ側で**子在庫を作る別処理**（`parent_inventory_id` を使う既存の仕組み）とします。注文RPCからは行いません。
 
-- **案A（推奨）**: 下回らないように積み、実重量で精算。ポータルに
-  「お受けした量 2.18kg（ご注文 2.0kg）／現物のため多少前後します」と明示し、注文前にも注記を出す。
-- 案B: 注文kgを超えない範囲で積む（1.53kg で確定）。不足感が出る。
-- 案C: 引当はせず、センターが実物を見て確定してから数量を決める → 施主の決定（注文時に引当）と矛盾。
+**戻し**: `キャンセル` で `引当済 → 在庫`、`発送済` で `引当済 → 出荷済`。二重に戻らないよう
+`inventory_allocations` の存在を条件にします。
 
-キャンセル・戻し:
-- `orders.status='キャンセル'` にしたとき、`inventory_allocations` を辿って `引当済 → 在庫` に戻す
-- 出荷確定（`発送済`）で `引当済 → 出荷済` にする
-- 受発注管理から明細単位で引当を外す操作も用意する
+### 5-5. 「いつもの商品」の抽出ルール（要望 §4）
 
-### 5.4 センター側（受発注管理）
+**お気に入りとテーブルを完全に分けます。**
 
-- 注文一覧に **「新着」バッジ**（`channel='ポータル' and status='受注'`）
-- 注文詳細に**引当の内訳**（どの個体のどの点を何kg取ったか＝トレーサビリティ）
-- 引当の**やり直し**（別の点に差し替え）／**取り消し**
-- 商品マスタ（§5.1）の編集タブ
-- 在庫が `低` になった商品の一覧（欠品予告）
+```sql
+-- 自動抽出（システムが作る。人の★とは別物）
+create table customer_usual_items (
+  customer_id     uuid not null references customers(id) on delete cascade,
+  product_id      uuid not null references portal_products(id) on delete cascade,
+  rank            int  not null,             -- 1〜5
+  purchase_count  int  not null,
+  total_kg        numeric not null,
+  avg_order_kg    numeric not null,          -- 「いつもの注文量」の根拠
+  usual_qty_kg    numeric not null,          -- 画面の初期値（step_kg に丸めた値）
+  last_purchased_on date,
+  avg_interval_days numeric,
+  reason          text not null,             -- 自動抽出の根拠（人が読める文）
+  computed_at     timestamptz not null default now(),
+  is_pinned       boolean not null default false,  -- 人が固定したものは自動更新で消さない
+  is_hidden       boolean not null default false,  -- 人が非表示にした
+  primary key (customer_id, product_id)
+);
+```
 
-### 5.5 お客様の識別（§4.7 への部分対応）
+お気に入りは**既存の `customer_saved_items` を `kind='favorite'` 専用として継続利用**します
+（0行なので実害はありませんが、`kind='usual'` の行があれば `favorite` へ移し替えて保持 → §7-2）。
 
-現在ポータルは `customers` / `orders` / `order_items` を anon で直接読み書きしている。
-注文サイトの実装にあわせて、**お客様側の読み書きはすべてRPC経由**に寄せる。
+**初期候補の条件**
 
-- `portal_login()` が**セッショントークン**を発行（`portal_sessions` に保管・有効期限あり）
-- `portal_my_orders(token)` / `portal_place_order(token, ...)` / `portal_saved_items(token, ...)`
-- これによりポータル側から `customers` / `orders` を直読みする必要がなくなり、
-  **anon の SELECT ポリシーを外せる**（センター側3画面の Supabase Auth 化は別途必要）
+1. 直近1年で **購入2回以上**、または **直近3か月以内に購入**
+2. 並び: `購入回数 desc` → `直近購入日 desc` → `累計重量 desc`
+3. 顧客ごと **最大5商品**
+4. `portal_products.is_reorderable = false`（特殊商品）は除外
+5. `is_hidden` は除外、`is_pinned` は無条件で先頭
+
+`usual_qty_kg` = `avg_order_kg` を `step_kg` に丸め、`min_order_kg` を下回らせない。
+
+**再集計しても `customer_saved_items`（お気に入り）は一切触りません。**
+自動更新は `customer_usual_items` の `is_pinned = false` の行だけを入れ替えます。
+
+### 5-6. セッションとRPC（要望 §10）
+
+```sql
+create table portal_sessions (
+  token       text primary key,             -- 32バイト乱数のbase64url
+  customer_id uuid not null references customers(id) on delete cascade,
+  created_at  timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  expires_at  timestamptz not null default now() + interval '30 days',
+  user_agent  text
+);
+```
+
+お客様側が呼ぶのは**RPCだけ**にし、テーブルへの直接アクセスを全廃します。
+
+| RPC | 役割 |
+|---|---|
+| `portal_login(login, password)` | 既存。**トークンを返すよう変更** |
+| `portal_logout(token)` | トークン失効 |
+| `portal_me(token)` | 顧客情報（パスワードは返さない） |
+| `portal_catalog(token)` | いつもの／お気に入り／全商品／在庫切れ。**記号と適用単価のみ。実重量は返さない** |
+| `portal_last_order(token)` | 前回注文の内容（再構成前） |
+| `portal_rebuild_cart(token, order_id)` | 前回注文を**現在条件で再計算**してカート案を返す（注文しない） |
+| `portal_place_order(token, items, delivery…)` | 単価決定＋引当＋注文作成をトランザクションで |
+| `portal_my_orders(token)` | 履歴 |
+| `portal_toggle_favorite(token, product_id)` | ☆の登録／解除 |
+| `portal_change_password(login, old, new)` | 既存 |
 
 ---
 
-## 6. 実装ステップ
+## §6 セキュリティ対応順序（要望 §10・**P0**）
 
-| # | 内容 | 変更ファイル | 目安 |
-|---|---|---|---|
-| 1 | 商品マスタ 3テーブル + 初期データ + `portal_stock` ビュー | `migrations/2026xxxx_portal_products.sql` | 小 |
-| 2 | 受発注管理に「商品マスタ」編集タブ | `order-admin.html` | 中 |
-| 3 | `inventory_allocations` + `portal_place_order()` RPC | `migrations/2026xxxx_allocations.sql` | **大（核）** |
-| 4 | ポータルを◎△×表示＋RPC注文に差し替え | `order-portal.html` | 中 |
-| 5 | 受発注管理に新着バッジ・引当内訳・引当のやり直し | `order-admin.html` | 中 |
-| 6 | セッショントークン化（§5.5）とRLS引き締め | `migrations` + `order-portal.html` | 中 |
-| 7 | `channel` の値の統一（4.5）と既存データの是正 | `order-portal.html` + 1行UPDATE | 小 |
+| # | 内容 | いつ |
+|---|---|---|
+| 1 | 商品・価格・引当の設計と実装 | 実装フェーズ1 |
+| 2 | `portal_sessions` とトークン発行 | フェーズ2 |
+| 3 | お客様向け読取・注文RPC | フェーズ2 |
+| 4 | お客様側の直接DBアクセス廃止（`order.html` はRPCのみ） | フェーズ2 |
+| 5 | **RLS引き締め**（`customers` / `orders` / `order_items` の `anon` 全権ポリシーを削除） | フェーズ2 |
+| 6 | スマホ注文UI | フェーズ3 |
+| 7 | 限定顧客（3〜5社）による試験運用 | フェーズ4 |
+| 8 | センター側 Supabase Auth | フェーズ5 |
+| 9 | 本番案内（718件への配布） | フェーズ6 |
 
-**1〜5 を先に出して現場で試し、6 は案内の一斉配布前に必ず入れる。**
+> ### 🚧 本番公開のブロッカー（明示）
+> **センター側の3画面（`index.html` / `order-admin.html` / `sales-dashboard.html`）が
+> 公開ページに埋め込まれた anon キーで全権アクセスしている状態が残っている限り、
+> 718件への案内配布（フェーズ6）を実施してはいけません。**
+> この状態では、キーを読み取った第三者が全顧客の氏名・住所・電話・全注文履歴を取得し、
+> 書き換え・削除もできます。フェーズ5（Supabase Auth 化）の完了が配布の前提条件です。
+>
+> なお試験運用（フェーズ4）は、対象を数社に限り、その旨を先方に伝えたうえでなら実施可能と考えます。
+> ここは施主判断が必要です（§9-5）。
 
-## 7. テスト計画
+---
 
-既存流儀に合わせ、Playwright（chromium: `/opt/pw-browsers/chromium/chrome-linux/chrome`）で
-`<script>` ごとの構文チェック → E2E → 本番反映。DBはルートで差し替え（`page.route`）してモック。
+## §7 データ移行・ロールバック計画
 
-- **在庫表示**: ◎△×の境界（`avail_kg` が `low_kg` ちょうど／`min_order_kg` ちょうど）、×は注文不可、
-  **APIレスポンスに実重量が含まれないこと**
-- **引当**: 端数（2.0kg 注文 → 複数点）、在庫ぴったり、在庫不足でロールバック、
-  上限ガード（1.25倍を超えない）、先入先出の順序
-- **競合**: 同一商品への同時注文2本で二重引当が起きないこと（RPCを並列に呼ぶ）
-- **キャンセル**: 引当が `在庫` に戻ること、二重に戻らないこと
-- **センター側**: 新着バッジ、引当内訳の表示、引当のやり直し
-- **回帰**: 既存の `custsync` / `indnum` / `rad` / `radscan` / `warn` / `portal-login` / `portal-guide`
+### 7-1. 原則
 
-## 8. リスク・未決事項（**レビューで判断がほしい点**）
+- **既存テーブルの列削除・改名・データ削除は行いません。** 追加のみ
+- `price_master` / `customer_prices` / `customer_saved_items` / `orders` / `order_items` / `inventory`
+  の既存行は書き換えません（`order_items` は**列の追加のみ**）
+- 各マイグレーションに対応する**取り消しSQL**を `migrations/rollback/` に同時に置きます
 
-1. **§5.3 の端数の扱い（案A/B/C）** — 商売のルールに関わる。推奨は案A
-2. **§5.2 で在庫切れ・数量オーバー時に「あと何kgまで」を伝えるか**
-   「重量を出さない」方針と、注文が通らないときの親切さがぶつかる。
-   現案は「ご用意できる量を超えています」とだけ出して具体量は伏せる
-3. **§5.1 の商品マスタ初期データ**（何を1商品にまとめ、何を出さないか）は施主の確認が要る。
-   特に「ペットフード用（あり／なし）」「味肉用」「チチカブ」を一般のお客様に出すかどうか
-4. **§4.7 のセンター側 Supabase Auth 化** — 本計画の外だが、注文履歴を扱う以上は前提条件に近い
-5. **在庫の実態がどれだけ正確か** — 引当を自動化すると、DBの在庫がずれていた場合に
-   「注文は通ったが現物が無い」が起きる。移行初期はセンター側で必ず目視確認する運用を挟む
-6. `individuals` との紐付け（`inventory.individual_id`）が欠けている点があると、
-   引当内訳のトレーサビリティが切れる。事前に棚卸しが必要かもしれない
+### 7-2. 移行手順
 
-## 9. 変更しないもの（安全のため）
+| 手順 | 内容 | 取り消し方法 |
+|---|---|---|
+| M1 | `portal_products` 等を作成し、**現在の在庫実態から初期データを投入**（人が確認） | テーブルを drop（既存に影響なし） |
+| M2 | `customer_saved_items` の `kind='usual'` を `favorite` へ複製（**元行は消さない**） | 複製行を削除 |
+| M3 | `order_items` に列追加（すべて nullable） | 列を drop |
+| M4 | 請求書ステージング一式を作成 | drop |
+| M5 | `customer_purchase_facts` を集計 → `customer_usual_items` を生成 | 再生成のみ。元データは請求書側に残る |
+| M6 | `customer_product_prices` へ**人が確認した価格だけ**投入 | 行を削除すればランク価格に戻る |
+| M7 | RLS引き締め | ポリシーを元に戻すSQLを用意 |
+
+### 7-3. 切り戻し
+
+- 画面: `order.html` は新規ファイル。問題があれば案内のリンクを `order-portal.html` に戻すだけ
+- RPC: `create or replace` のため、旧定義を `migrations/rollback/` に保存
+- RLS: フェーズ2で削除するポリシーの定義を事前に控え、復元SQLを用意
+- **試験運用中は `order-portal.html` を残し、いつでも戻せる状態を維持します**
+
+---
+
+## §8 テスト計画（要望 §12）
+
+既存流儀（`new Function()` による `<script>` 構文チェック → Playwright E2E → 本番反映）に追加します。
+
+### スマホ（390×844・`isMobile:true`）
+- レイアウトが崩れない（横スクロールが出ない）
+- 主要ボタン（カート／確認）が下部に固定される
+- **いつもの商品から1〜2タップでカート追加できる**
+- 商品10件以上でも操作しやすい（1画面あたりの商品数・総スクロール量を計測して閾値判定）
+- **注文確定まで3画面以内**
+- タップ領域がすべて44px以上
+
+### 請求書
+- PDF / 画像 / Excel の取込（モック同梱）
+- **同じファイルの再取込で `customer_purchase_facts` が増えない**
+- **同名顧客（4組）を誤って結合しない**
+- 表記揺れ商品を勝手に統合しない（`未判定` のまま止まる）
+- 読取不能箇所が `要確認` になる
+- `source_ref` から元ファイル・ページへ追跡できる
+
+### 価格
+- 個別価格が価格ランクより優先される
+- 個別価格の期限切れ（`valid_until` 経過）でランク価格に落ちる
+- 標準価格へのフォールバック
+- **価格未設定時は注文不可**
+- **クライアントが単価を書き換えても採用されない**（改ざんしたリクエストを送って検証）
+- **過去注文後に価格表を変えても過去注文額が変わらない**（スナップショット）
+
+### いつもの商品・再注文
+- リピーターだけに初期候補が出る（単発購入の顧客には出ない）
+- 単発購入商品が過剰に表示されない
+- **お気に入りが自動集計で消えない**（再集計を2回走らせて確認）
+- 販売停止商品は再注文されない
+- 在庫切れ明細を明示する（勝手に置き換えない）
+- 現在価格で再計算される
+- **再注文ボタンだけでは注文確定しない**
+
+### 引当
+- 超過最小の組み合わせが選ばれる（FIFOより良い解があるケースを用意）
+- 同程度なら古い在庫・少ないパック数
+- 1点が2注文に引き当たらない（RPCを並列に呼ぶ）
+- 不足時は注文全体がロールバックする
+- キャンセルで在庫に戻る／二重に戻らない
+
+### 回帰
+既存の `custsync` / `indnum` / `rad` / `radscan` / `warn` / `portal-login` / `portal-guide` を毎回実行。
+
+---
+
+## §9 未決事項・施主判断が必要な点
+
+### 9-1. Drive へのアクセス承認 ★至急
+Drive MCP が承認待ちで、請求書フォルダを開けません（`requires approval`）。
+**承認いただければ経路Aで直接取り込みます。** 難しい場合は経路B（ローカル配置）で進めますので、
+どちらにするかお知らせください。承認待ちの間はモックデータで実装とテストを進めます。
+
+### 9-2. 商品マスタの初期構成
+在庫にあってカタログに無い商品を、一般のお客様に出すかどうか。特に:
+
+| 在庫 | kg | 出す？ |
+|---|---|---|
+| ペットフード用（あり）／（なし） | 36.4kg | ペット用として別扱い？ 一般には出さない？ |
+| 味肉用 | 6.3kg | |
+| チチカブ | 0.4kg | |
+| ミンチ用（並）と ミンチ肉（粗挽き）（上） | 53.9kg | **1商品にまとめる？ 別商品として2つ出す？** |
+| キョン ロース | 0.14kg | |
+
+**「ミンチ用」と「ミンチ肉（粗挽き）」は等級が違う（並／上）ため、価格が違えば別商品にすべきです。**
+ここは商売のご判断が要ります。
+
+### 9-3. 在庫が足りないときの伝え方
+「重量は出さない」方針と、注文が通らないときの親切さがぶつかります。
+現案は具体量を伏せて「ご用意できる量を超えています。数量を減らしてください」とだけ出します。
+「あと2.5kgまでお受けできます」と出したほうが親切ですが、実質的に在庫量を開示することになります。
+
+### 9-4. 価格差が出た顧客の扱い
+`portal_enabled` を追加して、価格差が解消するまで案内を有効化しない運用を可能にします。
+**既定を「有効」「無効」どちらにしますか。** 推奨は**無効**（確認した顧客から順に開けていく）。
+
+### 9-5. 試験運用の可否
+§6 のとおり、センター側の Auth 化が終わるまでは顧客情報が読める状態が残ります。
+**数社に限った試験運用を、その状態で始めてよいか**のご判断をお願いします。
+推奨は「試験は3〜5社まで・期間を区切って実施、718件への配布は Auth 化後」です。
+
+### 9-6. 在庫データの正確さ
+引当を自動化すると、DBの在庫が実物とずれていた場合に「注文は通ったが現物が無い」が起きます。
+移行初期は**センター側で必ず目視確認してから確認済にする**運用を挟むことを推奨します。
+`inventory.individual_id` が欠けている点があると引当内訳のトレーサビリティが切れるため、
+開始前に一度棚卸しをお願いしたいです。
+
+### 9-7. 既存 `order-portal.html` の扱い
+新画面 `order.html` に移行後、旧ポータルをいつ閉じるか。
+推奨は「試験運用の間は両方残し、本配布のタイミングで旧を閉じる」。
+
+---
+
+## §10 実装ステップ
+
+| フェーズ | 内容 | 主な成果物 |
+|---|---|---|
+| **1** | 商品マスタ・価格解決・引当 | `migrations/*_portal_products.sql`、`*_allocations.sql`、`resolve_unit_price()`、`portal_place_order()`、受発注管理に商品マスタ編集タブ |
+| **2** | セッション・RPC・直接アクセス廃止・RLS引き締め | `portal_sessions`、お客様向けRPC一式、RLSポリシー入れ替え |
+| **3** | スマホ注文画面 | `order.html`（3画面・下部固定バー・56px行） |
+| **4** | 請求書取込 | ステージング一式、`scripts/import-invoices.mjs`、名寄せ画面、価格差比較表 |
+| **5** | いつもの商品の自動抽出 | `customer_usual_items` と再集計処理、管理画面 |
+| **6** | センター側 Supabase Auth | 3画面のログイン |
+| **7** | 試験運用 → 本配布 | — |
+
+フェーズ1〜3を先に出して現場で試し、4〜5を請求書の到着に合わせて進めます。
+**6 は 718件への配布より前に必ず完了させます。**
+
+---
+
+## §11 センター側の管理画面（要望 §11）
+
+受発注管理（`order-admin.html`）に追加するタブと機能:
+
+| 画面 | 内容 |
+|---|---|
+| 請求書取込 | 取込状況（状態別件数）、ファイル一覧、再取込、除外、元ファイルへのリンク |
+| 顧客の照合候補 | 確度つき候補の一覧、確定／別顧客として登録／対象外 |
+| 商品の照合候補 | `product_name_aliases` の判定（対応づけ／別商品／対象外）。価格帯の差を併記 |
+| 顧客別購入履歴 | `customer_purchase_facts` の一覧（出典の請求書へ追跡可能） |
+| いつもの商品 | 顧客ごとの5件、**自動抽出の根拠**、いつもの注文量、固定／非表示の切替 |
+| 顧客別価格の差異 | 価格差比較表、個別価格の登録、適用期間の設定 |
+| お気に入り | 顧客ごとの★一覧（**センターからは解除しない**。閲覧のみ） |
+| 注文詳細 | 再注文元、引当内訳（どの個体のどのパックを何kg）、引当のやり直し・取消 |
+
+**すべての自動判定は人が上書きでき、変更履歴を残します。**
+
+```sql
+create table admin_overrides (
+  id uuid primary key default gen_random_uuid(),
+  entity_type text not null,     -- invoice_document / invoice_line / product_alias / usual_item / customer_price
+  entity_id   uuid not null,
+  field       text not null,
+  old_value   jsonb, new_value jsonb,
+  reason      text,
+  changed_by  text not null,
+  changed_at  timestamptz not null default now()
+);
+```
+
+---
+
+## §12 変更しないもの（安全のため）
 
 - ルートのファイル構成・`sw.js`・`manifest.json`（現場PWAが壊れるため）
 - `capture-form.html` / `punch.html` / `outlet.html` / `record-list.html` / `capture-report.html`
-  （顧客・注文データに触れていないため無関係）
 - `orders.status` の語彙（`受注` / `確認済` / `発送済` / `キャンセル`）
-- 既存の `inventory.status` の語彙（`在庫` / `引当済` / `加工済` / `出荷済`）
+- `inventory.status` の語彙（`在庫` / `引当済` / `加工済` / `出荷済`）
+- 既存の `price_master` / `customer_prices` / `customer_saved_items` の行
