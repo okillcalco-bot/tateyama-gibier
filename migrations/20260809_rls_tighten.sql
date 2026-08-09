@@ -31,10 +31,11 @@ create policy customers_staff_update on customers
   with check ((select staff_key_header_ok()));
 create policy customers_staff_delete on customers
   for delete to anon using ((select staff_key_header_ok()));
--- 新規登録フォーム（customer-signup.html）は signup-form 経由の行だけ入れられる
+-- 新規登録は public_signup_request()（20260810_phase3_hardening.sql）経由のみ。
+-- 直接INSERTはスタッフキーのヘッダがあるときだけ
 create policy customers_insert on customers
   for insert to anon
-  with check (signup_source = 'signup-form' or (select staff_key_header_ok()));
+  with check ((select staff_key_header_ok()));
 
 -- ── orders / order_items ─────────────────────────────────────────
 drop policy if exists allow_all on orders;

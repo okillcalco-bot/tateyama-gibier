@@ -6,6 +6,7 @@ drop policy if exists customers_staff_select on customers;
 drop policy if exists customers_staff_update on customers;
 drop policy if exists customers_staff_delete on customers;
 drop policy if exists customers_insert on customers;
+-- （旧: signup_source='signup-form' の分岐は 20260810 で廃止済み）
 create policy allow_all on customers as permissive for all to public using (true) with check (true);
 create policy allow_all_customers on customers as permissive for all to anon using (true) with check (true);
 create policy portal_customers_select on customers as permissive for select to anon using (true);

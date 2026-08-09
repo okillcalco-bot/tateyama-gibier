@@ -276,6 +276,12 @@ th,td{padding:8px 6px;font-size:.8rem}
         <span style="font-size:12px;color:var(--text2);">お客様に送るログインID・パスワードと案内文をまとめて用意します</span>
       </div>
       <div id="portalWarn" style="display:none;font-size:12.5px;color:var(--red);background:rgba(200,80,80,.08);border:1px solid var(--red);border-radius:6px;padding:8px 10px;margin-bottom:10px;line-height:1.7;"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+        <span style="font-size:12px;color:var(--text2);">🔑 スタッフキー:</span>
+        <button class="btn btn-outline btn-sm" onclick="staffKeyChange()">変更する</button>
+        <button class="btn btn-outline btn-sm" onclick="staffKeyForget()">この端末から削除</button>
+        <span style="font-size:11.5px;color:var(--text3);">キーを変えると全端末で再入力が必要になります（漏えい時の失効手順）</span>
+      </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <select id="portalChannel" onchange="renderPortalPreview()" style="height:34px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:inherit;padding:0 8px;font-size:13px;">
           <option value="mail">メール・FAX（正式な文面）</option>
@@ -1443,6 +1449,25 @@ function staffKeyGet(){
   catch(e){ return ''; }
 }
 function staffKeyClear(){ try{ localStorage.removeItem('tg_staff_key'); sessionStorage.removeItem('tg_staff_key'); }catch(e){} }
+/* キーの変更（＝旧キーの失効）。DB側で bcrypt+sha256 が入れ替わり、
+   旧キーを覚えている全端末は次の操作から再入力になる */
+async function staffKeyChange(){
+  const cur=await staffKeyEnsure(); if(!cur) return;
+  const nw=prompt('新しいスタッフキーを入力してください（12文字以上・他で使っていないもの）');
+  if(!nw) return;
+  if(nw.trim().length<12){alert('12文字以上にしてください');return;}
+  try{
+    if(!await sbRpc('staff_key_set',{p_current_key:cur,p_new_key:nw.trim()})){
+      alert('現在のキーの照合に失敗しました'); staffKeyClear(); return;
+    }
+    try{ localStorage.setItem('tg_staff_key',nw.trim()); }catch(e){}
+    alert('スタッフキーを変更しました。\n他の端末では次の操作時に新しいキーの入力が必要になります。');
+  }catch(e){ alert('変更に失敗しました: '+e.message); }
+}
+function staffKeyForget(){
+  staffKeyClear();
+  alert('この端末からスタッフキーを消しました。次に顧客・注文を開くときに再入力が必要です。');
+}
 async function staffKeyEnsure(){
   let k=staffKeyGet();
   if(k) return k;
