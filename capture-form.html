@@ -2248,6 +2248,36 @@ const MISSING_CHECKS = [
   { label: '施設受入時刻', get: () => document.getElementById('receiveTime')?.value },
   { label: '記録者名', get: () => document.getElementById('recorder')?.value },
 ];
+/* 未入力とは別の「内容の確認」。地区名の誤りと、放血→受入が1時間を超えていないか。
+   どちらも市役所提出の台帳で見られるところなので、その場で気づけるようにする */
+function collectWarnings() {
+  const out = [];
+  const area = (document.getElementById('captureArea')?.value || '').trim();
+  if (area && Array.isArray(areaMasterRows) && areaMasterRows.length) {
+    const hit = areaMasterRows.some(a => a.oaza === area || a.district === area || (a.district || '') + a.oaza === area);
+    if (!hit) {
+      const near = areaMasterRows
+        .map(a => ((a.district || '') + a.oaza === area ? null : a))
+        .filter(Boolean)
+        .flatMap(a => [a.oaza, (a.district || '') + a.oaza])
+        .filter(n => n && n.length === area.length &&
+          [...n].filter((c, i) => c !== area[i]).length === 1)
+        .slice(0, 3);
+      out.push(`地区名「${area}」は地区マスタにありません` + (near.length ? `（似た地区: ${near.join('・')}）` : ''));
+    }
+  }
+  const mins = bleedToIntakeMinutes();
+  if (mins !== null && mins > 60) out.push(`放血から受入まで ${mins}分（目安の1時間を超えています）`);
+  return out;
+}
+/* 放血→受入の経過分。どちらか欠けていれば null */
+function bleedToIntakeMinutes() {
+  const toMin = s => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(s || '').trim()); return m ? +m[1] * 60 + +m[2] : null; };
+  const b = toMin(document.getElementById('bleedTime')?.value);
+  const r = toMin(document.getElementById('receiveTime')?.value);
+  if (b === null || r === null) return null;
+  return ((r - b) % 1440 + 1440) % 1440;
+}
 function collectMissing() {
   const out = [];
   MISSING_CHECKS.forEach(c => {
@@ -2284,8 +2314,12 @@ async function handleSubmit() {
   if (!state.sex) { alert('性別を選択してください'); return; }
   // 未入力があってもそのまま保存できるが、何が抜けているかは必ずその場で知らせる
   const missing = collectMissing();
-  if (missing.length) {
-    if (!confirm(`未入力が ${missing.length}件 あります。\n\n・${missing.join('\n・')}\n\nこのまま保存しますか？\n（あとから「既存データを修正」や業務アプリで入力できます）`)) {
+  const warns = collectWarnings();
+  if (missing.length || warns.length) {
+    const parts = [];
+    if (missing.length) parts.push(`【未入力 ${missing.length}件】\n・${missing.join('\n・')}`);
+    if (warns.length) parts.push(`【確認してください ${warns.length}件】\n・${warns.join('\n・')}`);
+    if (!confirm(`${parts.join('\n\n')}\n\nこのまま保存しますか？\n（あとから「既存データを修正」や業務アプリで直せます）`)) {
       btn.disabled = false; btn.textContent = '登録する';
       return;
     }

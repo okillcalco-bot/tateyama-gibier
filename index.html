@@ -5437,6 +5437,43 @@ async function indValidateNumbers(labelId, serial, editingId) {
   return null;
 }
 
+let areaMasterRows = [];   // 地区マスタ（地区名の点検に使う）
+
+/* 保存前の内容確認。市役所提出の台帳で見られるところを、その場で気づけるようにする
+   ・地区名が地区マスタにあるか
+   ・放血から施設受入まで1時間以内か
+   ・台帳に必要な欄が埋まっているか */
+function indCollectWarnings() {
+  const out = [];
+  const area = (indGetVal('capture_area') || '').trim();
+  if (area && Array.isArray(areaMasterRows) && areaMasterRows.length) {
+    if (!areaMasterRows.some(a => a.oaza === area || a.district === area || (a.district || '') + a.oaza === area)) {
+      const near = areaMasterRows
+        .map(a => ((a.district || '') + a.oaza === area ? null : a))
+        .filter(Boolean)
+        .flatMap(a => [a.oaza, (a.district || '') + a.oaza])
+        .filter(n => n && n.length === area.length &&
+          [...n].filter((c, i) => c !== area[i]).length === 1)
+        .slice(0, 3);
+      out.push(`地区名「${area}」は地区マスタにありません` + (near.length ? `（似た地区: ${near.join('・')}）` : ''));
+    }
+  }
+  const toMin = v => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || '').trim()); return m ? +m[1] * 60 + +m[2] : null; };
+  const b = toMin(indGetVal('bleed_time')), r = toMin(indGetVal('receive_time'));
+  if (b !== null && r !== null) {
+    const mins = ((r - b) % 1440 + 1440) % 1440;
+    if (mins > 60) out.push(`放血から受入まで ${mins}分（目安の1時間を超えています）`);
+  }
+  // 台帳に必要な欄
+  const need = [['capture_city','市名'],['capture_area','地区'],['capture_time','捕獲時刻'],
+    ['capture_method','捕獲方法'],['hunter_name','捕獲者'],['finishing_method','止め刺し方法'],
+    ['bleed_time','放血時刻'],['sex','性別'],['weight_total','体重'],
+    ['receive_time','受入時刻'],['process_time','処理時刻'],['recorder','記録者']];
+  const miss = need.filter(([f]) => !indGetVal(f)).map(([, l]) => l);
+  if (miss.length) out.push(`台帳の未記載: ${miss.join('・')}`);
+  return out;
+}
+
 async function indSave() {
   // 手入力の個体データはバイト（スタッフ）も編集可。削除・マスタ編集は管理者のみ（別途requireAdmin）。
   if (indEditId && !isLoggedIn()) return;
@@ -5448,6 +5485,11 @@ async function indSave() {
     // 手入力なので、形式ちがい（例: TGC-08-243 とTが抜ける）と重複を保存前に止める
     const vErr = await indValidateNumbers(label_id, numValRaw('serial_number'), indEditId);
     if (vErr) { alert(vErr); btn.disabled = false; btn.textContent = '保存'; return; }
+    // 台帳で見られるところ（地区名・放血→受入1時間・未記載）を保存前に知らせる
+    const warns = indCollectWarnings();
+    if (warns.length && !confirm(`確認してください（${warns.length}件）\n\n・${warns.join('\n・')}\n\nこのまま保存しますか？`)) {
+      btn.disabled = false; btn.textContent = '保存'; return;
+    }
     const numVal = id => { const v = indGetVal(id); return v !== null ? parseFloat(v) || null : null; };
     const boolVal = id => { const v = indGetVal(id); return v === 'true' ? true : v === 'false' ? false : null; };
     const payload = {
@@ -8173,14 +8215,14 @@ async function radGenerateReport() {
           <tr><th>個体管理番号</th>${g.map(r => `<td class="id">${r ? esc(r.label_id) : ''}</td>`).join('')}</tr>
           <tr><th>捕獲日時</th>${g.map(r => `<td class="dt">${r ? `${esc(jwa(r.capture_date))}<br>${esc(jtime(r.capture_time, true))}` : ''}</td>`).join('')}</tr>
           ${row('捕獲方法', g, r => METHOD[r.capture_method] || r.capture_method || '')}
-          ${row('捕獲場所', g, r => [r.capture_city, r.capture_area].filter(Boolean).join(''), 'b')}
-          ${row('捕獲者', g, r => r.hunter_name || '', 'b')}
-          ${row('止め刺し方法', g, r => r.finishing_method || '', 'b')}
-          ${row('放血時刻', g, r => jtime(r.bleed_time), 'b')}
-          ${row('放血場所', g, r => r.capture_area || '', 'b sm')}
-          ${row('性別', g, r => r.sex || '', 'b')}
-          ${row('体重', g, r => r.weight_total ? `${r.weight_total}kg` : '', 'r')}
-          ${row('受入時刻', g, r => jtime(r.receive_time), 'b')}
+          ${row('捕獲場所', g, r => [r.capture_city, r.capture_area].filter(Boolean).join(''))}
+          ${row('捕獲者', g, r => r.hunter_name || '')}
+          ${row('止め刺し方法', g, r => r.finishing_method || '')}
+          ${row('放血時刻', g, r => jtime(r.bleed_time))}
+          ${row('放血場所', g, r => r.capture_area || '', 'sm')}
+          ${row('性別', g, r => r.sex || '')}
+          ${row('体重', g, r => r.weight_total ? `${r.weight_total}kg` : '')}
+          ${row('受入時刻', g, r => jtime(r.receive_time))}
           ${row('処理日時', g, r => jtime(r.process_time), 'b tall')}
           ${row('記録者', g, r => r.recorder || '沖')}
           <tr><th>確認者印</th>${g.map(r => `<td class="st">${r ? stamp : ''}</td>`).join('')}</tr>
@@ -8204,35 +8246,39 @@ async function radGenerateReport() {
   }
 
   const css = `
-    /* 台帳の見本に合わせ、左右にしっかり余白をとる（幅いっぱいにしない） */
-    @page{size:A4 portrait;margin:14mm 20mm;}
+    /* 左右に余白をとり、上下も紙全体でバランスをとる（上が詰まって下が余るのを防ぐ） */
+    @page{size:A4 portrait;margin:18mm 20mm 14mm;}
     *{box-sizing:border-box;margin:0;padding:0;}
-    body{font-family:'Noto Sans JP','Yu Gothic','Hiragino Kaku Gothic ProN',sans-serif;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    /* 文字はゴシックで統一する。環境ごとの入れ替わりで不揃いに見えるのを防ぐ */
+    body{font-family:"Yu Gothic","YuGothic","Hiragino Kaku Gothic ProN","Hiragino Sans",
+      "Noto Sans JP","MS PGothic",sans-serif;color:#000;
+      -webkit-print-color-adjust:exact;print-color-adjust:exact;}
     .sheet{page-break-after:always;max-width:168mm;margin:0 auto;}
     .sheet:last-child{page-break-after:auto;}
-    .ttl{text-align:center;font-size:15pt;font-weight:700;margin-bottom:10px;}
-    .fac{text-align:right;font-size:9.5pt;margin-bottom:5px;}
+    .ttl{text-align:center;font-size:15pt;font-weight:700;margin-bottom:12px;}
+    .fac{text-align:right;font-size:9.5pt;margin-bottom:6px;}
     .t{width:100%;border-collapse:collapse;table-layout:fixed;}
-    .t th,.t td{border:1px solid #000;font-size:9.5pt;padding:3px 6px;text-align:center;vertical-align:middle;}
+    /* すべて中央揃え・同じ文字サイズ。セルに収まるよう自動で縮める */
+    .t th,.t td{border:1px solid #000;font-size:9.5pt;padding:3px 5px;
+      text-align:center;vertical-align:middle;line-height:1.35;
+      overflow:hidden;word-break:break-all;}
     .t th{font-weight:400;}
     .t1 th,.t2 th,.t3 th{width:22%;}
-    .t1 td,.t3 td{width:26%;height:26px;}
-    .t td.b{font-weight:700;}
-    .t td.sm{font-size:8.5pt;}
-    .t td.r{text-align:right;}
-    .t td.id{font-size:10.5pt;letter-spacing:.4px;}
-    .t td.dt{text-align:right;line-height:1.5;height:42px;}
-    .t td.tall{height:40px;}
-    .t2{margin-top:9px;}
+    .t1 td,.t3 td{width:26%;height:34px;}
+    .t td.sm{font-size:9pt;}
+    .t td.id{font-size:10.5pt;letter-spacing:.3px;}
+    .t td.dt{line-height:1.5;height:46px;}
+    .t td.tall{height:39px;}
+    .t2{margin-top:11px;}
     .t2 th.vt{width:5%;line-height:1.2;font-size:8.5pt;}
-    .t2 th.sub{width:17%;text-align:center;font-size:8pt;padding:3px 2px;}
+    .t2 th.sub{width:17%;text-align:center;font-size:8pt;padding:3px 1px;white-space:nowrap;}
     .t2 td{width:26%;}
-    .t3{margin-top:9px;}
-    tr.csrow th,tr.csrow td{height:38px;}
-    td.cs{text-align:left;line-height:1.6;padding:3px 4px;font-size:8.5pt;}
+    .t3{margin-top:11px;}
+    tr.csrow th,tr.csrow td{height:42px;}
+    td.cs{text-align:center;line-height:1.65;padding:3px 4px;font-size:8.5pt;}
     .circled{display:inline-block;padding:0 4px;border:1.2px solid #000;border-radius:50%;}
     .csnum{display:inline-block;min-width:44px;}
-    td.st{height:34px;}
+    td.st{height:36px;}
     .stamp{display:inline-block;width:30px;height:30px;line-height:27px;border:1.6px solid #c00;border-radius:50%;
       color:#c00;font-size:14px;font-weight:700;text-align:center;}`;
 
@@ -8866,7 +8912,8 @@ async function loadMasterDatalists() {
     if (active.length) document.getElementById('dl-hunter').innerHTML = [...new Set(active)].map(n => `<option>${esc2(n)}</option>`).join('');
   } catch (e) {}
   try {
-    const as = await sb('GET', 'area_master', null, '?select=oaza&order=sort_order.asc&limit=300');
+    const as = await sb('GET', 'area_master', null, '?select=oaza,district,city&order=sort_order.asc&limit=500');
+    areaMasterRows = as;   // 地区名の点検にも使う
     if (as.length) document.getElementById('dl-area').innerHTML = [...new Set(as.map(a => a.oaza).filter(Boolean))].map(a => `<option>${esc2(a)}</option>`).join('');
   } catch (e) {}
   // 記録者・異常確認者の候補はスタッフマスタから作る（固定リストだと入社した人が出ないため）
