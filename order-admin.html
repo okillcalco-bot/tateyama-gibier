@@ -530,6 +530,32 @@ th,td{padding:8px 6px;font-size:.8rem}
   </div>
 </div>
 
+<!-- スタッフキーの変更（回復コード必須） Modal -->
+<div class="modal-overlay" id="rotateModal">
+  <div class="modal" style="max-width:420px;">
+    <span class="modal-close" onclick="closeModal('rotateModal')">&times;</span>
+    <h2>スタッフキーの変更</h2>
+    <div style="font-size:12.5px;color:var(--text2);line-height:1.8;margin-bottom:12px;">
+      変更には<strong>管理者用回復コード</strong>が必要です（通常のスタッフキーでは変更できません）。
+      変更すると全端末で再入力が必要になり、操作は監査ログに残ります。
+    </div>
+    <div class="form-group"><label>管理者用回復コード</label>
+      <input type="password" id="rkCode" autocomplete="off"></div>
+    <div class="form-group"><label>新しいスタッフキー（16文字以上）</label>
+      <input type="password" id="rkNew" autocomplete="new-password"></div>
+    <div class="form-group"><label>新しいスタッフキー（確認）</label>
+      <input type="password" id="rkNew2" autocomplete="new-password"></div>
+    <div id="rkMsg" style="color:var(--red);font-size:12.5px;min-height:1.4em;margin:6px 0;"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-gold" id="rkBtn" onclick="staffKeyRotateSubmit()">変更する</button>
+      <button class="btn btn-outline" onclick="closeModal('rotateModal')">やめる</button>
+    </div>
+    <div style="font-size:11.5px;color:var(--text3);margin-top:10px;line-height:1.7;">
+      回復コードを紛失した場合の再設定は Supabase の SQL Editor から行います（手順は docs/order-site-plan.md）。
+    </div>
+  </div>
+</div>
+
 <!-- ポータル商品の編集 Modal -->
 <div class="modal-overlay" id="ppModal">
   <div class="modal">
@@ -1449,20 +1475,35 @@ function staffKeyGet(){
   catch(e){ return ''; }
 }
 function staffKeyClear(){ try{ localStorage.removeItem('tg_staff_key'); sessionStorage.removeItem('tg_staff_key'); }catch(e){} }
-/* キーの変更（＝旧キーの失効）。DB側で bcrypt+sha256 が入れ替わり、
-   旧キーを覚えている全端末は次の操作から再入力になる */
-async function staffKeyChange(){
-  const cur=await staffKeyEnsure(); if(!cur) return;
-  const nw=prompt('新しいスタッフキーを入力してください（12文字以上・他で使っていないもの）');
-  if(!nw) return;
-  if(nw.trim().length<12){alert('12文字以上にしてください');return;}
+/* キーの変更（＝旧キーの失効）は「管理者用回復コード」が必要。
+   通常のスタッフキーを知っているだけでは変更できない（誰かが全端末を締め出すのを防ぐ）。
+   変更はDB側で監査ログに残り、誤コードは5回/15分で試行制限される。 */
+function staffKeyChange(){
+  const dlg=document.getElementById('rotateModal');
+  ['rkCode','rkNew','rkNew2'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('rkMsg').textContent='';
+  openModal('rotateModal');
+}
+async function staffKeyRotateSubmit(){
+  const code=document.getElementById('rkCode').value.trim();
+  const nw=document.getElementById('rkNew').value;
+  const nw2=document.getElementById('rkNew2').value;
+  const msg=document.getElementById('rkMsg');
+  if(!code||!nw||!nw2){msg.textContent='すべて入力してください';return;}
+  if(nw.length<16){msg.textContent='新しいキーは16文字以上にしてください';return;}
+  if(nw!==nw2){msg.textContent='新しいキーが一致しません';return;}   // 確認入力必須（再表示はしない）
+  const btn=document.getElementById('rkBtn'); btn.disabled=true;
   try{
-    if(!await sbRpc('staff_key_set',{p_current_key:cur,p_new_key:nw.trim()})){
-      alert('現在のキーの照合に失敗しました'); staffKeyClear(); return;
-    }
-    try{ localStorage.setItem('tg_staff_key',nw.trim()); }catch(e){}
-    alert('スタッフキーを変更しました。\n他の端末では次の操作時に新しいキーの入力が必要になります。');
-  }catch(e){ alert('変更に失敗しました: '+e.message); }
+    const ok=await sbRpc('admin_rotate_staff_key',{p_recovery_code:code,p_new_key:nw});
+    if(!ok){ msg.textContent='回復コードが違います'; btn.disabled=false; return; }
+    closeModal('rotateModal');
+    staffKeyClear();   // この端末も再認証させる
+    alert('スタッフキーを変更しました。全端末（この端末を含む）で新しいキーの入力が必要です。');
+    await staffKeyEnsure();
+  }catch(e){
+    msg.textContent=/試行回数/.test(e.message)?e.message:'変更に失敗しました';
+  }
+  btn.disabled=false;
 }
 function staffKeyForget(){
   staffKeyClear();

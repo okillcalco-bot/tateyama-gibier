@@ -200,11 +200,17 @@ body.kb .bar{display:none}
     <div style="font-size:13px;color:var(--text2);line-height:1.7" id="c-addr"></div>
     <div style="font-size:11px;color:var(--text3);margin-top:4px">変更が必要なときは備考にお書きください</div></div>
   <div class="fgrp"><label>備考（500文字まで）</label><textarea id="c-memo" maxlength="500"></textarea></div>
-  <div class="notice">ジビエは現物パック単位のため、ご希望量を下回らない範囲で重量が前後します。<br>
-    <strong>請求額は実際に確保した重量で確定します。</strong>確定後の内容は次の画面でご確認いただけます。</div>
+  <!-- 実重量精算への同意（確定ボタンの直前に必ず表示。数値基準はDB・運用と同じ 20%／50%） -->
+  <div class="notice" id="c-consent">
+    商品は現物パック単位でご用意するため、<strong>ご希望量を下回らない範囲で重量が増える場合があります
+    （通常はご希望量の2割以内）</strong>。<br>
+    <strong>請求額は確保した実重量で確定します。</strong>確定した重量・金額は次の画面に表示されます。<br>
+    ご希望量を2割以上超える場合は、発送前にセンターから確認のご連絡をいたします。
+    （5割を超えるご用意になる場合は、この場でお受けせず数量の調整をご案内します）
+  </div>
   <div class="bar">
     <div class="sum" id="c-bar-sum"></div>
-    <button class="go" id="c-go" onclick="placeOrder()">注文を確定する</button>
+    <button class="go" id="c-go" onclick="placeOrder()">同意して注文を確定する</button>
   </div>
 </div>
 
@@ -582,8 +588,11 @@ async function placeOrder() {
         <span>${yen(i.amount)}</span>
       </div>`).join('');
     $('d-total').textContent = yen(res.total_amount);
-    $('d-delivery').textContent = '納品希望日: ' + $('c-date').value +
-      '（内容の確認後、センターからご連絡することがあります）';
+    const overs = (res.items || []).filter(i => i.needs_review);
+    $('d-delivery').innerHTML = esc('納品希望日: ' + $('c-date').value +
+      '（内容の確認後、センターからご連絡することがあります）') +
+      (overs.length ? '<div class="warn" style="margin-top:8px">⚠️ ' +
+        esc(overs.map(i => i.name).join('、') + ' はご希望量を2割以上超えるご用意になりました。発送前にセンターから確認のご連絡をいたします。') + '</div>' : '');
     cartSet([]); qtyState = {}; orderRequestId = null;
     $('c-memo').value = ''; $('c-date').value = '';
     showScreen('done');
@@ -600,7 +609,7 @@ async function placeOrder() {
     }
   }
   placing = false;
-  btn.disabled = false; btn.textContent = '注文を確定する';
+  btn.disabled = false; btn.textContent = '同意して注文を確定する';
 }
 
 function resetToList() { enterList(); }
