@@ -653,14 +653,16 @@ const SB_URL='https://clpdyrehdgzgiidbfucj.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
 
 async function sb(method,table,body,query=''){
+  const headers={
+    'apikey':SB_KEY,
+    'Authorization':`Bearer ${SB_KEY}`,
+    'Content-Type':'application/json',
+    'Prefer':method==='POST'?'return=representation':(method==='PATCH'?'return=representation':'')
+  };
+  // 顧客・注文のRLSはスタッフキーのヘッダで開く（20260809_rls_tighten.sql）
+  const sk=staffKeyGet(); if(sk) headers['x-staff-key']=sk;
   const res=await fetch(`${SB_URL}/rest/v1/${table}${query}`,{
-    method,
-    headers:{
-      'apikey':SB_KEY,
-      'Authorization':`Bearer ${SB_KEY}`,
-      'Content-Type':'application/json',
-      'Prefer':method==='POST'?'return=representation':(method==='PATCH'?'return=representation':'')
-    },
+    method,headers,
     body:body?JSON.stringify(body):undefined
   });
   if(!res.ok) throw new Error(await res.text());
@@ -698,6 +700,8 @@ function ensureCustAdmin(){
 // ── Init ──
 async function init(){
   try{
+    // RLS引き締め後は、スタッフキーが無いと顧客・注文が読めない（空になる）ため先に確認する
+    if(!staffKeyGet()) await staffKeyEnsure();
     await Promise.all([loadOrders(),loadCustomers(),loadProducts(),loadInvoiceSettings(),loadOrgInfo()]);
     orderedCustomerIds=new Set(allOrders.map(o=>o.customer_id).filter(Boolean));
     populateCustomerDropdowns();
@@ -859,7 +863,7 @@ async function ppSave(){
     closeModal('ppModal');
     await loadPortalProducts();
   }catch(e){
-    if(String(e.message).includes('スタッフキー')){try{sessionStorage.removeItem('tg_staff_key');}catch(_e){}}
+    if(String(e.message).includes('スタッフキー')) staffKeyClear();
     alert('保存に失敗しました: '+e.message);
   }
 }
@@ -964,11 +968,34 @@ function renderOrders(){
 
 async function changeStatus(id,status){
   if(!status) return;
-  if(!confirm(`ステータスを「${status}」に変更しますか？`)) return;
+  if(!confirm(`ステータスを「${status}」に変更しますか？`+
+    (status==='キャンセル'?'\n（引当済の在庫パックは在庫へ戻ります）':
+     status==='発送済'?'\n（引当済の在庫パックは出荷済になります）':''))) return;
   try{
-    await sb('PATCH','orders',{status,updated_at:new Date().toISOString()},`?id=eq.${id}`);
+    // キャンセル→引当を在庫へ戻す／発送済→パックを出荷済にする、をDB側でまとめて行う
+    const key=await staffKeyEnsure();
+    if(!key) return;
+    const r=await sbRpc('admin_set_order_status',{p_staff_key:key,p_order_id:id,p_status:status});
+    if(r&&(+r.released||+r.shipped)){
+      const parts=[]; if(+r.released)parts.push(`在庫へ戻し ${r.released}パック`); if(+r.shipped)parts.push(`出荷済 ${r.shipped}パック`);
+      alert('変更しました（'+parts.join('・')+'）');
+    }
     await loadOrders();
   }catch(e){alert('エラー: '+e.message)}
+}
+
+/* 引当内訳（どの個体のどのパックを何kg）を注文詳細に出す */
+async function odLoadAllocations(orderId){
+  const el=document.getElementById('odAlloc'); if(!el) return;
+  try{
+    const key=staffKeyGet(); if(!key){el.textContent='';return;}
+    const rows=await sbRpc('admin_order_allocations',{p_staff_key:key,p_order_id:orderId});
+    if(!rows||!rows.length){el.innerHTML='';return;}
+    el.innerHTML='<div style="font-size:.82rem;color:var(--text2);margin:10px 0 4px;font-weight:700">引当内訳（トレーサビリティ）</div>'+
+      '<div class="table-wrap"><table><thead><tr><th>商品</th><th>個体</th><th>パック</th><th>部位</th><th>等級</th><th>重量(kg)</th></tr></thead><tbody>'+
+      rows.map(r=>`<tr><td>${esc(r.product_name||'')}</td><td>${esc(r.individual_id||'—')}</td><td style="font-size:11px">${esc(r.ident_code||'')}</td><td>${esc(r.part_name||'')}</td><td>${esc(r.grade||'')}</td><td>${r.weight_kg}</td></tr>`).join('')+
+      '</tbody></table></div>';
+  }catch(e){ el.textContent=''; }
 }
 
 function showOrderDetail(id){
@@ -998,9 +1025,10 @@ function showOrderDetail(id){
   const flow={'受注':'確認済','確認済':'発送済','発送済':'納品完了'};
   if(flow[o.status]) html+=`<button class="btn btn-green" onclick="changeStatus('${o.id}','${flow[o.status]}');closeModal('orderDetailModal')">${flow[o.status]}にする</button>`;
   if(o.status!=='キャンセル'&&o.status!=='納品完了') html+=`<button class="btn btn-danger" onclick="changeStatus('${o.id}','キャンセル');closeModal('orderDetailModal')">キャンセル</button>`;
-  html+=`</div>`;
+  html+=`</div><div id="odAlloc"></div>`;
   document.getElementById('odContent').innerHTML=html;
   openModal('orderDetailModal');
+  odLoadAllocations(id);
 }
 
 // ── B2 CSV Export ──
@@ -1408,17 +1436,23 @@ function portalTargets(){
 }
 
 /* スタッフキー。画面には書かず、担当者が入れたぶんだけこの端末に覚えておく。
-   これを知っている人だけがパスワードを発行できる。 */
-function staffKeyGet(){ try{ return sessionStorage.getItem('tg_staff_key')||''; }catch(e){ return ''; } }
+   顧客・注文の読み書き（RLS）とパスワード発行に必要。
+   端末ごとに1回入れれば localStorage に残る（共有端末で消したいときはログアウト時にクリア）。 */
+function staffKeyGet(){
+  try{ return localStorage.getItem('tg_staff_key')||sessionStorage.getItem('tg_staff_key')||''; }
+  catch(e){ return ''; }
+}
+function staffKeyClear(){ try{ localStorage.removeItem('tg_staff_key'); sessionStorage.removeItem('tg_staff_key'); }catch(e){} }
 async function staffKeyEnsure(){
   let k=staffKeyGet();
   if(k) return k;
-  k=prompt('スタッフキーを入力してください\n（パスワードの発行に必要です。センターの担当者だけがご存じのものです）');
+  k=prompt('スタッフキーを入力してください\n（顧客・注文データを開くのに必要です。センターの担当者だけがご存じのものです）');
   if(!k) return '';
+  k=k.trim();
   try{
     if(!await sbRpc('staff_key_ok',{p_staff_key:k})){ alert('スタッフキーが違います'); return ''; }
   }catch(e){ alert('確認できませんでした：'+e.message); return ''; }
-  try{ sessionStorage.setItem('tg_staff_key',k); }catch(e){}
+  try{ localStorage.setItem('tg_staff_key',k); }catch(e){ try{ sessionStorage.setItem('tg_staff_key',k); }catch(_e){} }
   return k;
 }
 
@@ -1429,7 +1463,7 @@ async function portalIssuePasswords(targets){
   let rows;
   try{ rows=await sbRpc('staff_issue_portal_passwords',{p_staff_key:key,p_customer_ids:targets.map(c=>c.id)}); }
   catch(e){
-    try{ sessionStorage.removeItem('tg_staff_key'); }catch(_e){}
+    staffKeyClear();
     alert('発行できませんでした：'+e.message); return false;
   }
   const byId={}; (rows||[]).forEach(r=>byId[r.customer_id]=r.password);
@@ -2651,6 +2685,7 @@ function ordRenderNotifyBtn(){
 }
 async function checkNewOrders(silent){
   if(!ordNotifyEnabled()) return;
+  if(!staffKeyGet()) return;  // キー入力前はRLSで読めない（空が返って既読管理が壊れる）ため待つ
   try{
     const rows=await sb('GET','orders','','?status=eq.受注&select=id,order_code,customer_name,delivery_date,total_amount,created_at&order=created_at.desc&limit=30');
     const seen=ordNotifiedSet();

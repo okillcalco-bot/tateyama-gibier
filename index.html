@@ -1885,19 +1885,45 @@ const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
 
 async function sb(method, table, body, query = '') {
+  const headers = {
+    'apikey': SB_KEY,
+    'Authorization': `Bearer ${SB_KEY}`,
+    'Content-Type': 'application/json',
+    'Prefer': method === 'POST' ? 'return=representation' : (method === 'PATCH' ? 'return=representation' : '')
+  };
+  // 顧客・注文のRLSはスタッフキーのヘッダで開く（migrations/20260809_rls_tighten.sql）
+  const sk = staffKeyGet(); if (sk) headers['x-staff-key'] = sk;
   const res = await fetch(`${SB_URL}/rest/v1/${table}${query}`, {
     method,
-    headers: {
-      'apikey': SB_KEY,
-      'Authorization': `Bearer ${SB_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': method === 'POST' ? 'return=representation' : (method === 'PATCH' ? 'return=representation' : '')
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined
   });
   if (!res.ok) throw new Error(await res.text());
   const t = await res.text();
   return t ? JSON.parse(t) : [];
+}
+
+/* スタッフキー（顧客台帳・出荷・BASE取込で使う）。端末ごとに1回入れれば残る */
+function staffKeyGet() {
+  try { return localStorage.getItem('tg_staff_key') || sessionStorage.getItem('tg_staff_key') || ''; }
+  catch (e) { return ''; }
+}
+async function staffKeyEnsure() {
+  let k = staffKeyGet();
+  if (k) return k;
+  k = prompt('スタッフキーを入力してください\n（顧客・注文データを開くのに必要です。分からないときは管理者へ）');
+  if (!k) return '';
+  k = k.trim();
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/rpc/staff_key_ok`, {
+      method: 'POST',
+      headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_staff_key: k })
+    });
+    if (!res.ok || (await res.json()) !== true) { toast('スタッフキーが違います', 'error'); return ''; }
+  } catch (e) { toast('スタッフキーを確認できませんでした', 'error'); return ''; }
+  try { localStorage.setItem('tg_staff_key', k); } catch (e) {}
+  return k;
 }
 
 /* ===== State ===== */
@@ -2051,6 +2077,7 @@ document.getElementById('ship-scan-code').addEventListener('keydown', (e) => {
 let baseOrderCache = {}; // unique_key → detail
 
 async function loadBaseOrders() {
+  await staffKeyEnsure(); // 注文の取込にはスタッフキーが要る
   const box = document.getElementById('base-orders');
   if (!box) return;
   box.innerHTML = '<div class="loading"><span class="spin"></span>BASEに問い合わせ中...</div>';
@@ -2237,6 +2264,7 @@ async function shipDirectScan() {
 }
 
 async function shipDirectConfirm() {
+  await staffKeyEnsure();
   const custName = document.getElementById('ship-direct-cust').value.trim();
   const memo = document.getElementById('ship-direct-memo').value.trim();
   const operator = document.getElementById('ship-operator') ? document.getElementById('ship-operator').value : '';
@@ -3119,6 +3147,7 @@ async function shipSelectOrder(orderId) {
 }
 
 async function loadShipping() {
+  await staffKeyEnsure(); // 注文・顧客の読み書きにはスタッフキーが要る
   const container = document.getElementById('ship-orders');
   container.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
   // 直販の出荷先候補（顧客台帳の名前だけ）
@@ -8706,6 +8735,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 async function loadCustomersReg() {
+  await staffKeyEnsure(); // 顧客台帳の読み書きにはスタッフキーが要る
   const body = document.getElementById('cust-body');
   body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
   try {
@@ -9064,6 +9094,7 @@ function ordRenderNotifyBtn() {
 
 async function checkNewOrders(silent) {
   if (!ordNotifyEnabled()) return;
+  if (!staffKeyGet()) return;  // キー入力前はRLSで読めないため待つ
   try {
     const orders = await sb('GET', 'orders', null, '?status=eq.受注&select=id,order_code,customer_name,delivery_date,total_amount,created_at&order=created_at.desc&limit=30');
     const seen = ordNotifiedSet();

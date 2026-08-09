@@ -107,7 +107,8 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 async function sb(method, table, body, query = '') {
   const res = await fetch(`${SB_URL}/rest/v1/${table}${query}`, {
     method,
-    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+    // RLS引き締め後、登録フォームは insert のみ許可（返り値は読めない）ため minimal で送る
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
     body: body ? JSON.stringify(body) : undefined
   });
   if (!res.ok) throw new Error(await res.text());
