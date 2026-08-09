@@ -183,6 +183,7 @@ th,td{padding:8px 6px;font-size:.8rem}
   <div class="tab" data-tab="invoice" onclick="switchTab('invoice')">&#x1f9fe; 請求書作成</div>
   <div class="tab" data-tab="customers" onclick="switchTab('customers')">&#x1f464; 顧客管理</div>
   <div class="tab" data-tab="pricing" onclick="switchTab('pricing')">&#x1f3f7;&#xfe0f; 価格マスタ</div>
+  <div class="tab" data-tab="pproducts" onclick="switchTab('pproducts')">&#x1f6d2; ポータル商品</div>
 </div>
 
 <div class="main">
@@ -443,6 +444,27 @@ th,td{padding:8px 6px;font-size:.8rem}
       </table>
     </div>
   </div>
+
+  <!-- Tab: ポータル商品（お客様の注文サイトに出す商品マスタ） -->
+  <div class="tab-content" id="tab-pproducts">
+    <div style="font-size:12.5px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:12px;line-height:1.8;">
+      お客様の注文サイトに出す商品です。在庫の部位名とは「対応部位」で結びます（在庫側の名前は変わりません）。
+      在庫の記号は ◎=十分 / △=残りわずか / ×=最小注文量に足りない。<strong>価格が1つも無い商品は注文できません。</strong>
+      変更の保存にはスタッフキーが必要です。
+    </div>
+    <div class="filter-bar">
+      <input class="search-input" type="text" placeholder="商品名・部位で検索..." id="ppSearch" oninput="renderPortalProducts()">
+      <button class="btn btn-gold btn-sm" onclick="ppOpenEdit('')">+ 商品追加</button>
+      <button class="btn btn-outline btn-sm" onclick="loadPortalProducts()">↻ 再読込</button>
+    </div>
+    <div class="table-wrap">
+      <table class="customer-table">
+        <thead><tr><th>並び</th><th>商品名</th><th>等級</th><th>対応部位</th><th>在庫</th>
+          <th>スタンダード</th><th>ローカル</th><th>スタートメンバー</th><th>公開</th><th>注文</th><th>操作</th></tr></thead>
+        <tbody id="ppBody"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <!-- Order Detail Modal -->
@@ -498,6 +520,57 @@ th,td{padding:8px 6px;font-size:.8rem}
       <div class="cart-total" id="moTotal">合計: &yen;0</div>
       <div class="form-group"><label>備考</label><textarea id="moMemo" rows="2"></textarea></div>
       <button class="btn btn-gold" style="width:100%;margin-top:10px" onclick="submitManualOrder()">注文を登録</button>
+    </div>
+  </div>
+</div>
+
+<!-- ポータル商品の編集 Modal -->
+<div class="modal-overlay" id="ppModal">
+  <div class="modal">
+    <span class="modal-close" onclick="closeModal('ppModal')">&times;</span>
+    <h2 id="ppModalTitle">商品の編集</h2>
+    <input type="hidden" id="ppfId">
+    <div class="form-row">
+      <div class="form-group"><label>獣種</label>
+        <select id="ppfSpecies"><option>イノシシ</option><option>シカ</option><option>キョン</option><option>中型獣</option></select></div>
+      <div class="form-group"><label>商品名（お客様に見える名前）</label><input type="text" id="ppfName"></div>
+    </div>
+    <div class="form-row3">
+      <div class="form-group"><label>等級表示</label><input type="text" id="ppfGrade" placeholder="並 / 上"></div>
+      <div class="form-group"><label>並び順</label><input type="number" id="ppfSort" value="100"></div>
+      <div class="form-group"><label>&nbsp;</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;cursor:pointer;">
+          <input type="checkbox" id="ppfVisible"> ポータルに公開</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;cursor:pointer;">
+          <input type="checkbox" id="ppfOrderable"> 注文を受ける</label>
+      </div>
+    </div>
+    <div class="form-group"><label>商品説明（タップで展開・任意）</label><textarea id="ppfDesc" style="min-height:48px;"></textarea></div>
+    <div class="form-row3">
+      <div class="form-group"><label>最小注文量(kg)</label><input type="number" step="0.1" id="ppfMin" value="0.5"></div>
+      <div class="form-group"><label>注文単位(kg)</label><input type="number" step="0.1" id="ppfStep" value="0.5"></div>
+      <div class="form-group"><label>△になる残量(kg)</label><input type="number" step="0.5" id="ppfLow" value="3"></div>
+    </div>
+    <div class="form-row3">
+      <div class="form-group"><label>スタンダード(円/kg)</label><input type="number" id="ppfPs" placeholder="空=価格なし"></div>
+      <div class="form-group"><label>ローカル(円/kg)</label><input type="number" id="ppfPl"></div>
+      <div class="form-group"><label>スタートメンバー(円/kg)</label><input type="number" id="ppfPm"></div>
+    </div>
+    <div class="form-group"><label>対応部位（1行に1つ「部位名｜等級」。等級を省くと全等級）</label>
+      <textarea id="ppfParts" style="min-height:60px;font-family:monospace;" placeholder="ロース｜並&#10;カタ&#10;カタ（ウデ）"></textarea></div>
+    <div class="form-group"><label>公開する価格ランク（未選択=全ランクに公開）</label>
+      <div style="display:flex;gap:14px;font-size:.85rem;">
+        <label style="cursor:pointer;"><input type="checkbox" class="ppf-rank" value="standard"> スタンダード</label>
+        <label style="cursor:pointer;"><input type="checkbox" class="ppf-rank" value="local"> ローカル</label>
+        <label style="cursor:pointer;"><input type="checkbox" class="ppf-rank" value="startmember"> スタートメンバー</label>
+      </div></div>
+    <div class="form-group" id="ppfReorderWrap">
+      <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;cursor:pointer;">
+        <input type="checkbox" id="ppfReorderable" checked> 「いつもの商品」の候補にしてよい（特殊商品は外す）</label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn btn-gold" onclick="ppSave()" id="ppSaveBtn">保存</button>
+      <button class="btn btn-outline" onclick="closeModal('ppModal')">やめる</button>
     </div>
   </div>
 </div>
@@ -664,8 +737,131 @@ function switchTab(tab){
   try{ history.replaceState(null,'', tab==='orders' ? location.pathname : '#'+tab); }catch(e){}
   if(tab==='documents'){ populateDocCustomerDropdown(); loadDocOrders(); }
   if(tab==='pricing') renderPricing();
+  if(tab==='pproducts') loadPortalProducts();
   if(tab==='invoice') openInvoiceTab();
   if(tab==='customers' && !custAdminUnlocked) ensureCustAdmin();
+}
+
+/* ══════════ ポータル商品（お客様の注文サイトに出す商品マスタ） ══════════
+   在庫の部位名とは portal_product_parts で対応づける（在庫側の名称は変えない）。
+   価格の決定はDB側の resolve_unit_price() に一元化されており、ここで直した価格が
+   画面表示にも注文確定にも同じように効く。保存はスタッフキーを照合するRPCのみ。 */
+let ppProducts=[], ppParts=[], ppPrices=[], ppMarks={};
+
+async function loadPortalProducts(){
+  try{
+    const [prods, parts, prices, marks] = await Promise.all([
+      sb('GET','portal_products','','?order=sort_order.asc,display_name.asc'),
+      sb('GET','portal_product_parts','',''),
+      sb('GET','portal_product_prices','',''),
+      sbRpc('portal_stock_marks',{})
+    ]);
+    ppProducts=prods; ppParts=parts; ppPrices=prices;
+    ppMarks={}; (marks||[]).forEach(m=>ppMarks[m.product_id]=m.mark);
+    renderPortalProducts();
+  }catch(e){ alert('ポータル商品の読込みに失敗しました: '+e.message); }
+}
+
+function ppPriceOf(pid,rank){
+  const r=ppPrices.find(x=>x.product_id===pid&&x.price_rank===rank);
+  return r?r.unit_price:null;
+}
+
+function renderPortalProducts(){
+  const s=(document.getElementById('ppSearch')?.value||'').toLowerCase();
+  const body=document.getElementById('ppBody'); if(!body) return;
+  let rows=ppProducts;
+  if(s) rows=rows.filter(p=>(p.display_name+p.species+ppPartsOf(p.id).join('')).toLowerCase().includes(s));
+  body.innerHTML=rows.map(p=>{
+    const mark=ppMarks[p.id]||'—';
+    const markColor=mark==='◎'?'var(--green,#6a9e5a)':mark==='△'?'#d8a03a':'var(--red)';
+    const ps=ppPriceOf(p.id,'standard'), pl=ppPriceOf(p.id,'local'), pm=ppPriceOf(p.id,'startmember');
+    const noPrice=ps==null&&pl==null&&pm==null;
+    return `<tr style="${p.is_active?'':'opacity:.45;'}">
+      <td>${p.sort_order}</td>
+      <td style="font-weight:700">${esc(p.display_name)}<div style="font-size:11px;color:var(--text2);font-weight:400">${esc(p.species)}</div></td>
+      <td>${esc(p.grade_label||'')}</td>
+      <td style="font-size:12px;color:var(--text2);max-width:180px;">${esc(ppPartsOf(p.id).join('、 '))}</td>
+      <td style="color:${markColor};font-weight:700;">${mark}</td>
+      <td>${ps!=null?'¥'+Number(ps).toLocaleString():'<span style="color:var(--red)">なし</span>'}</td>
+      <td>${pl!=null?'¥'+Number(pl).toLocaleString():'—'}</td>
+      <td>${pm!=null?'¥'+Number(pm).toLocaleString():'—'}</td>
+      <td>${p.portal_visible?'<span style="color:var(--green,#6a9e5a)">公開</span>':'<span style="color:var(--text3)">非公開</span>'}</td>
+      <td>${p.is_orderable?(noPrice?'<span style="color:var(--red)" title="価格が無いため注文できません">価格なし</span>':'可'):'<span style="color:var(--text3)">停止</span>'}</td>
+      <td><button class="btn btn-outline btn-sm" onclick="ppOpenEdit('${p.id}')">編集</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function ppPartsOf(pid){
+  return ppParts.filter(x=>x.product_id===pid).map(x=>x.part_name+(x.grade?'（'+x.grade+'）':''));
+}
+
+function ppOpenEdit(id){
+  const p=ppProducts.find(x=>x.id===id);
+  document.getElementById('ppModalTitle').textContent=p?'商品の編集':'商品追加';
+  document.getElementById('ppfId').value=p?p.id:'';
+  document.getElementById('ppfSpecies').value=p?p.species:'イノシシ';
+  document.getElementById('ppfName').value=p?p.display_name:'';
+  document.getElementById('ppfGrade').value=p?(p.grade_label||''):'';
+  document.getElementById('ppfSort').value=p?p.sort_order:100;
+  document.getElementById('ppfVisible').checked=p?!!p.portal_visible:false;
+  document.getElementById('ppfOrderable').checked=p?!!p.is_orderable:true;
+  document.getElementById('ppfReorderable').checked=p?p.is_reorderable!==false:true;
+  document.getElementById('ppfDesc').value=p?(p.description||''):'';
+  document.getElementById('ppfMin').value=p?p.min_order_kg:0.5;
+  document.getElementById('ppfStep').value=p?p.step_kg:0.5;
+  document.getElementById('ppfLow').value=p?p.low_kg:3;
+  document.getElementById('ppfPs').value=p?(ppPriceOf(p.id,'standard')??''):'';
+  document.getElementById('ppfPl').value=p?(ppPriceOf(p.id,'local')??''):'';
+  document.getElementById('ppfPm').value=p?(ppPriceOf(p.id,'startmember')??''):'';
+  document.getElementById('ppfParts').value=p?ppParts.filter(x=>x.product_id===p.id)
+    .map(x=>x.part_name+(x.grade?'｜'+x.grade:'')).join('\n'):'';
+  const vr=p&&Array.isArray(p.visible_ranks)?p.visible_ranks:[];
+  document.querySelectorAll('.ppf-rank').forEach(cb=>cb.checked=vr.includes(cb.value));
+  openModal('ppModal');
+}
+
+async function ppSave(){
+  const name=document.getElementById('ppfName').value.trim();
+  if(!name){alert('商品名を入力してください');return;}
+  const parts=document.getElementById('ppfParts').value.split('\n').map(l=>l.trim()).filter(Boolean)
+    .map(l=>{const[pn,gr]=l.split(/[｜|]/).map(x=>(x||'').trim());return{part_name:pn,grade:gr||null};})
+    .filter(x=>x.part_name);
+  if(!parts.length){alert('対応部位を1つ以上入れてください（在庫と結びつかないと在庫記号が出ません）');return;}
+  const num=id=>{const v=document.getElementById(id).value;return v===''?null:Math.round(+v);};
+  const prices=[
+    {price_rank:'standard',    unit_price:num('ppfPs')},
+    {price_rank:'local',       unit_price:num('ppfPl')},
+    {price_rank:'startmember', unit_price:num('ppfPm')},
+  ].filter(x=>x.unit_price!=null);
+  const ranks=Array.from(document.querySelectorAll('.ppf-rank:checked')).map(cb=>cb.value);
+  const key=await staffKeyEnsure(); if(!key) return;
+  const payload={
+    species:document.getElementById('ppfSpecies').value,
+    display_name:name,
+    grade_label:document.getElementById('ppfGrade').value.trim(),
+    description:document.getElementById('ppfDesc').value.trim(),
+    sort_order:+document.getElementById('ppfSort').value||100,
+    min_order_kg:+document.getElementById('ppfMin').value||0.5,
+    step_kg:+document.getElementById('ppfStep').value||0.5,
+    low_kg:+document.getElementById('ppfLow').value||3,
+    portal_visible:document.getElementById('ppfVisible').checked,
+    is_orderable:document.getElementById('ppfOrderable').checked,
+    is_reorderable:document.getElementById('ppfReorderable').checked,
+    visible_ranks:ranks.length?ranks:null,
+    parts:parts, prices:prices
+  };
+  const id=document.getElementById('ppfId').value;
+  if(id) payload.id=id;
+  try{
+    await sbRpc('admin_upsert_product',{p_staff_key:key,p:payload});
+    closeModal('ppModal');
+    await loadPortalProducts();
+  }catch(e){
+    if(String(e.message).includes('スタッフキー')){try{sessionStorage.removeItem('tg_staff_key');}catch(_e){}}
+    alert('保存に失敗しました: '+e.message);
+  }
 }
 
 // ── 価格マスタ（3パターン編集） ──
