@@ -5447,11 +5447,14 @@ function indCollectWarnings() {
   const out = [];
   const area = (indGetVal('capture_area') || '').trim();
   if (area && Array.isArray(areaMasterRows) && areaMasterRows.length) {
-    if (!areaMasterRows.some(a => a.oaza === area || a.district === area)) {
+    if (!areaMasterRows.some(a => a.oaza === area || a.district === area || (a.district || '') + a.oaza === area)) {
       const near = areaMasterRows
-        .filter(a => a.oaza && a.oaza.length === area.length &&
-          [...a.oaza].filter((c, i) => c !== area[i]).length === 1)
-        .map(a => a.oaza).slice(0, 3);
+        .map(a => ((a.district || '') + a.oaza === area ? null : a))
+        .filter(Boolean)
+        .flatMap(a => [a.oaza, (a.district || '') + a.oaza])
+        .filter(n => n && n.length === area.length &&
+          [...n].filter((c, i) => c !== area[i]).length === 1)
+        .slice(0, 3);
       out.push(`地区名「${area}」は地区マスタにありません` + (near.length ? `（似た地区: ${near.join('・')}）` : ''));
     }
   }
