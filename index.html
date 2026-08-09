@@ -8215,14 +8215,14 @@ async function radGenerateReport() {
           <tr><th>個体管理番号</th>${g.map(r => `<td class="id">${r ? esc(r.label_id) : ''}</td>`).join('')}</tr>
           <tr><th>捕獲日時</th>${g.map(r => `<td class="dt">${r ? `${esc(jwa(r.capture_date))}<br>${esc(jtime(r.capture_time, true))}` : ''}</td>`).join('')}</tr>
           ${row('捕獲方法', g, r => METHOD[r.capture_method] || r.capture_method || '')}
-          ${row('捕獲場所', g, r => [r.capture_city, r.capture_area].filter(Boolean).join(''), 'b')}
-          ${row('捕獲者', g, r => r.hunter_name || '', 'b')}
-          ${row('止め刺し方法', g, r => r.finishing_method || '', 'b')}
-          ${row('放血時刻', g, r => jtime(r.bleed_time), 'b')}
-          ${row('放血場所', g, r => r.capture_area || '', 'b sm')}
-          ${row('性別', g, r => r.sex || '', 'b')}
+          ${row('捕獲場所', g, r => [r.capture_city, r.capture_area].filter(Boolean).join(''))}
+          ${row('捕獲者', g, r => r.hunter_name || '')}
+          ${row('止め刺し方法', g, r => r.finishing_method || '')}
+          ${row('放血時刻', g, r => jtime(r.bleed_time))}
+          ${row('放血場所', g, r => r.capture_area || '', 'sm')}
+          ${row('性別', g, r => r.sex || '')}
           ${row('体重', g, r => r.weight_total ? `${r.weight_total}kg` : '')}
-          ${row('受入時刻', g, r => jtime(r.receive_time), 'b')}
+          ${row('受入時刻', g, r => jtime(r.receive_time))}
           ${row('処理日時', g, r => jtime(r.process_time), 'b tall')}
           ${row('記録者', g, r => r.recorder || '沖')}
           <tr><th>確認者印</th>${g.map(r => `<td class="st">${r ? stamp : ''}</td>`).join('')}</tr>
@@ -8265,7 +8265,6 @@ async function radGenerateReport() {
     .t th{font-weight:400;}
     .t1 th,.t2 th,.t3 th{width:22%;}
     .t1 td,.t3 td{width:26%;height:34px;}
-    .t td.b{font-weight:700;}
     .t td.sm{font-size:9pt;}
     .t td.id{font-size:10.5pt;letter-spacing:.3px;}
     .t td.dt{line-height:1.5;height:46px;}
