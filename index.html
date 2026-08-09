@@ -8078,7 +8078,8 @@ async function loadRadiation() {
   // 並びは通し番号順にして、どこが抜けているか目で追えるようにする
   try {
     const un = await sb('GET', 'individuals', null,
-      `?species=eq.イノシシ&radiation_test_date=is.null&or=(intake_status.is.null,intake_status.neq.搬入待ち)&label_id=not.like.仮-*` +
+      `?species=eq.イノシシ&radiation_test_date=is.null&deleted_at=is.null` +
+      `&or=(intake_status.is.null,intake_status.neq.搬入待ち)&label_id=not.like.仮-*` +
       `&select=label_id,serial_number,capture_date&order=serial_number.asc.nullslast,label_id.asc&limit=3000`);
     radUntested = un;
     const cnt = document.getElementById('rad-untested-count');
@@ -8996,7 +8997,8 @@ async function refreshNavBadges() {
   // 放射能検査 未実施（イノシシ・受入済み・検査日null）
   try {
     const un = await sb('GET', 'individuals', null,
-      '?species=eq.イノシシ&radiation_test_date=is.null&or=(intake_status.is.null,intake_status.neq.搬入待ち)&label_id=not.like.仮-*&select=label_id');
+      '?species=eq.イノシシ&radiation_test_date=is.null&deleted_at=is.null' +
+      '&or=(intake_status.is.null,intake_status.neq.搬入待ち)&label_id=not.like.仮-*&select=label_id');
     setBadge('nav-badge-radiation', un.length, true);
   } catch (e) {}
 }
