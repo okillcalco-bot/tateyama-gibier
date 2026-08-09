@@ -287,11 +287,12 @@ th,td{padding:8px 6px;font-size:.8rem}
           <option value="active">有効なお客様すべて</option>
           <option value="ordered">注文したことがあるお客様だけ</option>
         </select>
-        <button class="btn btn-gold btn-sm" onclick="exportPortalCsv()">&#x2b07; 名簿CSV（差し込み用）</button>
-        <button class="btn btn-outline btn-sm" onclick="portalPrintSheets()">&#x1f5a8; 案内文を印刷</button>
-        <label style="font-size:12.5px;color:var(--text2);display:flex;align-items:center;gap:5px;cursor:pointer;">
-          <input type="checkbox" id="portalShowPw" onchange="renderCustomers()"> パスワードを一覧に表示
-        </label>
+        <button class="btn btn-gold btn-sm" onclick="exportPortalCsv()">&#x1f511; パスワードを発行して名簿CSV</button>
+        <button class="btn btn-outline btn-sm" onclick="portalPrintSheets()">&#x1f5a8; 発行して案内文を印刷</button>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.7;">
+        パスワードは暗号化して保管しているため、一覧では見られません。案内を作るときに新しく発行し、その1回だけ表示します。
+        書き出したCSVは無くさないようにしてください（もう一度見るには再発行が必要です）。
       </div>
       <div id="portalPreview" style="margin-top:10px;font-size:12.5px;color:var(--text2);line-height:1.8;"></div>
     </div>
@@ -546,7 +547,12 @@ th,td{padding:8px 6px;font-size:.8rem}
     </div>
     <div class="form-row">
       <div class="form-group"><label>ポータルのログインID<span style="color:var(--text2);font-size:.75rem">（お客様が変更可・管理者のみ閲覧。空欄なら店舗名）</span></label><input type="text" id="cfLoginId"></div>
-      <div class="form-group"><label>ポータルパスワード<span style="color:var(--text2);font-size:.75rem">（初期＝電話下6桁）</span></label><input type="text" id="cfPassword"></div>
+      <div class="form-group"><label>ポータルパスワード</label>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="text" id="cfPassword" readonly placeholder="暗号化して保管（見られません）" style="flex:1;">
+          <button type="button" class="btn btn-outline btn-sm" onclick="custReissuePassword()">再発行</button>
+        </div>
+      </div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>有効</label>
@@ -583,6 +589,19 @@ async function sb(method,table,body,query=''){
       'Prefer':method==='POST'?'return=representation':(method==='PATCH'?'return=representation':'')
     },
     body:body?JSON.stringify(body):undefined
+  });
+  if(!res.ok) throw new Error(await res.text());
+  const t=await res.text();
+  return t?JSON.parse(t):[];
+}
+
+/* DB側の関数を呼ぶ。パスワードの発行・照合はここを通す。
+   パスワードは customer_secrets に暗号化して保管してあり、一覧では読めない。 */
+async function sbRpc(fn,args){
+  const res=await fetch(`${SB_URL}/rest/v1/rpc/${fn}`,{
+    method:'POST',
+    headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Content-Type':'application/json'},
+    body:JSON.stringify(args||{})
   });
   if(!res.ok) throw new Error(await res.text());
   const t=await res.text();
@@ -1019,7 +1038,6 @@ async function generateDoc(type){
 // ── Customers Tab ──
 function renderCustomers(){
   const search=(document.getElementById('custSearch')?.value||'').toLowerCase();
-  const showPw=!!document.getElementById('portalShowPw')?.checked;
   let filtered=allCustomers;
   if(search) filtered=filtered.filter(c=>(c.name||'').toLowerCase().includes(search)||(c.code||'').toLowerCase().includes(search)||(c.phone||'').includes(search)||(c.kana||'').toLowerCase().includes(search));
   custFiltered=filtered;
@@ -1036,7 +1054,7 @@ function renderCustomers(){
       <td>${esc(c.phone||'')}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.address||'')}</td>
       <td style="font-family:monospace">${esc(c.portal_login_id||c.code||'')}</td>
-      <td style="font-family:monospace;letter-spacing:1px">${showPw?esc(c.portal_password||''):'••••••'}</td>
+      <td style="font-family:monospace;letter-spacing:1px;color:${c.__issuedPw?'var(--gold)':'var(--text3)'}">${c.__issuedPw?esc(c.__issuedPw):'（発行時のみ表示）'}</td>
       <td><span class="price-rank ${rankClass}">${rankLabel(c.price_rank)}</span></td>
       <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="portalCopyOne('${c.id}')" title="このお客様あての案内文をコピー">📨</button>
       <button class="btn btn-outline btn-sm" onclick="openEditCustomer('${c.id}')">編集</button>
@@ -1094,7 +1112,7 @@ function portalAddressee(c){
 function buildPortalMsg(c,channel){
   const to=portalAddressee(c);
   const id=c.portal_login_id||c.code||'';
-  const pw=c.portal_password||'';
+  const pw=c.__issuedPw||'（未発行）';
   const tel=orgInfo.phone?('　TEL '+orgInfo.phone):'';
 
   if(channel==='line'){
@@ -1193,17 +1211,45 @@ function portalTargets(){
   return (custFiltered.length?custFiltered:allCustomers).filter(c=>c.is_active!==false);
 }
 
+/* スタッフキー。画面には書かず、担当者が入れたぶんだけこの端末に覚えておく。
+   これを知っている人だけがパスワードを発行できる。 */
+function staffKeyGet(){ try{ return sessionStorage.getItem('tg_staff_key')||''; }catch(e){ return ''; } }
+async function staffKeyEnsure(){
+  let k=staffKeyGet();
+  if(k) return k;
+  k=prompt('スタッフキーを入力してください\n（パスワードの発行に必要です。センターの担当者だけがご存じのものです）');
+  if(!k) return '';
+  try{
+    if(!await sbRpc('staff_key_ok',{p_staff_key:k})){ alert('スタッフキーが違います'); return ''; }
+  }catch(e){ alert('確認できませんでした：'+e.message); return ''; }
+  try{ sessionStorage.setItem('tg_staff_key',k); }catch(e){}
+  return k;
+}
+
+/* 対象のお客様ぶんのパスワードを新しく発行して、その場で受け取る。
+   受け取った平文はこの画面の中だけに置き、保存はしない。 */
+async function portalIssuePasswords(targets){
+  const key=await staffKeyEnsure(); if(!key) return false;
+  let rows;
+  try{ rows=await sbRpc('staff_issue_portal_passwords',{p_staff_key:key,p_customer_ids:targets.map(c=>c.id)}); }
+  catch(e){
+    try{ sessionStorage.removeItem('tg_staff_key'); }catch(_e){}
+    alert('発行できませんでした：'+e.message); return false;
+  }
+  const byId={}; (rows||[]).forEach(r=>byId[r.customer_id]=r.password);
+  targets.forEach(c=>{ if(byId[c.id]) c.__issuedPw=byId[c.id]; });
+  return (rows||[]).length>0;
+}
+
 function renderPortalPreview(){
   const el=document.getElementById('portalPreview'); if(!el) return;
   const t=portalTargets();
   const ch=document.getElementById('portalChannel')?.value||'mail';
-  const noPw=t.filter(c=>!c.portal_password).length;
   const sample=t[0];
   // 会社の電話が未設定だと、案内文に連絡先が入らないので先に知らせる
   const warn=document.getElementById('portalWarn');
   const msgs=[];
   if(!orgInfo.phone) msgs.push('会社の電話番号が未設定（または仮の 0470-00-0000）のため、案内文に連絡先が入りません。業務アプリの設定で本当の番号を入れてください。');
-  if(noPw) msgs.push(noPw+'件はパスワードが未発行です。編集画面で発行してください。');
   if(warn){ warn.innerHTML=msgs.map(m=>'&#x26a0;&#xfe0f; '+esc(m)).join('<br>'); warn.style.display=msgs.length?'block':'none'; }
 
   el.innerHTML='<div style="margin-bottom:6px;">送る相手：<strong style="color:var(--text)">'+t.length+'件</strong>'+
@@ -1216,6 +1262,11 @@ function renderPortalPreview(){
 async function portalCopyOne(id){
   const c=allCustomers.find(x=>x.id===id); if(!c) return;
   const ch=document.getElementById('portalChannel')?.value||'mail';
+  if(!c.__issuedPw){
+    if(!confirm(portalAddressee(c)+' の新しいパスワードを発行して案内文を作ります。\n（いまのパスワードは使えなくなります）\n\n続けますか？')) return;
+    if(!await portalIssuePasswords([c])) return;
+    renderCustomers();
+  }
   const text=buildPortalMsg(c,ch);
   try{ await navigator.clipboard.writeText(text); alert(portalAddressee(c)+' あての案内文をコピーしました。\nメールやLINEに貼り付けてください。'); }
   catch(e){
@@ -1225,15 +1276,20 @@ async function portalCopyOne(id){
 }
 
 /* 差し込み印刷・郵送ラベル作成用のCSV（Excelでそのまま開ける） */
-function exportPortalCsv(){
+async function exportPortalCsv(){
   const t=portalTargets();
   if(!t.length){alert('対象のお客様がいません');return}
   const ch=document.getElementById('portalChannel')?.value||'mail';
-  if(!confirm(t.length+'件ぶんのログイン情報を書き出します。\nパスワードが入ったファイルです。取り扱いにご注意ください。\n\n続けますか？')) return;
+  if(!confirm(t.length+'件ぶんのパスワードを新しく発行して書き出します。\n'+
+    '・いまお使いのパスワードは使えなくなります\n'+
+    '・パスワードが入ったファイルです。取り扱いにご注意ください\n'+
+    '・もう一度見るには再発行が必要です\n\n続けますか？')) return;
+  if(!await portalIssuePasswords(t)){alert('発行できませんでした');return}
+  renderCustomers();
   const cols=['お客様番号','お名前','敬称','カナ','ログインID','パスワード','電話','メール','郵便番号・住所','建物名','ご注文ページ','案内文'];
   const rows=t.map(c=>[
     c.code||'', c.name||'', c.honorific||'様', c.kana||'',
-    c.portal_login_id||c.code||'', c.portal_password||'',
+    c.portal_login_id||c.code||'', c.__issuedPw||'',
     c.phone||'', c.email||'', c.address||'', c.building||'',
     PORTAL_URL, buildPortalMsg(c,ch)
   ].map(csvCell).join(','));
@@ -1245,10 +1301,14 @@ function exportPortalCsv(){
 }
 
 /* 1件1枚で印刷（同梱チラシ・郵送・手渡し用） */
-function portalPrintSheets(){
+async function portalPrintSheets(){
   const t=portalTargets();
   if(!t.length){alert('対象のお客様がいません');return}
-  if(t.length>200 && !confirm(t.length+'件ぶん（'+t.length+'枚）を印刷します。よろしいですか？')) return;
+  if(!confirm(t.length+'件ぶんのパスワードを新しく発行して、'+t.length+'枚を印刷します。\n'+
+    '・いまお使いのパスワードは使えなくなります\n'+
+    '・印刷し損ねた場合は再発行が必要です\n\n続けますか？')) return;
+  if(!await portalIssuePasswords(t)){alert('発行できませんでした');return}
+  renderCustomers();
   const ch=document.getElementById('portalChannel')?.value||'card';
   const sheets=t.map(c=>
     '<div class="sheet">'+
@@ -1320,17 +1380,28 @@ function openEditCustomer(id){
   document.getElementById('cfTimeZone').value=c.default_time_zone||'0000';
   document.getElementById('cfReqCode').value=c.requester_code||'';
   document.getElementById('cfReqPhone').value=c.requester_phone||'';
-  document.getElementById('cfPassword').value=c.portal_password||'';
+  document.getElementById('cfPassword').value=c.__issuedPw||'';
   document.getElementById('cfLoginId').value=c.portal_login_id||'';
   const carriers=Array.isArray(c.default_carriers)?c.default_carriers:[];
   document.querySelectorAll('.cf-carrier').forEach(cb=>{cb.checked=carriers.includes(cb.value)});
   openModal('custModal');
 }
 
+/* 1件だけパスワードを出しなおす（電話でお伝えするとき用） */
+async function custReissuePassword(){
+  const id=document.getElementById('custEditId').value;
+  if(!id){alert('先に保存してから発行してください');return}
+  const c=allCustomers.find(x=>x.id===id); if(!c) return;
+  if(!confirm(portalAddressee(c)+' のパスワードを新しく発行します。\nいまのパスワードは使えなくなります。\n\n続けますか？')) return;
+  if(!await portalIssuePasswords([c])) return;
+  document.getElementById('cfPassword').value=c.__issuedPw||'';
+  renderCustomers();
+  alert('新しいパスワード：'+c.__issuedPw+'\n\nこの画面を閉じると見られなくなります。お客様にお伝えください。');
+}
+
 async function saveCustomer(){
   const id=document.getElementById('custEditId').value;
   const phone=document.getElementById('cfPhone').value;
-  const pw=document.getElementById('cfPassword').value||phone.replace(/\D/g,'').slice(-6);
   const data={
     code:document.getElementById('cfCode').value,
     name:document.getElementById('cfName').value,
@@ -1349,8 +1420,8 @@ async function saveCustomer(){
     default_time_zone:document.getElementById('cfTimeZone').value,
     requester_code:document.getElementById('cfReqCode').value,
     requester_phone:document.getElementById('cfReqPhone').value,
-    portal_password:pw,
-    portal_login_id:document.getElementById('cfLoginId').value||null,
+    // パスワードはここでは扱わない（customer_secrets に暗号化して保管し、発行ボタンから出す）
+    portal_login_id:document.getElementById('cfLoginId').value||(document.getElementById('cfCode').value||null),
     default_carriers:Array.from(document.querySelectorAll('.cf-carrier:checked')).map(cb=>cb.value)
   };
   if(!data.name){alert('名前を入力してください');return}
@@ -1390,7 +1461,8 @@ function deleteCustomerFromModal(){
 }
 
 // ── 顧客CSV（エクスポート/インポート・codeをキーにupsert） ──
-const CSV_COLS=['code','name','kana','phone','email','address','building','contact_name','company1','company2','honorific','price_rank','default_carriers','portal_login_id','portal_password','default_time_zone','requester_code','requester_phone','is_active','notes'];
+// パスワードは含めない（暗号化して別に保管しており、ここからは読み書きしない）
+const CSV_COLS=['code','name','kana','phone','email','address','building','contact_name','company1','company2','honorific','price_rank','default_carriers','portal_login_id','default_time_zone','requester_code','requester_phone','is_active','notes'];
 function csvCell(v){
   if(v==null)v='';
   if(Array.isArray(v))v=v.join(';');
@@ -1455,7 +1527,9 @@ async function importCustomersCSV(input){
         if(code&&byCode[code]){await sb('PATCH','customers',rec,`?code=eq.${encodeURIComponent(code)}`);upd++;}
         else{
           if(!rec.code){const mx=allCustomers.reduce((m,c)=>{const n=parseInt((c.code||'').replace('C',''));return n>m?n:m},0)+ins+1;rec.code='C'+String(mx).padStart(4,'0');}
-          if(!rec.portal_password&&rec.phone)rec.portal_password=rec.phone.replace(/\D/g,'').slice(-6);
+          // パスワードは customers には入れない。ポータル案内の「発行」で作る
+          delete rec.portal_password;
+          if(!rec.portal_login_id)rec.portal_login_id=rec.code;
           await sb('POST','customers',[rec]);ins++;
         }
       }catch(e){errs.push('行'+(r+1)+': '+e.message.slice(0,60));}

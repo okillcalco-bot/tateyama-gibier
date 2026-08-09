@@ -234,7 +234,10 @@ input,select,textarea,button{font-family:inherit;font-size:inherit;color:inherit
 
     <!-- おすすめ -->
     <div class="card" id="reco-card" style="display:none">
-      <div class="card-title">&#128226; おすすめ・お知らせ</div>
+      <div class="card-title">&#128226; おすすめ・お知らせ
+        <span id="reco-unlock" onclick="unlockRecoAdmin()" title="センターの担当者用"
+              style="float:right;cursor:pointer;color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0;">&#9881;&#65039;</span>
+      </div>
       <div id="reco-list"></div>
       <div id="reco-admin" style="display:none;margin-top:10px;border-top:1px dashed var(--border);padding-top:10px;">
         <input type="text" id="reco-title" class="search-input" placeholder="タイトル（例: 本日の搬入 イノシシ3頭）" style="width:100%;margin-bottom:6px;">
@@ -397,12 +400,30 @@ async function sb(method,table,body,query=''){
   return t?JSON.parse(t):[];
 }
 
-/* ── Admin ── */
-const ADMIN_PASSWORD = 'tgc-admin-2024';
+/* DB側の関数を呼ぶ。パスワードの照合はすべてここを通す。
+   パスワードは customer_secrets に暗号化して保管してあり、外からは読めない。 */
+async function sbRpc(fn,args){
+  const res=await fetch(SB_URL+'/rest/v1/rpc/'+fn,{
+    method:'POST',
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+    body:JSON.stringify(args||{})
+  });
+  if(!res.ok)throw new Error(await res.text());
+  const t=await res.text();
+  return t?JSON.parse(t):null;
+}
+
+/* ── Admin ──
+   代理ログイン（admin:顧客名 ＋ 合言葉）は廃止した。
+   合言葉がこのページの中に書いてあるため、ソースを見れば誰でも
+   どのお客様にもなりすませてしまうため。
+   お電話でのご注文をこちらで入れる場合は、受発注管理の「手入力注文」を使う。
+   スタッフキーを入れたときだけ、おすすめの編集ができる。 */
 let isAdminSession = false;
 
 /* ── State ── */
 let customer=null;
+let loginPass='';   // パスワード変更のときだけ使う（保存はしない）
 let products=[];
 let cart=[];
 let lastOrder=null;
@@ -421,31 +442,17 @@ function hideLoading(){document.getElementById('loading').classList.remove('show
 async function doLogin(){
   const name=document.getElementById('login-name').value.trim();
   const pass=document.getElementById('login-pass').value.trim();
-  // 管理者ログイン: アカウント名に "admin:" プレフィックス + ADMIN_PASSWORD
-  if (pass === ADMIN_PASSWORD && name.startsWith('admin:')) {
-    const targetName = name.slice(6).trim();
-    if (!targetName) { document.getElementById('login-error').textContent = '顧客名を admin:顧客名 の形式で入力してください'; return; }
-    showLoading();
-    try {
-      const rows = await sb('GET','customers',null,'?name=eq.'+encodeURIComponent(targetName)+'&select=*');
-      hideLoading();
-      if (!rows||!rows.length){document.getElementById('login-error').textContent='顧客が見つかりません';return;}
-      customer=rows[0]; isAdminSession=true;
-      onLoginSuccess();
-    } catch(e){hideLoading();document.getElementById('login-error').textContent='エラー';}
-    return;
-  }
   // --- 通常ログイン ---
   const errEl=document.getElementById('login-error');
   errEl.textContent='';
   if(!name||!pass){errEl.textContent='お客様名とパスワードを入力してください';return}
   showLoading();
   try{
-    const enc=encodeURIComponent(name);
-    const q='?or=(name.ilike.*'+enc+'*,portal_login_id.eq.'+enc+')&portal_password=eq.'+encodeURIComponent(pass)+'&is_active=eq.true&limit=5';
-    const rows=await sb('GET','customers',null,q);
-    if(!rows.length){errEl.textContent='お客様名またはパスワードが正しくありません';hideLoading();return}
+    // 照合はDB側の関数で行う。パスワードは画面にもURLにも残らない
+    const rows=await sbRpc('portal_login',{p_login:name,p_password:pass});
+    if(!rows||!rows.length){errEl.textContent='お客様名またはパスワードが正しくありません';hideLoading();return}
     customer=rows[0];
+    loginPass=pass; // パスワード変更のときだけ使う
     await onLoginSuccess();
   }catch(e){
     console.error(e);
@@ -471,12 +478,15 @@ async function changePassword(){
   const conf=document.getElementById('pw-confirm').value;
   const msg=document.getElementById('pw-msg');
   if (!cur||!nw||!conf){msg.style.color='#e05555';msg.textContent='すべて入力してください';return;}
-  if (cur!==customer.portal_password){msg.style.color='#e05555';msg.textContent='現在のパスワードが違います';return;}
   if (nw.length<6){msg.style.color='#e05555';msg.textContent='6文字以上で入力してください';return;}
   if (nw!==conf){msg.style.color='#e05555';msg.textContent='新パスワードが一致しません';return;}
+  if (isAdminSession){msg.style.color='#e05555';msg.textContent='代理ログイン中はパスワードを変更できません';return;}
   try{
-    await sb('PATCH','customers',{portal_password:nw},'?id=eq.'+customer.id);
-    customer.portal_password=nw;
+    // 現在のパスワードの照合もDB側で行う
+    const ok=await sbRpc('portal_change_password',
+      {p_login:customer.portal_login_id||customer.code||customer.name,p_old:cur,p_new:nw});
+    if(!ok){msg.style.color='#e05555';msg.textContent='現在のパスワードが違います';return;}
+    loginPass=nw;
     msg.style.color='#4caf7d';msg.textContent='パスワードを変更しました';
     document.getElementById('pw-current').value='';
     document.getElementById('pw-new').value='';
@@ -507,7 +517,7 @@ async function loadPriceTable(){
   }catch(e){el.textContent='読込みエラー';}
 }
 function doLogout(){
-  customer=null;cart=[];lastOrder=null;lastOrderItems=[];products=[];
+  customer=null;loginPass='';isAdminSession=false;cart=[];lastOrder=null;lastOrderItems=[];products=[];
   document.getElementById('main-screen').style.display='none';
   document.getElementById('login-screen').style.display='';
   document.getElementById('login-name').value='';
@@ -666,7 +676,18 @@ function renderMyList(){
   document.getElementById('mylist-usual').innerHTML=usual.length?usual.map(s=>savedItemRow(s,true)).join(''):'<div style="color:var(--text3);font-size:13px;">商品の「＋いつもの」を押すと登録されます</div>';
 }
 
-/* ── おすすめ ── */
+/* ── おすすめ ──
+   編集はセンターの人だけ。スタッフキーをDB側で照合してから開ける
+   （合言葉をこのページに書かないため） */
+async function unlockRecoAdmin(){
+  const k=prompt('スタッフキーを入力してください（センターの担当者用）');
+  if(!k) return;
+  try{
+    if(await sbRpc('staff_key_ok',{p_staff_key:k})){ isAdminSession=true; renderRecommendations(); }
+    else alert('スタッフキーが違います');
+  }catch(e){ alert('確認できませんでした'); }
+}
+
 async function loadRecommendations(){
   try{ recommendations=await sb('GET','portal_recommendations',null,'?is_active=eq.true&select=*&order=sort_order.asc,created_at.desc'); }
   catch(e){ recommendations=[]; }
@@ -675,7 +696,7 @@ async function loadRecommendations(){
 function renderRecommendations(){
   const card=document.getElementById('reco-card');
   document.getElementById('reco-admin').style.display=isAdminSession?'block':'none';
-  if(!recommendations.length&&!isAdminSession){card.style.display='none';return;}
+  // お知らせが無くても、歯車から編集を開けるようにカードは出しておく
   card.style.display='';
   document.getElementById('reco-list').innerHTML=recommendations.length?recommendations.map(r=>
     '<div style="padding:8px 0;border-bottom:1px solid var(--border);">'+
