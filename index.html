@@ -8155,7 +8155,7 @@ async function radCopyForDaicho() {
 
 /* 市役所提出用「イノシシの搬入・処理管理台帳」を生成（1枚3個体・台帳の個体別シートと同じ様式）
    月を選ぶと、その月に検査した個体を通し番号順に並べて打ち出す。
-   ファイル名は 開始の個体番号〜終了の個体番号 */
+   ファイル名は「イノシシ搬入・処理管理台帳◯月分（開始の個体番号~終了の個体番号）」 */
 async function radGenerateReport() {
   const month = document.getElementById('rad-copy-month').value;
   if (!month) { toast('月を選んでください', 'error'); return; }
@@ -8282,8 +8282,9 @@ async function radGenerateReport() {
     .stamp{display:inline-block;width:30px;height:30px;line-height:27px;border:1.6px solid #c00;border-radius:50%;
       color:#c00;font-size:14px;font-weight:700;text-align:center;}`;
 
-  // ファイル名は 開始の個体番号〜終了の個体番号（印刷ダイアログの既定名になる）
-  const name = `イノシシの搬入・処理管理台帳 ${rows[0].label_id}〜${rows[rows.length - 1].label_id}`;
+  // ファイル名は「◯月分（開始の個体番号~終了の個体番号）」（印刷ダイアログの既定名になる）
+  const name = `イノシシ搬入・処理管理台帳${+month.split('-')[1]}月分` +
+    `（${rows[0].label_id}~${rows[rows.length - 1].label_id}）`;
   const html = '<!doctype html><html><head><meta charset="utf-8"><title>' + esc(name) + '</title><style>' + css +
     '</style></head><body>' + sheets.join('') +
     '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.focus();window.print();},400);};</scr' + 'ipt></body></html>';
