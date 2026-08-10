@@ -822,7 +822,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="section">
       <div class="section-title">出退勤打刻</div>
       <div style="font-size:13px;color:var(--text2);margin-bottom:8px;">自分の名前を選んで、体調をチェックして「出勤」「退勤」ボタンを押すだけで時刻が自動で記録されます。記録の修正は管理者に依頼してください。</div>
-      <div style="margin-bottom:14px;"><a href="punch.html" target="_blank" class="btn" style="display:inline-block;text-decoration:none;">📺 タブレット常時表示用の打刻ページを開く（punch.html）</a></div>
+      <div style="margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;">
+        <a href="punch.html" target="_blank" class="btn" style="display:inline-block;text-decoration:none;">📺 タブレット常時表示用の打刻ページを開く（punch.html）</a>
+        <a href="payroll.html" target="_blank" class="btn" style="display:inline-block;text-decoration:none;">💴 給与計算（月次・スタッフキー必須）</a>
+      </div>
       <div id="punch-names" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:16px;"></div>
       <div id="punch-panel" style="display:none;max-width:480px;padding:18px;border:1px solid var(--gold2);border-radius:var(--radius);background:var(--surface);">
         <div style="font-size:17px;font-weight:700;margin-bottom:6px;" id="punch-who"></div>
