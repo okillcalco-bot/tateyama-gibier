@@ -195,8 +195,8 @@ input,select,textarea,button{font-family:inherit;font-size:inherit;color:inherit
   <div class="login-box">
     <h2>ログイン</h2>
     <div class="field">
-      <label>お客様名</label>
-      <input type="text" id="login-name" placeholder="お名前を入力" autocomplete="off">
+      <label>ログインID（お客様番号）</label>
+      <input type="text" id="login-name" placeholder="例: C0011" autocomplete="off">
     </div>
     <div class="field">
       <label>パスワード</label>
@@ -445,12 +445,12 @@ async function doLogin(){
   // --- 通常ログイン ---
   const errEl=document.getElementById('login-error');
   errEl.textContent='';
-  if(!name||!pass){errEl.textContent='お客様名とパスワードを入力してください';return}
+  if(!name||!pass){errEl.textContent='ログインIDとパスワードを入力してください';return}
   showLoading();
   try{
     // 照合はDB側の関数で行う。パスワードは画面にもURLにも残らない
     const rows=await sbRpc('portal_login',{p_login:name,p_password:pass});
-    if(!rows||!rows.length){errEl.textContent='お客様名またはパスワードが正しくありません';hideLoading();return}
+    if(!rows||!rows.length){errEl.textContent='ログインIDまたはパスワードが正しくありません';hideLoading();return}
     customer=rows[0];
     loginPass=pass; // パスワード変更のときだけ使う
     await onLoginSuccess();

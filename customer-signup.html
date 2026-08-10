@@ -132,7 +132,8 @@ async function submitSignup() {
   const btn = document.getElementById('submit-btn');
   btn.disabled = true; btn.textContent = '送信中...';
   try {
-    await sbRpc('public_signup_request', {
+    // 戻り値は {ok:true, code:…} / {ok:false, error:…}（上限到達などは例外でなく ok:false で返る）
+    const r = await sbRpc('public_signup_request', {
       p_name: v('f-name'), p_kana: v('f-kana') || null,
       p_company: v('f-company') || null,
       p_contact: v('f-contact'), p_phone: v('f-phone'), p_email: v('f-email') || null,
@@ -142,6 +143,7 @@ async function submitSignup() {
       p_notify_method: document.getElementById('f-notify-method').value,
       p_notes: v('f-notes') || null
     });
+    if (!r || r.ok !== true) throw new Error((r && r.error) || '送信に失敗しました');
     document.getElementById('form-area').style.display = 'none';
     document.getElementById('done').style.display = 'block';
     window.scrollTo(0, 0);

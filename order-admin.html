@@ -785,17 +785,22 @@ function switchTab(tab){
 let ppProducts=[], ppParts=[], ppPrices=[], ppMarks={};
 
 async function loadPortalProducts(){
+  const key=await staffKeyEnsure(); if(!key) return;
   try{
-    const [prods, parts, prices, marks] = await Promise.all([
-      sb('GET','portal_products','','?order=sort_order.asc,display_name.asc'),
-      sb('GET','portal_product_parts','',''),
-      sb('GET','portal_product_prices','',''),
-      sbRpc('portal_stock_marks',{})
-    ]);
-    ppProducts=prods; ppParts=parts; ppPrices=prices;
-    ppMarks={}; (marks||[]).forEach(m=>ppMarks[m.product_id]=m.mark);
+    // カタログ表はanon直読み不可（価格漏えい対策）。スタッフキー必須のRPCで一括取得する
+    const rows=await sbRpc('admin_list_portal_products',{p_staff_key:key})||[];
+    ppProducts=[]; ppParts=[]; ppPrices=[]; ppMarks={};
+    rows.forEach(p=>{
+      ppProducts.push(p);
+      (p.parts||[]).forEach(x=>ppParts.push({product_id:p.id,part_name:x.part_name,grade:x.grade}));
+      (p.prices||[]).forEach(x=>ppPrices.push({product_id:p.id,price_rank:x.price_rank,unit_price:x.unit_price}));
+      ppMarks[p.id]=p.mark;
+    });
     renderPortalProducts();
-  }catch(e){ alert('ポータル商品の読込みに失敗しました: '+e.message); }
+  }catch(e){
+    if(String(e.message).includes('スタッフキー')) staffKeyClear();
+    alert('ポータル商品の読込みに失敗しました: '+e.message);
+  }
 }
 
 function ppPriceOf(pid,rank){
@@ -1328,7 +1333,7 @@ function renderCustomers(){
 
 /* ══════════ 注文ポータルのご案内（ログイン情報の配布） ══════════
    お客様へ送る案内文と、ログインID・パスワードの名簿をここでまとめて作る。
-   ログインIDはお客様番号（C0011 など）。お名前でもログインできる。 */
+   ログインIDはお客様番号（C0011 など）。お名前でのログインは廃止（総当たり対策）。 */
 const PORTAL_URL='https://tateyama-gibier.vercel.app/order-portal.html';
 let orgInfo={name:'館山ジビエセンター',address:'千葉県館山市西長田1163-5',phone:'',email:''};
 let custFiltered=[];
@@ -1419,7 +1424,6 @@ function buildPortalMsg(c,channel){
       '・ログインID： '+id+'　→ 読み方「'+readDigits(id)+'」',
       '・パスワード： '+pw+'　→ 読み方「'+readDigits(pw)+'」',
       '',
-      '「お名前（'+(c.name||'')+'）でもログインいただけます。」',
       '「パスワードはログイン後の設定でご自由に変更いただけます。」',
       '「これまでどおり、お電話でのご注文も承ります。」'
     ].join('\n');
@@ -1440,7 +1444,6 @@ function buildPortalMsg(c,channel){
     '■ ログイン情報',
     '　ログインID：'+id,
     '　パスワード：'+pw,
-    '　※お店のお名前（'+(c.name||'')+'）でもログインいただけます。',
     '',
     '■ ご注文の流れ',
     '　1. 上のページを開く',
