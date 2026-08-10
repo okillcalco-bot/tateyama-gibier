@@ -195,8 +195,8 @@ input,select,textarea,button{font-family:inherit;font-size:inherit;color:inherit
   <div class="login-box">
     <h2>ログイン</h2>
     <div class="field">
-      <label>お客様名</label>
-      <input type="text" id="login-name" placeholder="お名前を入力" autocomplete="off">
+      <label>ログインID（お客様番号）</label>
+      <input type="text" id="login-name" placeholder="例: C0011" autocomplete="off">
     </div>
     <div class="field">
       <label>パスワード</label>
@@ -445,12 +445,12 @@ async function doLogin(){
   // --- 通常ログイン ---
   const errEl=document.getElementById('login-error');
   errEl.textContent='';
-  if(!name||!pass){errEl.textContent='お客様名とパスワードを入力してください';return}
+  if(!name||!pass){errEl.textContent='ログインIDとパスワードを入力してください';return}
   showLoading();
   try{
     // 照合はDB側の関数で行う。パスワードは画面にもURLにも残らない
     const rows=await sbRpc('portal_login',{p_login:name,p_password:pass});
-    if(!rows||!rows.length){errEl.textContent='お客様名またはパスワードが正しくありません';hideLoading();return}
+    if(!rows||!rows.length){errEl.textContent='ログインIDまたはパスワードが正しくありません';hideLoading();return}
     customer=rows[0];
     loginPass=pass; // パスワード変更のときだけ使う
     await onLoginSuccess();
@@ -841,8 +841,12 @@ async function loadHistory(){
   const el=document.getElementById('history-list');
   el.innerHTML='<div style="text-align:center;padding:30px"><div class="spinner"></div></div>';
   try{
+    // 直読みが塞がっている場合はお知らせを出す（新しい注文ページで履歴が見られるようになります）
     historyOrders=await sb('GET','orders',null,'?customer_id=eq.'+customer.id+'&order=created_at.desc&limit=100');
-    if(!historyOrders.length){el.innerHTML='<div class="history-empty">注文履歴はまだありません</div>';return}
+    if(!historyOrders.length){
+      el.innerHTML='<div class="history-empty">このページはリニューアル中のため、履歴の表示を一時停止しています。<br>ご不明な点はセンターへお問い合わせください。</div>';
+      return;
+    }
     const ids=historyOrders.map(o=>o.id);
     const allItems=await sb('GET','order_items',null,'?order_id=in.('+ids.join(',')+')');
     historyItemMap={};
@@ -899,6 +903,14 @@ async function reorderFromHistory(orderId){
 
 /* ── Submit Order ── */
 async function submitOrder(){
+  // このページからの注文は、新しい注文ページへの切り替えに伴い停止しました。
+  // 旧ページは価格・在庫の確認が現在の仕組みとつながっておらず、
+  // 誤った単価で注文が確定するおそれがあるためです（→ docs/order-site-plan.md §0-1）。
+  alert('ご注文ページは現在リニューアル中です。\n'+
+        'お手数ですが、ご注文はお電話またはFAXでお願いいたします。\n'+
+        '新しい注文ページができ次第、あらためてご案内いたします。');
+  return;
+  /* eslint-disable no-unreachable */
   if(!cart.length){alert('カートに商品を追加してください');return}
   const dateVal=document.getElementById('delivery-date').value;
   if(!dateVal){alert('納品希望日を選択してください');return}

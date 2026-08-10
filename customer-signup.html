@@ -104,15 +104,21 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--g
 <script>
 const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
-async function sb(method, table, body, query = '') {
-  const res = await fetch(`${SB_URL}/rest/v1/${table}${query}`, {
-    method,
-    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
-    body: body ? JSON.stringify(body) : undefined
+/* 登録は専用RPCだけを使う（customers への直接INSERTはしない）。
+   列のホワイトリスト・書式検査・連続登録の抑止はサーバ側で行われる */
+async function sbRpc(fn, args) {
+  const res = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
+    method: 'POST',
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(args || {})
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) {
+    let msg = '';
+    try { msg = (await res.json()).message || ''; } catch (e) {}
+    throw new Error(msg || ('HTTP ' + res.status));
+  }
   const t = await res.text();
-  return t ? JSON.parse(t) : [];
+  return t ? JSON.parse(t) : null;
 }
 const v = id => document.getElementById(id).value.trim();
 async function submitSignup() {
@@ -126,24 +132,26 @@ async function submitSignup() {
   const btn = document.getElementById('submit-btn');
   btn.disabled = true; btn.textContent = '送信中...';
   try {
-    await sb('POST', 'customers', {
-      code: 'S' + Date.now().toString(36).toUpperCase(),
-      name: v('f-name'), kana: v('f-kana') || null,
-      company1: v('f-company') || null,
-      contact_name: v('f-contact'), phone: v('f-phone'), email: v('f-email') || null,
-      address: v('f-address'), building: v('f-building') || null,
-      default_time_zone: document.getElementById('f-timezone').value,
-      order_method: document.getElementById('f-order-method').value,
-      notify_method: document.getElementById('f-notify-method').value,
-      notes: v('f-notes') || null,
-      is_active: false,
-      signup_source: 'signup-form'
+    // 戻り値は {ok:true, code:…} / {ok:false, error:…}（上限到達などは例外でなく ok:false で返る）
+    const r = await sbRpc('public_signup_request', {
+      p_name: v('f-name'), p_kana: v('f-kana') || null,
+      p_company: v('f-company') || null,
+      p_contact: v('f-contact'), p_phone: v('f-phone'), p_email: v('f-email') || null,
+      p_address: v('f-address'), p_building: v('f-building') || null,
+      p_time_zone: document.getElementById('f-timezone').value,
+      p_order_method: document.getElementById('f-order-method').value,
+      p_notify_method: document.getElementById('f-notify-method').value,
+      p_notes: v('f-notes') || null
     });
+    if (!r || r.ok !== true) throw new Error((r && r.error) || '送信に失敗しました');
     document.getElementById('form-area').style.display = 'none';
     document.getElementById('done').style.display = 'block';
     window.scrollTo(0, 0);
   } catch (e) {
-    err.textContent = '送信に失敗しました。電波の良い場所でもう一度お試しください';
+    // サーバ側の検査メッセージ（電話番号を確認してください 等）はそのまま見せる
+    const m = String(e.message || '');
+    err.textContent = (m && !m.startsWith('HTTP') && m.length < 80)
+      ? m : '送信に失敗しました。電波の良い場所でもう一度お試しください';
     err.style.display = 'block';
     btn.disabled = false; btn.textContent = '申込を送信する';
   }

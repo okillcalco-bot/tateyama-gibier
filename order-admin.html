@@ -183,6 +183,7 @@ th,td{padding:8px 6px;font-size:.8rem}
   <div class="tab" data-tab="invoice" onclick="switchTab('invoice')">&#x1f9fe; 請求書作成</div>
   <div class="tab" data-tab="customers" onclick="switchTab('customers')">&#x1f464; 顧客管理</div>
   <div class="tab" data-tab="pricing" onclick="switchTab('pricing')">&#x1f3f7;&#xfe0f; 価格マスタ</div>
+  <div class="tab" data-tab="pproducts" onclick="switchTab('pproducts')">&#x1f6d2; ポータル商品</div>
 </div>
 
 <div class="main">
@@ -275,6 +276,12 @@ th,td{padding:8px 6px;font-size:.8rem}
         <span style="font-size:12px;color:var(--text2);">お客様に送るログインID・パスワードと案内文をまとめて用意します</span>
       </div>
       <div id="portalWarn" style="display:none;font-size:12.5px;color:var(--red);background:rgba(200,80,80,.08);border:1px solid var(--red);border-radius:6px;padding:8px 10px;margin-bottom:10px;line-height:1.7;"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+        <span style="font-size:12px;color:var(--text2);">🔑 スタッフキー:</span>
+        <button class="btn btn-outline btn-sm" onclick="staffKeyChange()">変更する</button>
+        <button class="btn btn-outline btn-sm" onclick="staffKeyForget()">この端末から削除</button>
+        <span style="font-size:11.5px;color:var(--text3);">キーを変えると全端末で再入力が必要になります（漏えい時の失効手順）</span>
+      </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <select id="portalChannel" onchange="renderPortalPreview()" style="height:34px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:inherit;padding:0 8px;font-size:13px;">
           <option value="mail">メール・FAX（正式な文面）</option>
@@ -443,6 +450,27 @@ th,td{padding:8px 6px;font-size:.8rem}
       </table>
     </div>
   </div>
+
+  <!-- Tab: ポータル商品（お客様の注文サイトに出す商品マスタ） -->
+  <div class="tab-content" id="tab-pproducts">
+    <div style="font-size:12.5px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:12px;line-height:1.8;">
+      お客様の注文サイトに出す商品です。在庫の部位名とは「対応部位」で結びます（在庫側の名前は変わりません）。
+      在庫の記号は ◎=十分 / △=残りわずか / ×=最小注文量に足りない。<strong>価格が1つも無い商品は注文できません。</strong>
+      変更の保存にはスタッフキーが必要です。
+    </div>
+    <div class="filter-bar">
+      <input class="search-input" type="text" placeholder="商品名・部位で検索..." id="ppSearch" oninput="renderPortalProducts()">
+      <button class="btn btn-gold btn-sm" onclick="ppOpenEdit('')">+ 商品追加</button>
+      <button class="btn btn-outline btn-sm" onclick="loadPortalProducts()">↻ 再読込</button>
+    </div>
+    <div class="table-wrap">
+      <table class="customer-table">
+        <thead><tr><th>並び</th><th>商品名</th><th>等級</th><th>対応部位</th><th>在庫</th>
+          <th>スタンダード</th><th>ローカル</th><th>スタートメンバー</th><th>公開</th><th>注文</th><th>操作</th></tr></thead>
+        <tbody id="ppBody"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <!-- Order Detail Modal -->
@@ -498,6 +526,83 @@ th,td{padding:8px 6px;font-size:.8rem}
       <div class="cart-total" id="moTotal">合計: &yen;0</div>
       <div class="form-group"><label>備考</label><textarea id="moMemo" rows="2"></textarea></div>
       <button class="btn btn-gold" style="width:100%;margin-top:10px" onclick="submitManualOrder()">注文を登録</button>
+    </div>
+  </div>
+</div>
+
+<!-- スタッフキーの変更（回復コード必須） Modal -->
+<div class="modal-overlay" id="rotateModal">
+  <div class="modal" style="max-width:420px;">
+    <span class="modal-close" onclick="closeModal('rotateModal')">&times;</span>
+    <h2>スタッフキーの変更</h2>
+    <div style="font-size:12.5px;color:var(--text2);line-height:1.8;margin-bottom:12px;">
+      変更には<strong>管理者用回復コード</strong>が必要です（通常のスタッフキーでは変更できません）。
+      変更すると全端末で再入力が必要になり、操作は監査ログに残ります。
+    </div>
+    <div class="form-group"><label>管理者用回復コード</label>
+      <input type="password" id="rkCode" autocomplete="off"></div>
+    <div class="form-group"><label>新しいスタッフキー（16文字以上）</label>
+      <input type="password" id="rkNew" autocomplete="new-password"></div>
+    <div class="form-group"><label>新しいスタッフキー（確認）</label>
+      <input type="password" id="rkNew2" autocomplete="new-password"></div>
+    <div id="rkMsg" style="color:var(--red);font-size:12.5px;min-height:1.4em;margin:6px 0;"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-gold" id="rkBtn" onclick="staffKeyRotateSubmit()">変更する</button>
+      <button class="btn btn-outline" onclick="closeModal('rotateModal')">やめる</button>
+    </div>
+    <div style="font-size:11.5px;color:var(--text3);margin-top:10px;line-height:1.7;">
+      回復コードを紛失した場合の再設定は Supabase の SQL Editor から行います（手順は docs/order-site-plan.md）。
+    </div>
+  </div>
+</div>
+
+<!-- ポータル商品の編集 Modal -->
+<div class="modal-overlay" id="ppModal">
+  <div class="modal">
+    <span class="modal-close" onclick="closeModal('ppModal')">&times;</span>
+    <h2 id="ppModalTitle">商品の編集</h2>
+    <input type="hidden" id="ppfId">
+    <div class="form-row">
+      <div class="form-group"><label>獣種</label>
+        <select id="ppfSpecies"><option>イノシシ</option><option>シカ</option><option>キョン</option><option>中型獣</option></select></div>
+      <div class="form-group"><label>商品名（お客様に見える名前）</label><input type="text" id="ppfName"></div>
+    </div>
+    <div class="form-row3">
+      <div class="form-group"><label>等級表示</label><input type="text" id="ppfGrade" placeholder="並 / 上"></div>
+      <div class="form-group"><label>並び順</label><input type="number" id="ppfSort" value="100"></div>
+      <div class="form-group"><label>&nbsp;</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;cursor:pointer;">
+          <input type="checkbox" id="ppfVisible"> ポータルに公開</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;cursor:pointer;">
+          <input type="checkbox" id="ppfOrderable"> 注文を受ける</label>
+      </div>
+    </div>
+    <div class="form-group"><label>商品説明（タップで展開・任意）</label><textarea id="ppfDesc" style="min-height:48px;"></textarea></div>
+    <div class="form-row3">
+      <div class="form-group"><label>最小注文量(kg)</label><input type="number" step="0.1" id="ppfMin" value="0.5"></div>
+      <div class="form-group"><label>注文単位(kg)</label><input type="number" step="0.1" id="ppfStep" value="0.5"></div>
+      <div class="form-group"><label>△になる残量(kg)</label><input type="number" step="0.5" id="ppfLow" value="3"></div>
+    </div>
+    <div class="form-row3">
+      <div class="form-group"><label>スタンダード(円/kg)</label><input type="number" id="ppfPs" placeholder="空=価格なし"></div>
+      <div class="form-group"><label>ローカル(円/kg)</label><input type="number" id="ppfPl"></div>
+      <div class="form-group"><label>スタートメンバー(円/kg)</label><input type="number" id="ppfPm"></div>
+    </div>
+    <div class="form-group"><label>対応部位（1行に1つ「部位名｜等級」。等級を省くと全等級）</label>
+      <textarea id="ppfParts" style="min-height:60px;font-family:monospace;" placeholder="ロース｜並&#10;カタ&#10;カタ（ウデ）"></textarea></div>
+    <div class="form-group"><label>公開する価格ランク（未選択=全ランクに公開）</label>
+      <div style="display:flex;gap:14px;font-size:.85rem;">
+        <label style="cursor:pointer;"><input type="checkbox" class="ppf-rank" value="standard"> スタンダード</label>
+        <label style="cursor:pointer;"><input type="checkbox" class="ppf-rank" value="local"> ローカル</label>
+        <label style="cursor:pointer;"><input type="checkbox" class="ppf-rank" value="startmember"> スタートメンバー</label>
+      </div></div>
+    <div class="form-group" id="ppfReorderWrap">
+      <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;cursor:pointer;">
+        <input type="checkbox" id="ppfReorderable" checked> 「いつもの商品」の候補にしてよい（特殊商品は外す）</label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn btn-gold" onclick="ppSave()" id="ppSaveBtn">保存</button>
+      <button class="btn btn-outline" onclick="closeModal('ppModal')">やめる</button>
     </div>
   </div>
 </div>
@@ -580,14 +685,16 @@ const SB_URL='https://clpdyrehdgzgiidbfucj.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
 
 async function sb(method,table,body,query=''){
+  const headers={
+    'apikey':SB_KEY,
+    'Authorization':`Bearer ${SB_KEY}`,
+    'Content-Type':'application/json',
+    'Prefer':method==='POST'?'return=representation':(method==='PATCH'?'return=representation':'')
+  };
+  // 顧客・注文のRLSはスタッフキーのヘッダで開く（20260809_rls_tighten.sql）
+  const sk=staffKeyGet(); if(sk) headers['x-staff-key']=sk;
   const res=await fetch(`${SB_URL}/rest/v1/${table}${query}`,{
-    method,
-    headers:{
-      'apikey':SB_KEY,
-      'Authorization':`Bearer ${SB_KEY}`,
-      'Content-Type':'application/json',
-      'Prefer':method==='POST'?'return=representation':(method==='PATCH'?'return=representation':'')
-    },
+    method,headers,
     body:body?JSON.stringify(body):undefined
   });
   if(!res.ok) throw new Error(await res.text());
@@ -625,6 +732,8 @@ function ensureCustAdmin(){
 // ── Init ──
 async function init(){
   try{
+    // RLS引き締め後は、スタッフキーが無いと顧客・注文が読めない（空になる）ため先に確認する
+    if(!staffKeyGet()) await staffKeyEnsure();
     await Promise.all([loadOrders(),loadCustomers(),loadProducts(),loadInvoiceSettings(),loadOrgInfo()]);
     orderedCustomerIds=new Set(allOrders.map(o=>o.customer_id).filter(Boolean));
     populateCustomerDropdowns();
@@ -664,8 +773,136 @@ function switchTab(tab){
   try{ history.replaceState(null,'', tab==='orders' ? location.pathname : '#'+tab); }catch(e){}
   if(tab==='documents'){ populateDocCustomerDropdown(); loadDocOrders(); }
   if(tab==='pricing') renderPricing();
+  if(tab==='pproducts') loadPortalProducts();
   if(tab==='invoice') openInvoiceTab();
   if(tab==='customers' && !custAdminUnlocked) ensureCustAdmin();
+}
+
+/* ══════════ ポータル商品（お客様の注文サイトに出す商品マスタ） ══════════
+   在庫の部位名とは portal_product_parts で対応づける（在庫側の名称は変えない）。
+   価格の決定はDB側の resolve_unit_price() に一元化されており、ここで直した価格が
+   画面表示にも注文確定にも同じように効く。保存はスタッフキーを照合するRPCのみ。 */
+let ppProducts=[], ppParts=[], ppPrices=[], ppMarks={};
+
+async function loadPortalProducts(){
+  const key=await staffKeyEnsure(); if(!key) return;
+  try{
+    // カタログ表はanon直読み不可（価格漏えい対策）。スタッフキー必須のRPCで一括取得する
+    const rows=await sbRpc('admin_list_portal_products',{p_staff_key:key})||[];
+    ppProducts=[]; ppParts=[]; ppPrices=[]; ppMarks={};
+    rows.forEach(p=>{
+      ppProducts.push(p);
+      (p.parts||[]).forEach(x=>ppParts.push({product_id:p.id,part_name:x.part_name,grade:x.grade}));
+      (p.prices||[]).forEach(x=>ppPrices.push({product_id:p.id,price_rank:x.price_rank,unit_price:x.unit_price}));
+      ppMarks[p.id]=p.mark;
+    });
+    renderPortalProducts();
+  }catch(e){
+    if(String(e.message).includes('スタッフキー')) staffKeyClear();
+    alert('ポータル商品の読込みに失敗しました: '+e.message);
+  }
+}
+
+function ppPriceOf(pid,rank){
+  const r=ppPrices.find(x=>x.product_id===pid&&x.price_rank===rank);
+  return r?r.unit_price:null;
+}
+
+function renderPortalProducts(){
+  const s=(document.getElementById('ppSearch')?.value||'').toLowerCase();
+  const body=document.getElementById('ppBody'); if(!body) return;
+  let rows=ppProducts;
+  if(s) rows=rows.filter(p=>(p.display_name+p.species+ppPartsOf(p.id).join('')).toLowerCase().includes(s));
+  body.innerHTML=rows.map(p=>{
+    const mark=ppMarks[p.id]||'—';
+    const markColor=mark==='◎'?'var(--green,#6a9e5a)':mark==='△'?'#d8a03a':'var(--red)';
+    const ps=ppPriceOf(p.id,'standard'), pl=ppPriceOf(p.id,'local'), pm=ppPriceOf(p.id,'startmember');
+    const noPrice=ps==null&&pl==null&&pm==null;
+    return `<tr style="${p.is_active?'':'opacity:.45;'}">
+      <td>${p.sort_order}</td>
+      <td style="font-weight:700">${esc(p.display_name)}<div style="font-size:11px;color:var(--text2);font-weight:400">${esc(p.species)}</div></td>
+      <td>${esc(p.grade_label||'')}</td>
+      <td style="font-size:12px;color:var(--text2);max-width:180px;">${esc(ppPartsOf(p.id).join('、 '))}</td>
+      <td style="color:${markColor};font-weight:700;">${mark}</td>
+      <td>${ps!=null?'¥'+Number(ps).toLocaleString():'<span style="color:var(--red)">なし</span>'}</td>
+      <td>${pl!=null?'¥'+Number(pl).toLocaleString():'—'}</td>
+      <td>${pm!=null?'¥'+Number(pm).toLocaleString():'—'}</td>
+      <td>${p.portal_visible?'<span style="color:var(--green,#6a9e5a)">公開</span>':'<span style="color:var(--text3)">非公開</span>'}</td>
+      <td>${p.is_orderable?(noPrice?'<span style="color:var(--red)" title="価格が無いため注文できません">価格なし</span>':'可'):'<span style="color:var(--text3)">停止</span>'}</td>
+      <td><button class="btn btn-outline btn-sm" onclick="ppOpenEdit('${p.id}')">編集</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function ppPartsOf(pid){
+  return ppParts.filter(x=>x.product_id===pid).map(x=>x.part_name+(x.grade?'（'+x.grade+'）':''));
+}
+
+function ppOpenEdit(id){
+  const p=ppProducts.find(x=>x.id===id);
+  document.getElementById('ppModalTitle').textContent=p?'商品の編集':'商品追加';
+  document.getElementById('ppfId').value=p?p.id:'';
+  document.getElementById('ppfSpecies').value=p?p.species:'イノシシ';
+  document.getElementById('ppfName').value=p?p.display_name:'';
+  document.getElementById('ppfGrade').value=p?(p.grade_label||''):'';
+  document.getElementById('ppfSort').value=p?p.sort_order:100;
+  document.getElementById('ppfVisible').checked=p?!!p.portal_visible:false;
+  document.getElementById('ppfOrderable').checked=p?!!p.is_orderable:true;
+  document.getElementById('ppfReorderable').checked=p?p.is_reorderable!==false:true;
+  document.getElementById('ppfDesc').value=p?(p.description||''):'';
+  document.getElementById('ppfMin').value=p?p.min_order_kg:0.5;
+  document.getElementById('ppfStep').value=p?p.step_kg:0.5;
+  document.getElementById('ppfLow').value=p?p.low_kg:3;
+  document.getElementById('ppfPs').value=p?(ppPriceOf(p.id,'standard')??''):'';
+  document.getElementById('ppfPl').value=p?(ppPriceOf(p.id,'local')??''):'';
+  document.getElementById('ppfPm').value=p?(ppPriceOf(p.id,'startmember')??''):'';
+  document.getElementById('ppfParts').value=p?ppParts.filter(x=>x.product_id===p.id)
+    .map(x=>x.part_name+(x.grade?'｜'+x.grade:'')).join('\n'):'';
+  const vr=p&&Array.isArray(p.visible_ranks)?p.visible_ranks:[];
+  document.querySelectorAll('.ppf-rank').forEach(cb=>cb.checked=vr.includes(cb.value));
+  openModal('ppModal');
+}
+
+async function ppSave(){
+  const name=document.getElementById('ppfName').value.trim();
+  if(!name){alert('商品名を入力してください');return;}
+  const parts=document.getElementById('ppfParts').value.split('\n').map(l=>l.trim()).filter(Boolean)
+    .map(l=>{const[pn,gr]=l.split(/[｜|]/).map(x=>(x||'').trim());return{part_name:pn,grade:gr||null};})
+    .filter(x=>x.part_name);
+  if(!parts.length){alert('対応部位を1つ以上入れてください（在庫と結びつかないと在庫記号が出ません）');return;}
+  const num=id=>{const v=document.getElementById(id).value;return v===''?null:Math.round(+v);};
+  const prices=[
+    {price_rank:'standard',    unit_price:num('ppfPs')},
+    {price_rank:'local',       unit_price:num('ppfPl')},
+    {price_rank:'startmember', unit_price:num('ppfPm')},
+  ].filter(x=>x.unit_price!=null);
+  const ranks=Array.from(document.querySelectorAll('.ppf-rank:checked')).map(cb=>cb.value);
+  const key=await staffKeyEnsure(); if(!key) return;
+  const payload={
+    species:document.getElementById('ppfSpecies').value,
+    display_name:name,
+    grade_label:document.getElementById('ppfGrade').value.trim(),
+    description:document.getElementById('ppfDesc').value.trim(),
+    sort_order:+document.getElementById('ppfSort').value||100,
+    min_order_kg:+document.getElementById('ppfMin').value||0.5,
+    step_kg:+document.getElementById('ppfStep').value||0.5,
+    low_kg:+document.getElementById('ppfLow').value||3,
+    portal_visible:document.getElementById('ppfVisible').checked,
+    is_orderable:document.getElementById('ppfOrderable').checked,
+    is_reorderable:document.getElementById('ppfReorderable').checked,
+    visible_ranks:ranks.length?ranks:null,
+    parts:parts, prices:prices
+  };
+  const id=document.getElementById('ppfId').value;
+  if(id) payload.id=id;
+  try{
+    await sbRpc('admin_upsert_product',{p_staff_key:key,p:payload});
+    closeModal('ppModal');
+    await loadPortalProducts();
+  }catch(e){
+    if(String(e.message).includes('スタッフキー')) staffKeyClear();
+    alert('保存に失敗しました: '+e.message);
+  }
 }
 
 // ── 価格マスタ（3パターン編集） ──
@@ -768,11 +1005,34 @@ function renderOrders(){
 
 async function changeStatus(id,status){
   if(!status) return;
-  if(!confirm(`ステータスを「${status}」に変更しますか？`)) return;
+  if(!confirm(`ステータスを「${status}」に変更しますか？`+
+    (status==='キャンセル'?'\n（引当済の在庫パックは在庫へ戻ります）':
+     status==='発送済'?'\n（引当済の在庫パックは出荷済になります）':''))) return;
   try{
-    await sb('PATCH','orders',{status,updated_at:new Date().toISOString()},`?id=eq.${id}`);
+    // キャンセル→引当を在庫へ戻す／発送済→パックを出荷済にする、をDB側でまとめて行う
+    const key=await staffKeyEnsure();
+    if(!key) return;
+    const r=await sbRpc('admin_set_order_status',{p_staff_key:key,p_order_id:id,p_status:status});
+    if(r&&(+r.released||+r.shipped)){
+      const parts=[]; if(+r.released)parts.push(`在庫へ戻し ${r.released}パック`); if(+r.shipped)parts.push(`出荷済 ${r.shipped}パック`);
+      alert('変更しました（'+parts.join('・')+'）');
+    }
     await loadOrders();
   }catch(e){alert('エラー: '+e.message)}
+}
+
+/* 引当内訳（どの個体のどのパックを何kg）を注文詳細に出す */
+async function odLoadAllocations(orderId){
+  const el=document.getElementById('odAlloc'); if(!el) return;
+  try{
+    const key=staffKeyGet(); if(!key){el.textContent='';return;}
+    const rows=await sbRpc('admin_order_allocations',{p_staff_key:key,p_order_id:orderId});
+    if(!rows||!rows.length){el.innerHTML='';return;}
+    el.innerHTML='<div style="font-size:.82rem;color:var(--text2);margin:10px 0 4px;font-weight:700">引当内訳（トレーサビリティ）</div>'+
+      '<div class="table-wrap"><table><thead><tr><th>商品</th><th>個体</th><th>パック</th><th>部位</th><th>等級</th><th>重量(kg)</th></tr></thead><tbody>'+
+      rows.map(r=>`<tr><td>${esc(r.product_name||'')}</td><td>${esc(r.individual_id||'—')}</td><td style="font-size:11px">${esc(r.ident_code||'')}</td><td>${esc(r.part_name||'')}</td><td>${esc(r.grade||'')}</td><td>${r.weight_kg}</td></tr>`).join('')+
+      '</tbody></table></div>';
+  }catch(e){ el.textContent=''; }
 }
 
 function showOrderDetail(id){
@@ -802,9 +1062,10 @@ function showOrderDetail(id){
   const flow={'受注':'確認済','確認済':'発送済','発送済':'納品完了'};
   if(flow[o.status]) html+=`<button class="btn btn-green" onclick="changeStatus('${o.id}','${flow[o.status]}');closeModal('orderDetailModal')">${flow[o.status]}にする</button>`;
   if(o.status!=='キャンセル'&&o.status!=='納品完了') html+=`<button class="btn btn-danger" onclick="changeStatus('${o.id}','キャンセル');closeModal('orderDetailModal')">キャンセル</button>`;
-  html+=`</div>`;
+  html+=`</div><div id="odAlloc"></div>`;
   document.getElementById('odContent').innerHTML=html;
   openModal('orderDetailModal');
+  odLoadAllocations(id);
 }
 
 // ── B2 CSV Export ──
@@ -1072,7 +1333,7 @@ function renderCustomers(){
 
 /* ══════════ 注文ポータルのご案内（ログイン情報の配布） ══════════
    お客様へ送る案内文と、ログインID・パスワードの名簿をここでまとめて作る。
-   ログインIDはお客様番号（C0011 など）。お名前でもログインできる。 */
+   ログインIDはお客様番号（C0011 など）。お名前でのログインは廃止（総当たり対策）。 */
 const PORTAL_URL='https://tateyama-gibier.vercel.app/order-portal.html';
 let orgInfo={name:'館山ジビエセンター',address:'千葉県館山市西長田1163-5',phone:'',email:''};
 let custFiltered=[];
@@ -1163,7 +1424,6 @@ function buildPortalMsg(c,channel){
       '・ログインID： '+id+'　→ 読み方「'+readDigits(id)+'」',
       '・パスワード： '+pw+'　→ 読み方「'+readDigits(pw)+'」',
       '',
-      '「お名前（'+(c.name||'')+'）でもログインいただけます。」',
       '「パスワードはログイン後の設定でご自由に変更いただけます。」',
       '「これまでどおり、お電話でのご注文も承ります。」'
     ].join('\n');
@@ -1184,7 +1444,6 @@ function buildPortalMsg(c,channel){
     '■ ログイン情報',
     '　ログインID：'+id,
     '　パスワード：'+pw,
-    '　※お店のお名前（'+(c.name||'')+'）でもログインいただけます。',
     '',
     '■ ご注文の流れ',
     '　1. 上のページを開く',
@@ -1212,17 +1471,57 @@ function portalTargets(){
 }
 
 /* スタッフキー。画面には書かず、担当者が入れたぶんだけこの端末に覚えておく。
-   これを知っている人だけがパスワードを発行できる。 */
-function staffKeyGet(){ try{ return sessionStorage.getItem('tg_staff_key')||''; }catch(e){ return ''; } }
+   顧客・注文の読み書き（RLS）とパスワード発行に必要。
+   端末ごとに1回入れれば localStorage に残る（共有端末で消したいときはログアウト時にクリア）。 */
+function staffKeyGet(){
+  try{ return localStorage.getItem('tg_staff_key')||sessionStorage.getItem('tg_staff_key')||''; }
+  catch(e){ return ''; }
+}
+function staffKeyClear(){ try{ localStorage.removeItem('tg_staff_key'); sessionStorage.removeItem('tg_staff_key'); }catch(e){} }
+/* キーの変更（＝旧キーの失効）は「管理者用回復コード」が必要。
+   通常のスタッフキーを知っているだけでは変更できない（誰かが全端末を締め出すのを防ぐ）。
+   変更はDB側で監査ログに残り、誤コードは5回/15分で試行制限される。 */
+function staffKeyChange(){
+  const dlg=document.getElementById('rotateModal');
+  ['rkCode','rkNew','rkNew2'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('rkMsg').textContent='';
+  openModal('rotateModal');
+}
+async function staffKeyRotateSubmit(){
+  const code=document.getElementById('rkCode').value.trim();
+  const nw=document.getElementById('rkNew').value;
+  const nw2=document.getElementById('rkNew2').value;
+  const msg=document.getElementById('rkMsg');
+  if(!code||!nw||!nw2){msg.textContent='すべて入力してください';return;}
+  if(nw.length<16){msg.textContent='新しいキーは16文字以上にしてください';return;}
+  if(nw!==nw2){msg.textContent='新しいキーが一致しません';return;}   // 確認入力必須（再表示はしない）
+  const btn=document.getElementById('rkBtn'); btn.disabled=true;
+  try{
+    const ok=await sbRpc('admin_rotate_staff_key',{p_recovery_code:code,p_new_key:nw});
+    if(!ok){ msg.textContent='回復コードが違います'; btn.disabled=false; return; }
+    closeModal('rotateModal');
+    staffKeyClear();   // この端末も再認証させる
+    alert('スタッフキーを変更しました。全端末（この端末を含む）で新しいキーの入力が必要です。');
+    await staffKeyEnsure();
+  }catch(e){
+    msg.textContent=/試行回数/.test(e.message)?e.message:'変更に失敗しました';
+  }
+  btn.disabled=false;
+}
+function staffKeyForget(){
+  staffKeyClear();
+  alert('この端末からスタッフキーを消しました。次に顧客・注文を開くときに再入力が必要です。');
+}
 async function staffKeyEnsure(){
   let k=staffKeyGet();
   if(k) return k;
-  k=prompt('スタッフキーを入力してください\n（パスワードの発行に必要です。センターの担当者だけがご存じのものです）');
+  k=prompt('スタッフキーを入力してください\n（顧客・注文データを開くのに必要です。センターの担当者だけがご存じのものです）');
   if(!k) return '';
+  k=k.trim();
   try{
     if(!await sbRpc('staff_key_ok',{p_staff_key:k})){ alert('スタッフキーが違います'); return ''; }
   }catch(e){ alert('確認できませんでした：'+e.message); return ''; }
-  try{ sessionStorage.setItem('tg_staff_key',k); }catch(e){}
+  try{ localStorage.setItem('tg_staff_key',k); }catch(e){ try{ sessionStorage.setItem('tg_staff_key',k); }catch(_e){} }
   return k;
 }
 
@@ -1233,7 +1532,7 @@ async function portalIssuePasswords(targets){
   let rows;
   try{ rows=await sbRpc('staff_issue_portal_passwords',{p_staff_key:key,p_customer_ids:targets.map(c=>c.id)}); }
   catch(e){
-    try{ sessionStorage.removeItem('tg_staff_key'); }catch(_e){}
+    staffKeyClear();
     alert('発行できませんでした：'+e.message); return false;
   }
   const byId={}; (rows||[]).forEach(r=>byId[r.customer_id]=r.password);
@@ -2455,6 +2754,7 @@ function ordRenderNotifyBtn(){
 }
 async function checkNewOrders(silent){
   if(!ordNotifyEnabled()) return;
+  if(!staffKeyGet()) return;  // キー入力前はRLSで読めない（空が返って既読管理が壊れる）ため待つ
   try{
     const rows=await sb('GET','orders','','?status=eq.受注&select=id,order_code,customer_name,delivery_date,total_amount,created_at&order=created_at.desc&limit=30');
     const seen=ordNotifiedSet();
