@@ -30,6 +30,7 @@
 | analyze_crosspost_source | FB投稿の原文 | crosspost_fact_sheet | social_sources.fact_sheet（事実・数値・引用を1回だけ固定）|
 | generate_crosspost_drafts | 事実シート + 媒体2〜3件 + スタイル設定 | crosspost_ai_output | social_channel_drafts.ai_body（**承認対象ではない**。再生成すると置き換わるが、過去のAI出力は generated_drafts に残る）|
 | （承認時に生成） | 人が編集した本文のスナップショット | crosspost_approval | social_channel_drafts.approved_body |
+| parse_receipt | レシート・領収書の**写真**（+ 今日の日付・ひとことメモ） | receipt_result | （承認のみ。expenses への登録は人が /expenses の確認フォームで行う）**日付・金額・取引先が欠けていればサーバー側で必ず要確認にする** |
 | summarize_meeting | （プロンプト定義のみ。実装は次段） | meeting_minutes | - |
 
 FB横展開（0029）は AI を2段階で呼ぶ。事実整理を1回だけ実行して媒体間で数値がぶれないようにし、
@@ -37,6 +38,11 @@ FB横展開（0029）は AI を2段階で呼ぶ。事実整理を1回だけ実�
 失敗した媒体だけ作り直せる。文字数が上限を超えても生成全体は失敗させず、その媒体だけ要確認にする。
 センシティブ判定は `domain/social/crosspost/sensitive.ts` の辞書が最終権限で、
 AIが「問題なし」と言っても辞書に当たれば要確認になる。
+
+parse_receipt は**画像を渡す唯一のワークフロー**（`CompletionRequest.images`）。
+写真そのものは Storage（非公開バケット alco-os）に置き、`ai_runs` には残さない。
+`input_summary` にも金額・店名を入れない（撮った人のひとことメモのみ）。
+AIは候補を出すだけで、`expenses` への登録は人が確認フォームで確定したときに起きる。
 
 **Crosspostの承認は `alco_crosspost_approve()` を唯一の本番承認経路とする。**
 これは運用上の約束ではなく **DB側で強制**している。承認関数は

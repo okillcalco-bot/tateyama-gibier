@@ -3,6 +3,12 @@
  * アプリ側は絶対にプロバイダSDKを直接呼ばない（必ず model-router 経由）。
  */
 
+/** 画像入力（レシート写真など）。base64はデータURLのプレフィックスを含めない */
+export interface ImageInput {
+  mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+  base64: string;
+}
+
 export interface CompletionRequest {
   /** システムプロンプト（prompts/ からロード） */
   system: string;
@@ -11,6 +17,8 @@ export interface CompletionRequest {
   /** モデルID。model-router が解決する。プロバイダ側でのフォールバック禁止 */
   model: string;
   maxTokens?: number;
+  /** 画像を読ませる場合のみ（レシート読み取り等）。省略時は従来どおり文字だけ */
+  images?: ImageInput[];
 }
 
 export interface CompletionResult {
