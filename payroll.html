@@ -40,6 +40,8 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
 .att{font-size:11px;color:var(--text3);}
 .att b{color:var(--blue);}
 #msg{font-size:13px;margin-left:8px;}
+#tripModal input,#tripModal select{padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:#fffdf6;font-size:13px;}
+#tripModal input{text-align:right;}
 @media print{
   header .no-print,.bar,.hint,td .btn,th.op,td.op{display:none!important;}
   body{background:#fff;}
@@ -84,8 +86,33 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
 <div class="hint">
   ・<b>青字は自動計算</b>（基本給＝時給×時間、止めさし手当＝3000円×回数、通勤費＝往復km×20円×回数）。入力欄はどれも手で直せます<br>
   ・「勤怠から取込」は打刻記録（<a href="punch.html">punch.html</a>／業務アプリの勤怠）から日数・時間を計算して入れます。通勤回数は日数と同じ値が入ります<br>
+  ・🚚ボタンで<b>行き先別の移動費</b>（産廃処理・アワコネ・資材購入など）を人ごとに追加できます。センター以外へ行った日は「通勤回数」を1回減らしてください<br>
   ・止めさし手当（+3000円/回）の対象: 白石さん・大和田さん・今泉さん。回数は各自の報告から入力してください<br>
   ・社会保険料（健康保険・厚生年金）と税は<b>従業員負担分</b>を円で入力します。空欄は0円扱い
+</div>
+
+<!-- 行き先別移動費モーダル -->
+<div id="tripModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;align-items:center;justify-content:center;" onclick="if(event.target===this)tripClose()">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;min-width:360px;max-width:94vw;max-height:88vh;overflow:auto;">
+    <h3 id="tmTitle" style="margin-bottom:10px;font-size:15px;"></h3>
+    <table style="margin-bottom:10px;">
+      <thead><tr><th style="text-align:left">行き先</th><th>往復km</th><th>回数</th><th>金額</th><th class="op"></th></tr></thead>
+      <tbody id="tmBody"></tbody>
+    </table>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:10px;">
+      <select id="tmDest" onchange="document.getElementById('tmNewBox').style.display=this.value==='__new__'?'inline-flex':'none'"></select>
+      <span id="tmNewBox" style="display:none;gap:4px;">
+        <input id="tmNewDest" placeholder="行き先名" style="width:110px;">
+        <input id="tmNewKm" placeholder="往復km" style="width:70px;">
+      </span>
+      <input id="tmCount" placeholder="回数" value="1" style="width:56px;">
+      <button class="btn btn-sm" onclick="tripAdd()">＋ 追加</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-sm" onclick="tripClose()">閉じる</button>
+    </div>
+    <div class="hint">金額＝往復km×20円×回数。行き先とkmは一度入れると次の月から選ぶだけで使えます。<br>
+    産廃処理などセンター以外へ行った日は、一覧の「通勤回数」（センター往復）を1回減らしてください。</div>
+  </div>
 </div>
 </main>
 <script>
@@ -119,16 +146,33 @@ async function staffKeyEnsure(){
   return k;
 }
 
-let lines=[], staffList=[], attMap={};
+let lines=[], staffList=[], attMap={}, trips=[], tripRates=[];
 const N=v=>(v===''||v==null||isNaN(+v))?0:+v;
 const yen=v=>'¥'+Math.round(v).toLocaleString();
 const msg=(t,ok)=>{ const m=document.getElementById('msg'); m.textContent=t; m.style.color=ok?'var(--green)':'var(--red)'; if(t) setTimeout(()=>{ if(m.textContent===t) m.textContent=''; },4000); };
 
-/* 行の金額（すべてこの1か所で計算する） */
+/* 行き先別（産廃処理・アワコネなど）の移動費の合計 */
+function tripSum(name){
+  return trips.filter(t=>t.staff_name===name)
+    .reduce((a,t)=>a+Math.round(N(t.round_km)*(N(t.yen_per_km)||20)*N(t.trip_count)),0);
+}
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function commTitle(l){
+  const parts=['センター '+N(l.commute_round_km)+'km×'+(N(l.commute_yen_per_km)||20)+'円×'+N(l.commute_count)+'回'];
+  trips.filter(t=>t.staff_name===l.staff_name)
+    .forEach(t=>parts.push(t.destination+' '+N(t.round_km)+'km×'+(N(t.yen_per_km)||20)+'円×'+N(t.trip_count)+'回'));
+  return parts.join(' ＋ ');
+}
+function tripLabel(name){
+  return trips.filter(t=>t.staff_name===name).map(t=>t.destination+'×'+t.trip_count).join(' ');
+}
+
+/* 行の金額（すべてこの1か所で計算する）。交通費＝センター往復＋行き先別 */
 function calc(l){
   const base=Math.round(N(l.hourly_wage)*N(l.work_hours));
   const stop=N(l.stopkill_count)*(N(l.stopkill_unit)||3000);
-  const comm=Math.round(N(l.commute_round_km)*(N(l.commute_yen_per_km)||20)*N(l.commute_count));
+  const comm=Math.round(N(l.commute_round_km)*(N(l.commute_yen_per_km)||20)*N(l.commute_count))
+            +tripSum(l.staff_name);
   const pay=base+stop+comm+N(l.other_allowance);
   const ded=N(l.health_insurance)+N(l.pension)+N(l.employment_insurance)
            +N(l.income_tax)+N(l.resident_tax)+N(l.other_deduction);
@@ -142,6 +186,7 @@ async function load(){
     const r=await sbRpc('admin_payroll_list',{p_staff_key:key,p_month:month});
     lines=(r.lines||[]).map(l=>({...l,_dirty:false}));
     staffList=r.staff||[];
+    trips=r.trips||[]; tripRates=r.trip_rates||[];
     attMap={}; (r.attendance||[]).forEach(a=>attMap[a.staff_name]=a);
     const sel=document.getElementById('addSel');
     sel.innerHTML=staffList.filter(s=>!lines.some(l=>l.staff_name===s.name))
@@ -174,7 +219,7 @@ function render(){
       <td class="calc">${yen(c.stop)}</td>
       <td>${inp('commute_round_km')}</td>
       <td>${inp('commute_count')}</td>
-      <td class="calc">${yen(c.comm)}</td>
+      <td class="calc" title="${esc(commTitle(l))}">${yen(c.comm)}${trips.filter(t=>t.staff_name===l.staff_name).length?'<div class="att">'+esc(tripLabel(l.staff_name))+'</div>':''}</td>
       <td>${inp('other_allowance')}</td>
       <td class="calc pay">${yen(c.pay)}</td>
       <td>${inp('health_insurance')}</td>
@@ -188,6 +233,7 @@ function render(){
       <td style="text-align:left">${inp('memo','wide')}</td>
       <td class="op">
         ${att?`<button class="btn btn-sm" title="勤怠から日数・時間・通勤回数を入れる" onclick="importAtt(${i})">📥</button>`:''}
+        <button class="btn btn-sm" title="行き先別の移動費（産廃処理など）" onclick="tripOpen(${i})">🚚${trips.filter(t=>t.staff_name===l.staff_name).length?'<span style="color:var(--gold)">●</span>':''}</button>
         <button class="btn btn-sm" onclick="saveLine(${i})">💾</button>
         <button class="btn btn-sm" onclick="delLine(${i})">🗑</button>
       </td>
@@ -260,6 +306,73 @@ function addLine(){
   lines.sort((a,b)=>a.staff_name.localeCompare(b.staff_name,'ja'));
   render();
 }
+/* ── 行き先別移動費（産廃処理など）の編集 ── */
+let tripStaff=null;
+function tripOpen(i){ tripStaff=lines[i].staff_name; tripRender(); document.getElementById('tripModal').style.display='flex'; }
+function tripClose(){ document.getElementById('tripModal').style.display='none'; tripStaff=null; render(); }
+function tripRender(){
+  document.getElementById('tmTitle').textContent=tripStaff+' の行き先別移動費（'+document.getElementById('month').value+'）';
+  const rows=trips.filter(t=>t.staff_name===tripStaff);
+  document.getElementById('tmBody').innerHTML=rows.map(t=>`<tr>
+    <td style="text-align:left;font-weight:600">${esc(t.destination)}</td>
+    <td><input value="${t.round_km??''}" style="width:70px" onchange="tripField('${esc(t.destination)}','round_km',this.value)"> km</td>
+    <td><input value="${t.trip_count??''}" style="width:50px" onchange="tripField('${esc(t.destination)}','trip_count',this.value)"> 回</td>
+    <td class="calc">${yen(Math.round(N(t.round_km)*(N(t.yen_per_km)||20)*N(t.trip_count)))}</td>
+    <td><button class="btn btn-sm" onclick="tripDelete('${esc(t.destination)}')">🗑</button></td>
+  </tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:10px;">まだありません</td></tr>';
+  const used=new Set(rows.map(t=>t.destination));
+  const cands=tripRates.filter(r=>r.staff_name===tripStaff&&!used.has(r.destination));
+  document.getElementById('tmDest').innerHTML=
+    cands.map(c=>`<option value="${esc(c.destination)}" data-km="${c.round_km}">${esc(c.destination)}（往復${c.round_km}km）</option>`).join('')
+    +'<option value="__new__">その他（行き先を入力）</option>';
+  document.getElementById('tmNewBox').style.display=document.getElementById('tmDest').value==='__new__'?'inline-flex':'none';
+}
+async function tripUpsert(t){
+  const key=await staffKeyEnsure(); if(!key) return false;
+  try{
+    await sbRpc('admin_payroll_trip_upsert',{p_staff_key:key,p:{
+      month:document.getElementById('month').value,
+      staff_id:(lines.find(l=>l.staff_name===tripStaff)||{}).staff_id||'',
+      staff_name:tripStaff, destination:t.destination,
+      round_km:t.round_km??'', trip_count:t.trip_count??'', yen_per_km:t.yen_per_km??20}});
+    return true;
+  }catch(e){
+    if(String(e.message).includes('スタッフキー')) staffKeyClear();
+    msg('保存失敗: '+e.message,false); return false;
+  }
+}
+async function tripField(dest,f,v){
+  const t=trips.find(x=>x.staff_name===tripStaff&&x.destination===dest); if(!t) return;
+  t[f]=v;
+  if(+String(t.trip_count)===0){ return tripDelete(dest); }
+  if(await tripUpsert(t)) msg(dest+' を保存しました',true);
+  tripRender();
+}
+async function tripDelete(dest){
+  const t=trips.find(x=>x.staff_name===tripStaff&&x.destination===dest); if(!t) return;
+  const saved=t.trip_count; t.trip_count=0;
+  if(await tripUpsert(t)){ trips=trips.filter(x=>!(x.staff_name===tripStaff&&x.destination===dest)); msg(dest+' を削除しました',true); }
+  else t.trip_count=saved;
+  tripRender();
+}
+async function tripAdd(){
+  let dest=document.getElementById('tmDest').value, km='';
+  if(dest==='__new__'){
+    dest=(document.getElementById('tmNewDest').value||'').trim();
+    km=document.getElementById('tmNewKm').value;
+    if(!dest){ alert('行き先名を入れてください'); return; }
+  } else {
+    const o=document.getElementById('tmDest').selectedOptions[0]; km=o?o.dataset.km:'';
+  }
+  const cnt=document.getElementById('tmCount').value||'1';
+  if(trips.some(x=>x.staff_name===tripStaff&&x.destination===dest)){ alert('同じ行き先が既にあります。表の回数を直してください'); return; }
+  const t={staff_name:tripStaff,destination:dest,round_km:km,trip_count:cnt,yen_per_km:20};
+  trips.push(t);
+  if(await tripUpsert(t)){ msg(dest+' を追加しました',true); document.getElementById('tmNewDest').value=''; document.getElementById('tmNewKm').value=''; }
+  else trips.pop();
+  tripRender();
+}
+
 async function delLine(i){
   const l=lines[i];
   if(!confirm(l.staff_name+' の行を削除しますか？（入力した金額も消えます）')) return;
