@@ -339,7 +339,8 @@ function payslipSection(l, month, rows){
   if(N(l.commute_count)) commParts.push(`センター ${N(l.commute_round_km)}km×${N(l.commute_yen_per_km)||20}円×${N(l.commute_count)}回`);
   trips.filter(t=>t.staff_name===l.staff_name)
     .forEach(t=>commParts.push(`${t.destination} ${N(t.round_km)}km×${N(t.yen_per_km)||20}円×${N(t.trip_count)}回`));
-  const detail=(rows||[]).map(r=>`<tr><td>${r.work_date}</td><td>${r.clock_in||'-'}〜${r.clock_out||'-'}</td><td style="text-align:right;">${attHrs(r).toFixed(1)}h</td><td>${esc(r.note||'')}</td></tr>`).join('');
+  // メモ列は載せない（勤怠のメモは社内の記録用。訂正履歴などは渡す明細に不要）
+  const detail=(rows||[]).map(r=>`<tr><td>${r.work_date}</td><td>${r.clock_in||'-'}〜${r.clock_out||'-'}</td><td style="text-align:right;">${attHrs(r).toFixed(1)}h${(r.break_minutes||0)?`<span style="color:#888;font-size:11px;">（休憩${r.break_minutes}分）</span>`:''}</td></tr>`).join('');
   const shakai=N(l.health_insurance)+N(l.pension);
   const other_ded=N(l.resident_tax)+N(l.other_deduction);
   return `<section class="slip">
@@ -357,7 +358,7 @@ function payslipSection(l, month, rows){
   <tr><th>所得税</th><td>¥${N(l.income_tax).toLocaleString()}</td><th>住民税・他控除</th><td>¥${other_ded.toLocaleString()}</td></tr>
   <tr><th>差引支給額</th><td colspan="3" class="big">¥${c.net.toLocaleString()}</td></tr></table>
   <h2 style="font-size:15px;">勤怠明細</h2>
-  <table><thead><tr><th>日付</th><th>時刻</th><th>実働</th><th>メモ</th></tr></thead><tbody>${detail||'<tr><td colspan="4">打刻記録なし（報告書ベース）</td></tr>'}</tbody></table>
+  <table class="att-table"><thead><tr><th>日付</th><th>時刻</th><th>実働</th></tr></thead><tbody>${detail||'<tr><td colspan="3">打刻記録なし（報告書ベース）</td></tr>'}</tbody></table>
   <p style="font-size:11px;color:#666;">発行日: ${new Date().toLocaleDateString('ja-JP')}</p>
   </section>`;
 }
@@ -366,9 +367,18 @@ function payslipDocOpen(title, sectionsHtml){
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(title)}</title>
   <style>body{font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;padding:32px;color:#222;} h1{font-size:20px;border-bottom:2px solid #222;padding-bottom:8px;} table{border-collapse:collapse;width:100%;margin:12px 0;} th,td{border:1px solid #999;padding:6px 10px;font-size:13px;text-align:left;} th{background:#f0f0f0;width:18%;} .big{font-size:18px;font-weight:700;}
   .slip{page-break-after:always;} .slip:last-of-type{page-break-after:auto;}
+  .att-table th,.att-table td{padding:3px 10px;font-size:12px;}
   .toolbar{position:sticky;top:0;background:#fffbe8;border:1px solid #d8c98a;border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
   .toolbar button{padding:10px 16px;min-height:44px;font-size:14px;border-radius:6px;border:1px solid #999;background:#fff;cursor:pointer;}
-  @media print{.toolbar{display:none;}}</style></head><body>
+  @media print{
+    .toolbar{display:none;}
+    body{padding:0;}
+    /* 改ページで行が切れない・2ページ目に続くときは見出し行を繰り返す */
+    tr{page-break-inside:avoid;}
+    thead{display:table-header-group;}
+    h1,h2{page-break-after:avoid;}
+    table{page-break-inside:auto;}
+  }</style></head><body>
   <div class="toolbar">
     <button onclick="window.print()">🖨 印刷 / PDF保存</button>
     <button onclick="if(history.length>1)history.back();window.close();">← 戻る（閉じる）</button>
