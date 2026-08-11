@@ -120,19 +120,23 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
 </div>
 
 <!-- 本人ページの恒久リンク表示モーダル -->
-<div id="plModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;align-items:center;justify-content:center;" onclick="if(event.target===this)payslipLinkClose()">
-  <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;min-width:320px;max-width:94vw;">
+<div id="plModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;align-items:center;justify-content:center;overflow:auto;" onclick="if(event.target===this)payslipLinkClose()">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;min-width:320px;max-width:94vw;max-height:88vh;overflow:auto;">
     <h3 id="plTitle" style="margin-bottom:10px;font-size:15px;"></h3>
+    <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px;">リンクだけ（自分用の控えなどに）</label>
     <input id="plLink" readonly style="width:100%;padding:8px;font-size:12px;margin-bottom:10px;border:1px solid var(--border);border-radius:6px;background:#fffdf6;" onclick="this.select()">
+    <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px;">LINEなどでそのまま送れる文面</label>
+    <textarea id="plMsg" readonly rows="7" style="width:100%;padding:8px;font-size:12.5px;line-height:1.7;margin-bottom:10px;border:1px solid var(--border);border-radius:6px;background:#fffdf6;font-family:inherit;" onclick="this.select()"></textarea>
     <div class="hint" style="margin:0 0 12px;">
       このリンクは<b>毎月同じものを使えます</b>（開くたびに最新の給与明細が表示され、月を選んで過去分も見られます）。
       発行できるのは今この場だけで、閉じると二度と表示できません（パスワードと同じ扱い）。<br>
       <b style="color:var(--red)">⚠️ 給与・社会保険料が見える鍵です。必ずご本人とのLINE個別トークなど、転送されにくい経路でお送りください。</b>
       漏えい・機種変更のときは、もう一度🔗ボタンから失効・再発行できます。
     </div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;">
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
       <button class="btn btn-sm" onclick="payslipLinkClose()">閉じる</button>
-      <button class="btn btn-gold btn-sm" onclick="payslipLinkCopy()">📋 コピー</button>
+      <button class="btn btn-outline btn-sm" onclick="payslipLinkCopy('plLink')">📋 リンクをコピー</button>
+      <button class="btn btn-gold btn-sm" onclick="payslipLinkCopy('plMsg')">📋 文面をコピー</button>
     </div>
   </div>
 </div>
@@ -450,16 +454,36 @@ async function payslipLinkAction(i){
   payslipLinkShow(l.staff_name, PAYSLIP_URL+'#t='+r.token);
 }
 
+/* LINEなどでそのまま送れる案内文。名前を入れて丁寧に。 */
+function buildPayslipMsg(staffName, link){
+  return [
+    staffName+'さん',
+    '',
+    'お疲れ様です。館山ジビエセンターです。',
+    '給与明細をスマホから確認できるページをご用意しました。',
+    '下のリンクを開くだけで、いつでもご自身の明細をご覧いただけます',
+    '（月を選んで過去分もご覧いただけます）。',
+    '',
+    '▼給与明細ページ',
+    link,
+    '',
+    '※このリンクは今後も同じものを使えますので、保存しておいてください。',
+    '※ご本人だけでご利用ください（他の方への転送はしないようお願いします）。',
+    'ご不明な点があれば気軽にご連絡ください。'
+  ].join('\n');
+}
+
 function payslipLinkShow(staffName, link){
   document.getElementById('plTitle').textContent=staffName+' さん専用の給与明細リンク';
   document.getElementById('plLink').value=link;
+  document.getElementById('plMsg').value=buildPayslipMsg(staffName, link);
   document.getElementById('plModal').style.display='flex';
 }
 function payslipLinkClose(){ document.getElementById('plModal').style.display='none'; }
-async function payslipLinkCopy(){
-  const v=document.getElementById('plLink').value;
-  try{ await navigator.clipboard.writeText(v); msg('リンクをコピーしました',true); }
-  catch(e){ document.getElementById('plLink').select(); document.execCommand('copy'); msg('リンクをコピーしました',true); }
+async function payslipLinkCopy(id){
+  const v=document.getElementById(id||'plLink').value;
+  try{ await navigator.clipboard.writeText(v); msg('コピーしました',true); }
+  catch(e){ document.getElementById(id||'plLink').select(); document.execCommand('copy'); msg('コピーしました',true); }
 }
 
 /* 全員分の明細を1つの書類にまとめて開く（1人1ページ。印刷→PDF保存で台帳の控えにも） */
