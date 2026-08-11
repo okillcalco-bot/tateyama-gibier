@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>給与明細 | 館山ジビエセンター</title>
+<style>
+:root{
+  --bg:#f6f4ef; --card:#fff; --border:#ddd6c8; --text:#2b2a26; --text2:#6f6a5d; --text3:#a09a8a;
+  --gold:#a8873c; --green:#4a7a3d; --red:#b0432f;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:15px;line-height:1.6;}
+header{background:#2f2b23;color:#f0ead8;padding:14px 16px;}
+header h1{font-size:16px;font-weight:700;}
+header .sub{font-size:11px;color:#b6ad97;margin-top:2px;}
+main{padding:14px;max-width:520px;margin:0 auto;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px;}
+.bar{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;}
+.bar select{flex:1;min-width:0;padding:10px 12px;min-height:44px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:15px;}
+.btn{padding:10px 16px;min-height:44px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:14px;color:var(--text);cursor:pointer;}
+.btn-gold{background:var(--gold);border-color:var(--gold);color:#fff;font-weight:700;}
+table{border-collapse:collapse;width:100%;margin:10px 0;}
+th,td{border:1px solid var(--border);padding:8px 10px;font-size:13.5px;text-align:left;}
+th{background:#faf7ef;color:var(--text2);width:34%;font-weight:600;}
+.big{font-size:19px;font-weight:700;color:var(--green);}
+.ded{color:var(--red);}
+h2{font-size:20px;border-bottom:2px solid var(--text);padding-bottom:8px;margin-bottom:10px;}
+h3{font-size:14px;margin:16px 0 6px;color:var(--text2);}
+.msg{padding:40px 20px;text-align:center;color:var(--text2);}
+.msg b{color:var(--text);}
+.hidden{display:none!important;}
+.att-table th{width:auto;}
+.att-table th,.att-table td{padding:5px 8px;font-size:12.5px;}
+.note{font-size:11px;color:var(--text3);margin-top:4px;}
+@media print{
+  header,.bar,.no-print{display:none!important;}
+  body{background:#fff;}
+  .card{border:none;padding:0;}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>💴 給与明細</h1>
+  <div class="sub">館山ジビエセンター（合同会社アルコ）</div>
+</header>
+<main>
+  <div id="loading" class="msg">読み込み中…</div>
+
+  <div id="errBox" class="msg hidden">
+    <p id="errText" style="color:var(--red);font-weight:700;"></p>
+    <p class="note" style="margin-top:8px;">このページは担当者から届いたご自身専用のリンクからのみ開けます。<br>リンクに心当たりが無い、または開けない場合はセンターへご連絡ください。</p>
+  </div>
+
+  <div id="content" class="hidden">
+    <div class="bar no-print">
+      <select id="monthSel" onchange="loadMonth(this.value)"></select>
+      <button class="btn btn-gold" onclick="window.print()">🖨 印刷/PDF保存</button>
+    </div>
+    <div id="slipArea"></div>
+  </div>
+</main>
+<script>
+const SB_URL='https://clpdyrehdgzgiidbfucj.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+
+async function rpc(fn,args){
+  const res=await fetch(`${SB_URL}/rest/v1/rpc/${fn}`,{
+    method:'POST',
+    headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Content-Type':'application/json'},
+    body:JSON.stringify(args||{})
+  });
+  const t=await res.text();
+  return t?JSON.parse(t):null;
+}
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const N=v=>(v===''||v==null||isNaN(+v))?0:+v;
+const yen=v=>'¥'+Math.round(v).toLocaleString();
+
+// リンクのトークン（URLのハッシュから読む。サーバに送信されないため安全）
+const token=(()=>{ const m=(location.hash||'').match(/[#&]t=([^&]+)/); return m?decodeURIComponent(m[1]):''; })();
+
+function calc(l){
+  const base=Math.round(N(l.hourly_wage)*N(l.work_hours));
+  const stop=N(l.stopkill_count)*(N(l.stopkill_unit)||3000);
+  const comm=Math.round(N(l.commute_round_km)*(N(l.commute_yen_per_km)||20)*N(l.commute_count));
+  return {base,stop,comm};
+}
+
+function attHrs(a){
+  if(!a.clock_in||!a.clock_out) return 0;
+  const [ih,im]=a.clock_in.split(':').map(Number), [oh,om]=a.clock_out.split(':').map(Number);
+  return Math.max(0,(oh*60+om-ih*60-im-(a.break_minutes||0))/60);
+}
+
+function renderSlip(staffName, month, l, trips, attendance){
+  const area=document.getElementById('slipArea');
+  if(!l){
+    area.innerHTML=`<div class="card msg">${esc(month)} の給与データはまだありません。</div>`;
+    return;
+  }
+  const c=calc(l);
+  const commParts=[];
+  if(N(l.commute_count)) commParts.push(`センター ${N(l.commute_round_km)}km×${N(l.commute_yen_per_km)||20}円×${N(l.commute_count)}回`);
+  (trips||[]).forEach(t=>commParts.push(`${t.destination} ${N(t.round_km)}km×${N(t.yen_per_km)||20}円×${N(t.trip_count)}回`));
+  const other=N(l.other_allowance);
+  const pay=c.base+c.stop+c.comm+other;
+  const shakai=N(l.health_insurance)+N(l.pension);
+  const otherDed=N(l.resident_tax)+N(l.other_deduction);
+  const ded=shakai+N(l.employment_insurance)+N(l.income_tax)+otherDed;
+  const net=pay-ded;
+  const detail=(attendance||[]).map(a=>`<tr><td>${a.work_date}</td><td>${a.clock_in||'-'}〜${a.clock_out||'-'}</td><td style="text-align:right">${attHrs(a).toFixed(1)}h${(a.break_minutes||0)?`<span style="color:#888;font-size:11px">（休憩${a.break_minutes}分）</span>`:''}</td></tr>`).join('');
+
+  area.innerHTML=`<div class="card">
+    <h2>給与明細書　${esc(month.replace('-','年'))}月分</h2>
+    <p style="margin-bottom:10px;">氏名: <strong>${esc(staffName)}</strong></p>
+    <table>
+      <tr><th>出勤日数</th><td>${N(l.work_days)}日</td></tr>
+      <tr><th>実働時間</th><td>${N(l.work_hours)}時間</td></tr>
+      <tr><th>時給</th><td>${yen(N(l.hourly_wage))}</td></tr>
+      <tr><th>基本給</th><td>${yen(c.base)}</td></tr>
+      ${c.stop?`<tr><th>止めさし手当</th><td>${yen(c.stop)}（${N(l.stopkill_count)}回×${yen(N(l.stopkill_unit)||3000)}）</td></tr>`:''}
+      ${other?`<tr><th>その他手当</th><td>${yen(other)}</td></tr>`:''}
+      ${c.comm?`<tr><th>通勤費</th><td>${yen(c.comm)}<div class="note">${esc(commParts.join(' ＋ '))}</div></td></tr>`:''}
+      <tr><th>支給額（総額）</th><td class="big">${yen(pay)}</td></tr>
+      <tr><th>社会保険料</th><td>${yen(shakai)}${shakai?`<div class="note">健保 ${yen(N(l.health_insurance))}／厚年 ${yen(N(l.pension))}</div>`:''}</td></tr>
+      <tr><th>雇用保険料</th><td>${yen(N(l.employment_insurance))}</td></tr>
+      <tr><th>所得税</th><td>${yen(N(l.income_tax))}</td></tr>
+      <tr><th>住民税・他控除</th><td>${yen(otherDed)}</td></tr>
+      <tr><th>差引支給額</th><td class="big">${yen(net)}</td></tr>
+    </table>
+    <h3>勤怠明細</h3>
+    <table class="att-table"><thead><tr><th>日付</th><th>時刻</th><th>実働</th></tr></thead>
+      <tbody>${detail||'<tr><td colspan="3">打刻記録なし（報告書ベース）</td></tr>'}</tbody></table>
+  </div>`;
+}
+
+let currentData=null;
+async function loadMonth(month){
+  const r=await rpc('staff_payslip_view',{p_token:token,p_month:month||null});
+  if(!r||!r.ok){ showError(r&&r.error||'読み込みに失敗しました'); return; }
+  currentData=r;
+  renderSlip(r.staff_name,r.month,r.line,r.trips,r.attendance);
+}
+
+function showError(msg){
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('content').classList.add('hidden');
+  document.getElementById('errBox').classList.remove('hidden');
+  document.getElementById('errText').textContent=msg;
+}
+
+(async function boot(){
+  history.replaceState(null,'',location.pathname);   // トークンをURL表示・履歴に残さない
+  if(!token){ showError('リンクが正しくありません。担当者から届いたリンクからお開きください。'); return; }
+  const r=await rpc('staff_payslip_view',{p_token:token});
+  document.getElementById('loading').classList.add('hidden');
+  if(!r||!r.ok){ showError((r&&r.error)||'通信できませんでした。電波の良い場所でもう一度お試しください'); return; }
+  document.getElementById('content').classList.remove('hidden');
+  const months=r.months&&r.months.length?r.months:(r.month?[r.month]:[]);
+  const sel=document.getElementById('monthSel');
+  sel.innerHTML=months.map(m=>`<option value="${m}" ${m===r.month?'selected':''}>${m.replace('-','年')}月分</option>`).join('')
+    ||'<option value="">対象月がありません</option>';
+  currentData=r;
+  renderSlip(r.staff_name,r.month,r.line,r.trips,r.attendance);
+})();
+</script>
+</body>
+</html>

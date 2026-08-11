@@ -90,6 +90,7 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
   ・🚚ボタンで<b>行き先別の移動費</b>（産廃処理・アワコネ・資材購入など）を人ごとに追加できます。センター以外へ行った日は「通勤回数」を1回減らしてください<br>
   ・📄ボタンで<b>その人の給与明細書</b>を発行できます（印刷・PDF保存→LINEやメールで送付）。明細の発行はこの画面に統一しています<br>
   ・「📄 明細をまとめて印刷」は<b>全員分を1人1ページ</b>で一度に開きます。月の支払い確定時にPDF保存しておくと賃金台帳の控えになります<br>
+  ・🔗ボタンで<b>本人専用の恒久リンク</b>を発行できます。毎月同じリンクで最新の明細（過去分も月選択で）を見られるので、共有は最初の1回だけで済みます。発行は一度きり表示・共有は必ずLINE個別トークなど本人だけに届く経路で<br>
   ・止めさし手当（+3000円/回）の対象: 白石さん・大和田さん・今泉さん。回数は各自の報告から入力してください<br>
   ・社会保険料（健康保険・厚生年金）と税は<b>従業員負担分</b>を円で入力します。空欄は0円扱い
 </div>
@@ -115,6 +116,24 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
     </div>
     <div class="hint">金額＝往復km×20円×回数。行き先とkmは一度入れると次の月から選ぶだけで使えます。<br>
     産廃処理などセンター以外へ行った日は、一覧の「通勤回数」（センター往復）を1回減らしてください。</div>
+  </div>
+</div>
+
+<!-- 本人ページの恒久リンク表示モーダル -->
+<div id="plModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;align-items:center;justify-content:center;" onclick="if(event.target===this)payslipLinkClose()">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;min-width:320px;max-width:94vw;">
+    <h3 id="plTitle" style="margin-bottom:10px;font-size:15px;"></h3>
+    <input id="plLink" readonly style="width:100%;padding:8px;font-size:12px;margin-bottom:10px;border:1px solid var(--border);border-radius:6px;background:#fffdf6;" onclick="this.select()">
+    <div class="hint" style="margin:0 0 12px;">
+      このリンクは<b>毎月同じものを使えます</b>（開くたびに最新の給与明細が表示され、月を選んで過去分も見られます）。
+      発行できるのは今この場だけで、閉じると二度と表示できません（パスワードと同じ扱い）。<br>
+      <b style="color:var(--red)">⚠️ 給与・社会保険料が見える鍵です。必ずご本人とのLINE個別トークなど、転送されにくい経路でお送りください。</b>
+      漏えい・機種変更のときは、もう一度🔗ボタンから失効・再発行できます。
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-sm" onclick="payslipLinkClose()">閉じる</button>
+      <button class="btn btn-gold btn-sm" onclick="payslipLinkCopy()">📋 コピー</button>
+    </div>
   </div>
 </div>
 </main>
@@ -238,6 +257,7 @@ function render(){
         ${att?`<button class="btn btn-sm" title="勤怠から日数・時間・通勤回数を入れる" onclick="importAtt(${i})">📥</button>`:''}
         <button class="btn btn-sm" title="行き先別の移動費（産廃処理など）" onclick="tripOpen(${i})">🚚${trips.filter(t=>t.staff_name===l.staff_name).length?'<span style="color:var(--gold)">●</span>':''}</button>
         <button class="btn btn-sm" title="給与明細書を開く（印刷・PDF保存）" onclick="payslipOpen(${i})">📄</button>
+        <button class="btn btn-sm" title="${staffHasLink(l.staff_name)?'本人ページのリンク（発行済み）':'本人ページのリンクを発行'}" onclick="payslipLinkAction(${i})">🔗${staffHasLink(l.staff_name)?'<span style="color:var(--gold)">●</span>':''}</button>
         <button class="btn btn-sm" onclick="saveLine(${i})">💾</button>
         <button class="btn btn-sm" onclick="delLine(${i})">🗑</button>
       </td>
@@ -395,6 +415,51 @@ async function payslipOpen(i){
   let rows=[];
   try{ rows=await fetchAttendanceRows(l, month); }catch(e){}
   payslipDocOpen(`給与明細 ${l.staff_name} ${month}`, payslipSection(l, month, rows));
+}
+
+/* ── 本人ページ（payslip.html）の恒久リンク ──
+   毎月同じリンクで見られるよう、一度発行したら明示的に失効させるまで変わらない。
+   平文トークンは発行した瞬間しか受け取れない（パスワードと同じ扱い）ため、
+   その場でコピー・保存してもらう。長期間有効という性質上、共有は
+   本人とのLINE個別トークなど、転送されにくい経路を使うよう案内する。 */
+const PAYSLIP_URL='https://tateyama-gibier.vercel.app/payslip.html';
+function staffOf(name){ return staffList.find(s=>s.name===name); }
+function staffHasLink(name){ const s=staffOf(name); return !!(s&&s.has_payslip_link); }
+
+async function payslipLinkAction(i){
+  const l=lines[i], s=staffOf(l.staff_name);
+  if(!s){ alert('スタッフ情報が見つかりません。読み込み直してください'); return; }
+  const key=await staffKeyEnsure(); if(!key) return;
+  if(s.has_payslip_link){
+    if(!confirm(l.staff_name+' には既にリンクを発行済みです。\n'+
+      '平文はもう表示できないため、内容の再確認はできません。\n\n'+
+      '漏えい・機種変更などで作り直す場合は「失効して再発行」します。\n'+
+      '（今のリンクは使えなくなるため、新しいリンクをもう一度お送りする必要があります）\n\n'+
+      '失効して再発行しますか？')) return;
+    try{ await sbRpc('admin_revoke_staff_payslip_link',{p_staff_key:key,p_staff_id:s.id}); }
+    catch(e){ alert('失効に失敗しました: '+e.message); return; }
+  }
+  let r;
+  try{ r=await sbRpc('admin_issue_staff_payslip_link',{p_staff_key:key,p_staff_id:s.id}); }
+  catch(e){
+    if(String(e.message).includes('スタッフキー')) staffKeyClear();
+    alert('発行に失敗しました: '+e.message); return;
+  }
+  s.has_payslip_link=true; render();
+  if(!r.token){ alert('すでに発行済みのため、新しいリンクは作られませんでした。'); return; }
+  payslipLinkShow(l.staff_name, PAYSLIP_URL+'#t='+r.token);
+}
+
+function payslipLinkShow(staffName, link){
+  document.getElementById('plTitle').textContent=staffName+' さん専用の給与明細リンク';
+  document.getElementById('plLink').value=link;
+  document.getElementById('plModal').style.display='flex';
+}
+function payslipLinkClose(){ document.getElementById('plModal').style.display='none'; }
+async function payslipLinkCopy(){
+  const v=document.getElementById('plLink').value;
+  try{ await navigator.clipboard.writeText(v); msg('リンクをコピーしました',true); }
+  catch(e){ document.getElementById('plLink').select(); document.execCommand('copy'); msg('リンクをコピーしました',true); }
 }
 
 /* 全員分の明細を1つの書類にまとめて開く（1人1ページ。印刷→PDF保存で台帳の控えにも） */
