@@ -462,10 +462,10 @@ textarea { min-height: 80px; resize: vertical; }
         <div style="flex:1;">
           <label class="form-label">捕獲時刻</label>
           <div class="time-wrap">
-            <input type="text" inputmode="numeric" class="input" id="captureTime" placeholder="745 → 7:45" maxlength="5">
+            <input type="time" class="input" id="captureTime">
             <button type="button" class="now-btn" onclick="setNow('captureTime')">今</button>
           </div>
-          <div class="field-note" style="font-size:11px;color:var(--text2);margin-top:4px;">※捕獲個体を初めて目視した時間。「745」→自動で7:45になります</div>
+          <div class="field-note" style="font-size:11px;color:var(--text2);margin-top:4px;">※捕獲個体を初めて目視した時間</div>
         </div>
       </div>
       <div class="form-row">
@@ -656,14 +656,14 @@ textarea { min-height: 80px; resize: vertical; }
         <div style="flex:1;">
           <label class="form-label">放血開始</label>
           <div class="time-wrap">
-            <input type="text" inputmode="numeric" class="input time-track" id="bleedTime" placeholder="HH:MM" oninput="checkBleedingToIntakeTime()" maxlength="5">
+            <input type="time" class="input time-track" id="bleedTime" oninput="checkBleedingToIntakeTime()">
             <button type="button" class="now-btn" onclick="setNow('bleedTime')">今</button>
           </div>
         </div>
         <div style="flex:1;">
           <label class="form-label">受入時刻</label>
           <div class="time-wrap">
-            <input type="text" inputmode="numeric" class="input time-track" id="receiveTime" placeholder="HH:MM" maxlength="5" oninput="checkBleedingToIntakeTime()">
+            <input type="time" class="input time-track" id="receiveTime" oninput="checkBleedingToIntakeTime()">
             <div id="bleedIntakeWarning" style="display:none;color:#e05555;font-size:12px;font-weight:600;margin-top:4px;"></div>
             <button type="button" class="now-btn" onclick="setNow('receiveTime')">今</button>
           </div>
@@ -675,14 +675,14 @@ textarea { min-height: 80px; resize: vertical; }
         <div style="flex:1;">
           <label class="form-label">搬送開始</label>
           <div class="time-wrap">
-            <input type="text" inputmode="numeric" class="input" id="transportStart" placeholder="HH:MM" maxlength="5">
+            <input type="time" class="input" id="transportStart">
             <button type="button" class="now-btn" onclick="setNow('transportStart')">今</button>
           </div>
         </div>
         <div style="flex:1;">
           <label class="form-label">処理時刻<span style="opacity:.7;font-size:11px;">（受入＋10分）</span></label>
           <div class="time-wrap">
-            <input type="text" inputmode="numeric" class="input" id="processTime" placeholder="HH:MM" maxlength="5">
+            <input type="time" class="input" id="processTime">
             <button type="button" class="now-btn" onclick="setNow('processTime')">今</button>
           </div>
         </div>
@@ -1348,22 +1348,8 @@ function syncProcessTime() {
   prc.value = t;
   prc.dataset.autofill = '1';
 }
-// 時刻入力: 数字4桁 or コロン区切り を自動整形
 function setupTimeInputs() {
-  document.querySelectorAll('input[inputmode="numeric"][placeholder="HH:MM"]').forEach(el => {
-    el.addEventListener('input', () => {
-      let v = el.value.replace(/[^0-9]/g, '');
-      if (v.length >= 4) {
-        const h = v.slice(0,2), m = v.slice(2,4);
-        el.value = h + ':' + m;
-      }
-    });
-    el.addEventListener('blur', () => {
-      // 整合チェック: HH:MM 形式でなければクリア
-      if (el.value && !/^\d{2}:\d{2}$/.test(el.value)) el.value = '';
-    });
-  });
-  // 受入時刻→処理時刻の自動入力。上の整形が終わったあとに動かしたいので後から登録する
+  // 受入時刻→処理時刻の自動入力
   const rec = document.getElementById('receiveTime');
   if (rec) { rec.addEventListener('input', syncProcessTime); rec.addEventListener('blur', syncProcessTime); }
   const prc = document.getElementById('processTime');
@@ -2826,28 +2812,6 @@ function capMapLocate(){
     drag = null;
   });
 })();
-
-// ── 時刻入力の自動整形（745 / 0745 / 7:45 → 07:45） ──
-['captureTime','bleedTime','receiveTime','transportStart','processTime'].forEach(function(id){
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.addEventListener('blur', function(){
-    let v = el.value.trim().replace(/[：]/g, ':');
-    if (!v) return;
-    let m = v.match(/^(\d{1,2}):(\d{1,2})$/);
-    if (!m) {
-      const d = v.replace(/\D/g, '');
-      if (d.length === 3) m = [null, d[0], d.slice(1)];
-      else if (d.length === 4) m = [null, d.slice(0,2), d.slice(2)];
-      else if (d.length <= 2 && d.length > 0) m = [null, d, '0'];
-      else return;
-    }
-    const h = parseInt(m[1]), mi = parseInt(m[2]);
-    if (isNaN(h) || isNaN(mi) || h > 23 || mi > 59) return;
-    el.value = String(h).padStart(2,'0') + ':' + String(mi).padStart(2,'0');
-    if (typeof checkBleedingToIntakeTime === 'function') checkBleedingToIntakeTime();
-  });
-});
 
 // ── 捕獲方法に応じた行の表示切替 ──
 function updateMethodRows(){
