@@ -374,6 +374,19 @@ textarea { min-height: 80px; resize: vertical; }
   </div>
 </div>
 
+<!-- 作業しながら確認する用の大きなボタン（捕獲者モードでは隠す） -->
+<div id="intakeListBar" style="padding:10px 12px;">
+  <button type="button" onclick="openIntakeList()"
+    style="width:100%;min-height:60px;font-size:20px;font-weight:800;letter-spacing:.02em;
+           background:var(--gold);color:#1a1a1a;border:none;border-radius:12px;cursor:pointer;
+           display:flex;align-items:center;justify-content:center;gap:10px;">
+    &#x1F4CB; 今日の搬入リスト
+    <span id="intakeListAlert"
+      style="display:none;background:#c0392b;color:#fff;border-radius:14px;
+             padding:3px 12px;font-size:16px;font-weight:800;"></span>
+  </button>
+</div>
+
 <div class="tabs">
   <div class="tab active" data-tab="form">&#x1F4DD; 捕獲票入力</div>
   <div class="tab" data-tab="list">&#x1F4CB; 搬入一覧</div>
@@ -546,6 +559,12 @@ textarea { min-height: 80px; resize: vertical; }
       </div>
       <div class="form-row">
         <label class="form-label">捕獲者名</label>
+        <!-- センター職員モード: 打ち間違い防止のため一覧から選ぶ（既定）。
+             捕獲者モード（?hunter=）ではこの選択欄を隠し、氏名の手入力にする。
+             保存は常に #hunterName の値を使う（保存処理は変更しない） -->
+        <select class="input" id="hunterSelect" style="display:none">
+          <option value="">― 捕獲者を選んでください ―</option>
+        </select>
         <input type="text" class="input" id="hunterName" placeholder="氏名" list="hunterList" autocomplete="off">
         <datalist id="hunterList">
           <option value="小谷忠雄"><option value="石渡裕"><option value="諏訪文二"><option value="押元修一"><option value="正木敏順">
@@ -941,6 +960,17 @@ textarea { min-height: 80px; resize: vertical; }
   </div>
 </div>
 
+<!-- 今日の搬入リスト（作業中に見る。文字大きめ） -->
+<div class="modal-overlay" id="intakeListModal">
+  <div class="modal" style="max-width:820px;width:96vw;">
+    <div class="modal-head">
+      <h3 style="font-size:21px;">&#x1F4CB; 今日の搬入リスト</h3>
+      <div class="modal-close" onclick="closeIntakeList()" style="font-size:30px;">&times;</div>
+    </div>
+    <div class="modal-body" id="intakeListBody" style="font-size:17px;line-height:1.8;"></div>
+  </div>
+</div>
+
 <!-- QUICK ENTRY TAB -->
 <div class="tab-panel" id="panel-quick">
   <div style="padding:16px;max-width:600px;margin:0 auto;">
@@ -1295,6 +1325,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupTimeInputs();
   setupFilterChips();
   loadTodayCount();
+  checkIntakeAlert();   // 搬入リストの「要確認」バッジ
   syncPending();
   // 捕獲者の電話番号（調査票で使う）を控えておく
   try { window._huntersCache = await sb('GET', 'hunters', null, '?select=name,phone&deleted_at=is.null&limit=500'); } catch (e) { window._huntersCache = []; }
@@ -1461,7 +1492,62 @@ async function refreshAutocomplete() {
     const names = [...new Set(hs.filter(h => !['逝去', '返納'].includes(h.memo)).map(h => h.name).filter(Boolean))];
     const hl = document.getElementById('hunterList');
     if (hl && names.length) hl.innerHTML = names.map(h => '<option value="' + h + '">').join('');
+    // センター職員モードの選択欄にも同じ名簿を入れる（捕獲者モードでは使わない）
+    if (!window.hunterMode) fillHunterSelect(names);
   } catch(e) { /* オフライン時はHTMLの固定リストのまま */ }
+}
+
+/* 捕獲者名の選択欄（センター職員モード）。
+   一覧に無い人のときだけ手入力に切り替えられるようにして、現場が止まらないようにする。 */
+function fillHunterSelect(names) {
+  const sel = document.getElementById('hunterSelect');
+  const input = document.getElementById('hunterName');
+  if (!sel || !input) return;
+  const current = input.value;
+  sel.innerHTML = '<option value="">― 捕獲者を選んでください ―</option>'
+    + names.map(n => '<option value="' + n + '">' + n + '</option>').join('')
+    + '<option value="__manual__">― 一覧にない（手入力）―</option>';
+  if (current && names.includes(current)) {
+    sel.value = current;
+    input.style.display = 'none';
+  } else if (current) {
+    // 既存データの氏名が名簿に無い場合は手入力のまま見せる（値を消さない）
+    sel.value = '__manual__';
+    input.style.display = '';
+  } else {
+    input.style.display = 'none';
+  }
+  sel.style.display = '';
+  sel.onchange = function() {
+    if (sel.value === '__manual__') {
+      input.value = '';
+      input.style.display = '';
+      input.focus();
+    } else {
+      input.value = sel.value;
+      input.style.display = 'none';
+    }
+  };
+}
+
+/* 既存データを読み込んだあと、選択欄を氏名に合わせる（センター職員モードのみ） */
+function syncHunterSelect() {
+  if (window.hunterMode) return;
+  const sel = document.getElementById('hunterSelect');
+  const input = document.getElementById('hunterName');
+  if (!sel || !input) return;
+  const name = input.value;
+  const known = [...sel.options].some(o => o.value === name && o.value !== '__manual__');
+  if (name && known) {
+    sel.value = name;
+    input.style.display = 'none';
+  } else if (name) {
+    sel.value = '__manual__';   // 名簿に無い氏名。値は消さずに手入力欄で見せる
+    input.style.display = '';
+  } else {
+    sel.value = '';
+    input.style.display = 'none';
+  }
 }
 
 /* ── OCR Scan ── */
@@ -1553,7 +1639,7 @@ function applyScanToForm() {
   const ft = document.querySelector('.tab[data-tab="form"]'); if (ft) ft.classList.add('active');
   const fp = document.getElementById('panel-form'); if (fp) fp.classList.add('active');
   const sv = (id,val) => { const el=document.getElementById(id); if(el&&val) el.value=val; };
-  sv('captureDate',fv('scan_date')); sv('hunterName',fv('scan_hunter')); sv('captureArea',fv('scan_area'));
+  sv('captureDate',fv('scan_date')); sv('hunterName',fv('scan_hunter')); syncHunterSelect(); sv('captureArea',fv('scan_area'));
   sv('weight',fv('scan_weight')); if(fv('scan_serial')) sv('serialNumber',fv('scan_serial'));
   if(fv('scan_label')) sv('labelId',fv('scan_label'));
 }
@@ -1839,6 +1925,7 @@ function loadForEdit(rec) {
     document.getElementById('areaPickedRow').style.display = '';
   }
   sv('hunterName', rec.hunter_name);
+  syncHunterSelect();   // センター職員モードの選択欄を、読み込んだ氏名に合わせる
   sv('bleedTime', rec.bleed_time);
   sv('receiveTime', rec.receive_time);
   sv('transportStart', rec.transport_start);
@@ -2547,6 +2634,7 @@ function resetForm() {
     const el = document.getElementById(id);
     if (el) { el.value = ''; if (el.dataset) el.dataset.autofill = ''; }
   });
+  syncHunterSelect();   // 捕獲者名の選択欄も未選択に戻す
   document.getElementById('captureArea').value = '';
   document.getElementById('captureOldTown').value = '';
   document.getElementById('districtRow').style.display = 'none';
@@ -2572,6 +2660,151 @@ function resetForm() {
   document.getElementById('healthIssueRow').style.display = 'none';
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ── 今日の搬入リスト（作業しながら確認する。入力漏れをその場で知らせる） ──
+   必須項目は市役所提出の捕獲票に合わせている（ALCO OS の
+   domain/hunters/capture-form-parser.ts の REQUIRED_FIELD_LABELS と同じ考え方）。
+   受入前の仮登録（搬入待ち）は、個体番号・受入時刻をまだ求めない。 */
+function intakeMissingFields(r) {
+  const pending = r.intake_status === '搬入待ち';
+  const m = [];
+  if (!r.species) m.push('獣種');
+  if (!r.capture_method) m.push('捕獲方法');
+  if (!r.capture_area && !r.capture_city) m.push('捕獲場所');
+  if (!r.capture_date) m.push('捕獲日');
+  if (!r.hunter_name) m.push('捕獲者名');
+  if (!r.sex) m.push('性別');
+  if (r.weight_total === null || r.weight_total === undefined || r.weight_total === '') m.push('体重');
+  if (!r.finishing_method) m.push('止め刺し方法');
+  if (r.capture_method === '箱罠' && !r.trap_number) m.push('箱わな番号');
+  if (!pending) {
+    if (!r.label_id || String(r.label_id).indexOf('仮-') === 0) m.push('個体管理番号');
+    if (!r.receive_time) m.push('受入時刻');
+  }
+  return m;
+}
+
+async function openIntakeList() {
+  const modal = document.getElementById('intakeListModal');
+  const body = document.getElementById('intakeListBody');
+  modal.classList.add('show');
+  body.innerHTML = '<p style="text-align:center;color:var(--text3);padding:24px;font-size:18px;">読み込み中…</p>';
+  try {
+    // 本日の搬入 + 受入まち（前日以前の連絡も残るため別で取る）
+    const [todays, pendings] = await Promise.all([
+      sb('GET', 'individuals', null, '?capture_date=eq.' + today() + '&deleted_at=is.null&select=*&order=receive_time.desc'),
+      sb('GET', 'individuals', null, '?intake_status=eq.' + encodeURIComponent('搬入待ち') + '&deleted_at=is.null&select=*&order=created_at.desc')
+    ]);
+    const byId = new Map();
+    (pendings || []).forEach(r => byId.set(r.id, r));
+    (todays || []).forEach(r => byId.set(r.id, r));
+    renderIntakeList([...byId.values()]);
+  } catch (e) {
+    body.innerHTML = '<p style="color:var(--red);padding:20px;font-size:18px;">読み込めませんでした。電波の良い場所でもう一度お試しください。</p>';
+  }
+}
+
+function closeIntakeList() {
+  document.getElementById('intakeListModal').classList.remove('show');
+}
+
+function renderIntakeList(rows) {
+  const body = document.getElementById('intakeListBody');
+  if (!rows.length) {
+    body.innerHTML = '<p style="text-align:center;padding:28px;font-size:18px;color:var(--text2);">今日の搬入はまだありません。</p>';
+    updateIntakeAlert(0);
+    return;
+  }
+  // 受入まちを先に、そのあと入力漏れのあるもの、最後に完了したもの
+  const withMiss = rows.map(r => ({ r: r, miss: intakeMissingFields(r) }));
+  withMiss.sort((a, b) => {
+    const pa = a.r.intake_status === '搬入待ち' ? 0 : (a.miss.length ? 1 : 2);
+    const pb = b.r.intake_status === '搬入待ち' ? 0 : (b.miss.length ? 1 : 2);
+    return pa - pb;
+  });
+
+  const pendingCount = withMiss.filter(x => x.r.intake_status === '搬入待ち').length;
+  const missCount = withMiss.filter(x => x.miss.length).length;
+  updateIntakeAlert(missCount);
+
+  const emojiMap = {'イノシシ':'&#x1F417;','シカ':'&#x1F98C;','アライグマ':'&#x1F99D;','ハクビシン':'&#x1F43C;','キョン':'&#x1F98C;','タヌキ':'&#x1F99D;','ノウサギ':'&#x1F430;'};
+  const esc = v => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  const summary =
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;font-size:18px;font-weight:800;">' +
+      '<span style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:8px 14px;">合計 ' + rows.length + ' 頭</span>' +
+      (pendingCount ? '<span style="background:rgba(200,164,90,.18);border:1px solid var(--gold2);color:var(--gold);border-radius:10px;padding:8px 14px;">受入まち ' + pendingCount + ' 頭</span>' : '') +
+      (missCount ? '<span style="background:rgba(192,57,43,.15);border:1px solid #c0392b;color:#e74c3c;border-radius:10px;padding:8px 14px;">&#x26A0; 入力漏れ ' + missCount + ' 頭</span>'
+                 : '<span style="background:rgba(46,125,50,.15);border:1px solid #2e7d32;color:#66bb6a;border-radius:10px;padding:8px 14px;">&#x2714; 入力漏れなし</span>') +
+    '</div>';
+
+  const cards = withMiss.map(function(x) {
+    const r = x.r, miss = x.miss;
+    const pending = r.intake_status === '搬入待ち';
+    const emoji = emojiMap[r.species] || '&#x1F43E;';
+    const border = pending ? 'var(--gold2)' : (miss.length ? '#c0392b' : 'var(--border)');
+    const num = pending ? '受入まち' : (r.label_id || '番号なし');
+    const place = [r.capture_city, r.capture_area].filter(Boolean).join(' ') || '場所未記入';
+    const link = pending
+      ? 'capture-form.html?receive=' + encodeURIComponent(r.id)
+      : 'capture-form.html?edit=' + encodeURIComponent(r.id);
+    const btnLabel = pending ? '受入する（番号を付ける）' : (miss.length ? '入力を続ける' : '内容を見る');
+
+    return '<div style="border:2px solid ' + border + ';border-radius:12px;padding:14px;margin-bottom:12px;background:var(--surface);">' +
+      '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
+        '<span style="font-size:26px;">' + emoji + '</span>' +
+        '<strong style="font-size:20px;">' + esc(num) + '</strong>' +
+        '<span style="font-size:18px;">' + esc(r.species || '獣種未記入') + '</span>' +
+        (r.weight_total ? '<span style="font-size:18px;">' + esc(r.weight_total) + 'kg</span>' : '') +
+        (pending ? '<span style="background:var(--gold);color:#1a1a1a;border-radius:8px;padding:3px 10px;font-size:15px;font-weight:800;">受入まち</span>' : '') +
+      '</div>' +
+      '<div style="font-size:16px;color:var(--text2);margin-top:6px;">' +
+        esc(r.hunter_name || '捕獲者未記入') + ' / ' + esc(r.capture_time || '') + ' / ' + esc(place) +
+      '</div>' +
+      (miss.length
+        ? '<div style="margin-top:10px;background:rgba(192,57,43,.12);border:1px solid #c0392b;border-radius:10px;padding:10px 12px;">' +
+            '<div style="font-size:17px;font-weight:800;color:#e74c3c;">&#x26A0; 足りない項目（' + miss.length + '）</div>' +
+            '<div style="font-size:17px;margin-top:4px;">' + miss.map(esc).join(' ・ ') + '</div>' +
+          '</div>'
+        : '<div style="margin-top:8px;font-size:16px;color:#66bb6a;font-weight:700;">&#x2714; 必要な項目はそろっています</div>') +
+      '<a href="' + link + '" style="display:block;text-align:center;margin-top:12px;min-height:52px;line-height:52px;' +
+        'background:' + (pending || miss.length ? 'var(--gold)' : 'var(--surface2)') + ';' +
+        'color:' + (pending || miss.length ? '#1a1a1a' : 'var(--text)') + ';' +
+        'border-radius:10px;font-size:18px;font-weight:800;text-decoration:none;">' + btnLabel + '</a>' +
+    '</div>';
+  }).join('');
+
+  body.innerHTML = summary + cards +
+    '<p style="font-size:14px;color:var(--text3);margin-top:8px;">' +
+    '受入まちは捕獲者からの連絡です。個体管理番号はセンターで受入するときに付きます。</p>';
+}
+
+/* ボタンの赤バッジ（入力漏れの件数）。開かなくても気づけるようにする */
+function updateIntakeAlert(missCount) {
+  const badge = document.getElementById('intakeListAlert');
+  if (!badge) return;
+  if (missCount > 0) {
+    badge.textContent = '要確認 ' + missCount;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+/* 開かなくても入力漏れがあるか分かるよう、起動時に静かに数えておく */
+async function checkIntakeAlert() {
+  try {
+    const [todays, pendings] = await Promise.all([
+      sb('GET', 'individuals', null, '?capture_date=eq.' + today() + '&deleted_at=is.null&select=*'),
+      sb('GET', 'individuals', null, '?intake_status=eq.' + encodeURIComponent('搬入待ち') + '&deleted_at=is.null&select=*')
+    ]);
+    const byId = new Map();
+    (pendings || []).forEach(r => byId.set(r.id, r));
+    (todays || []).forEach(r => byId.set(r.id, r));
+    const miss = [...byId.values()].filter(r => intakeMissingFields(r).length).length;
+    updateIntakeAlert(miss);
+  } catch (e) { /* オフライン時は何も出さない */ }
 }
 
 /* ── Today count ── */
@@ -2679,12 +2912,29 @@ document.getElementById('weight').addEventListener('focus', function() {
 (function(){
   const params = new URLSearchParams(location.search);
   const h = params.get('hunter');
-  if (h) { const el = document.getElementById('hunterName'); if (el && !el.value) el.value = h; }
+  if (h) { const el = document.getElementById('hunterName'); if (el && !el.value) { el.value = h; if (typeof syncHunterSelect === 'function') syncHunterSelect(); } }
 
   // ── 捕獲者入力モード（?hunter= 付き・スタッフ項目を隠して仮登録） ──
   if (h !== null && !params.get('receive')) {
     window.hunterMode = true;
     const hide = el => { if (el) el.style.display = 'none'; };
+
+    // 捕獲者名は「手入力」にする（プルダウンにしない）。
+    // 他の捕獲者の氏名が候補に出ないよう、名簿（datalist・選択欄）も外す。
+    (function(){
+      const input = document.getElementById('hunterName');
+      const sel = document.getElementById('hunterSelect');
+      const dl = document.getElementById('hunterList');
+      if (sel) sel.remove();
+      if (dl) dl.remove();
+      if (input) {
+        input.removeAttribute('list');
+        input.style.display = '';
+        input.placeholder = 'ご自分のお名前';
+      }
+    })();
+
+    hide(document.getElementById('intakeListBar'));   // 搬入リストはセンター職員用
     hide(document.getElementById('indSerial')?.closest('.form-row'));
     ['receiveTime', 'processTime'].forEach(id => {
       const el = document.getElementById(id);
@@ -2698,6 +2948,19 @@ document.getElementById('weight').addEventListener('focus', function() {
     bar.innerHTML = '🏹 <strong>捕獲者入力モード</strong> — わかるところだけ入れて「登録する」を押してください。個体番号・受入・検査の記録はセンターのスタッフが行います。';
     const first = document.querySelector('.section');
     if (first) first.parentNode.insertBefore(bar, first);
+  }
+
+  // ── 修正モード（搬入リストの「入力を続ける」から。既存データを開いて足りない項目を埋める） ──
+  const eid = params.get('edit');
+  if (eid && !params.get('receive')) {
+    (async () => {
+      try {
+        const rows = await sb('GET', 'individuals', null, '?id=eq.' + encodeURIComponent(eid) + '&select=*');
+        if (!rows.length) { alert('データが見つかりませんでした'); return; }
+        loadForEdit(rows[0]);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch (e) { alert('読み込みに失敗しました。電波の良い場所でお試しください。'); }
+    })();
   }
 
   // ── 受入モード（スタッフ: 搬入待ちを開き、内容が入った状態で個体番号を付ける） ──
