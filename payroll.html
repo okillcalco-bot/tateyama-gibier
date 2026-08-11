@@ -87,6 +87,7 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
   ・<b>青字は自動計算</b>（基本給＝時給×時間、止めさし手当＝3000円×回数、通勤費＝往復km×20円×回数）。入力欄はどれも手で直せます<br>
   ・「勤怠から取込」は打刻記録（<a href="punch.html">punch.html</a>／業務アプリの勤怠）から日数・時間を計算して入れます。通勤回数は日数と同じ値が入ります<br>
   ・🚚ボタンで<b>行き先別の移動費</b>（産廃処理・アワコネ・資材購入など）を人ごとに追加できます。センター以外へ行った日は「通勤回数」を1回減らしてください<br>
+  ・📄ボタンで<b>その人の給与明細書</b>を発行できます（印刷・PDF保存→LINEやメールで送付）。明細の発行はこの画面に統一しています<br>
   ・止めさし手当（+3000円/回）の対象: 白石さん・大和田さん・今泉さん。回数は各自の報告から入力してください<br>
   ・社会保険料（健康保険・厚生年金）と税は<b>従業員負担分</b>を円で入力します。空欄は0円扱い
 </div>
@@ -234,6 +235,7 @@ function render(){
       <td class="op">
         ${att?`<button class="btn btn-sm" title="勤怠から日数・時間・通勤回数を入れる" onclick="importAtt(${i})">📥</button>`:''}
         <button class="btn btn-sm" title="行き先別の移動費（産廃処理など）" onclick="tripOpen(${i})">🚚${trips.filter(t=>t.staff_name===l.staff_name).length?'<span style="color:var(--gold)">●</span>':''}</button>
+        <button class="btn btn-sm" title="給与明細書を開く（印刷・PDF保存）" onclick="payslipOpen(${i})">📄</button>
         <button class="btn btn-sm" onclick="saveLine(${i})">💾</button>
         <button class="btn btn-sm" onclick="delLine(${i})">🗑</button>
       </td>
@@ -306,6 +308,67 @@ function addLine(){
   lines.sort((a,b)=>a.staff_name.localeCompare(b.staff_name,'ja'));
   render();
 }
+/* ── 給与明細書（一人ずつ発行。ここに統一） ── */
+async function fetchAttendanceRows(l, month){
+  // 勤怠の打刻記録（明細の下段用）。attendance表は現状anonで読める
+  const q = l.staff_id
+    ? `staff_id=eq.${l.staff_id}`
+    : `staff_name=eq.${encodeURIComponent(l.staff_name)}`;
+  const res = await fetch(`${SB_URL}/rest/v1/attendance?${q}&work_date=gte.${month}-01&work_date=lte.${month}-31&select=work_date,clock_in,clock_out,break_minutes,note&order=work_date.asc`,
+    { headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` } });
+  if(!res.ok) return [];
+  return res.json();
+}
+function attHrs(a){
+  if(!a.clock_in||!a.clock_out) return 0;
+  const [ih,im]=a.clock_in.split(':').map(Number), [oh,om]=a.clock_out.split(':').map(Number);
+  return Math.max(0,(oh*60+om-ih*60-im-(a.break_minutes||0))/60);
+}
+async function payslipOpen(i){
+  const l=lines[i], month=document.getElementById('month').value;
+  if(l._dirty && !await saveLine(i)) return;   // 未保存の変更は先に保存してから発行
+  const c=calc(l);
+  const myTrips=trips.filter(t=>t.staff_name===l.staff_name);
+  const commParts=[];
+  if(N(l.commute_count)) commParts.push(`センター ${N(l.commute_round_km)}km×${N(l.commute_yen_per_km)||20}円×${N(l.commute_count)}回`);
+  myTrips.forEach(t=>commParts.push(`${t.destination} ${N(t.round_km)}km×${N(t.yen_per_km)||20}円×${N(t.trip_count)}回`));
+  let rows=[];
+  try{ rows=await fetchAttendanceRows(l, month); }catch(e){}
+  const detail=rows.map(r=>`<tr><td>${r.work_date}</td><td>${r.clock_in||'-'}〜${r.clock_out||'-'}</td><td style="text-align:right;">${attHrs(r).toFixed(1)}h</td><td>${esc(r.note||'')}</td></tr>`).join('');
+  const shakai=N(l.health_insurance)+N(l.pension);
+  const other_ded=N(l.resident_tax)+N(l.other_deduction);
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>給与明細 ${esc(l.staff_name)} ${month}</title>
+  <style>body{font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;padding:32px;color:#222;} h1{font-size:20px;border-bottom:2px solid #222;padding-bottom:8px;} table{border-collapse:collapse;width:100%;margin:12px 0;} th,td{border:1px solid #999;padding:6px 10px;font-size:13px;text-align:left;} th{background:#f0f0f0;width:18%;} .big{font-size:18px;font-weight:700;}
+  .toolbar{position:sticky;top:0;background:#fffbe8;border:1px solid #d8c98a;border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .toolbar button{padding:10px 16px;min-height:44px;font-size:14px;border-radius:6px;border:1px solid #999;background:#fff;cursor:pointer;}
+  @media print{.toolbar{display:none;}}</style></head><body>
+  <div class="toolbar">
+    <button onclick="window.print()">🖨 印刷 / PDF保存</button>
+    <button onclick="if(history.length>1)history.back();window.close();">← 戻る（閉じる）</button>
+    <span style="font-size:12px;color:#666;">スマホは共有→「PDFとして保存」でLINE・メールに送れます</span>
+  </div>
+  <h1>給与明細書　${month.replace('-','年')}月分</h1>
+  <p>氏名: <strong>${esc(l.staff_name)}</strong><br>館山ジビエセンター（合同会社アルコ）</p>
+  <table>
+  <tr><th>出勤日数</th><td>${N(l.work_days)}日</td><th>実働時間</th><td>${N(l.work_hours)}時間</td></tr>
+  <tr><th>時給</th><td>¥${N(l.hourly_wage).toLocaleString()}</td><th>基本給</th><td>¥${c.base.toLocaleString()}</td></tr>
+  ${c.stop?`<tr><th>止めさし手当</th><td>¥${c.stop.toLocaleString()}（${N(l.stopkill_count)}回×¥${(N(l.stopkill_unit)||3000).toLocaleString()}）</td><th>その他手当</th><td>¥${N(l.other_allowance).toLocaleString()}</td></tr>`
+        :(N(l.other_allowance)?`<tr><th>その他手当</th><td colspan="3">¥${N(l.other_allowance).toLocaleString()}</td></tr>`:'')}
+  ${c.comm?`<tr><th>通勤費</th><td colspan="3">¥${c.comm.toLocaleString()}　<span style="font-size:11px;color:#555;">${esc(commParts.join(' ＋ '))}</span></td></tr>`:''}
+  <tr><th>支給額（総額）</th><td colspan="3" class="big">¥${c.pay.toLocaleString()}</td></tr>
+  <tr><th>社会保険料</th><td>¥${shakai.toLocaleString()}${shakai?`（健保 ¥${N(l.health_insurance).toLocaleString()}／厚年 ¥${N(l.pension).toLocaleString()}）`:''}</td>
+      <th>雇用保険料</th><td>¥${N(l.employment_insurance).toLocaleString()}</td></tr>
+  <tr><th>所得税</th><td>¥${N(l.income_tax).toLocaleString()}</td><th>住民税・他控除</th><td>¥${other_ded.toLocaleString()}</td></tr>
+  <tr><th>差引支給額</th><td colspan="3" class="big">¥${c.net.toLocaleString()}</td></tr></table>
+  <h2 style="font-size:15px;">勤怠明細</h2>
+  <table><thead><tr><th>日付</th><th>時刻</th><th>実働</th><th>メモ</th></tr></thead><tbody>${detail||'<tr><td colspan="4">打刻記録なし（報告書ベース）</td></tr>'}</tbody></table>
+  <p style="font-size:11px;color:#666;">発行日: ${new Date().toLocaleDateString('ja-JP')}</p>
+  </body></html>`;
+  const w=window.open('','_blank');
+  if(!w){ alert('ポップアップがブロックされました。ブラウザの設定を確認してください。'); return; }
+  w.document.write(html); w.document.close();
+}
+
 /* ── 行き先別移動費（産廃処理など）の編集 ── */
 let tripStaff=null;
 function tripOpen(i){ tripStaff=lines[i].staff_name; tripRender(); document.getElementById('tripModal').style.display='flex'; }

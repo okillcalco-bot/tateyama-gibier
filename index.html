@@ -1276,13 +1276,11 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
     </div>
     <div class="section">
-      <div class="section-title">給与明細</div>
-      <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:10px;flex-wrap:wrap;">
-        <div class="form-group"><label>スタッフ</label><select class="form-input" id="pay-staff" style="min-width:180px;"></select></div>
-        <div class="form-group"><label>対象月</label><input class="form-input" id="pay-month" type="month" /></div>
-        <div class="form-group"><label>&nbsp;</label><button class="btn btn-primary" onclick="payrollCalc()">勤怠から集計</button></div>
-      </div>
-      <div id="payroll-result" style="display:none;"></div>
+      <div class="section-title">給与計算・給与明細</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:10px;">
+        給与のとりまとめ（勤務時間・手当・通勤費・社会保険料）と、一人ずつの給与明細の発行は
+        <b>給与計算の画面</b>に統一しました。ここからは移動するだけです。</div>
+      <a href="payroll.html" class="btn btn-primary" style="display:inline-block;text-decoration:none;min-height:44px;line-height:30px;">💴 給与計算・明細を開く</a>
     </div>
   </div>
 
@@ -5898,10 +5896,6 @@ async function loadStaffPanel() {
         <td><button class="btn btn-sm" onclick="staffEdit('${s.id}')">編集</button></td>
       </tr>`).join('');
     }
-    // 給与明細の対象セレクトも更新
-    const sel = document.getElementById('pay-staff');
-    sel.innerHTML = '<option value="">スタッフを選択...</option>' + staffData.map(s => `<option value="${s.id}">${esc2(s.name)}</option>`).join('');
-    if (!document.getElementById('pay-month').value) document.getElementById('pay-month').value = new Date().toISOString().slice(0, 7);
     if (!document.getElementById('att-date').value) document.getElementById('att-date').value = new Date().toISOString().slice(0, 10);
     loadAttendance();
     loadAttMissing();
@@ -6084,134 +6078,7 @@ async function loadAttEditLog() {
   }
 }
 
-/* ── 給与明細 ── */
-let payCurrent = null;
-
-function attHours(a) {
-  if (!a.clock_in || !a.clock_out) return 0;
-  const [ih, im] = a.clock_in.split(':').map(Number);
-  const [oh, om] = a.clock_out.split(':').map(Number);
-  return Math.max(0, (oh * 60 + om - ih * 60 - im - (a.break_minutes || 0)) / 60);
-}
-
-async function payrollRpc(fn, args) {
-  const res = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
-    method: 'POST',
-    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(args || {})
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const t = await res.text();
-  return t ? JSON.parse(t) : null;
-}
-
-async function payrollCalc() {
-  if (!requireAdmin('給与明細の作成')) return;
-  const staffId = document.getElementById('pay-staff').value;
-  const month = document.getElementById('pay-month').value;
-  const out = document.getElementById('payroll-result');
-  if (!staffId || !month) { toast('スタッフと対象月を選択してください', 'error'); return; }
-  const s = staffData.find(x => String(x.id) === String(staffId));
-  try {
-    const rows = await sb('GET', 'attendance', null, `?staff_id=eq.${staffId}&work_date=gte.${month}-01&work_date=lte.${month}-31&select=*&order=work_date.asc`);
-    const days = rows.filter(r => r.clock_in && r.clock_out);
-    const hours = days.reduce((t, r) => t + attHours(r), 0);
-
-    // 給与計算画面（payroll.html）で入力した明細行があれば、手当・通勤費・控除を取り込む
-    let pl = null, plTrips = [];
-    try {
-      const key = await staffKeyEnsure();
-      if (key) {
-        const r = await payrollRpc('admin_payroll_list', { p_staff_key: key, p_month: month });
-        pl = (r.lines || []).find(l => String(l.staff_id) === String(staffId) || l.staff_name === s.name) || null;
-        plTrips = (r.trips || []).filter(t => t.staff_name === s.name);
-      }
-    } catch (e) { /* 明細行が無くても勤怠だけで出せる */ }
-
-    const nz = v => (v == null || v === '' || isNaN(+v)) ? 0 : +v;
-    const useHours = pl && nz(pl.work_hours) ? nz(pl.work_hours) : hours;
-    const wage = pl && nz(pl.hourly_wage) ? nz(pl.hourly_wage) : (Number(s.hourly_wage) || 0);
-    const base = s.employment_type === '月給' ? (Number(s.monthly_salary) || 0) : Math.round(useHours * wage);
-    const stop = pl ? nz(pl.stopkill_count) * (nz(pl.stopkill_unit) || 3000) : 0;
-    const commParts = [];
-    let comm = 0;
-    if (pl && nz(pl.commute_count)) {
-      const c = Math.round(nz(pl.commute_round_km) * (nz(pl.commute_yen_per_km) || 20) * nz(pl.commute_count));
-      comm += c; commParts.push(`センター ${nz(pl.commute_round_km)}km×${nz(pl.commute_yen_per_km) || 20}円×${nz(pl.commute_count)}回`);
-    }
-    plTrips.forEach(t => {
-      const c = Math.round(nz(t.round_km) * (nz(t.yen_per_km) || 20) * nz(t.trip_count));
-      comm += c; commParts.push(`${t.destination} ${nz(t.round_km)}km×${nz(t.yen_per_km) || 20}円×${nz(t.trip_count)}回`);
-    });
-    const other = pl ? nz(pl.other_allowance) : 0;
-    const gross = base + stop + comm + other;
-    payCurrent = { staff: s, month, days: (pl && nz(pl.work_days)) || days.length, hours: useHours, wage,
-                   base, stop, comm, commParts, other, gross, rows, pl };
-    out.style.display = 'block';
-    out.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:12px;">
-        <div class="card" style="padding:12px;"><div class="card-label">出勤日数</div><div class="card-value" style="font-size:20px;">${payCurrent.days}日</div></div>
-        <div class="card" style="padding:12px;"><div class="card-label">実働時間</div><div class="card-value" style="font-size:20px;">${useHours.toFixed(1)}h</div></div>
-        <div class="card" style="padding:12px;"><div class="card-label">基本給</div><div class="card-value" style="font-size:20px;">¥${base.toLocaleString()}</div></div>
-        ${stop ? `<div class="card" style="padding:12px;"><div class="card-label">止めさし手当</div><div class="card-value" style="font-size:20px;">¥${stop.toLocaleString()}</div></div>` : ''}
-        ${comm ? `<div class="card" style="padding:12px;"><div class="card-label">通勤費</div><div class="card-value" style="font-size:20px;">¥${comm.toLocaleString()}</div></div>` : ''}
-        <div class="card" style="padding:12px;"><div class="card-label">支給額（総額）</div><div class="card-value" style="font-size:20px;">¥${gross.toLocaleString()}</div></div>
-      </div>
-      <div class="form-row" style="flex-wrap:wrap;">
-        <div class="form-group"><label>社会保険料（健保＋厚年）</label><input class="form-input" id="pay-ded-shakai" type="number" value="${pl ? nz(pl.health_insurance) + nz(pl.pension) : 0}" style="width:150px;"></div>
-        <div class="form-group"><label>雇用保険料</label><input class="form-input" id="pay-ded-koyou" type="number" value="${pl ? nz(pl.employment_insurance) : 0}" style="width:130px;"></div>
-        <div class="form-group"><label>所得税</label><input class="form-input" id="pay-ded-tax" type="number" value="${pl ? nz(pl.income_tax) : 0}" style="width:130px;"></div>
-        <div class="form-group"><label>その他控除（住民税等）</label><input class="form-input" id="pay-ded-other" type="number" value="${pl ? nz(pl.resident_tax) + nz(pl.other_deduction) : 0}" style="width:150px;"></div>
-        <div class="form-group"><label>&nbsp;</label><button class="btn btn-primary" onclick="payrollPrint()">🖨 給与明細を開く</button></div>
-      </div>
-      <div style="font-size:12px;color:var(--text2);">
-        ${pl ? '✅ 給与計算（payroll.html）の入力値を取り込みました。控除は必要なら上で直せます。' : '⚠️ この月の給与計算データが無いため勤怠だけで計算しています。手当・通勤費・社会保険料は <a href="payroll.html" target="_blank">給与計算</a> で入力してください。'}
-        保険加入状況: 社会保険 ${s.social_insurance === '加入' ? '加入' : '未加入'} / 雇用保険 ${s.employment_insurance === '加入' ? '加入' : '未加入'}</div>`;
-  } catch (err) { toast('集計に失敗しました: ' + sbSafeMsg(err), 'error'); }
-}
-
-function payrollPrint() {
-  if (!payCurrent) return;
-  const { staff: s, month, days, hours, wage, base, stop, comm, commParts, other, gross, rows, pl } = payCurrent;
-  const nz = v => (v == null || v === '' || isNaN(+v)) ? 0 : +v;
-  const d1 = parseInt(document.getElementById('pay-ded-shakai').value) || 0;
-  const d2 = parseInt(document.getElementById('pay-ded-koyou').value) || 0;
-  const d3 = parseInt(document.getElementById('pay-ded-tax').value) || 0;
-  const d4 = parseInt(document.getElementById('pay-ded-other').value) || 0;
-  const net = gross - d1 - d2 - d3 - d4;
-  const shakaiNote = pl && (nz(pl.health_insurance) + nz(pl.pension)) === d1 && d1 > 0
-    ? `（健保 ¥${nz(pl.health_insurance).toLocaleString()}／厚年 ¥${nz(pl.pension).toLocaleString()}）`
-    : `（${s.social_insurance === '加入' ? '加入' : '未加入'}）`;
-  const detail = rows.map(r => `<tr><td>${r.work_date}</td><td>${r.clock_in || '-'}〜${r.clock_out || '-'}</td><td style="text-align:right;">${attHours(r).toFixed(1)}h</td><td>${esc2(r.note || '')}</td></tr>`).join('');
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>給与明細 ${esc2(s.name)} ${month}</title>
-  <style>body{font-family:'Noto Sans JP',sans-serif;padding:32px;color:#222;} h1{font-size:20px;border-bottom:2px solid #222;padding-bottom:8px;} table{border-collapse:collapse;width:100%;margin:12px 0;} th,td{border:1px solid #999;padding:6px 10px;font-size:13px;text-align:left;} th{background:#f0f0f0;width:18%;} .big{font-size:18px;font-weight:700;}
-  .toolbar{position:sticky;top:0;background:#fffbe8;border:1px solid #d8c98a;border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;gap:10px;align-items:center;}
-  .toolbar button{padding:8px 14px;font-size:14px;border-radius:6px;border:1px solid #999;background:#fff;cursor:pointer;}
-  @media print{.toolbar{display:none;}}</style></head><body>
-  <div class="toolbar">
-    <button onclick="window.print()">🖨 印刷 / PDF保存</button>
-    <button onclick="if(history.length>1)history.back();window.close();">← 戻る（閉じる）</button>
-    <span style="font-size:12px;color:#666;">スマホは共有→「PDFとして保存」でLINE・メールに送れます</span>
-  </div>
-  <h1>給与明細書　${month.replace('-', '年')}月分</h1>
-  <p>氏名: <strong>${esc2(s.name)}</strong>　（${esc2(s.role || '')} / ${esc2(s.employment_type || '')}）<br>館山ジビエセンター（合同会社アルコ）</p>
-  <table><tr><th>出勤日数</th><td>${days}日</td><th>実働時間</th><td>${hours.toFixed(1)}時間</td></tr>
-  <tr><th>${s.employment_type === '月給' ? '月給' : '時給'}</th><td>¥${Number(s.employment_type === '月給' ? s.monthly_salary : wage || 0).toLocaleString()}</td><th>基本給</th><td>¥${base.toLocaleString()}</td></tr>
-  ${stop ? `<tr><th>止めさし手当</th><td>¥${stop.toLocaleString()}${pl ? `（${nz(pl.stopkill_count)}回×¥${(nz(pl.stopkill_unit) || 3000).toLocaleString()}）` : ''}</td><th>その他手当</th><td>¥${other.toLocaleString()}</td></tr>`
-        : (other ? `<tr><th>その他手当</th><td colspan="3">¥${other.toLocaleString()}</td></tr>` : '')}
-  ${comm ? `<tr><th>通勤費</th><td colspan="3">¥${comm.toLocaleString()}　<span style="font-size:11px;color:#555;">${esc2(commParts.join(' ＋ '))}</span></td></tr>` : ''}
-  <tr><th>支給額（総額）</th><td colspan="3" class="big">¥${gross.toLocaleString()}</td></tr>
-  <tr><th>社会保険料</th><td>¥${d1.toLocaleString()}${shakaiNote}</td><th>雇用保険料</th><td>¥${d2.toLocaleString()}（${s.employment_insurance === '加入' ? '加入' : '未加入'}）</td></tr>
-  <tr><th>所得税</th><td>¥${d3.toLocaleString()}</td><th>その他控除</th><td>¥${d4.toLocaleString()}</td></tr>
-  <tr><th>差引支給額</th><td colspan="3" class="big">¥${net.toLocaleString()}</td></tr></table>
-  <h2 style="font-size:15px;">勤怠明細</h2>
-  <table><thead><tr><th>日付</th><th>時刻</th><th>実働</th><th>メモ</th></tr></thead><tbody>${detail || '<tr><td colspan="4">記録なし</td></tr>'}</tbody></table>
-  <p style="font-size:11px;color:#666;">発行日: ${new Date().toLocaleDateString('ja-JP')}</p>
-  </body></html>`;
-  const w = window.open('', '_blank');
-  if (!w) { toast('ポップアップがブロックされました。ブラウザの設定を確認してください。', 'error'); return; }
-  w.document.write(html); w.document.close();
-}
+/* 給与明細は payroll.html（給与計算）に統一（2026-08-11）。このタブからはリンクのみ */
 
 /* ───────── 清掃記録（HACCP・国産ジビエ認証準拠） ───────── */
 const CLEAN_ROOMS = [
@@ -9242,6 +9109,12 @@ loadOrgInfo();
       sessionStorage.setItem(KEY,'ok');
       sessionStorage.setItem('tg_role_v1', code==='2468' ? 'admin' : 'staff');
       gate.classList.add('hidden');
+      // 管理者はここでスタッフキーも1回だけ確認しておく（以降、顧客管理・給与などで聞かれない）
+      if(code==='2468'){
+        setTimeout(function(){
+          try{ if(typeof staffKeyEnsure==='function' && typeof staffKeyGet==='function' && !staffKeyGet()) staffKeyEnsure(); }catch(e){}
+        }, 600);
+      }
     } else {
       errEl.textContent='コードが違います';
       inputs.forEach(function(x){x.value='';x.style.borderColor='var(--red)';});
