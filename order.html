@@ -614,8 +614,18 @@ async function placeOrder() {
 
 function resetToList() { enterList(); }
 
-/* ══════════ 起動 ══════════ */
+/* ══════════ 起動 ══════════
+   センターが発行した「かんたんログインリンク」（#t=トークン）で開かれた場合は、
+   そのトークンを通常のログインセッションと同じ扱いで使う。
+   URLのハッシュは screen 切替にも使うため、boot() が上書きする前に先に読み取っておく。 */
+const linkToken = (() => {
+  const m = (location.hash || '').match(/[#&]t=([^&]+)/);
+  return m ? decodeURIComponent(m[1]) : '';
+})();
 (async function boot() {
+  if (linkToken) {
+    try { sessionStorage.setItem('tg_ptoken', linkToken); } catch (e) {}
+  }
   history.replaceState({ scr: 'login' }, '', '#');
   if (api.token()) {
     try {
@@ -623,6 +633,7 @@ function resetToList() { enterList(); }
       if (me && me.length) { customer = me[0]; await enterList(); return; }
     } catch (e) {}
     try { sessionStorage.removeItem('tg_ptoken'); } catch (e) {}
+    if (linkToken) $('lg-err').textContent = 'リンクの有効期限が切れました。IDとパスワードでログインしてください';
   }
   showScreen('login');
 })();
