@@ -1914,9 +1914,14 @@ function staffKeyGet() {
 async function staffKeyEnsure() {
   let k = staffKeyGet();
   if (k) return k;
-  k = prompt('スタッフキーを入力してください\n（顧客・注文データを開くのに必要です。分からないときは管理者へ）');
+  k = prompt('スタッフキーを入力してください（この端末では初回の1回だけ）\n' +
+    '※アプリ起動時の4桁コードとは別の、長いキーです。管理者がお持ちです。');
   if (!k) return '';
   k = k.trim();
+  if (/^\d{4}$/.test(k)) {
+    toast('それは起動時の4桁コードです。スタッフキーは別の長いキーです（管理者へ）', 'error');
+    return '';
+  }
   try {
     const res = await fetch(`${SB_URL}/rest/v1/rpc/staff_key_ok`, {
       method: 'POST',
@@ -1925,7 +1930,9 @@ async function staffKeyEnsure() {
     });
     if (!res.ok || (await res.json()) !== true) { toast('スタッフキーが違います', 'error'); return ''; }
   } catch (e) { toast('スタッフキーを確認できませんでした', 'error'); return ''; }
-  try { localStorage.setItem('tg_staff_key', k); } catch (e) {}
+  // localStorageが使えない端末（プライベートモード等）でも、少なくとも開いている間は再入力不要にする
+  try { localStorage.setItem('tg_staff_key', k); } catch (e) { try { sessionStorage.setItem('tg_staff_key', k); } catch (e2) {} }
+  toast('スタッフキーを確認しました。この端末では次回から入力不要です');
   return k;
 }
 
