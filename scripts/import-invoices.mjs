@@ -81,7 +81,9 @@ for (const path of files) {
     summary.push({ name, status: 'dry-run', detail: `${docs.length}枚 ${lines}行` });
     console.log(`── ${name}（${docs.length}枚・${lines}行）`);
     for (const d of docs) {
-      console.log(`   宛名:${d.raw_customer_name ?? '?'} 電話:${d.raw_phone ?? '-'} 日付:${d.invoice_date ?? '-'} 番号:${d.invoice_number ?? '-'}`);
+      // 個人情報をログへ残さない: 電話は下2桁以外を伏せる（照合はDB側で行う）
+      const tel = d.raw_phone ? String(d.raw_phone).replace(/\d(?=[\d-]*\d\d)/g, '*') : '-';
+      console.log(`   宛名:${d.raw_customer_name ?? '?'} 電話:${tel} 日付:${d.invoice_date ?? '-'} 番号:${d.invoice_number ?? '-'}`);
       for (const l of d.lines) {
         console.log(`     ${l.raw_item_name}  ${l.weight_kg ?? '?'}kg × ¥${l.unit_price ?? '?'} = ¥${l.amount ?? '?'}  [${l.source_ref}]`);
       }

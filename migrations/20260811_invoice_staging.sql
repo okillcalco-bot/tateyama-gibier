@@ -127,6 +127,17 @@ returns text language sql immutable as $$
 $$;
 revoke all on function invoice_norm_name(text) from public, anon, authenticated;
 
+-- 顧客コードの正規化（大文字化・全角→半角・前後空白除去。内部専用）
+create or replace function invoice_norm_code(p text)
+returns text language sql immutable as $$
+  select case when p is null then null else
+    upper(btrim(translate(p,
+      'ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ０１２３４５６７８９－　',
+      'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- ')))
+  end
+$$;
+revoke all on function invoice_norm_code(text) from public, anon, authenticated;
+
 -- 文字bigramのJaccard類似度（内部専用）
 create or replace function invoice_name_similarity(a text, b text)
 returns numeric language plpgsql immutable as $$
@@ -227,18 +238,38 @@ begin
   loop
     v_best := null; v_best_score := 0; v_best_method := null;
 
-    -- 1) 顧客コードの一致（請求書のどこかに C0011 形式が印字されていれば最強）
-    select c.id into v_cid from customers c
-     where c.code is not null and length(c.code) >= 4
-       and position(upper(c.code) in upper(coalesce(v_doc.raw_customer_name,'') || ' ' ||
-                    coalesce(v_doc.raw_addressee,'') || ' ' || coalesce(v_doc.note,''))) > 0
-     limit 1;
-    if v_cid is not null then
-      update invoice_documents set customer_id = v_cid, match_confidence = 1.00,
-        match_method = 'code', match_status = '確定', matched_by = 'auto', matched_at = now()
-      where id = v_doc.id;
-      v_auto := v_auto + 1; continue;
-    end if;
+    -- 1) 顧客コード: 英数字境界付きの完全一致のみ。
+    --    「抽出されたコードが1種類」かつ「そのコードを持つ顧客が1件」のときだけ自動確定(1.00)。
+    --    複数コード印字・同一コードの顧客が複数・埋め込み（C0011の中のC001等）は自動確定しない。
+    declare
+      v_hay text := invoice_norm_code(
+        coalesce(v_doc.raw_customer_name,'') || ' ' ||
+        coalesce(v_doc.raw_addressee,'')    || ' ' ||
+        coalesce(v_doc.note,''));
+      v_codes text[]; v_ids uuid[];
+    begin
+      select array_agg(distinct u.code_n), array_agg(distinct u.cid)
+        into v_codes, v_ids
+        from (
+          select invoice_norm_code(c.code) as code_n, c.id as cid
+            from customers c
+           where c.code is not null
+             and length(invoice_norm_code(c.code)) >= 4
+             and invoice_norm_code(c.code) ~ '^[A-Z0-9][A-Z0-9-]*$'
+             -- 境界: コードの前後が英数字・ハイフンでない（＝別の文字列の一部は不一致）
+             and v_hay ~ ('(^|[^A-Z0-9-])' || invoice_norm_code(c.code) || '($|[^A-Z0-9-])')
+        ) u;
+      if coalesce(array_length(v_codes,1),0) = 1 and coalesce(array_length(v_ids,1),0) = 1 then
+        update invoice_documents set customer_id = v_ids[1], match_confidence = 1.00,
+          match_method = 'code', match_status = '確定', matched_by = 'auto', matched_at = now()
+        where id = v_doc.id;
+        v_auto := v_auto + 1; continue;
+      elsif coalesce(array_length(v_codes,1),0) > 1 then
+        v_best_score := 0.50; v_best_method := 'code(複数コード印字)'; v_best := null;
+      elsif coalesce(array_length(v_codes,1),0) = 1 and coalesce(array_length(v_ids,1),0) > 1 then
+        v_best_score := 0.50; v_best_method := 'code(同一コードの顧客が複数)'; v_best := null;
+      end if;
+    end;
 
     -- 2) 電話の完全一致（候補が1件のときだけ自動確定 0.95）
     if invoice_norm_phone(v_doc.raw_phone) is not null and length(invoice_norm_phone(v_doc.raw_phone)) >= 10 then
@@ -249,7 +280,7 @@ begin
           match_method = 'phone', match_status = '確定', matched_by = 'auto', matched_at = now()
         where id = v_doc.id;
         v_auto := v_auto + 1; continue;
-      elsif v_cnt > 1 then
+      elsif v_cnt > 1 and 0.70 > coalesce(v_best_score, 0) then
         v_best_score := 0.70; v_best_method := 'phone(複数)'; v_best := v_cid;
       end if;
     end if;
