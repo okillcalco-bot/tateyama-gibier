@@ -4,9 +4,11 @@
 
 | ファイル | 内容 |
 |---|---|
-| `invoice_staging.test.sql` | 本体テスト（投入・冪等・名寄せ・数字コード・ハイフン・同時投入・RLS/認可） |
+| `invoice_staging.test.sql` | 1/3 本体テスト（投入・冪等・名寄せ・数字コード・ハイフン・同時投入・RLS/認可） |
+| `invoice_confirm.test.sql` | 2/3 確認画面テスト（矛盾拒否・手動確定・商品alias・金額検算・実績反映/取消・監査・認可） |
 | `invoice_rollback.test.sql` | ロールバックSQLの完全性テスト（全オブジェクト削除→残存0件→復元） |
 | `concurrent-import.test.mjs` | Node.jsからRPCを`Promise.all`で同時実行する競合テスト（任意・要スタッフキー） |
+| `../e2e/invoice-import.e2e.js` | 確認画面のPlaywright E2E（390px・タップ44px・矛盾表示・確定→対応づけ→反映） |
 
 ## 実行方法
 
@@ -177,6 +179,34 @@ match_confidence を 0 にクリア。候補ありへ更新するときも全列
 | 80 | 名称一致で候補顧客Aが付く（前提。matched_by/matched_atはnull） | PASS |
 | 81 | 生データ変更→再照合で候補A→候補Bへ完全に置き換わる | PASS |
 | 82 | 一致しない状態へ変更→再照合で未照合・customer_id/method/by/at=null・confidence=0 | PASS |
+
+## フェーズ4(2/3) 確認画面（invoice_confirm.test.sql・2026-08-12 実測 38/38 PASS）
+
+対象: `migrations/20260812_invoice_confirm.sql`。すべて `begin`〜`rollback` 内で実行し本番に残さない。
+名寄せRPCの差し替え後も 1/3 の全挙動（A〜H）が回帰なしであることを別途確認済み（64/64 PASS）。
+
+| 区分 | 検証項目 | 結果 |
+|---|---|---|
+| §5 矛盾 | 顧客コードと電話が別顧客 → 自動確定せず候補あり・match_conflict=true・conflict_detail | PASS |
+| §4 手動 | 候補/矛盾を人が手動確定 → 確定・match_method=manual・customer_confirmed_by記録 | PASS |
+| §8 検算 | 明細合計=請求書合計で差額0 / 差額ありは要確認 / 差額の理由入力で確認済へ | PASS |
+| §8 拒否 | 差額の理由なしでは実績反映を拒否 | PASS |
+| §9 拒否 | 未対応明細があると反映拒否・拒否時は実績0件 | PASS |
+| §7 商品 | 対応づけで確定・alias保存（次回前埋め）／別商品は保留／対象外は反映せずブロックもしない | PASS |
+| §7 alias | 確定済みaliasが次回取込の同名明細を match_method='alias' で前埋め | PASS |
+| §10 反映 | 確定分のみ実績へ・購入日=納品日/請求日・source_id=明細idで一意 | PASS |
+| §10 冪等 | 連打・再送は already=true で実績が増えない | PASS |
+| §10 原子 | 一部docが未確定なら例外で全体ロールバック（先行docの実績も作られない） | PASS |
+| §11 取消 | 物理削除せず canceled_at/by/reason を記録・有効実績0件（集計除外用）・確認済へ | PASS |
+| §11 二重 | 反映済み（取込済）以外の取消を拒否（二重取消拒否） | PASS |
+| §11 再反映 | 取消後の再反映で同一source_idが復活し件数は増えない | PASS |
+| §12 監査 | invoice_audit に customer_confirm/product_map/amount_reason/finalize/cancel を記録 | PASS |
+| §14 認可 | 新RPC全9本 誤スタッフキーで拒否・PUBLIC EXECUTE無し・search_path固定 | PASS |
+| §14 遮断 | invoice_audit は anon 直アクセス不可・内部関数(_invoice_*)は anon/authenticated 実行不可 | PASS |
+
+E2E（`tests/e2e/invoice-import.e2e.js`・Playwright 390×844・22/22 PASS）: 取込タブ表示・状態別フィルタ8種・
+横スクロールなし・詳細全画面・矛盾警告表示・抽出元/確度表示・金額検算表示・未確認時は反映ボタン無効・
+詳細ボタンのタップ領域44px以上・顧客ピッカー検索と確定・商品対応づけ・全確定後の実績反映。
 
 ## ロールバック完全性（invoice_rollback.test.sql・2026-08-12 実測）
 
