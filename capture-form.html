@@ -405,13 +405,14 @@ textarea { min-height: 80px; resize: vertical; }
         <div style="display:flex;gap:8px;align-items:flex-end;">
           <div style="flex:0 0 90px;">
             <div style="font-size:11px;color:var(--text2);margin-bottom:3px;">通し番号</div>
-            <input type="number" class="input" id="indSerial" min="1" step="1" inputmode="numeric" placeholder="001" style="text-align:center;" oninput="syncLabelId()">
+            <input type="number" class="input" id="indSerial" min="1" step="1" inputmode="numeric" placeholder="001" style="text-align:center;" oninput="syncLabelId()" onblur="checkSerialPlaceholder()">
           </div>
           <div style="flex:1;">
             <div style="font-size:11px;color:var(--text2);margin-bottom:3px;">個体管理番号</div>
             <input type="text" class="input" id="indLabelId" placeholder="種別・市町村を選択" readonly style="background:var(--bg2);color:var(--gold);">
           </div>
         </div>
+        <div id="serialPlaceholderNote" style="display:none;font-size:11px;color:var(--gold);margin-top:4px;"></div>
       </div>
       <div class="form-row">
         <label class="form-label">性別</label>
@@ -1042,6 +1043,28 @@ function syncLabelId() {
   if (species === 'イノシシ') return;
   document.getElementById('indLabelId').value = `TGC-08-${prefix}${String(serial).padStart(3, '0')}`;
   document.getElementById('indLabelId').dataset.labelNum = serial;
+}
+
+/* 通し番号が「先に用意した空枠」（通し番号だけ登録済み・捕獲日は未入力）と一致するか確認して知らせる。
+   一致すればその空枠に登録される（handleSubmit側の処理）。編集モード・捕獲者モードでは確認しない。 */
+async function checkSerialPlaceholder() {
+  const note = document.getElementById('serialPlaceholderNote');
+  if (!note) return;
+  const serial = parseInt(document.getElementById('indSerial').value);
+  if (editRecordId || window.hunterMode || state.species !== 'イノシシ' || !serial) {
+    note.style.display = 'none';
+    return;
+  }
+  try {
+    const rows = await sb('GET', 'individuals', null,
+      `?species=eq.イノシシ&serial_number=eq.${serial}&capture_date=is.null&deleted_at=is.null&select=id&limit=1`);
+    if (rows.length) {
+      note.textContent = `✓ 通し番号 ${serial} は先に用意した空枠です。登録するとそこに入ります。`;
+      note.style.display = 'block';
+    } else {
+      note.style.display = 'none';
+    }
+  } catch (e) { note.style.display = 'none'; }
 }
 
 function openSerialSettings() {
@@ -2054,14 +2077,24 @@ async function handleSubmit() {
     if (!labelId && !window.hunterMode) { alert('個体管理番号が生成されていません。種別と市町村を選択してください。'); btn.disabled=false; btn.textContent='登録する'; return; }
 
     // 通し番号（連番）はイノシシのみ。新規登録時にDBの最大+1を自動採番（この次から連番）。
+    // ただし、手入力の番号が「先に用意した空枠」（通し番号だけ登録済みで捕獲日が未入力）と一致すれば、
+    // 新規行を作らずその空枠に登録する。
     let serialForSave = window.hunterMode ? null : serial;
-    if (!editRecordId && state.species === 'イノシシ') {
+    let matchedPlaceholderId = null;
+    if (!editRecordId && state.species === 'イノシシ' && !window.hunterMode) {
       try {
-        const rows = await sb('GET', 'individuals', null, '?species=eq.イノシシ&serial_number=not.is.null&select=serial_number&order=serial_number.desc&limit=1');
-        const dbNext = rows.length ? ((rows[0].serial_number || 0) + 1) : 1;
-        serialForSave = Math.max(dbNext, serial || 0) || dbNext;
-        const sf = document.getElementById('indSerial'); if (sf) sf.value = serialForSave; // 表示・ラベルと一致させる
-      } catch (e) { serialForSave = window.hunterMode ? null : (serial || null); }
+        const placeholders = await sb('GET', 'individuals', null,
+          `?species=eq.イノシシ&serial_number=eq.${serial}&capture_date=is.null&deleted_at=is.null&select=id&limit=1`);
+        if (placeholders.length) {
+          matchedPlaceholderId = placeholders[0].id;
+          serialForSave = serial;
+        } else {
+          const rows = await sb('GET', 'individuals', null, '?species=eq.イノシシ&serial_number=not.is.null&select=serial_number&order=serial_number.desc&limit=1');
+          const dbNext = rows.length ? ((rows[0].serial_number || 0) + 1) : 1;
+          serialForSave = Math.max(dbNext, serial || 0) || dbNext;
+          const sf = document.getElementById('indSerial'); if (sf) sf.value = serialForSave; // 表示・ラベルと一致させる
+        }
+      } catch (e) { serialForSave = serial || null; }
     }
 
     const record = {
@@ -2109,9 +2142,18 @@ async function handleSubmit() {
 
     let saved;
     try {
-      saved = await editMode && editRecordId
-        ? await (async function(){ const pb=Object.assign({},record); if(!window.receiveMode){ delete pb.label_id; delete pb.serial_number; } const er=await sb('PATCH','individuals',pb,'?id=eq.'+editRecordId); return Array.isArray(er)?er[0]:er; })()
-        : await sb('POST', 'individuals', record);
+      if (editMode && editRecordId) {
+        const pb = Object.assign({}, record);
+        if (!window.receiveMode) { delete pb.label_id; delete pb.serial_number; }
+        const er = await sb('PATCH', 'individuals', pb, '?id=eq.' + editRecordId);
+        saved = Array.isArray(er) ? er[0] : er;
+      } else if (matchedPlaceholderId) {
+        // 先に用意した空枠（通し番号だけの行）に登録する
+        const er = await sb('PATCH', 'individuals', record, '?id=eq.' + matchedPlaceholderId);
+        saved = Array.isArray(er) ? er[0] : er;
+      } else {
+        saved = await sb('POST', 'individuals', record);
+      }
       if (Array.isArray(saved)) saved = saved[0];
     } catch(e) {
       // Offline - queue
