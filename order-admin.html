@@ -553,6 +553,7 @@ th,td{padding:8px 6px;font-size:.8rem}
     <div style="font-size:12.5px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:12px;line-height:1.8;">
       取り込んだ請求書を確認して、<strong>顧客</strong>と<strong>商品</strong>を対応づけ、<strong>金額を検算</strong>してから購入実績へ反映します。
       OCR・抽出結果はそのままでは実績になりません。<strong>スタッフが最終確認したものだけ</strong>反映されます。取込・反映はスタッフキーが必要です。
+      <br><span style="color:var(--text3);font-size:11.5px;">※ 担当者名はスタッフキー利用者による自己申告の操作名です。Supabase Auth 移行までは認証済み本人を証明するものではありません（移行後は本人IDに結びつけます）。</span>
     </div>
     <div class="inv-status-badges" id="invStatusFilter"></div>
     <div class="filter-bar">
@@ -3088,8 +3089,10 @@ function toggleInvDoc(di){
 }
 async function invReload(){ if(invCurrent){ const id=invCurrent.import.id; try{ invCurrent=await invRpc('admin_invoice_detail',{p_import_id:id}); renderInvoiceDetail(); }catch(e){} } }
 
+function invRequireBy(){ const by=invOperator(); if(!by){ alert('担当者名を入力してください（操作の記録に残します）'); } return by; }
 async function invSetCustomer(docId,decision,custId){
-  try{ await invRpc('admin_invoice_set_customer',{p_document_id:docId,p_decision:decision,p_customer_id:custId,p_by:invOperator()}); await invReload(); }
+  const by=invRequireBy(); if(!by) return;
+  try{ await invRpc('admin_invoice_set_customer',{p_document_id:docId,p_decision:decision,p_customer_id:custId,p_by:by}); await invReload(); }
   catch(e){ alert('顧客の更新に失敗：'+e.message); }
 }
 async function invRematch(){
@@ -3098,39 +3101,44 @@ async function invRematch(){
   catch(e){ alert('再照合に失敗：'+e.message); }
 }
 async function invMapProduct(lineId,decision){
+  const by=invRequireBy(); if(!by) return;
   let pid=null;
   if(decision==='対応づけ'){ pid=document.getElementById('invprod-'+lineId)?.value||''; if(!pid){ alert('対応づける商品を選んでください'); return; } }
-  try{ await invRpc('admin_invoice_map_product',{p_line_id:lineId,p_decision:decision,p_product_id:pid||null,p_by:invOperator()}); await invReload(); }
+  try{ await invRpc('admin_invoice_map_product',{p_line_id:lineId,p_decision:decision,p_product_id:pid||null,p_by:by}); await invReload(); }
   catch(e){ alert('商品の対応づけに失敗：'+e.message); }
 }
 async function invSetAmountReason(docId){
+  const by=invRequireBy(); if(!by) return;
   const kind=document.getElementById('invkind-'+docId)?.value||'';
   const reason=(document.getElementById('invreason-'+docId)?.value||'').trim();
   if(!reason){ alert('差額の理由を入力してください'); return; }
-  try{ await invRpc('admin_invoice_set_amount_reason',{p_document_id:docId,p_reason:reason,p_kind:kind||null,p_by:invOperator()}); await invReload(); }
+  try{ await invRpc('admin_invoice_set_amount_reason',{p_document_id:docId,p_reason:reason,p_kind:kind||null,p_by:by}); await invReload(); }
   catch(e){ alert('理由の保存に失敗：'+e.message); }
 }
 async function invFinalize(id){
+  const by=invRequireBy(); if(!by) return;
   if(!confirm('この請求書の内容を購入実績へ反映します。\n確定済みの顧客・商品だけが反映され、以後は「取消」しない限り変更できません。\nよろしいですか？')) return;
   try{
-    const r=await invRpc('admin_invoice_finalize',{p_import_id:id,p_by:invOperator()});
+    const r=await invRpc('admin_invoice_finalize',{p_import_id:id,p_by:by});
     if(r.already) alert('この取込は既に反映済みです（実績は増えていません）。');
     else alert(`購入実績へ反映しました：明細 ${r.facts||0}行（請求書 ${r.documents||0}枚）`);
     await invReload();
   }catch(e){ alert('反映できませんでした：'+e.message); }
 }
 async function invCancel(id){
+  const by=invRequireBy(); if(!by) return;
   const reason=(prompt('実績を取り消します。理由を入力してください（例: 請求書の差し替え）')||'').trim();
   if(!reason) return;
   try{
-    const r=await invRpc('admin_invoice_cancel',{p_import_id:id,p_reason:reason,p_by:invOperator()});
+    const r=await invRpc('admin_invoice_cancel',{p_import_id:id,p_reason:reason,p_by:by});
     alert(`取り消しました：${r.canceled_facts||0}行（記録は残ります）。必要ならもう一度反映できます。`);
     await invReload();
   }catch(e){ alert('取消できませんでした：'+e.message); }
 }
 async function invExclude(id,ex){
+  const by=invRequireBy(); if(!by) return;
   if(ex&&!confirm('この取込を除外します（一覧の「除外」へ移動）。よろしいですか？')) return;
-  try{ await invRpc('admin_invoice_exclude_import',{p_import_id:id,p_exclude:ex,p_by:invOperator()}); await invReload(); }
+  try{ await invRpc('admin_invoice_exclude_import',{p_import_id:id,p_exclude:ex,p_by:by}); await invReload(); }
   catch(e){ alert('操作に失敗：'+e.message); }
 }
 

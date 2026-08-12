@@ -4,11 +4,20 @@
 
 | ファイル | 内容 |
 |---|---|
-| `invoice_staging.test.sql` | 1/3 本体テスト（投入・冪等・名寄せ・数字コード・ハイフン・同時投入・RLS/認可） |
-| `invoice_confirm.test.sql` | 2/3 確認画面テスト（矛盾拒否・手動確定・商品alias・金額検算・実績反映/取消・監査・認可） |
+| `invoice_staging.test.sql` | 1/3 本体テスト（投入・冪等・名寄せ・数字コード・ハイフン・同時投入・RLS/認可）／80件 |
+| `invoice_confirm.test.sql` | 2/3 確認画面テスト（矛盾拒否・手動確定・商品alias・金額検算・実績反映/取消・監査・認可）／38件 |
+| `invoice_confirm_hardening.test.sql` | 2/3 ハードニング（状態ゲート・親行ロック・検索・alias残存・担当者必須・認可網羅）／41件 |
 | `invoice_rollback.test.sql` | ロールバックSQLの完全性テスト（全オブジェクト削除→残存0件→復元） |
-| `concurrent-import.test.mjs` | Node.jsからRPCを`Promise.all`で同時実行する競合テスト（任意・要スタッフキー） |
-| `../e2e/invoice-import.e2e.js` | 確認画面のPlaywright E2E（390px・タップ44px・矛盾表示・確定→対応づけ→反映） |
+| `concurrent-import.test.mjs` | 同時投入の冪等テスト（`Promise.all`・任意・要スタッフキー） |
+| `concurrent-finalize.test.mjs` | finalizeと編集の同時実行テスト（親行ロックの直列化・A/B/C・任意・要スタッフキー） |
+| `../e2e/invoice-import.e2e.js` | 確認画面のPlaywright E2E（390px・タップ44px・矛盾表示・検索の特異性・担当者必須・確定→対応づけ→反映）／24件 |
+
+## テスト件数（2026-08-13 本番DBで実測）
+
+- 1/3 `invoice_staging.test.sql`: **80/80 PASS**（名寄せRPCを取込単位ロック方式へ再構築後も回帰なし）
+- 2/3 `invoice_confirm.test.sql`: **38/38 PASS**
+- 2/3 `invoice_confirm_hardening.test.sql`: **41/41 PASS**
+- E2E `invoice-import.e2e.js`: **24/24 PASS**（Playwright 390×844）
 
 ## 実行方法
 
@@ -207,6 +216,43 @@ match_confidence を 0 にクリア。候補ありへ更新するときも全列
 E2E（`tests/e2e/invoice-import.e2e.js`・Playwright 390×844・22/22 PASS）: 取込タブ表示・状態別フィルタ8種・
 横スクロールなし・詳細全画面・矛盾警告表示・抽出元/確度表示・金額検算表示・未確認時は反映ボタン無効・
 詳細ボタンのタップ領域44px以上・顧客ピッカー検索と確定・商品対応づけ・全確定後の実績反映。
+
+## フェーズ4(2/3) ハードニング（invoice_confirm_hardening.test.sql・2026-08-13 実測 41/41 PASS）
+
+対象: `migrations/20260813_invoice_confirm_hardening.sql`（本番適用済み）。Codexレビュー対応。
+
+| 区分 | 検証項目 | 結果 |
+|---|---|---|
+| 修正4 担当者必須 | set_customer / map_product 等で担当者名(p_by)が空白だと拒否（'staff'フォールバック廃止） | PASS |
+| 修正1 状態ゲート | 取込済で set_customer / map_product / set_amount_reason を直接呼ぶ → 「編集できません」で拒否 | PASS |
+| 修正1 run_matching | 取込済の取込は再照合の対象外（変更なし・skip） | PASS |
+| 修正1 直列化 | 取消→確認済で編集可能 → 商品変更→再反映で facts が新商品へ更新・行数不変 | PASS |
+| 修正1 直列化 | 取消→顧客変更→再反映で facts が新顧客へ更新・行数不変 | PASS |
+| 修正1 除外 | 除外中の顧客・商品・差額理由変更 → 拒否 | PASS |
+| 修正3 残存クリア | 別商品/対象外で invoice_lines.product_id=null・product_decided_by 更新・alias.product_id=null | PASS |
+| 修正2 検索 | 日本語店名で該当のみ（無関係を返さない）／カナ／コード／電話下4桁で該当 | PASS |
+| 修正2 検索 | 数字なし語で電話条件は無効／「%」「_」だけで全件返さない／空白は空配列／81字は拒否 | PASS |
+| 追加5 認可 | 新RPC9本 PUBLIC無・anon/authenticated有・SECURITY DEFINER・search_path固定 | PASS |
+| 追加5 認可 | 内部関数4本（_invoice_actor/_invoice_lock_editable/_invoice_audit/_invoice_recompute_import_status）を PUBLIC/anon/authenticated から実行不可 | PASS |
+| 追加5 認可 | 誤スタッフキーで detail/products/customer_search/map_product を拒否 | PASS |
+| 追加5 RLS | invoice_audit を anon・authenticated の SELECT/INSERT/UPDATE/DELETE すべて拒否（8項目） | PASS |
+
+### finalize と編集の同時実行（concurrent-finalize.test.mjs・要スタッフキー）
+
+`TGC_STAFF_KEY=… node tests/db/concurrent-finalize.test.mjs` で、2セッションから `Promise.all` で同時実行:
+
+- **A**: finalize と 商品変更 → 編集が先勝ちなら成功・finalize が反映、finalize が先勝ちなら編集は「編集できません」で拒否。どちらでも最終状態は「取込済」で一部反映なし。
+- **B**: finalize と 顧客変更 → A と同様。
+- **C**: finalize ×2 → ちょうど1本だけ実績反映（already=false・facts=1）、もう1本は already=true（実績は増えない）。
+
+いずれもすべての編集/反映/取消RPCが変更前に対象 `invoice_imports` 行を `FOR UPDATE` でロックし、
+**ロック取得後に** status を判定することで直列化される（ロック前に status を読んで判断しない）。
+※本番DBに一時データと実在顧客への購入実績を作るため、終了時に表示される掃除SQLを実行すること。
+
+### 担当者名（actor）の位置づけ
+
+`p_by`（担当者名）はスタッフキー利用者による**自己申告の操作名**であり、Supabase Auth 移行までは
+認証済み本人を証明するものではない（画面にも明記）。移行後は actor を `auth.uid()` に結びつける前提。
 
 ## ロールバック完全性（invoice_rollback.test.sql・2026-08-12 実測）
 

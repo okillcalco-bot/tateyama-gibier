@@ -65,7 +65,18 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
     if (fn === 'admin_invoice_detail') { detailCalls++; return j(detail(setCustomerCalled > 0 && mapProductCalled > 0)); }
     if (fn === 'admin_invoice_set_customer') { setCustomerCalled++; return j({ ok: true, status: '商品未照合' }); }
     if (fn === 'admin_invoice_map_product') { mapProductCalled++; return j({ ok: true, status: '確認済' }); }
-    if (fn === 'admin_invoice_customer_search') return j([{ id: 'cust-B', code: 'B001', name: 'ビー商店', phone_tail: '2222' }]);
+    if (fn === 'admin_invoice_customer_search') {
+      // サーバ側の絞り込みを模す: 検索語に一致する顧客だけ返す（無関係は返さない）
+      const q = String(body.p_q || '');
+      const all = [
+        { id: 'cust-B', code: 'B001', name: 'ビー商店', kana: 'ビーショウテン', phone_tail: '2222' },
+        { id: 'cust-Z', code: 'A000', name: 'ゼータ無関係商店', kana: 'ゼータムカンケイ', phone_tail: '9999' },
+      ];
+      const digits = q.replace(/\D/g, '');
+      const hit = all.filter(c => c.name.includes(q) || c.kana.includes(q) || c.code.includes(q)
+        || (digits.length >= 4 && String(c.phone_tail).includes(digits)));
+      return j(hit);
+    }
     if (fn === 'admin_invoice_finalize') { finalizeCalled++; return j({ ok: true, already: false, facts: 2, documents: 1 }); }
     if (fn === 'admin_invoice_run_matching') return j({ ok: true, auto: 0, candidates: 1, unmatched: 0, conflicts: 1 });
     return j([]);
@@ -108,9 +119,20 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   await p.locator('#invDetailBody .inv-btn', { hasText: '顧客を選んで確定' }).first().click(); await p.waitForTimeout(300);
   ck('⑥顧客ピッカーが開く', await p.locator('#invCustPick').evaluate(el => el.classList.contains('show')));
   await p.locator('#invCustQ').fill('ビー'); await p.waitForTimeout(400);
-  ck('⑥検索結果が出る', (await p.locator('#invCustResults .invpick-row').count()) >= 1);
+  const results = await p.locator('#invCustResults').innerText();
+  ck('⑥検索は該当顧客(ビー商店)を含む', results.includes('ビー商店'));
+  ck('⑥検索は無関係顧客(ゼータ)を含まない', !results.includes('ゼータ'), results.replace(/\n/g, ' '));
+  ck('⑥検索結果は1件', (await p.locator('#invCustResults .invpick-row').count()) === 1);
   await p.locator('#invCustResults .invpick-row').first().click(); await p.waitForTimeout(500);
   ck('⑥set_customerが呼ばれた', setCustomerCalled === 1);
+
+  // ⑥b 担当者名が無いと状態変更しない（修正4）
+  await p.evaluate(() => { localStorage.removeItem('tg_operator'); });
+  await p.evaluate(() => { window.prompt = () => ''; });   // 担当者名の入力をキャンセル
+  const beforeMap = mapProductCalled;
+  await p.locator('.inv-line .inv-btn', { hasText: 'この商品で確定' }).first().click(); await p.waitForTimeout(200);
+  ck('⑥b担当者名なしではRPCを呼ばない', mapProductCalled === beforeMap, 'called=' + (mapProductCalled - beforeMap));
+  await p.evaluate(() => { localStorage.setItem('tg_operator', 'テスト職員'); });
 
   // ⑦ 商品を対応づけ
   await p.locator('#invprod-l1').selectOption('p1'); await p.waitForTimeout(100);
