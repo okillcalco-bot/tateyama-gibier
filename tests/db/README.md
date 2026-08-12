@@ -10,8 +10,18 @@
 
 ## 実行方法
 
-SQLテストは**ファイル全体**を psql（`ON_ERROR_STOP`推奨）または Supabase SQL Editor /
-MCP execute_sql に貼り付けて実行する。全体が `begin` 〜 `rollback` で囲まれているため、
+- **psql の場合（`-v ON_ERROR_STOP=1` は必須）**:
+
+  ```
+  psql -v ON_ERROR_STOP=1 -f tests/db/invoice_staging.test.sql
+  ```
+
+  ON_ERROR_STOP なしだと、途中で raise exception が発生しても後続の rollback まで実行され、
+  プロセス終了コードが 0 になることがある（＝失敗を見逃す）。
+- **Supabase SQL Editor / API（MCP execute_sql）の場合**: ファイル全体を貼り付けて実行し、
+  エラー応答の有無で判定する。
+
+全体が `begin` 〜 `rollback` で囲まれているため、
 
 - テストデータ（顧客・取込・明細・対応表）は**一切本番に残らない**
 - スタッフキーもトランザクション内で一時キーに差し替えられ、rollbackで元に戻る
@@ -19,15 +29,17 @@ MCP execute_sql に貼り付けて実行する。全体が `begin` 〜 `rollback
 
 ### 合否の機械判定
 
-`invoice_staging.test.sql` は結果表の表示後、**ok=false が1件でもあれば最後のDOブロックが
-`raise exception` してSQL全体を失敗させる**。psqlでは終了ステータス非0、SQL Editor / API では
-エラー応答になり、例外メッセージに失敗テスト名の一覧が入るため目視不要で検知できる。
+**ok=false が1件でも存在した場合はテスト失敗**。`invoice_staging.test.sql` は結果表の表示後、
+ok=false があれば最後のDOブロックが `raise exception` してSQL全体を失敗させる
+（psqlでは ON_ERROR_STOP=1 により終了ステータス非0、SQL Editor / API ではエラー応答。
+例外メッセージに失敗テスト名の一覧が入るため目視不要で検知できる）。
 全件PASSなら NOTICE `ALL TESTS PASSED` が出て正常終了する。
 `invoice_rollback.test.sql` も同様（残存オブジェクトがあれば raise exception）。
 
 ## テスト項目と直近の実行結果
 
-実行日: 2026-08-12（JST）／ 対象: 本番DB `clpdyrehdgzgiidbfucj` ／ 結果: **65/65 PASS**
+実行日: 2026-08-12（JST・再レビュー対応後に全件再実行）／ 対象: 本番DB `clpdyrehdgzgiidbfucj` ／
+結果: **80/80 PASS**
 
 ### A. 基本フロー（1〜10）
 
@@ -46,12 +58,21 @@ MCP execute_sql に貼り付けて実行する。全体が `begin` 〜 `rollback
 
 ### B. 顧客コード照合（13〜22）
 
-判定方法: 請求書文字列（宛名・宛先・備考）とcustomers.codeの両方を正規化
-（大文字化・全角→半角・ハイフン類6種の統一・前後空白除去）した上で、
-**英数字・ハイフン境界付きの完全一致**（`(^|[^A-Z0-9-])コード($|[^A-Z0-9-])`）で照合。
-「一致したコードが1種類」かつ「そのコードを持つ顧客が1件」のときだけ
-match_status='確定'・matched_by='auto'・match_confidence=1.00。
-それ以外（複数コード印字・埋め込み・曖昧）は候補あり/未照合として人の確認へ回す。
+判定方法（2026-08-12 再レビュー対応で改訂・「ラベル付きコードの事前抽出」方式）:
+
+1. 請求書文字列（宛名・宛先・備考）を正規化（大文字化・全角→半角・ハイフン類6種の統一・
+   前後空白除去）し、**customersとの照合より先に**「顧客コード」「顧客番号」「お客様コード」
+   「お客様番号」「得意先コード」「得意先番号」「客先コード」「客先番号」等の
+   ラベル直後にある `[A-Z0-9-]{4,}` をコード候補として抽出する
+2. ラベル付き候補が**複数種類** → DBに存在するかに関わらず自動確定しない
+   （未登録・OCR誤読のコードが混ざっていても、DBに残った1件へ寄せない）
+3. ラベル付き候補が**1種類だけ** → 正規化後の customers.code と完全一致で照合し、
+   該当顧客が1件のときだけ match_status='確定'・matched_by='auto'・match_confidence=1.00
+4. 抽出コードが**DBに存在しない** → 未照合/候補あり（既存顧客へ推測で確定しない。
+   このとき電話一意でも「確定」にせず候補提示に留める）
+5. 同じコードの複数回印字は distinct 後の1種類として扱う
+6. **ラベル付き候補が1つも無いとき**だけ、英字入りコードの境界一致
+   （`(^|[^A-Z0-9-])コード($|[^A-Z0-9-])`）を従来どおり使う（数字のみコードはラベル必須のまま）
 
 | # | 項目 | 結果 |
 |---|---|---|
@@ -120,16 +141,42 @@ INSERTできた場合だけ documents/lines を登録。(source, source_file_id)
 `concurrent-import.test.mjs`（RPCを`Promise.all`で2本同時）はスタッフキー保持者が実行できる
 （本番に CONCURRENCY-TEST の取込が1件残るため、終了時に表示される掃除SQLを実行すること）。
 
-### F. RLS・認可（39〜67。2026-08-12レビュー対応で追加）
+### F. RLS・認可（39〜74。2026-08-12レビュー対応で追加、再レビューでhelper4本へ拡張）
 
 | # | 項目 | 結果 |
 |---|---|---|
 | 39-58 | 5テーブル×SELECT/INSERT/UPDATE/DELETE: anonはすべて拒否（20項目） | PASS |
 | 59-61 | admin_invoice_*（3関数）は誤ったスタッフキーで拒否 | PASS |
-| 62-63 | helper関数（invoice_norm_code / invoice_name_similarity）はanonから実行不可 | PASS |
-| 64-65 | anon / authenticated は public schema へ CREATE 不可 | PASS |
-| 66 | admin_invoice_* のEXECUTEはPUBLICに無し・anon/authenticatedにのみ有り（proacl実測） | PASS |
-| 67 | admin_invoice_*（SECURITY DEFINER）のsearch_pathが固定されている | PASS |
+| 62-69 | helper4本（norm_code / name_similarity / norm_phone / norm_name）× anon・authenticated の直接EXECUTEをすべて実測で拒否（8項目） | PASS |
+| 70-71 | anon / authenticated は public schema へ CREATE 不可 | PASS |
+| 72 | admin_invoice_* のEXECUTEはPUBLICに無し・anon/authenticatedにのみ有り（proacl実測） | PASS |
+| 73 | admin_invoice_*（SECURITY DEFINER）のsearch_pathが固定されている | PASS |
+| 74 | helper4本の権限表: PUBLIC(grantee=0)のEXECUTEエントリ無し＋anon/authenticatedともhas_function_privilege=false | PASS |
+
+### G. ラベル付きコードの事前抽出（75〜79。2026-08-12再レビュー対応で追加）
+
+「DBに存在する一致コードが1件」ではなく「請求書に印字されたラベル付きコードが1種類」を
+先に確認してから照合する（未登録・OCR誤読コードの検出）。
+
+| # | 項目 | 結果 |
+|---|---|---|
+| 75 | 既知ZC901+未登録ZC999が両方ラベル付きで印字 → ZC901へ自動確定しない | PASS |
+| 76 | 同じZC901がラベル付きで2回印字 → distinct後1種類として確定できる | PASS |
+| 77 | 未登録コードZC999だけがラベル付きで印字 → customer_id無しで未照合 | PASS |
+| 78 | ラベル付きZC999＋ラベルなしの既知ZC901が併記 → ZC901へ自動確定しない | PASS |
+| 79 | OCR表記揺れ（全角ｚｃ・EMダッシュ）を正規化後に複数コードとして検出 | PASS |
+
+### H. 再照合で前回の候補情報を残さない（80〜82。2026-08-12再レビュー対応で追加）
+
+未照合へ戻すときは customer_id / match_method / matched_by / matched_at を null、
+match_confidence を 0 にクリア。候補ありへ更新するときも全列を今回の判定結果で
+置き換え、matched_by / matched_at（「確定」を意味する列）は入れない。
+
+| # | 項目 | 結果 |
+|---|---|---|
+| 80 | 名称一致で候補顧客Aが付く（前提。matched_by/matched_atはnull） | PASS |
+| 81 | 生データ変更→再照合で候補A→候補Bへ完全に置き換わる | PASS |
+| 82 | 一致しない状態へ変更→再照合で未照合・customer_id/method/by/at=null・confidence=0 | PASS |
 
 ## ロールバック完全性（invoice_rollback.test.sql・2026-08-12 実測）
 

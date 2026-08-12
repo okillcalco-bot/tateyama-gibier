@@ -1,13 +1,17 @@
 -- 請求書ステージングの実DBテスト（migrations/20260811_invoice_staging.sql 対象）
 --
--- 実行方法: psql -f このファイル（ON_ERROR_STOP推奨）または Supabase SQL Editor / MCP execute_sql に
--- ファイル全体を貼って実行。
+-- 実行方法:
+--   * psql の場合（-v ON_ERROR_STOP=1 は必須。付けないと raise exception 後も後続の
+--     rollback まで実行され、終了コードが0になることがある）:
+--       psql -v ON_ERROR_STOP=1 -f tests/db/invoice_staging.test.sql
+--   * Supabase SQL Editor / API（MCP execute_sql）の場合: ファイル全体を貼って実行し、
+--     エラー応答の有無を確認する
 --
--- 合否判定:
+-- 合否の機械判定: ok=false が1件でも存在した場合はテスト失敗とする。
 --   * 全件PASS → 結果表が表示され、最後に NOTICE『ALL TESTS PASSED』が出て rollback で終わる
 --   * 1件でもFAIL → 最後のDOブロックが raise exception し、SQL全体がエラー終了する
 --     （例外メッセージに失敗したテスト名の一覧が入るため、結果表を目視しなくても検知できる。
---       psqlでは終了ステータス非0、Supabase SQL Editor / API ではエラー応答になる）
+--       psqlでは ON_ERROR_STOP=1 により終了ステータス非0、SQL Editor / API ではエラー応答になる）
 --   * 例外で中断した場合もトランザクションごと巻き戻るため、テストデータ・一時スタッフキーは
 --     本番に一切残らない
 begin;
@@ -323,34 +327,49 @@ begin
   end;
 
   -- F3: helper関数はanonから直接実行できない
-  begin
-    set local role anon;
-    perform invoice_norm_code('ZC901');
-    reset role;
-    insert into _t values (62,'F3: anonはinvoice_norm_codeを実行できない', false, '実行できてしまった');
-  exception when insufficient_privilege then
-    reset role;
-    insert into _t values (62,'F3: anonはinvoice_norm_codeを実行できない', true, 'permission denied');
-  end;
-  begin
-    set local role anon;
-    perform invoice_name_similarity('a','b');
-    reset role;
-    insert into _t values (63,'F3: anonはinvoice_name_similarityを実行できない', false, '実行できてしまった');
-  exception when insufficient_privilege then
-    reset role;
-    insert into _t values (63,'F3: anonはinvoice_name_similarityを実行できない', true, 'permission denied');
-  end;
+  -- F3: helper関数4本すべて、anon / authenticated から直接EXECUTEできない
+  v_no := 62;
+  foreach v_op in array array['anon','authenticated'] loop
+    foreach v_tbl in array array['invoice_norm_code(''ZC901'')','invoice_name_similarity(''a'',''b'')',
+                                 'invoice_norm_phone(''0470-1'')','invoice_norm_name(''テスト'')'] loop
+      begin
+        execute format('set local role %I', v_op);
+        execute 'select ' || v_tbl;
+        reset role;
+        insert into _t values (v_no, 'F3: '||v_op||'は'||split_part(v_tbl,'(',1)||'を実行できない', false, '実行できてしまった');
+      exception when insufficient_privilege then
+        reset role;
+        insert into _t values (v_no, 'F3: '||v_op||'は'||split_part(v_tbl,'(',1)||'を実行できない', true, 'permission denied');
+      end;
+      v_no := v_no + 1;
+    end loop;
+  end loop;
+  -- F3b: 権限表の実測（PUBLIC(grantee=0)のEXECUTEエントリなし＋anon/authenticatedにEXECUTE権限なし）
+  insert into _t values (74,'F3b: helper4本の権限表（PUBLIC/anon/authenticatedにEXECUTE無し）',
+    4 = (select count(*) from pg_proc p
+          where p.pronamespace = 'public'::regnamespace
+            and p.proname in ('invoice_norm_code','invoice_norm_name','invoice_norm_phone','invoice_name_similarity')
+            and p.proacl is not null
+            and not exists (select 1 from aclexplode(p.proacl) a
+                             where a.grantee = 0 and a.privilege_type = 'EXECUTE'))
+    and not has_function_privilege('anon','invoice_norm_code(text)','execute')
+    and not has_function_privilege('anon','invoice_norm_name(text)','execute')
+    and not has_function_privilege('anon','invoice_norm_phone(text)','execute')
+    and not has_function_privilege('anon','invoice_name_similarity(text,text)','execute')
+    and not has_function_privilege('authenticated','invoice_norm_code(text)','execute')
+    and not has_function_privilege('authenticated','invoice_norm_name(text)','execute')
+    and not has_function_privilege('authenticated','invoice_norm_phone(text)','execute')
+    and not has_function_privilege('authenticated','invoice_name_similarity(text,text)','execute'), '');
 
   -- F4: anon/authenticated は public schema へ CREATE できない
-  insert into _t values (64,'F4: anonはpublicへCREATE不可',
+  insert into _t values (70,'F4: anonはpublicへCREATE不可',
     not has_schema_privilege('anon','public','CREATE'), '');
-  insert into _t values (65,'F4: authenticatedはpublicへCREATE不可',
+  insert into _t values (71,'F4: authenticatedはpublicへCREATE不可',
     not has_schema_privilege('authenticated','public','CREATE'), '');
 
   -- F5: admin_invoice_* のEXECUTEはPUBLICに無く、anon/authenticatedにだけある
   --     （proaclを実測: grantee=0(PUBLIC)のEXECUTEエントリが無いこと＋anon/authenticatedに有ること）
-  insert into _t values (66,'F5: EXECUTE権限（PUBLIC無し・anon/authenticated有り）',
+  insert into _t values (72,'F5: EXECUTE権限（PUBLIC無し・anon/authenticated有り）',
     3 = (select count(*) from pg_proc p
           where p.pronamespace = 'public'::regnamespace
             and p.proname in ('admin_invoice_stage_import','admin_invoice_run_matching','admin_invoice_list')
@@ -365,12 +384,75 @@ begin
     and has_function_privilege('authenticated','admin_invoice_list(text,text)','execute'), '');
 
   -- F6: SECURITY DEFINER関数のsearch_pathが固定されている
-  insert into _t values (67,'F6: admin_invoice_*のsearch_path固定', 3 = (
+  insert into _t values (73,'F6: admin_invoice_*のsearch_path固定', 3 = (
     select count(*) from pg_proc p
     where p.proname in ('admin_invoice_stage_import','admin_invoice_run_matching','admin_invoice_list')
       and p.prosecdef
       and exists (select 1 from unnest(coalesce(p.proconfig,'{}')) cfg
                    where cfg like 'search_path=%')), '');
+
+  -- ═══════════ G. ラベル付きコードの事前抽出（DB未登録コードの検出） ═══════════
+  -- 2026-08-12 再レビュー対応: 「DBに存在する一致コードが1件」ではなく
+  -- 「請求書に印字されたラベル付きコードが1種類」を確認してから照合する
+  v_r := admin_invoice_stage_import(v_key, jsonb_build_object(
+    'file_name','mock-labeled-codes.xlsx','content_hash','testhash-' || md5(random()::text),
+    'documents', jsonb_build_array(
+      jsonb_build_object('page_from',1,'invoice_number','G1','note','顧客番号 ZC901 ／ 顧客番号 ZC999'),
+      jsonb_build_object('page_from',2,'invoice_number','G2','note','顧客番号 ZC901 の件（再掲: 顧客番号 ZC901）'),
+      jsonb_build_object('page_from',3,'invoice_number','G3','note','お客様番号 ZC999'),
+      jsonb_build_object('page_from',4,'invoice_number','G4','note','お客様番号 ZC999 ／ 出荷分 ZC901'),
+      jsonb_build_object('page_from',5,'invoice_number','G5','note','顧客番号 ｚｃ９０１ ／ 得意先コード ZC—999')
+    )));
+  v_imp := (v_r->>'import_id')::uuid;
+  v_r := admin_invoice_run_matching(v_key, v_imp);
+
+  insert into _t values (75,'G1: 既知ZC901+未登録ZC999が両方ラベル付き→自動確定しない', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='G1'
+      and match_status <> '確定' and customer_id is null));
+  insert into _t values (76,'G2: 同じZC901がラベル付きで2回→distinct後1種類として確定できる', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='G2'
+      and customer_id=zc900 and match_confidence=1.00 and match_status='確定'));
+  insert into _t values (77,'G3: 未登録コードZC999だけ→customer_id無しで未照合', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='G3'
+      and match_status='未照合' and customer_id is null));
+  insert into _t values (78,'G4: ラベル付きZC999+ラベルなし既知ZC901→ZC901へ自動確定しない', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='G4'
+      and match_status <> '確定' and customer_id is null));
+  insert into _t values (79,'G5: 表記揺れ(全角ｚｃ/EMダッシュ)を正規化後に複数コードとして検出', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='G5'
+      and match_status <> '確定' and customer_id is null));
+
+  -- ═══════════ H. 再照合で前回の候補情報を残さない ═══════════
+  insert into customers (code, name) values ('ZC910','再照合テスト店') returning id into c001;   -- 変数を再利用
+  insert into customers (code, name) values ('ZC911','再照合テスト店Ｂ号館') returning id into c0011;
+  v_r := admin_invoice_stage_import(v_key, jsonb_build_object(
+    'file_name','mock-rematch.xlsx','content_hash','testhash-' || md5(random()::text),
+    'documents', jsonb_build_array(
+      jsonb_build_object('page_from',1,'invoice_number','H1','raw_customer_name','再照合テスト店'))));
+  v_imp := (v_r->>'import_id')::uuid;
+  v_r := admin_invoice_run_matching(v_key, v_imp);
+  insert into _t values (80,'H0: 名称一致で候補顧客Aが付く（前提）', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='H1'
+      and match_status='候補あり' and customer_id=c001 and match_method='name'
+      and matched_by is null and matched_at is null));
+
+  -- 候補A→候補B（生データを変更して再照合）: 全列が今回の判定結果へ置き換わる
+  update invoice_documents set raw_customer_name='再照合テスト店Ｂ号館'
+   where import_id=v_imp and invoice_number='H1';
+  v_r := admin_invoice_run_matching(v_key, v_imp);
+  insert into _t values (81,'H1: 候補A→候補Bへ完全に置き換わる', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='H1'
+      and match_status='候補あり' and customer_id=c0011 and match_method='name'
+      and match_confidence > 0 and matched_by is null and matched_at is null));
+
+  -- 候補→一致なし（生データを無関係な文字列へ）: customer_id等がすべてクリアされる
+  update invoice_documents set raw_customer_name='qzv9x8w7unrelated'
+   where import_id=v_imp and invoice_number='H1';
+  v_r := admin_invoice_run_matching(v_key, v_imp);
+  insert into _t values (82,'H2: 一致なしへ戻すと候補情報が完全クリア（未照合/null/0）', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='H1'
+      and match_status='未照合' and customer_id is null and match_method is null
+      and match_confidence=0 and matched_by is null and matched_at is null));
 end $$;
 
 -- 結果表（psql / SQL Editor で目視できる）

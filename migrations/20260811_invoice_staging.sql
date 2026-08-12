@@ -260,65 +260,95 @@ begin
     v_best := null; v_best_score := 0; v_best_method := null;
 
     -- 1) 顧客コード: 完全一致のみ。
-    --    「抽出されたコードが1種類」かつ「そのコードを持つ顧客が1件」のときだけ自動確定(1.00)。
-    --    複数コード印字・同一コードの顧客が複数・埋め込み（C0011の中のC001等）は自動確定しない。
-    --    * 照合に使うコードは正規化後 [A-Z0-9-] のみ・4文字以上（それ以外の文字を含むコードは
-    --      正規表現に入れず、1.00の自動照合にも使わない）
-    --    * 英字を1文字以上含むコード: 英数字・ハイフン境界付きの完全一致
-    --    * 数字だけのコード: 「顧客コード」「顧客番号」「お客様番号」「得意先コード」等の
-    --      ラベル直後に印字されている場合だけ一致（年度・金額・電話番号などの無関係な数字に
-    --      同じ値があっても一致させない）
+    --    手順（DB照合より先に、請求書側からラベル付きコード候補を抽出する）:
+    --      (1) 「顧客コード」「顧客番号」「お客様コード」「お客様番号」「得意先コード」
+    --          「得意先番号」「客先コード」「客先番号」等のラベル直後にある [A-Z0-9-]{4,} を抽出
+    --      (2) ラベル付き候補が複数種類 → DBに存在するかに関わらず自動確定しない
+    --          （未登録・OCR誤読のコードが混ざっていても、残った1件へ寄せない）
+    --      (3) ラベル付き候補が1種類だけ → 正規化後の customers.code と完全一致で照合。
+    --          該当顧客が1件のときだけ 1.00 で確定
+    --      (4) 抽出コードがDBに存在しない → 未照合/候補ありへ。既存顧客へ推測で確定しない
+    --          （このとき電話一意でも「確定」にはせず候補提示に留める）
+    --      (5) 同じコードの複数回印字は distinct 後の1種類として扱う
+    --      (6) ラベルなしの英字入りコードの境界一致は「ラベル付き候補が1つも無い」ときだけ使う
+    --    * 照合・抽出に使うコードは正規化後 [A-Z0-9-] のみ・4文字以上
     declare
       v_hay text := invoice_norm_code(
         coalesce(v_doc.raw_customer_name,'') || ' ' ||
         coalesce(v_doc.raw_addressee,'')    || ' ' ||
         coalesce(v_doc.note,''));
-      v_codes text[]; v_ids uuid[];
+      v_labeled text[]; v_codes text[]; v_ids uuid[];
+      v_no_auto boolean := false;   -- true: このドキュメントは自動「確定」を出さない（候補提示まで）
     begin
-      select array_agg(distinct u.code_n), array_agg(distinct u.cid)
-        into v_codes, v_ids
-        from (
-          select invoice_norm_code(c.code) as code_n, c.id as cid
-            from customers c
-           where c.code is not null
-             and length(invoice_norm_code(c.code)) >= 4
-             and invoice_norm_code(c.code) ~ '^[A-Z0-9][A-Z0-9-]*$'
-             and (
-               -- 英字を含むコード: 境界付き完全一致（前後が英数字・ハイフンでない）
-               (invoice_norm_code(c.code) ~ '[A-Z]'
-                 and v_hay ~ ('(^|[^A-Z0-9-])' || invoice_norm_code(c.code) || '($|[^A-Z0-9-])'))
-               or
-               -- 数字だけのコード: 明示的なラベルの直後のみ（ラベルなしの数字は一致させない）
-               (invoice_norm_code(c.code) ~ '^[0-9]+$'
-                 and v_hay ~ ('(顧客|お客様|得意先|客先)\s*(コード|番号|NO\.?|ID)[\s：:＃#]*'
-                              || invoice_norm_code(c.code) || '($|[^A-Z0-9-])'))
-             )
-        ) u;
-      if coalesce(array_length(v_codes,1),0) = 1 and coalesce(array_length(v_ids,1),0) = 1 then
-        update invoice_documents set customer_id = v_ids[1], match_confidence = 1.00,
-          match_method = 'code', match_status = '確定', matched_by = 'auto', matched_at = now()
-        where id = v_doc.id;
-        v_auto := v_auto + 1; continue;
-      elsif coalesce(array_length(v_codes,1),0) > 1 then
+      -- (1) ラベル付きコード候補の抽出（customers との照合より先）
+      v_labeled := array(
+        select distinct r[1]
+          from regexp_matches(v_hay,
+            '(?:顧客|お客様|得意先|客先)\s*(?:コード|番号|NO\.?|ID)[\s：:＃#]*([A-Z0-9-]{4,})', 'g') as r);
+
+      if coalesce(array_length(v_labeled,1),0) > 1 then
+        -- (2) ラベル付きコードが複数種類 → 自動確定しない
+        v_no_auto := true;
         v_best_score := 0.50; v_best_method := 'code(複数コード印字)'; v_best := null;
-      elsif coalesce(array_length(v_codes,1),0) = 1 and coalesce(array_length(v_ids,1),0) > 1 then
-        v_best_score := 0.50; v_best_method := 'code(同一コードの顧客が複数)'; v_best := null;
+      elsif coalesce(array_length(v_labeled,1),0) = 1 then
+        -- (3) 1種類だけ → DBと照合
+        select array_agg(distinct c.id) into v_ids
+          from customers c
+         where c.code is not null and invoice_norm_code(c.code) = v_labeled[1];
+        if coalesce(array_length(v_ids,1),0) = 1 then
+          update invoice_documents set customer_id = v_ids[1], match_confidence = 1.00,
+            match_method = 'code', match_status = '確定', matched_by = 'auto', matched_at = now()
+          where id = v_doc.id;
+          v_auto := v_auto + 1; continue;
+        elsif coalesce(array_length(v_ids,1),0) = 0 then
+          -- (4) 未登録コード（またはOCR誤読）→ 推測確定しない
+          v_no_auto := true;
+        else
+          v_no_auto := true;
+          v_best_score := 0.50; v_best_method := 'code(同一コードの顧客が複数)'; v_best := null;
+        end if;
+      else
+        -- (6) ラベル付き候補なし → 英字入りコードの境界一致（従来どおり）
+        select array_agg(distinct u.code_n), array_agg(distinct u.cid)
+          into v_codes, v_ids
+          from (
+            select invoice_norm_code(c.code) as code_n, c.id as cid
+              from customers c
+             where c.code is not null
+               and length(invoice_norm_code(c.code)) >= 4
+               and invoice_norm_code(c.code) ~ '^[A-Z0-9][A-Z0-9-]*$'
+               and invoice_norm_code(c.code) ~ '[A-Z]'
+               and v_hay ~ ('(^|[^A-Z0-9-])' || invoice_norm_code(c.code) || '($|[^A-Z0-9-])')
+          ) u;
+        if coalesce(array_length(v_codes,1),0) = 1 and coalesce(array_length(v_ids,1),0) = 1 then
+          update invoice_documents set customer_id = v_ids[1], match_confidence = 1.00,
+            match_method = 'code', match_status = '確定', matched_by = 'auto', matched_at = now()
+          where id = v_doc.id;
+          v_auto := v_auto + 1; continue;
+        elsif coalesce(array_length(v_codes,1),0) > 1 then
+          v_best_score := 0.50; v_best_method := 'code(複数コード印字)'; v_best := null;
+        elsif coalesce(array_length(v_codes,1),0) = 1 and coalesce(array_length(v_ids,1),0) > 1 then
+          v_best_score := 0.50; v_best_method := 'code(同一コードの顧客が複数)'; v_best := null;
+        end if;
+      end if;
+
+      -- 2) 電話の完全一致（候補が1件のときだけ自動確定 0.95。
+      --    ラベル付きコードが未解決(v_no_auto)のときは確定にせず候補提示に留める）
+      if invoice_norm_phone(v_doc.raw_phone) is not null and length(invoice_norm_phone(v_doc.raw_phone)) >= 10 then
+        select count(*), (array_agg(c.id))[1] into v_cnt, v_cid from customers c
+         where invoice_norm_phone(c.phone) = invoice_norm_phone(v_doc.raw_phone);
+        if v_cnt = 1 and not v_no_auto then
+          update invoice_documents set customer_id = v_cid, match_confidence = 0.95,
+            match_method = 'phone', match_status = '確定', matched_by = 'auto', matched_at = now()
+          where id = v_doc.id;
+          v_auto := v_auto + 1; continue;
+        elsif v_cnt = 1 and v_no_auto and 0.70 > coalesce(v_best_score, 0) then
+          v_best_score := 0.70; v_best_method := 'phone(コード未解決のため要確認)'; v_best := v_cid;
+        elsif v_cnt > 1 and 0.70 > coalesce(v_best_score, 0) then
+          v_best_score := 0.70; v_best_method := 'phone(複数)'; v_best := v_cid;
+        end if;
       end if;
     end;
-
-    -- 2) 電話の完全一致（候補が1件のときだけ自動確定 0.95）
-    if invoice_norm_phone(v_doc.raw_phone) is not null and length(invoice_norm_phone(v_doc.raw_phone)) >= 10 then
-      select count(*), (array_agg(c.id))[1] into v_cnt, v_cid from customers c
-       where invoice_norm_phone(c.phone) = invoice_norm_phone(v_doc.raw_phone);
-      if v_cnt = 1 then
-        update invoice_documents set customer_id = v_cid, match_confidence = 0.95,
-          match_method = 'phone', match_status = '確定', matched_by = 'auto', matched_at = now()
-        where id = v_doc.id;
-        v_auto := v_auto + 1; continue;
-      elsif v_cnt > 1 and 0.70 > coalesce(v_best_score, 0) then
-        v_best_score := 0.70; v_best_method := 'phone(複数)'; v_best := v_cid;
-      end if;
-    end if;
 
     -- 3) 郵便番号（住所欄の〒から抽出）一致＋名称類似 / 名称のみ。
     --    電話複数の候補(0.70)より高いスコアのときだけ置き換える
@@ -343,13 +373,20 @@ begin
       end if;
     end;
 
+    -- 再照合で前回の候補情報を残さない:
+    --   候補あり → 全列を今回の判定結果で置き換える（matched_by/matched_atは「確定」の意味を持つため入れない）
+    --   未照合   → customer_id / match_method / matched_by / matched_at をすべてクリアする
     if coalesce(v_best_score,0) > 0 then
       update invoice_documents set customer_id = v_best, match_confidence = v_best_score,
-        match_method = v_best_method, match_status = '候補あり'
+        match_method = v_best_method, match_status = '候補あり',
+        matched_by = null, matched_at = null
       where id = v_doc.id;
       v_cand := v_cand + 1;
     else
-      update invoice_documents set match_status = '未照合', match_confidence = 0 where id = v_doc.id;
+      update invoice_documents set customer_id = null, match_confidence = 0,
+        match_method = null, match_status = '未照合',
+        matched_by = null, matched_at = null
+      where id = v_doc.id;
       v_none := v_none + 1;
     end if;
   end loop;
