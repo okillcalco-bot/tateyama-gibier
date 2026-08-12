@@ -933,7 +933,7 @@ async function sb(method, table, body, query = '') {
 /* ── Individual numbering ── */
 function getIndividualPrefix(species, city) {
   if (species === 'イノシシ') return city === '南房総市' ? 'M' : 'T';
-  if (species === 'シカ')     return city === '南房総市' ? 'Mシ' : 'Tシ';
+  if (species === 'シカ')     return 'シ';   // 館山市・南房総市を区別せず共通（2026-08-12）
   if (species === 'アライグマ') return 'ア';
   if (species === 'ハクビシン') return 'ハ';
   if (species === 'キョン')    return 'キ';
@@ -972,7 +972,8 @@ async function refreshIndividualNumber() {
   const species = state.species;
   const city = state.capture_city;
   if (!species) return;
-  if ((species === 'イノシシ' || species === 'シカ') && !city) {
+  // イノシシのみ市町村でT/Mに分ける。シカ・他種は市を問わず共通採番（2026-08-12）
+  if (species === 'イノシシ' && !city) {
     document.getElementById('indLabelId').placeholder = '市町村を選択してください';
     document.getElementById('indSerial').value = '';
     return;
@@ -983,14 +984,16 @@ async function refreshIndividualNumber() {
   // ── 通し番号を取得 ──
   let nextSerial;
   if (species === 'イノシシ') {
-    // DBの最大通し番号+1を基準に（取り込み・手動追加後もズレない）。手動カウンタ(localStorage)が先行していればそちらを優先。
+    // 実際に捕獲済み（capture_date あり）の最大+1を基準にする。先に用意した空枠（仮-・捕獲日なし）は
+    // まだ埋まっていない予約枠なので、次の番号を先送りしない。空枠の番号は入力時に一致させて埋める。
+    // 削除済み（ソフトデリート）は capture_date が残るので番号を再利用しない。
     let dbNext = 1;
     try {
-      // 削除済みも含めて最大を見る（番号は削除しても解放されないため）
       const rows = await sb('GET', 'individuals', null,
-        `?species=eq.イノシシ&serial_number=not.is.null&select=serial_number&order=serial_number.desc&limit=1`);
+        `?species=eq.イノシシ&serial_number=not.is.null&capture_date=not.is.null&select=serial_number&order=serial_number.desc&limit=1`);
       dbNext = rows.length > 0 ? (rows[0].serial_number || 0) + 1 : 1;
     } catch(e) { dbNext = 1; }
+    // 開始番号設定（app_settings の serial_start）と端末カウンタのうち大きい方を採用
     const lsVal = parseInt(localStorage.getItem('tgc_next_serial_イノシシ') || '0') || 0;
     nextSerial = Math.max(dbNext, lsVal, numStart('serial_start'));
   } else {
@@ -1072,8 +1075,7 @@ function openSerialSettings() {
     {label:'イノシシ 通し番号（共通）', key:'tgc_next_serial_イノシシ', example:'serial_number 共通'},
     {label:'イノシシ 管理番号（館山市）', key:'tgc_next_label_T', example:'TGC-08-T###'},
     {label:'イノシシ 管理番号（南房総市）', key:'tgc_next_label_M', example:'TGC-08-M###'},
-    {label:'シカ（館山市）', key:'tgc_next_serial_Tシ', example:'TGC-08-Tシ###'},
-    {label:'シカ（南房総市）', key:'tgc_next_serial_Mシ', example:'TGC-08-Mシ###'},
+    {label:'シカ（館山・南房総 共通）', key:'tgc_next_serial_シ', example:'TGC-08-シ###'},
     {label:'アライグマ', key:'tgc_next_serial_ア', example:'TGC-08-ア###'},
     {label:'ハクビシン', key:'tgc_next_serial_ハ', example:'TGC-08-ハ###'},
     {label:'キョン', key:'tgc_next_serial_キ', example:'TGC-08-キ###'},
