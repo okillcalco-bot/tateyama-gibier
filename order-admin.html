@@ -278,9 +278,10 @@ th,td{padding:8px 6px;font-size:.8rem}
       <div id="portalWarn" style="display:none;font-size:12.5px;color:var(--red);background:rgba(200,80,80,.08);border:1px solid var(--red);border-radius:6px;padding:8px 10px;margin-bottom:10px;line-height:1.7;"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
         <span style="font-size:12px;color:var(--text2);">🔑 スタッフキー:</span>
+        <button class="btn btn-outline btn-sm" onclick="staffKeyShare()">📲 共有リンクをコピー</button>
         <button class="btn btn-outline btn-sm" onclick="staffKeyChange()">変更する</button>
         <button class="btn btn-outline btn-sm" onclick="staffKeyForget()">この端末から削除</button>
-        <span style="font-size:11.5px;color:var(--text3);">キーを変えると全端末で再入力が必要になります（漏えい時の失効手順）</span>
+        <span style="font-size:11.5px;color:var(--text3);">共有リンク＝開くだけでその端末にキーが入るURL（入力不要）。キーを変えると全端末で再入力が必要になります（漏えい時の失効手順）</span>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <select id="portalChannel" onchange="renderPortalPreview()" style="height:34px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:inherit;padding:0 8px;font-size:13px;">
@@ -1464,6 +1465,21 @@ function staffKeyGet(){
   catch(e){ return ''; }
 }
 function staffKeyClear(){ try{ localStorage.removeItem('tg_staff_key'); sessionStorage.removeItem('tg_staff_key'); }catch(e){} }
+/* 共有リンク（#skey=…）でスタッフキーを受け取る（index.htmlと同じ仕組み） */
+(function(){
+  const m=(location.hash||'').match(/[#&]skey=([^&]+)/);
+  if(!m) return;
+  const k=decodeURIComponent(m[1]);
+  history.replaceState(null,'',location.pathname+location.search);
+  fetch(`${SB_URL}/rest/v1/rpc/staff_key_ok`,{method:'POST',
+    headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`,'Content-Type':'application/json'},
+    body:JSON.stringify({p_staff_key:k})
+  }).then(r=>r.json()).then(ok=>{
+    if(ok===true){ try{localStorage.setItem('tg_staff_key',k);}catch(e){ try{sessionStorage.setItem('tg_staff_key',k);}catch(e2){} }
+      alert('共有リンクからスタッフキーを設定しました。この端末では入力不要です。'); }
+    else alert('共有リンクのスタッフキーが正しくありません（変更された可能性があります）。');
+  }).catch(()=>{});
+})();
 /* キーの変更（＝旧キーの失効）は「管理者用回復コード」が必要。
    通常のスタッフキーを知っているだけでは変更できない（誰かが全端末を締め出すのを防ぐ）。
    変更はDB側で監査ログに残り、誤コードは5回/15分で試行制限される。 */
@@ -1497,6 +1513,21 @@ async function staffKeyRotateSubmit(){
 function staffKeyForget(){
   staffKeyClear();
   alert('この端末からスタッフキーを消しました。次に顧客・注文を開くときに再入力が必要です。');
+}
+/* 共有リンク: この端末に保存済みのキーを #skey= 付きURLにして渡す。
+   開いた端末は照合のうえ自動でキーを保存する（手入力が要らなくなる）。
+   リンク自体がキーなので、送る相手・送り方（LINE個別トーク等）には注意。
+   漏れた疑いがあれば「変更する」で全端末を失効できる */
+function staffKeyShare(){
+  const k = staffKeyGet();
+  if(!k){ alert('この端末にスタッフキーが保存されていません。先にキーを入力してください。'); return; }
+  const url = location.origin + location.pathname.replace(/[^/]*$/, '') + 'index.html#skey=' + encodeURIComponent(k);
+  const done = () => alert('共有リンクをコピーしました。\n\nスタッフのLINE個別トークなどに貼って送ってください。\n開くだけでその端末にスタッフキーが設定されます（入力不要）。\n\n※リンク自体がキーです。グループや外部には送らないでください。\n※漏れた疑いがあれば「変更する」で全端末を失効できます。');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(done).catch(() => prompt('コピーできませんでした。このURLを選択してコピーしてください', url));
+  } else {
+    prompt('このURLを選択してコピーしてください', url);
+  }
 }
 async function staffKeyEnsure(){
   let k=staffKeyGet();
