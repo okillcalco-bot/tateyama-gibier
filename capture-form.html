@@ -338,6 +338,20 @@ textarea { min-height: 80px; resize: vertical; }
   body.cityform-open #cityFormOverlay .cf-sheet { max-width: none; padding: 0; }
 }
 
+/* 撮影用の大きな表示ボード（ホワイトボードの代わり。個体と一緒に撮る） */
+#boardOverlay { display: none; position: fixed; inset: 0; background: #fff; z-index: 9998; overflow: auto; -webkit-overflow-scrolling: touch; }
+#boardOverlay.show { display: block; }
+#boardOverlay .board-bar { position: sticky; top: 0; display: flex; align-items: center; gap: 10px; background: #23271c; padding: 10px 14px; }
+#boardOverlay .board-bar button { border: none; border-radius: 10px; padding: 11px 18px; font-size: 15px; font-weight: 700; cursor: pointer; }
+#boardOverlay .board-detail { background: #3a3f31; color: #fff; }
+#boardOverlay .board-close { background: #c9a13b; color: #1c1f16; margin-left: auto; }
+#boardOverlay .board-hint { color: #cfd3c4; font-size: 12px; }
+#boardOverlay .board-sheet { color: #000; background: #fff; max-width: 900px; margin: 0 auto; padding: 18px 20px 60px; }
+#boardOverlay .brd-row { display: flex; align-items: baseline; gap: 14px; border-bottom: 3px solid #000; padding: 12px 4px; }
+#boardOverlay .brd-k { flex: 0 0 clamp(88px, 20vw, 150px); font-size: clamp(18px, 4.5vw, 30px); font-weight: 700; color: #333; }
+#boardOverlay .brd-v { flex: 1; font-size: clamp(40px, 13vw, 76px); font-weight: 800; line-height: 1.05; letter-spacing: 0.01em; word-break: break-all; }
+#boardOverlay .brd-v.small { font-size: clamp(28px, 8.5vw, 52px); }
+
 /* Animations */
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .section { animation: fadeIn 0.3s ease; }
@@ -490,6 +504,12 @@ textarea { min-height: 80px; resize: vertical; }
           <div class="toggle-btn" data-val="館山市">館山市</div>
           <div class="toggle-btn" data-val="南房総市">南房総市</div>
         </div>
+      </div>
+      <div class="form-row" id="oazaSearchRow" style="display:none">
+        <label class="form-label">大字から探す（旧町村がわからないとき）</label>
+        <input type="text" class="input" id="oazaSearch" list="oazaList" autocomplete="off" placeholder="例: 神余 と入れると 豊房 が自動で決まります" oninput="onOazaSearch()">
+        <datalist id="oazaList"></datalist>
+        <div id="oazaSearchNote" style="display:none;font-size:12px;color:var(--gold);margin-top:4px;"></div>
       </div>
       <div class="form-row" id="districtRow" style="display:none">
         <label class="form-label">地区（旧町村）</label>
@@ -909,6 +929,16 @@ textarea { min-height: 80px; resize: vertical; }
   </div>
 </div>
 
+<!-- 撮影用の大きな表示ボード（個体と一緒に撮る） -->
+<div id="boardOverlay">
+  <div class="board-bar">
+    <button type="button" class="board-detail" onclick="boardShowDetail()">詳細</button>
+    <span class="board-hint">個体と一緒に撮影してください</span>
+    <button type="button" class="board-close" onclick="closeBoard()">✕ 閉じる</button>
+  </div>
+  <div class="board-sheet" id="boardSheet"></div>
+</div>
+
 <script>
 /* ── Supabase helper ── */
 const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
@@ -1293,8 +1323,11 @@ async function refreshAutocomplete() {
     if (hl && names.length) hl.innerHTML = names.map(h => '<option value="' + h + '">').join('');
   } catch(e) { /* オフライン時はHTMLの固定リストのまま（台帳チェックも行わない） */ }
 }
-/* 捕獲者名・止め刺し者名が台帳に無い場合の注意書き（保存はブロックしない） */
-function checkHunterNameWarning(inputId, warnId) {
+/* 捕獲者名・止め刺し者名が台帳に無い場合の扱い。
+   センター側（予測変換あり）: 台帳から選べば漢字誤りを防げる。台帳に無い名前なら
+   「新しい捕獲者として仮登録」するか確認する（誤字ならキャンセルして直す）。
+   捕獲者モード: 仮登録はせず注意書きのみ（データ入力はセンターが行う）。 */
+async function checkHunterNameWarning(inputId, warnId) {
   const input = document.getElementById(inputId);
   const warn = document.getElementById(warnId);
   if (!input || !warn) return;
@@ -1305,8 +1338,37 @@ function checkHunterNameWarning(inputId, warnId) {
     warn.textContent = '';
     return;
   }
+  // 捕獲者モードは仮登録しない（注意書きのみ）
+  if (window.hunterMode) {
+    warn.style.display = 'block';
+    warn.textContent = `⚠ 「${v}」は捕獲者台帳に入っていません。センターで確認します。`;
+    return;
+  }
+  // 二重に確認ダイアログを出さないためのガード
+  if (input.dataset.regAsking === '1') return;
+  input.dataset.regAsking = '1';
   warn.style.display = 'block';
-  warn.textContent = `⚠ 「${v}」は捕獲者台帳に入っていませんが、よろしいですか？`;
+  warn.style.color = '#e0a020';
+  warn.textContent = `⚠ 「${v}」は捕獲者台帳にありません…`;
+  const ok = confirm(`「${v}」は捕獲者台帳にありません。\n\n新しい捕獲者として仮登録しますか？\n（漢字の打ち間違いの場合は「キャンセル」して直してください）`);
+  input.dataset.regAsking = '';
+  if (!ok) {
+    warn.textContent = `⚠ 「${v}」は台帳にありません（漢字をご確認ください）`;
+    return;
+  }
+  try {
+    await sb('POST', 'hunters', { name: v, memo: '仮登録' });
+    // キャッシュ・予測変換リストへ追加して以降は警告を出さない
+    window._hunterNames = [...new Set([...(window._hunterNames || []), v])];
+    try { window._huntersCache = [...(window._huntersCache || []), { name: v, phone: '' }]; } catch (e) {}
+    const hl = document.getElementById('hunterList');
+    if (hl) { const o = document.createElement('option'); o.value = v; hl.appendChild(o); }
+    warn.style.color = 'var(--green)';
+    warn.textContent = `✓ 「${v}」を仮登録しました（あとで台帳で詳細を補えます）`;
+  } catch (e) {
+    warn.style.color = 'var(--red)';
+    warn.textContent = `仮登録に失敗しました（通信をご確認ください）。このまま保存はできます。`;
+  }
 }
 
 
@@ -1407,6 +1469,10 @@ function updateAreaDropdown(city) {
   document.getElementById('captureArea').value = '';
   document.getElementById('areaPickedRow').style.display = 'none';
   document.getElementById('oazaRow').style.display = 'none';
+  const sr = document.getElementById('oazaSearchRow'); if (sr) sr.style.display = city ? '' : 'none';
+  const os = document.getElementById('oazaSearch'); if (os) os.value = '';
+  const osn = document.getElementById('oazaSearchNote'); if (osn) osn.style.display = 'none';
+  refreshOazaList(city);
   const row = document.getElementById('districtRow');
   const box = document.getElementById('districtBtns');
   box.innerHTML = '';
@@ -1420,6 +1486,49 @@ function updateAreaDropdown(city) {
       renderOazaButtons(city, d);
     }));
   });
+}
+
+/* 大字の予測リスト（選択中の市の大字だけ）を datalist に出す */
+function refreshOazaList(city) {
+  const dl = document.getElementById('oazaList');
+  if (!dl) return;
+  if (!city || !Array.isArray(areaMasterRows)) { dl.innerHTML = ''; return; }
+  const oazas = [...new Set(areaMasterRows.filter(r => r.city === city).map(r => r.oaza).filter(Boolean))];
+  dl.innerHTML = oazas.map(o => '<option value="' + o + '">').join('');
+}
+
+/* 大字を入力すると、その大字が属する旧町村（地区）を自動で決める。
+   旧町村を知らなくても大字だけで捕獲場所を確定できる。 */
+function onOazaSearch() {
+  const note = document.getElementById('oazaSearchNote');
+  const city = state.capture_city;
+  const v = (document.getElementById('oazaSearch').value || '').trim();
+  if (!note) return;
+  if (!v || !city || !Array.isArray(areaMasterRows)) { note.style.display = 'none'; return; }
+  // 選択中の市で完全一致する大字を探す
+  const hits = areaMasterRows.filter(r => r.city === city && r.oaza === v);
+  if (!hits.length) {
+    note.style.display = 'block';
+    note.style.color = 'var(--text2)';
+    note.textContent = `「${v}」は${city}の大字一覧にありません（一覧から選ぶか、下のボタンで選んでください）`;
+    return;
+  }
+  const district = hits[0].district;
+  // 旧町村ボタンを描画し、該当地区を選択状態にして大字も確定する
+  document.getElementById('captureOldTown').value = district || '';
+  renderOazaButtons(city, district);
+  // districtBtns のうち該当地区を active に
+  document.querySelectorAll('#districtBtns .toggle-btn').forEach(b => b.classList.toggle('active', b.textContent === district));
+  // oazaBtns のうち該当大字を active に
+  document.querySelectorAll('#oazaBtns .toggle-btn').forEach(b => {
+    if (b.textContent === v) { b.classList.add('active'); }
+  });
+  document.getElementById('captureArea').value = v;
+  const lbl = document.getElementById('areaPickedLabel');
+  if (lbl) { lbl.textContent = '📍 捕獲場所: ' + city + ' → ' + district + ' → ' + v; document.getElementById('areaPickedRow').style.display = ''; }
+  note.style.display = 'block';
+  note.style.color = 'var(--gold)';
+  note.textContent = `✓ 「${v}」は「${district}」の大字です。地区を自動で選びました。`;
 }
 
 function renderOazaButtons(city, district) {
@@ -2373,10 +2482,10 @@ function renderList() {
     const emojiMap = {'イノシシ':'&#x1F417;','シカ':'&#x1F98C;','アライグマ':'&#x1F99D;','ハクビシン':'&#x1F43C;','キョン':'&#x1F98C;','タヌキ':'&#x1F99D;','ノウサギ':'&#x1F430;'};
     const emoji = emojiMap[r.species] || '&#x1F43E;';
     const qClass = r.quality === '良' ? 'q-good' : r.quality === '可' ? 'q-ok' : 'q-bad';
-    return `<div class="card" onclick='showDetail(${JSON.stringify(r).replace(/'/g, "&#39;")})'>
+    return `<div class="card" onclick='showBoard(${JSON.stringify(r).replace(/'/g, "&#39;")})'>
       <div class="card-emoji">${emoji}</div>
       <div class="card-info">
-        <div class="card-label">${r.label_id || '-'}</div>
+        <div class="card-label">${(r.serial_number != null ? '#' + r.serial_number + ' ' : '') + (r.label_id || '-')}</div>
         <div class="card-detail">${r.capture_time || ''} / ${r.hunter_name || '-'}</div>
       </div>
       <div class="card-meta">
@@ -2386,6 +2495,39 @@ function renderList() {
     </div>`;
   }).join('');
 }
+
+/* 大字（capture_area）から旧町村（地区）を逆引き。分からなければ空 */
+function districtOfOaza(city, oaza) {
+  if (!oaza || !Array.isArray(areaMasterRows)) return '';
+  const hit = areaMasterRows.find(r => r.city === city && r.oaza === oaza) ||
+              areaMasterRows.find(r => r.oaza === oaza);
+  return hit ? (hit.district || '') : '';
+}
+
+/* 撮影用の大きな表示ボード（個体と一緒に撮る）。ホワイトボードの代わり */
+let _boardRec = null;
+function showBoard(r) {
+  _boardRec = r;
+  const esc2 = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const district = districtOfOaza(r.capture_city, r.capture_area);
+  const place = [r.capture_city, district, r.capture_area].filter(Boolean).join(' ');
+  const sw = (r.weight_total != null && r.weight_total !== '') ? (r.weight_total + ' kg') : '';
+  const sexWeight = [r.sex, sw].filter(Boolean).join('　');
+  const rows = [
+    ['捕獲日', r.capture_date || '', false],
+    ['通し番号', (r.serial_number != null ? r.serial_number : ''), false],
+    ['個体番号', r.label_id || '', false],
+    ['捕獲者', r.hunter_name || '', false],
+    ['捕獲場所', place, true],
+    ['性別・体重', sexWeight, false],
+  ];
+  document.getElementById('boardSheet').innerHTML = rows.map(([k, v, small]) =>
+    `<div class="brd-row"><div class="brd-k">${k}</div><div class="brd-v${small ? ' small' : ''}">${esc2(v) || '—'}</div></div>`
+  ).join('');
+  document.getElementById('boardOverlay').classList.add('show');
+}
+function closeBoard() { document.getElementById('boardOverlay').classList.remove('show'); }
+function boardShowDetail() { if (_boardRec) showDetail(_boardRec); }
 
 function showDetail(r) {
   document.getElementById('detailTitle').textContent = r.label_id || '詳細';
