@@ -163,6 +163,11 @@ h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600;
       <div class="hint">複数選べます。押すと色が付きます。</div>
       <div class="chips" id="work-chips"></div>
 
+      <div style="margin-top:14px;">
+        <label style="font-size:13px;color:var(--text2);display:block;margin-bottom:6px;">🔪 止めさしを行った回数（該当者のみ・任意）</label>
+        <input type="number" id="stopkill-count" min="0" step="1" placeholder="回数" style="width:110px;font-size:18px;padding:10px;border:1px solid var(--border);border-radius:10px;font-family:inherit;">
+      </div>
+
       <h3 style="margin-top:16px;">🧹 清掃（できていない所だけチェックを外す）</h3>
       <div class="hint">最初は<strong>すべて実施済み</strong>になっています。やっていない所だけ押して外してください。</div>
       <div class="rooms" id="room-list"></div>
@@ -288,7 +293,7 @@ function tick() {
 setInterval(tick, 1000); tick();
 
 /* 作業内容・清掃場所（清掃場所は業務アプリの清掃記録と同じ区分・項目） */
-const WORK_TYPES = ['解体', '精肉', '加工処理（スライス・ミンチ）', '加工調理', '出荷', '清掃', '事務', 'その他'];
+const WORK_TYPES = ['解体', '精肉', '加工処理（スライス・ミンチ）', '加工調理', '出荷', '納品', '産廃処理', '清掃', '事務', 'その他'];
 /* ── 施設チェック（監査様式）──
    監査の指摘「日・週・月ごとのチェック表に再整備し、清掃履歴や衛生害虫駆除を
    記入できるように」「チェック内容に壁面・床面・排水桝を追加」に対応。
@@ -438,6 +443,7 @@ function resetReport() {
   roomsDone = {};
   ROOMS.forEach(r => roomsDone[r.key] = true);   // 既定は「すべて実施済み」
   const n = document.getElementById('report-note'); if (n) n.value = '';
+  const sk = document.getElementById('stopkill-count'); if (sk) sk.value = '';
   fcReset();
   renderWorkChips(); renderRooms(); renderFacilityChecks();
 }
@@ -834,6 +840,14 @@ async function punchIn() {
   busy = false;
 }
 
+// 止めさし回数の入力値。空欄はnull（0回とは区別する）
+function stopkillValue() {
+  const el = document.getElementById('stopkill-count');
+  if (!el || el.value.trim() === '') return null;
+  const n = parseInt(el.value);
+  return (isNaN(n) || n < 0) ? null : n;
+}
+
 async function punchOut() {
   if (!selected) return;
   if (loading) { showToast('読み込み中です。1〜2秒待ってからもう一度押してください。'); return; }
@@ -848,7 +862,7 @@ async function punchOut() {
   try {
     await sb('PATCH', 'attendance', {
       clock_out: t, break_minutes: brk, health_out: hv,
-      work_types: works || null, updated_at: new Date().toISOString(),
+      work_types: works || null, stopkill_count: stopkillValue(), updated_at: new Date().toISOString(),
     }, `?id=eq.${todayRec.id}`);
     if (document.getElementById('brk-set-default').checked) {
       try { await sb('PATCH', 'staff', { default_break_min: brk }, `?id=eq.${selected.id}`); selected.default_break_min = brk; } catch (_e) {}
@@ -860,8 +874,10 @@ async function punchOut() {
       const skipped = ROOMS.filter(r => roomsDone[r.key] === false).map(r => r.key);
       cleanMsg = `<br>清掃 ${n}か所を記録` + (skipped.length ? `（未実施: ${esc(skipped.join('・'))}）` : '');
     } catch (e) { cleanMsg = '<br><span style="color:#b93d3d;">※清掃記録の保存に失敗しました。業務アプリから入力してください。</span>'; }
+    const skDone = stopkillValue();
     showDone(`${selected.name}さん お疲れさまでした`,
-      `退勤 <strong>${t}</strong> ／ 休憩 ${brk}分 ／ 体調: ${esc(hv)}` + (works ? `<br>作業: ${esc(works)}` : '') + cleanMsg, !healthOK);
+      `退勤 <strong>${t}</strong> ／ 休憩 ${brk}分 ／ 体調: ${esc(hv)}` + (works ? `<br>作業: ${esc(works)}` : '')
+      + (skDone !== null ? `<br>止めさし: ${skDone}回` : '') + cleanMsg, !healthOK);
     if (!healthOK) showToast('体調異常が記録されました。責任者に必ず報告してください。');
   } catch (e) { beep(false); showToast('退勤の記録に失敗しました。通信を確認して、もう一度押してください。'); }
   busy = false;
@@ -874,8 +890,12 @@ async function saveReportOnly() {
   try {
     const n = await saveCleaning();
     const fc = await saveFacilityChecks();
-    if (todayRec && todayRec.id && workPicked.length) {
-      await sb('PATCH', 'attendance', { work_types: workPicked.join('、'), updated_at: new Date().toISOString() }, `?id=eq.${todayRec.id}`);
+    const sk = stopkillValue();
+    if (todayRec && todayRec.id && (workPicked.length || sk !== null)) {
+      const patch = { updated_at: new Date().toISOString() };
+      if (workPicked.length) patch.work_types = workPicked.join('、');
+      if (sk !== null) patch.stopkill_count = sk;
+      await sb('PATCH', 'attendance', patch, `?id=eq.${todayRec.id}`);
     }
     beep(true);
     showToast(`報告を保存しました（清掃 ${n}か所／施設チェック ${fc}項目）`);
