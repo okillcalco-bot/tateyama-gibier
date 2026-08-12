@@ -1904,7 +1904,8 @@ async function sb(method, table, body, query = '') {
   return t ? JSON.parse(t) : [];
 }
 
-/* スタッフキー（顧客台帳・出荷・BASE取込で使う）。端末ごとに1回入れれば残る */
+/* スタッフキー（顧客マスタ＝顧客台帳の操作だけに使う。2026-08-12から出荷・BASE取込では不要）。
+   端末ごとに1回入れれば残る。手入力のほか、管理者端末の「共有リンク」（#skey=…）でも設定できる */
 function staffKeyGet() {
   try { return localStorage.getItem('tg_staff_key') || sessionStorage.getItem('tg_staff_key') || ''; }
   catch (e) { return ''; }
@@ -1913,7 +1914,8 @@ async function staffKeyEnsure() {
   let k = staffKeyGet();
   if (k) return k;
   k = prompt('スタッフキーを入力してください（この端末では初回の1回だけ）\n' +
-    '※アプリ起動時の4桁コードとは別の、長いキーです。管理者がお持ちです。');
+    '※アプリ起動時の4桁コードとは別の、長いキーです。管理者がお持ちです。\n' +
+    '※管理者の端末から「共有リンク」を送ってもらうと、入力なしで設定できます。');
   if (!k) return '';
   k = k.trim();
   if (/^\d{4}$/.test(k)) {
@@ -1933,6 +1935,26 @@ async function staffKeyEnsure() {
   toast('スタッフキーを確認しました。この端末では次回から入力不要です');
   return k;
 }
+/* 共有リンク（#skey=…）でスタッフキーを受け取る。ハッシュはサーバーへ送られない。
+   照合してから保存し、URLからは即座に消す */
+(function () {
+  const m = (location.hash || '').match(/[#&]skey=([^&]+)/);
+  if (!m) return;
+  const k = decodeURIComponent(m[1]);
+  history.replaceState(null, '', location.pathname + location.search);
+  fetch(`${SB_URL}/rest/v1/rpc/staff_key_ok`, {
+    method: 'POST',
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_staff_key: k })
+  }).then(r => r.json()).then(ok => {
+    if (ok === true) {
+      try { localStorage.setItem('tg_staff_key', k); } catch (e) { try { sessionStorage.setItem('tg_staff_key', k); } catch (e2) {} }
+      setTimeout(() => toast('共有リンクからスタッフキーを設定しました。この端末では入力不要です'), 800);
+    } else {
+      setTimeout(() => toast('共有リンクのスタッフキーが正しくありません（変更された可能性があります）', 'error'), 800);
+    }
+  }).catch(() => {});
+})();
 
 /* ===== State ===== */
 let invData = [];
@@ -2085,7 +2107,7 @@ document.getElementById('ship-scan-code').addEventListener('keydown', (e) => {
 let baseOrderCache = {}; // unique_key → detail
 
 async function loadBaseOrders() {
-  await staffKeyEnsure(); // 注文の取込にはスタッフキーが要る
+  // スタッフキーは求めない（キーが要るのは顧客マスタの操作だけ。2026-08-12）
   const box = document.getElementById('base-orders');
   if (!box) return;
   box.innerHTML = '<div class="loading"><span class="spin"></span>BASEに問い合わせ中...</div>';
@@ -2272,7 +2294,7 @@ async function shipDirectScan() {
 }
 
 async function shipDirectConfirm() {
-  await staffKeyEnsure();
+  // スタッフキーは求めない（キーが要るのは顧客マスタの操作だけ。2026-08-12）
   const custName = document.getElementById('ship-direct-cust').value.trim();
   const memo = document.getElementById('ship-direct-memo').value.trim();
   const operator = document.getElementById('ship-operator') ? document.getElementById('ship-operator').value : '';
@@ -2284,11 +2306,10 @@ async function shipDirectConfirm() {
   const btn = document.getElementById('ship-direct-confirm');
   btn.disabled = true;
   try {
-    // 顧客台帳に完全一致があれば紐付ける
+    // 顧客台帳に完全一致があれば紐付ける（キー不要のRPC: 名前が一意のときだけidが返る）
     let customerId = null;
     try {
-      const custs = await sb('GET', 'customers', null, `?name=eq.${encodeURIComponent(custName)}&select=id&limit=2`);
-      if (custs.length === 1) customerId = custs[0].id;
+      customerId = await sb('POST', 'rpc/staff_lookup_customer_id', { p_name: custName }) || null;
     } catch(e) {}
 
     const now = new Date();
@@ -3155,10 +3176,11 @@ async function shipSelectOrder(orderId) {
 }
 
 async function loadShipping() {
-  await staffKeyEnsure(); // 注文・顧客の読み書きにはスタッフキーが要る
+  // スタッフキーは求めない（キーが要るのは顧客マスタの操作だけ。2026-08-12）
   const container = document.getElementById('ship-orders');
   container.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
-  // 直販の出荷先候補（顧客台帳の名前だけ）
+  // 直販の出荷先候補（顧客台帳の名前だけ）。キー未設定の端末では候補が出ないだけで、
+  // 名前を手入力すれば staff_lookup_customer_id が紐付けを解決する
   try {
     const custs = await sb('GET', 'customers', null, '?select=name&order=name.asc&limit=300');
     const dl = document.getElementById('shipCustDatalist');
@@ -9031,7 +9053,6 @@ function ordRenderNotifyBtn() {
 
 async function checkNewOrders(silent) {
   if (!ordNotifyEnabled()) return;
-  if (!staffKeyGet()) return;  // キー入力前はRLSで読めないため待つ
   try {
     const orders = await sb('GET', 'orders', null, '?status=eq.受注&select=id,order_code,customer_name,delivery_date,total_amount,created_at&order=created_at.desc&limit=30');
     const seen = ordNotifiedSet();
@@ -9109,12 +9130,8 @@ loadOrgInfo();
       sessionStorage.setItem(KEY,'ok');
       sessionStorage.setItem('tg_role_v1', code==='2468' ? 'admin' : 'staff');
       gate.classList.add('hidden');
-      // 管理者はここでスタッフキーも1回だけ確認しておく（以降、顧客管理・給与などで聞かれない）
-      if(code==='2468'){
-        setTimeout(function(){
-          try{ if(typeof staffKeyEnsure==='function' && typeof staffKeyGet==='function' && !staffKeyGet()) staffKeyEnsure(); }catch(e){}
-        }, 600);
-      }
+      // スタッフキーはここでは求めない。要るのは顧客マスタの操作だけになったため、
+      // 顧客管理を開いたときに（未設定の端末でだけ）確認する。2026-08-12
     } else {
       errEl.textContent='コードが違います';
       inputs.forEach(function(x){x.value='';x.style.borderColor='var(--red)';});

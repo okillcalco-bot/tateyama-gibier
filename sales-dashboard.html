@@ -367,6 +367,20 @@ async function staffKeyEnsure() {
   try { localStorage.setItem('tg_staff_key', k); } catch (e) {}
   return k;
 }
+/* 共有リンク（#skey=…）でスタッフキーを受け取る（index.htmlと同じ仕組み） */
+(function () {
+  const m = (location.hash || '').match(/[#&]skey=([^&]+)/);
+  if (!m) return;
+  const k = decodeURIComponent(m[1]);
+  history.replaceState(null, '', location.pathname + location.search);
+  fetch(`${SB_URL}/rest/v1/rpc/staff_key_ok`, {
+    method: 'POST',
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_staff_key: k })
+  }).then(r => r.json()).then(ok => {
+    if (ok === true) { try { localStorage.setItem('tg_staff_key', k); } catch (e) {} }
+  }).catch(() => {});
+})();
 
 function fmt(n) {
   return n == null ? '—' : '¥' + Math.round(n).toLocaleString();
