@@ -338,19 +338,22 @@ textarea { min-height: 80px; resize: vertical; }
   body.cityform-open #cityFormOverlay .cf-sheet { max-width: none; padding: 0; }
 }
 
-/* 撮影用の大きな表示ボード（ホワイトボードの代わり。個体と一緒に撮る） */
-#boardOverlay { display: none; position: fixed; inset: 0; background: #fff; z-index: 9998; overflow: auto; -webkit-overflow-scrolling: touch; }
+/* 撮影用の大きな表示ボード（ホワイトボードの代わり。個体と一緒に撮る）。
+   --bscale を左右スワイプで変えて文字サイズを調整する */
+#boardOverlay { display: none; position: fixed; inset: 0; background: #fff; z-index: 9998; overflow: auto; -webkit-overflow-scrolling: touch; --bscale: 1; }
 #boardOverlay.show { display: block; }
-#boardOverlay .board-bar { position: sticky; top: 0; display: flex; align-items: center; gap: 10px; background: #23271c; padding: 10px 14px; }
+#boardOverlay .board-bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; background: #23271c; padding: 10px 14px; }
 #boardOverlay .board-bar button { border: none; border-radius: 10px; padding: 11px 18px; font-size: 15px; font-weight: 700; cursor: pointer; }
 #boardOverlay .board-detail { background: #3a3f31; color: #fff; }
 #boardOverlay .board-close { background: #c9a13b; color: #1c1f16; margin-left: auto; }
 #boardOverlay .board-hint { color: #cfd3c4; font-size: 12px; }
-#boardOverlay .board-sheet { color: #000; background: #fff; max-width: 900px; margin: 0 auto; padding: 18px 20px 60px; }
+#boardOverlay .board-sheet { color: #000; background: #fff; max-width: 900px; margin: 0 auto; padding: 18px 20px 60px; touch-action: pan-y; }
 #boardOverlay .brd-row { display: flex; align-items: baseline; gap: 14px; border-bottom: 3px solid #000; padding: 12px 4px; }
 #boardOverlay .brd-k { flex: 0 0 clamp(88px, 20vw, 150px); font-size: clamp(18px, 4.5vw, 30px); font-weight: 700; color: #333; }
-#boardOverlay .brd-v { flex: 1; font-size: clamp(40px, 13vw, 76px); font-weight: 800; line-height: 1.05; letter-spacing: 0.01em; word-break: break-all; }
-#boardOverlay .brd-v.small { font-size: clamp(28px, 8.5vw, 52px); }
+#boardOverlay .brd-v { flex: 1; font-size: calc(clamp(40px, 13vw, 76px) * var(--bscale)); font-weight: 800; line-height: 1.05; letter-spacing: 0.01em; word-break: break-all; }
+#boardOverlay .brd-v.small { font-size: calc(clamp(28px, 8.5vw, 52px) * var(--bscale)); }
+#boardScaleTip { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); background: rgba(35,39,28,.92); color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 700; z-index: 3; opacity: 0; transition: opacity .2s; pointer-events: none; }
+#boardScaleTip.show { opacity: 1; }
 
 /* Animations */
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -876,6 +879,10 @@ textarea { min-height: 80px; resize: vertical; }
 
 <!-- LIST TAB -->
 <div class="tab-panel" id="panel-list">
+  <div style="margin-bottom:12px;">
+    <button type="button" class="now-btn" style="width:100%;padding:12px;font-size:14px;" onclick="showBoardSample()">📷 撮影用ボードの見本を表示（文字サイズを調整）</button>
+    <div style="font-size:11.5px;color:var(--text2);margin-top:4px;line-height:1.6;">一覧の個体を押すと、その個体の情報が大きな文字で出ます（個体と一緒に撮影用）。ボード上で<strong>左右にスワイプ</strong>すると文字サイズを変えられます。</div>
+  </div>
   <div class="card-list" id="cardList"></div>
   <div id="listEmpty" style="text-align:center;padding:40px;color:var(--text3);display:none;">
     本日の搬入データはありません
@@ -932,11 +939,12 @@ textarea { min-height: 80px; resize: vertical; }
 <!-- 撮影用の大きな表示ボード（個体と一緒に撮る） -->
 <div id="boardOverlay">
   <div class="board-bar">
-    <button type="button" class="board-detail" onclick="boardShowDetail()">詳細</button>
-    <span class="board-hint">個体と一緒に撮影してください</span>
+    <button type="button" class="board-detail" id="boardDetailBtn" onclick="boardShowDetail()">詳細</button>
+    <span class="board-hint">← 左右スワイプで文字サイズ調整 →</span>
     <button type="button" class="board-close" onclick="closeBoard()">✕ 閉じる</button>
   </div>
   <div class="board-sheet" id="boardSheet"></div>
+  <div id="boardScaleTip"></div>
 </div>
 
 <script>
@@ -2506,6 +2514,24 @@ function districtOfOaza(city, oaza) {
 
 /* 撮影用の大きな表示ボード（個体と一緒に撮る）。ホワイトボードの代わり */
 let _boardRec = null;
+const BOARD_SCALE_MIN = 0.55, BOARD_SCALE_MAX = 2.2;
+let _boardScale = 1;
+try { const s = parseFloat(localStorage.getItem('tg_board_scale')); if (s >= BOARD_SCALE_MIN && s <= BOARD_SCALE_MAX) _boardScale = s; } catch (e) {}
+
+function applyBoardScale(save) {
+  const ov = document.getElementById('boardOverlay');
+  if (ov) ov.style.setProperty('--bscale', _boardScale.toFixed(2));
+  if (save) { try { localStorage.setItem('tg_board_scale', _boardScale.toFixed(2)); } catch (e) {} }
+}
+function showBoardScaleTip() {
+  const tip = document.getElementById('boardScaleTip');
+  if (!tip) return;
+  tip.textContent = '文字サイズ ' + Math.round(_boardScale * 100) + '%';
+  tip.classList.add('show');
+  clearTimeout(showBoardScaleTip._t);
+  showBoardScaleTip._t = setTimeout(() => tip.classList.remove('show'), 900);
+}
+
 function showBoard(r) {
   _boardRec = r;
   const esc2 = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -2524,10 +2550,51 @@ function showBoard(r) {
   document.getElementById('boardSheet').innerHTML = rows.map(([k, v, small]) =>
     `<div class="brd-row"><div class="brd-k">${k}</div><div class="brd-v${small ? ' small' : ''}">${esc2(v) || '—'}</div></div>`
   ).join('');
+  document.getElementById('boardDetailBtn').style.display = r.__sample ? 'none' : '';
+  applyBoardScale(false);
   document.getElementById('boardOverlay').classList.add('show');
+}
+/* ボードの見本（サンプル画像の代わり。文字サイズ調整を試せる）。
+   地区名が長い例（南房総市 千倉町 白間津）で調整感を確かめられる */
+function showBoardSample() {
+  showBoard({
+    __sample: true, capture_date: today(),
+    serial_number: 448, label_id: 'TGC-08-M166', hunter_name: '（見本）山田太郎',
+    capture_city: '南房総市', capture_area: '白間津', sex: 'メス', weight_total: 21.3
+  });
 }
 function closeBoard() { document.getElementById('boardOverlay').classList.remove('show'); }
 function boardShowDetail() { if (_boardRec) showDetail(_boardRec); }
+
+/* ボード上で左右スワイプ → 文字サイズを調整。縦スクロールは邪魔しない（横移動が主のときだけ効く） */
+(function setupBoardSwipe() {
+  const sheet = document.getElementById('boardSheet');
+  if (!sheet) return;
+  let startX = 0, startY = 0, baseScale = 1, active = false, decided = false, horizontal = false;
+  sheet.addEventListener('pointerdown', e => {
+    active = true; decided = false; horizontal = false;
+    startX = e.clientX; startY = e.clientY; baseScale = _boardScale;
+  });
+  sheet.addEventListener('pointermove', e => {
+    if (!active) return;
+    const dx = e.clientX - startX, dy = e.clientY - startY;
+    if (!decided) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      decided = true;
+      horizontal = Math.abs(dx) > Math.abs(dy);
+    }
+    if (!horizontal) return;   // 縦方向はスクロールに任せる
+    e.preventDefault();
+    // 画面幅の8割の横移動で約 ±1.0 倍
+    const delta = (dx / (window.innerWidth * 0.8)) * 1.0;
+    _boardScale = Math.min(BOARD_SCALE_MAX, Math.max(BOARD_SCALE_MIN, baseScale + delta));
+    applyBoardScale(false);
+    showBoardScaleTip();
+  });
+  const end = () => { if (active && decided && horizontal) applyBoardScale(true); active = false; };
+  sheet.addEventListener('pointerup', end);
+  sheet.addEventListener('pointercancel', end);
+})();
 
 function showDetail(r) {
   document.getElementById('detailTitle').textContent = r.label_id || '詳細';
