@@ -4118,7 +4118,7 @@ async function pmLoadRecentIndividuals() {
   list.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
   try {
     const today = new Date().toISOString().split('T')[0];
-    let inds = await sb('GET', 'individuals', null, `?select=label_id,species,weight_total,capture_date,hunter_name,quality,serial_number,intake_status&deleted_at=is.null&processing_done_at=is.null&order=serial_number.desc.nullslast,created_at.desc&limit=25`);
+    let inds = await sb('GET', 'individuals', null, `?select=label_id,species,weight_total,capture_date,hunter_name,quality,serial_number,intake_status&deleted_at=is.null&processing_done_at=is.null&capture_date=not.is.null&order=serial_number.desc.nullslast,created_at.desc&limit=25`);
     inds = inds.filter(i => i.intake_status !== '搬入待ち'); // 受入前の仮登録は精肉できない
     // テスト個体（通し番号なし）は上記20件に入らないため先頭に必ず表示する
     try {
