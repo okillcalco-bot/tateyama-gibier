@@ -127,13 +127,16 @@ returns text language sql immutable as $$
 $$;
 revoke all on function invoice_norm_name(text) from public, anon, authenticated;
 
--- 顧客コードの正規化（大文字化・全角→半角・前後空白除去。内部専用）
+-- 顧客コードの正規化（大文字化・全角→半角・ハイフン類の統一・前後空白除去。内部専用）
+-- ハイフン類は次の6種をASCIIの「-」へ正規化する:
+--   － U+FF0D 全角ハイフンマイナス / ‐ U+2010 ハイフン / ‑ U+2011 改行しないハイフン /
+--   – U+2013 enダッシュ / — U+2014 emダッシュ / − U+2212 マイナス記号
 create or replace function invoice_norm_code(p text)
 returns text language sql immutable as $$
   select case when p is null then null else
     upper(btrim(translate(p,
-      'ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ０１２３４５６７８９－　',
-      'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- ')))
+      'ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ０１２３４５６７８９－‐‑–—−　',
+      'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789------ ')))
   end
 $$;
 revoke all on function invoice_norm_code(text) from public, anon, authenticated;
@@ -162,7 +165,7 @@ revoke all on function invoice_name_similarity(text, text) from public, anon, au
 create or replace function admin_invoice_stage_import(p_staff_key text, p jsonb)
 returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare v_import_id uuid; v_doc jsonb; v_line jsonb; v_doc_id uuid;
+declare v_import_id uuid; v_existing uuid; v_doc jsonb; v_line jsonb; v_doc_id uuid;
         v_docs int := 0; v_lines int := 0; v_no int;
 begin
   if not staff_key_ok(p_staff_key) then raise exception 'スタッフキーが違います'; end if;
@@ -170,18 +173,35 @@ begin
     raise exception 'content_hash と file_name は必須です';
   end if;
 
-  select id into v_import_id from invoice_imports where content_hash = p->>'content_hash';
-  if v_import_id is not null then
-    return jsonb_build_object('ok', true, 'import_id', v_import_id, 'skipped', true,
+  -- 同時投入でも1件だけ作られるよう、SELECT→INSERT ではなく INSERT ... ON CONFLICT DO NOTHING を使う（原子的）。
+  -- ・content_hash 競合（同じ内容のファイル）→ DO NOTHING で INSERT されず、既存行の id を skipped=true で返す
+  -- ・(source, source_file_id) の一意インデックス競合（同じ取込元ファイルIDで内容だけ変わった）→
+  --   下の例外分岐で明示的に skipped=true として返す（自動では上書きしない。人が既存の取込を除外してから取り直す）
+  begin
+    insert into invoice_imports (source, source_file_id, file_name, mime_type, content_hash,
+                                 page_count, status, imported_by)
+    values (coalesce(nullif(p->>'source',''),'local'), nullif(p->>'source_file_id',''),
+            p->>'file_name', nullif(p->>'mime_type',''), p->>'content_hash',
+            nullif(p->>'page_count','')::int, '抽出済', nullif(p->>'imported_by',''))
+    on conflict (content_hash) do nothing
+    returning id into v_import_id;
+  exception when unique_violation then
+    -- content_hash は ON CONFLICT で処理されるため、ここへ来るのは (source, source_file_id) 側の競合のみ
+    select id into v_existing from invoice_imports
+     where source = coalesce(nullif(p->>'source',''),'local')
+       and source_file_id = nullif(p->>'source_file_id','');
+    return jsonb_build_object('ok', true, 'import_id', v_existing, 'skipped', true,
+      'reason', '同じ取込元ファイルIDが登録済み（内容が変更されています。取り直す場合は既存の取込を除外してください）');
+  end;
+
+  if v_import_id is null then
+    -- content_hash が既存（同時投入で先を越された場合もここに入る）。エラーにせず skipped=true で正常終了
+    select id into v_existing from invoice_imports where content_hash = p->>'content_hash';
+    return jsonb_build_object('ok', true, 'import_id', v_existing, 'skipped', true,
       'reason', '同じ内容のファイルが取込済み');
   end if;
 
-  insert into invoice_imports (source, source_file_id, file_name, mime_type, content_hash,
-                               page_count, status, imported_by)
-  values (coalesce(nullif(p->>'source',''),'local'), nullif(p->>'source_file_id',''),
-          p->>'file_name', nullif(p->>'mime_type',''), p->>'content_hash',
-          nullif(p->>'page_count','')::int, '抽出済', nullif(p->>'imported_by',''))
-  returning id into v_import_id;
+  -- ここから下は「今回 INSERT できた場合」だけ実行される（documents / lines の登録）
 
   for v_doc in select * from jsonb_array_elements(coalesce(p->'documents','[]'::jsonb)) loop
     insert into invoice_documents (import_id, page_from, page_to, invoice_number, invoice_date,
@@ -221,6 +241,7 @@ begin
     'documents', v_docs, 'lines', v_lines);
 end;
 $$;
+revoke all on function admin_invoice_stage_import(text, jsonb) from public;
 grant execute on function admin_invoice_stage_import(text, jsonb) to anon, authenticated;
 
 -- ── RPC: 顧客の名寄せ実行（候補提示。自動確定は code=1.00 / 電話一意=0.95 のみ） ──
@@ -238,9 +259,15 @@ begin
   loop
     v_best := null; v_best_score := 0; v_best_method := null;
 
-    -- 1) 顧客コード: 英数字境界付きの完全一致のみ。
+    -- 1) 顧客コード: 完全一致のみ。
     --    「抽出されたコードが1種類」かつ「そのコードを持つ顧客が1件」のときだけ自動確定(1.00)。
     --    複数コード印字・同一コードの顧客が複数・埋め込み（C0011の中のC001等）は自動確定しない。
+    --    * 照合に使うコードは正規化後 [A-Z0-9-] のみ・4文字以上（それ以外の文字を含むコードは
+    --      正規表現に入れず、1.00の自動照合にも使わない）
+    --    * 英字を1文字以上含むコード: 英数字・ハイフン境界付きの完全一致
+    --    * 数字だけのコード: 「顧客コード」「顧客番号」「お客様番号」「得意先コード」等の
+    --      ラベル直後に印字されている場合だけ一致（年度・金額・電話番号などの無関係な数字に
+    --      同じ値があっても一致させない）
     declare
       v_hay text := invoice_norm_code(
         coalesce(v_doc.raw_customer_name,'') || ' ' ||
@@ -256,8 +283,16 @@ begin
            where c.code is not null
              and length(invoice_norm_code(c.code)) >= 4
              and invoice_norm_code(c.code) ~ '^[A-Z0-9][A-Z0-9-]*$'
-             -- 境界: コードの前後が英数字・ハイフンでない（＝別の文字列の一部は不一致）
-             and v_hay ~ ('(^|[^A-Z0-9-])' || invoice_norm_code(c.code) || '($|[^A-Z0-9-])')
+             and (
+               -- 英字を含むコード: 境界付き完全一致（前後が英数字・ハイフンでない）
+               (invoice_norm_code(c.code) ~ '[A-Z]'
+                 and v_hay ~ ('(^|[^A-Z0-9-])' || invoice_norm_code(c.code) || '($|[^A-Z0-9-])'))
+               or
+               -- 数字だけのコード: 明示的なラベルの直後のみ（ラベルなしの数字は一致させない）
+               (invoice_norm_code(c.code) ~ '^[0-9]+$'
+                 and v_hay ~ ('(顧客|お客様|得意先|客先)\s*(コード|番号|NO\.?|ID)[\s：:＃#]*'
+                              || invoice_norm_code(c.code) || '($|[^A-Z0-9-])'))
+             )
         ) u;
       if coalesce(array_length(v_codes,1),0) = 1 and coalesce(array_length(v_ids,1),0) = 1 then
         update invoice_documents set customer_id = v_ids[1], match_confidence = 1.00,
@@ -333,6 +368,7 @@ begin
   return jsonb_build_object('ok', true, 'auto', v_auto, 'candidates', v_cand, 'unmatched', v_none);
 end;
 $$;
+revoke all on function admin_invoice_run_matching(text, uuid) from public;
 grant execute on function admin_invoice_run_matching(text, uuid) to anon, authenticated;
 
 -- ── RPC: 一覧（確認画面用） ──────────────────────────────────────
@@ -357,4 +393,5 @@ begin
     where p_status is null or i.status = p_status), '[]'::jsonb);
 end;
 $$;
+revoke all on function admin_invoice_list(text, text) from public;
 grant execute on function admin_invoice_list(text, text) to anon, authenticated;

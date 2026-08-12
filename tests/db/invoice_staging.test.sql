@@ -1,16 +1,24 @@
 -- 請求書ステージングの実DBテスト（migrations/20260811_invoice_staging.sql 対象）
 --
--- 実行方法: Supabase SQL Editor（または MCP execute_sql）にこのファイル全体を貼って実行。
--- 全体が begin〜rollback で囲まれており、テストデータ（顧客・取込）は一切残らない。
--- スタッフキーもトランザクション内で一時キーに差し替え、rollbackで元に戻る。
--- 期待結果: すべての行が ok=true。
+-- 実行方法: psql -f このファイル（ON_ERROR_STOP推奨）または Supabase SQL Editor / MCP execute_sql に
+-- ファイル全体を貼って実行。
+--
+-- 合否判定:
+--   * 全件PASS → 結果表が表示され、最後に NOTICE『ALL TESTS PASSED』が出て rollback で終わる
+--   * 1件でもFAIL → 最後のDOブロックが raise exception し、SQL全体がエラー終了する
+--     （例外メッセージに失敗したテスト名の一覧が入るため、結果表を目視しなくても検知できる。
+--       psqlでは終了ステータス非0、Supabase SQL Editor / API ではエラー応答になる）
+--   * 例外で中断した場合もトランザクションごと巻き戻るため、テストデータ・一時スタッフキーは
+--     本番に一切残らない
 begin;
 create temp table _t(no int, item text, ok boolean, detail text) on commit drop;
 do $$
 declare v_key text := 'TEST-INV-KEY-' || md5(random()::text);
         v_code text; v_phone text; v_name text; v_cid uuid;
-        v_r jsonb; v_imp uuid; v_cnt int;
+        v_r jsonb; v_imp uuid; v_cnt int; v_hash text;
         c001 uuid; c0011 uuid; zc900 uuid; zc901 uuid;
+        n2026 uuid; n1000 uuid; n0470 uuid; n5566 uuid; hy901 uuid; hy77 uuid;
+        v_tbl text; v_op text; v_ok boolean; v_no int;
 begin
   update app_secrets set hash = extensions.crypt(v_key, extensions.gen_salt('bf')) where key='staff_key';
 
@@ -48,7 +56,8 @@ begin
   v_r := admin_invoice_stage_import(v_key, jsonb_build_object(
     'file_name','mock-invoice.xlsx',
     'content_hash', (select content_hash from invoice_imports where id=v_imp)));
-  insert into _t values (2,'同じファイルはskip', (v_r->>'skipped')::boolean, v_r::text);
+  insert into _t values (2,'同じファイルはskip（既存idを返す）',
+    (v_r->>'skipped')::boolean and (v_r->>'import_id')::uuid = v_imp, v_r::text);
   select count(*) into v_cnt from invoice_imports where id=v_imp;
   insert into _t values (3,'取込行は増えない', v_cnt=1, v_cnt||'件');
 
@@ -58,13 +67,15 @@ begin
 
   v_r := admin_invoice_run_matching(v_key, v_imp);
   insert into _t values (5,'名寄せ実行 auto=2', (v_r->>'auto')::int = 2, v_r::text);
-  insert into _t values (6,'code印字は1.00で自動確定', exists (
+  insert into _t values (6,'code印字は1.00で確定(matched_by=auto)', exists (
     select 1 from invoice_documents where import_id=v_imp and invoice_number='INV-001'
-      and customer_id=v_cid and match_confidence=1.00 and match_status='確定' and match_method='code'));
-  insert into _t values (7,'電話一意は0.95で自動確定', exists (
+      and customer_id=v_cid and match_confidence=1.00 and match_status='確定'
+      and match_method='code' and matched_by='auto'));
+  insert into _t values (7,'電話一意は0.95で確定(matched_by=auto)', exists (
     select 1 from invoice_documents where import_id=v_imp and invoice_number='INV-002'
-      and customer_id=v_cid and match_confidence=0.95 and match_status='確定' and match_method='phone'));
-  insert into _t values (8,'不明な名称は自動確定しない', exists (
+      and customer_id=v_cid and match_confidence=0.95 and match_status='確定'
+      and match_method='phone' and matched_by='auto'));
+  insert into _t values (8,'不明な名称は確定しない', exists (
     select 1 from invoice_documents where import_id=v_imp and invoice_number='INV-003'
       and match_status in ('未照合','候補あり') and coalesce(match_confidence,0) < 0.95));
   insert into _t values (9,'取込ステータスは顧客未照合', exists (
@@ -76,23 +87,7 @@ begin
      where (e->>'id')::uuid = v_imp and (e->>'unmatched_customers')::int = 1
        and (e->>'unmatched_products')::int = 4));
 
-  begin
-    set local role anon;
-    select count(*) into v_cnt from invoice_lines;
-    reset role;
-    insert into _t values (11,'anonはinvoice_linesを読めない', false, '読めてしまった');
-  exception when insufficient_privilege then
-    reset role;
-    insert into _t values (11,'anonはinvoice_linesを読めない', true, 'permission denied');
-  end;
-  begin
-    perform admin_invoice_list('wrong-key', null);
-    insert into _t values (12,'誤キーで一覧は開けない', false, '');
-  exception when others then
-    insert into _t values (12,'誤キーで一覧は開けない', sqlerrm like '%スタッフキー%', left(sqlerrm,40));
-  end;
-
-  -- ═══════════ B. 顧客コード照合（境界付き完全一致・曖昧時は自動確定しない） ═══════════
+  -- ═══════════ B. 顧客コード照合（境界付き完全一致・曖昧時は確定しない） ═══════════
   -- テスト用顧客（rollbackで消える）。code は本番に存在しない値を使う。
   -- 包含ペア: ZC90 ⊂ ZC900（C001/C0011 と同じ構図）
   insert into customers (code, name) values ('ZC90','包含テストA店') returning id into c001;
@@ -115,7 +110,7 @@ begin
   v_imp := (v_r->>'import_id')::uuid;
   v_r := admin_invoice_run_matching(v_key, v_imp);
 
-  insert into _t values (13,'B1: コード1件完全一致→1.00自動確定', exists (
+  insert into _t values (13,'B1: コード1件完全一致→1.00確定', exists (
     select 1 from invoice_documents where import_id=v_imp and invoice_number='B1'
       and customer_id=zc900 and match_confidence=1.00 and match_status='確定'));
   insert into _t values (14,'B2: ZC900印字→ZC900だけに一致(ZC90に誤爆しない)', exists (
@@ -132,7 +127,7 @@ begin
   exception when unique_violation then
     insert into _t values (16,'B4: 同一コードはDB一意制約で作れない', true, 'unique_violation');
   end;
-  insert into _t values (17,'B5: 複数コード印字→自動確定しない', exists (
+  insert into _t values (17,'B5: 複数コード印字→確定しない', exists (
     select 1 from invoice_documents where import_id=v_imp and invoice_number='B5'
       and match_status <> '確定' and customer_id is null));
   insert into _t values (18,'B6: 別文字列への埋め込み(INVZC901X)→一致しない', exists (
@@ -144,11 +139,11 @@ begin
   insert into _t values (20,'B8: 全角小文字・前後空白でも正規化して一致', exists (
     select 1 from invoice_documents where import_id=v_imp and invoice_number='B8'
       and customer_id=zc900 and match_confidence=1.00 and match_status='確定'));
-  insert into _t values (21,'B9: 名称一致は候補提示のみ(自動確定しない)', exists (
+  insert into _t values (21,'B9: 名称一致は候補提示のみ(確定しない)', exists (
     select 1 from invoice_documents where import_id=v_imp and invoice_number='B9'
       and match_status = '候補あり' and coalesce(match_confidence,0) <= 0.50));
 
-  -- 修正後も電話一意の自動確定が動くこと（Aの7で検証済みだが、コード曖昧+電話一意の組合せも確認）
+  -- 修正後も電話一意の自動確定が動くこと（コード曖昧+電話一意の組合せ）
   insert into customers (code, name, phone) values ('ZC903','電話併記店','0470-77-9911');
   v_r := admin_invoice_stage_import(v_key, jsonb_build_object(
     'file_name','mock-code-phone.xlsx','content_hash','testhash-' || md5(random()::text),
@@ -160,6 +155,237 @@ begin
   insert into _t values (22,'B10: コード曖昧でも電話一意なら0.95で確定', exists (
     select 1 from invoice_documents where import_id=v_imp and invoice_number='B10'
       and match_confidence=0.95 and match_status='確定' and match_method='phone'));
+
+  -- ═══════════ C. 数字だけの顧客コード（ラベル直後のみ一致） ═══════════
+  insert into customers (code, name) values ('2026','数字コード店') returning id into n2026;
+  insert into customers (code, name) values ('1000','数字コード店2') returning id into n1000;
+  insert into customers (code, name, phone) values ('0470123456','数字コード店3','0470-12-3456') returning id into n0470;
+  insert into customers (code, name) values ('5566','数字コード店4') returning id into n5566;
+
+  v_r := admin_invoice_stage_import(v_key, jsonb_build_object(
+    'file_name','mock-numeric-codes.xlsx','content_hash','testhash-' || md5(random()::text),
+    'documents', jsonb_build_array(
+      jsonb_build_object('page_from',1,'invoice_number','C1','note','2026年度請求分'),
+      jsonb_build_object('page_from',2,'invoice_number','C2','note','お客様番号：2026'),
+      jsonb_build_object('page_from',3,'invoice_number','C3','raw_phone','0470-12-3456','note','ご請求'),
+      jsonb_build_object('page_from',4,'invoice_number','C4','note','ご請求額 1,000円（税込）'),
+      jsonb_build_object('page_from',5,'invoice_number','C5','note','顧客番号 2026 ／ 得意先コード 5566 の合算'),
+      jsonb_build_object('page_from',6,'invoice_number','C6','note','顧客コード 1000')
+    )));
+  v_imp := (v_r->>'import_id')::uuid;
+  v_r := admin_invoice_run_matching(v_key, v_imp);
+
+  insert into _t values (23,'C1: 数字コード2026 vs「2026年度」→一致しない', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='C1'
+      and match_status='未照合' and customer_id is null));
+  insert into _t values (24,'C2: 「お客様番号：2026」→1.00確定', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='C2'
+      and customer_id=n2026 and match_confidence=1.00 and match_status='確定' and match_method='code'));
+  insert into _t values (25,'C3: 数字コードと同値のraw_phone→コードでなく電話照合(0.95)', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='C3'
+      and customer_id=n0470 and match_confidence=0.95 and match_method='phone'));
+  insert into _t values (26,'C4: 金額表記「1,000円」→一致しない', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='C4'
+      and match_status='未照合' and customer_id is null));
+  insert into _t values (27,'C5: ラベル付き数字コードが複数→確定しない', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='C5'
+      and match_status <> '確定' and customer_id is null));
+  insert into _t values (28,'C6: 「顧客コード 1000」→1.00確定（ラベル別表記）', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='C6'
+      and customer_id=n1000 and match_confidence=1.00 and match_status='確定'));
+
+  -- ═══════════ D. ハイフン表記の正規化 ═══════════
+  insert into customers (code, name) values ('ZC-901','ハイフンコード店') returning id into hy901;
+  insert into customers (code, name) values ('ZC77-','末尾ハイフン店') returning id into hy77;
+
+  v_r := admin_invoice_stage_import(v_key, jsonb_build_object(
+    'file_name','mock-hyphen-codes.xlsx','content_hash','testhash-' || md5(random()::text),
+    'documents', jsonb_build_array(
+      jsonb_build_object('page_from',1,'invoice_number','D1','note','お客様番号 ZC－901'),   -- U+FF0D
+      jsonb_build_object('page_from',2,'invoice_number','D2','note','お客様番号 ZC–901'),   -- U+2013
+      jsonb_build_object('page_from',3,'invoice_number','D3','note','お客様番号 ZC—901'),   -- U+2014
+      jsonb_build_object('page_from',4,'invoice_number','D4','note','お客様番号 ZC−901'),   -- U+2212
+      jsonb_build_object('page_from',5,'invoice_number','D5','note','コード ZC77- を参照'),
+      jsonb_build_object('page_from',6,'invoice_number','D6','note','伝票 INV-ZC-901')
+    )));
+  v_imp := (v_r->>'import_id')::uuid;
+  v_r := admin_invoice_run_matching(v_key, v_imp);
+
+  insert into _t values (29,'D1: 全角ハイフン(U+FF0D)→ZC-901に一致', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='D1'
+      and customer_id=hy901 and match_confidence=1.00 and match_status='確定'));
+  insert into _t values (30,'D2: enダッシュ(U+2013)→ZC-901に一致', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='D2'
+      and customer_id=hy901 and match_confidence=1.00));
+  insert into _t values (31,'D3: emダッシュ(U+2014)→ZC-901に一致', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='D3'
+      and customer_id=hy901 and match_confidence=1.00));
+  insert into _t values (32,'D4: マイナス記号(U+2212)→ZC-901に一致', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='D4'
+      and customer_id=hy901 and match_confidence=1.00));
+  insert into _t values (33,'D5: 末尾ハイフンコード単独印字→一致', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='D5'
+      and customer_id=hy77 and match_confidence=1.00 and match_status='確定'));
+  insert into _t values (34,'D6: INV-ZC-901→ZC-901と一致しない', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='D6'
+      and match_status='未照合' and customer_id is null));
+
+  -- 正規表現へ入るコード文字の限定: 記号入りコードは1.00自動照合に使われない
+  insert into customers (code, name) values ('ZC(9)','記号入りコード店');
+  v_r := admin_invoice_stage_import(v_key, jsonb_build_object(
+    'file_name','mock-symbol-code.xlsx','content_hash','testhash-' || md5(random()::text),
+    'documents', jsonb_build_array(
+      jsonb_build_object('page_from',1,'invoice_number','D7','note','お客様番号 ZC(9)'))));
+  v_imp := (v_r->>'import_id')::uuid;
+  v_r := admin_invoice_run_matching(v_key, v_imp);
+  insert into _t values (35,'D7: [A-Z0-9-]以外を含むコードは1.00自動照合に使わない', exists (
+    select 1 from invoice_documents where import_id=v_imp and invoice_number='D7'
+      and (match_status <> '確定' or coalesce(match_confidence,0) < 1.00)));
+
+  -- ═══════════ E. 同時投入の冪等性（原子的なON CONFLICT経路） ═══════════
+  -- E1: 「他セッションが先にINSERTした」状態を再現 → SELECTせず即INSERTするRPCが
+  --     エラーなく skipped=true・既存id・1件のみ を返すこと（check-then-insertの競合窓が無い）
+  v_hash := 'testhash-race-' || md5(random()::text);
+  insert into invoice_imports (source, file_name, content_hash, status)
+  values ('local','race-first.xlsx', v_hash, '抽出済') returning id into v_imp;
+  v_r := admin_invoice_stage_import(v_key, jsonb_build_object(
+    'file_name','race-second.xlsx','content_hash', v_hash,
+    'documents', jsonb_build_array(jsonb_build_object('page_from',1,'invoice_number','E1',
+      'lines', jsonb_build_array(jsonb_build_object('raw_item_name','競合テスト品'))))));
+  select count(*) into v_cnt from invoice_imports where content_hash = v_hash;
+  insert into _t values (36,'E1: 先行INSERT済みハッシュへの投入→skipped=true・既存id・1件のみ',
+    (v_r->>'ok')::boolean and (v_r->>'skipped')::boolean
+    and (v_r->>'import_id')::uuid = v_imp and v_cnt = 1, v_r::text || ' / rows=' || v_cnt);
+  insert into _t values (37,'E1b: skip時はdocuments/linesを登録しない', not exists (
+    select 1 from invoice_documents where import_id = v_imp));
+
+  -- E2: (source, source_file_id) 競合（同じDriveファイルIDで内容が変わった）→
+  --     エラーなく skipped=true（自動上書きしない）
+  v_r := admin_invoice_stage_import(v_key, jsonb_build_object(
+    'source','drive','source_file_id','drive-file-001',
+    'file_name','drive-v1.xlsx','content_hash','testhash-' || md5(random()::text)));
+  v_imp := (v_r->>'import_id')::uuid;
+  v_r := admin_invoice_stage_import(v_key, jsonb_build_object(
+    'source','drive','source_file_id','drive-file-001',
+    'file_name','drive-v2.xlsx','content_hash','testhash-' || md5(random()::text)));
+  select count(*) into v_cnt from invoice_imports where source='drive' and source_file_id='drive-file-001';
+  insert into _t values (38,'E2: 同一source_file_idで内容変更→skipped=true・既存id・1件のみ',
+    (v_r->>'ok')::boolean and (v_r->>'skipped')::boolean
+    and (v_r->>'import_id')::uuid = v_imp and v_cnt = 1
+    and (v_r->>'reason') like '%取込元ファイルID%', v_r::text || ' / rows=' || v_cnt);
+
+  -- ═══════════ F. RLS・認可 ═══════════
+  -- F1: 5テーブルすべてで anon の SELECT / INSERT / UPDATE / DELETE が拒否される
+  v_no := 39;
+  foreach v_tbl in array array['invoice_imports','invoice_documents','invoice_lines',
+                               'customer_purchase_facts','product_name_aliases'] loop
+    foreach v_op in array array['SELECT','INSERT','UPDATE','DELETE'] loop
+      begin
+        set local role anon;
+        case v_op
+          when 'SELECT' then execute format('select count(*) from %I', v_tbl);
+          when 'INSERT' then execute format('insert into %I default values', v_tbl);
+          when 'UPDATE' then execute format('update %I set id = id', v_tbl);
+          when 'DELETE' then execute format('delete from %I', v_tbl);
+        end case;
+        reset role;
+        insert into _t values (v_no, 'F1: anonは'||v_tbl||'を'||v_op||'できない', false, '実行できてしまった');
+      exception when insufficient_privilege then
+        reset role;
+        insert into _t values (v_no, 'F1: anonは'||v_tbl||'を'||v_op||'できない', true, 'permission denied');
+      when others then
+        reset role;
+        -- default values が無い等の別エラーは権限より先に権限エラーになるべきなので false
+        insert into _t values (v_no, 'F1: anonは'||v_tbl||'を'||v_op||'できない', false, sqlerrm);
+      end;
+      v_no := v_no + 1;
+    end loop;
+  end loop;
+
+  -- F2: admin_invoice_* は誤ったスタッフキーで拒否される（3関数すべて）
+  begin
+    perform admin_invoice_stage_import('wrong-key', jsonb_build_object('file_name','x','content_hash','x'));
+    insert into _t values (59,'F2: stage_importは誤キーで拒否', false, '');
+  exception when others then
+    insert into _t values (59,'F2: stage_importは誤キーで拒否', sqlerrm like '%スタッフキー%', left(sqlerrm,40));
+  end;
+  begin
+    perform admin_invoice_run_matching('wrong-key', null);
+    insert into _t values (60,'F2: run_matchingは誤キーで拒否', false, '');
+  exception when others then
+    insert into _t values (60,'F2: run_matchingは誤キーで拒否', sqlerrm like '%スタッフキー%', left(sqlerrm,40));
+  end;
+  begin
+    perform admin_invoice_list('wrong-key', null);
+    insert into _t values (61,'F2: listは誤キーで拒否', false, '');
+  exception when others then
+    insert into _t values (61,'F2: listは誤キーで拒否', sqlerrm like '%スタッフキー%', left(sqlerrm,40));
+  end;
+
+  -- F3: helper関数はanonから直接実行できない
+  begin
+    set local role anon;
+    perform invoice_norm_code('ZC901');
+    reset role;
+    insert into _t values (62,'F3: anonはinvoice_norm_codeを実行できない', false, '実行できてしまった');
+  exception when insufficient_privilege then
+    reset role;
+    insert into _t values (62,'F3: anonはinvoice_norm_codeを実行できない', true, 'permission denied');
+  end;
+  begin
+    set local role anon;
+    perform invoice_name_similarity('a','b');
+    reset role;
+    insert into _t values (63,'F3: anonはinvoice_name_similarityを実行できない', false, '実行できてしまった');
+  exception when insufficient_privilege then
+    reset role;
+    insert into _t values (63,'F3: anonはinvoice_name_similarityを実行できない', true, 'permission denied');
+  end;
+
+  -- F4: anon/authenticated は public schema へ CREATE できない
+  insert into _t values (64,'F4: anonはpublicへCREATE不可',
+    not has_schema_privilege('anon','public','CREATE'), '');
+  insert into _t values (65,'F4: authenticatedはpublicへCREATE不可',
+    not has_schema_privilege('authenticated','public','CREATE'), '');
+
+  -- F5: admin_invoice_* のEXECUTEはPUBLICに無く、anon/authenticatedにだけある
+  --     （proaclを実測: grantee=0(PUBLIC)のEXECUTEエントリが無いこと＋anon/authenticatedに有ること）
+  insert into _t values (66,'F5: EXECUTE権限（PUBLIC無し・anon/authenticated有り）',
+    3 = (select count(*) from pg_proc p
+          where p.pronamespace = 'public'::regnamespace
+            and p.proname in ('admin_invoice_stage_import','admin_invoice_run_matching','admin_invoice_list')
+            and p.proacl is not null
+            and not exists (select 1 from aclexplode(p.proacl) a
+                             where a.grantee = 0 and a.privilege_type = 'EXECUTE'))
+    and has_function_privilege('anon','admin_invoice_stage_import(text,jsonb)','execute')
+    and has_function_privilege('anon','admin_invoice_run_matching(text,uuid)','execute')
+    and has_function_privilege('anon','admin_invoice_list(text,text)','execute')
+    and has_function_privilege('authenticated','admin_invoice_stage_import(text,jsonb)','execute')
+    and has_function_privilege('authenticated','admin_invoice_run_matching(text,uuid)','execute')
+    and has_function_privilege('authenticated','admin_invoice_list(text,text)','execute'), '');
+
+  -- F6: SECURITY DEFINER関数のsearch_pathが固定されている
+  insert into _t values (67,'F6: admin_invoice_*のsearch_path固定', 3 = (
+    select count(*) from pg_proc p
+    where p.proname in ('admin_invoice_stage_import','admin_invoice_run_matching','admin_invoice_list')
+      and p.prosecdef
+      and exists (select 1 from unnest(coalesce(p.proconfig,'{}')) cfg
+                   where cfg like 'search_path=%')), '');
 end $$;
+
+-- 結果表（psql / SQL Editor で目視できる）
 select * from _t order by no;
+
+-- ok=false が1件でもあれば例外でSQL全体を失敗させる（終了ステータス／API応答で機械判定できる）
+do $$
+declare v_fails text; v_total int; v_ng int;
+begin
+  select count(*), count(*) filter (where not ok) into v_total, v_ng from _t;
+  if v_ng > 0 then
+    select string_agg(no || ':' || item, ' / ' order by no) into v_fails from _t where not ok;
+    raise exception 'TEST FAILED (%/% 件): %', v_ng, v_total, v_fails;
+  end if;
+  raise notice 'ALL TESTS PASSED (% 件)', v_total;
+end $$;
+
 rollback;

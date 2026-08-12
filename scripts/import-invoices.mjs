@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 /* 請求書のローカル取込（経路B）
  *
- *   node scripts/import-invoices.mjs --dir import/invoices --dry-run   # 抽出だけ（DBに触れない）
- *   node scripts/import-invoices.mjs --dir import/invoices --push     # ステージングへ投入＋名寄せ実行
+ *   node scripts/import-invoices.mjs --dir import/invoices --dry-run      # 抽出だけ（DBに触れない）
+ *   node scripts/import-invoices.mjs --dir import/invoices --push        # 投入＋今回投入分だけ名寄せ
+ *   node scripts/import-invoices.mjs --dir import/invoices --push --rematch-all
+ *                                             # 明示指定時のみ、過去の未照合・候補あり全件を再照合
  *
  * --push には環境変数 TGC_STAFF_KEY（スタッフキー）が必要。キーは引数に書かない・ログに出さない。
  * 冪等: 同じ内容のファイル（SHA-256一致）はDB側でskipされるので、何度実行しても二重取込にならない。
+ * 名寄せは「今回新規投入した import_id」だけを対象に実行する。skipされた既存ファイルや
+ * 過去のステージングデータは、--rematch-all を明示しない限り触らない。
  * 画像・画像PDFはここでは読まず一覧に「画像認識へ」と表示するだけ（1枚ずつ人が確認できる経路で別途投入）。
  */
 import { createHash } from 'node:crypto';
@@ -22,6 +26,7 @@ const optVal = (name, dflt) => { const i = args.indexOf(name); return i >= 0 ? a
 const dir = optVal('--dir', 'import/invoices');
 const push = opt('--push');
 const dryRun = opt('--dry-run') || !push;
+const rematchAll = opt('--rematch-all');
 
 async function rpc(fn, body) {
   const res = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
@@ -58,6 +63,7 @@ if (push) {
 }
 
 const summary = [];
+const newImportIds = [];   // 今回新規投入した import_id（名寄せはこの分だけ）
 for (const path of files) {
   const name = basename(path);
   const buf = readFileSync(path);
@@ -99,11 +105,25 @@ for (const path of files) {
     },
   });
   summary.push({ name, status: r.skipped ? 'skip(取込済)' : '投入', detail: r.skipped ? r.reason : `${r.documents}枚 ${r.lines}行` });
+  if (!r.skipped && r.import_id) newImportIds.push(r.import_id);
 }
 
 if (push) {
-  const m = await rpc('admin_invoice_run_matching', { p_staff_key: staffKey, p_import_id: null });
-  console.log(`名寄せ: 自動確定 ${m.auto} / 候補あり ${m.candidates} / 未照合 ${m.unmatched}`);
+  if (rematchAll) {
+    // 明示指定時だけ全件（過去の未照合・候補あり含む）を再照合
+    const m = await rpc('admin_invoice_run_matching', { p_staff_key: staffKey, p_import_id: null });
+    console.log(`名寄せ(全件再照合): 自動確定 ${m.auto} / 候補あり ${m.candidates} / 未照合 ${m.unmatched}`);
+  } else if (newImportIds.length) {
+    // 既定: 今回新規投入した import_id だけを名寄せ（skipped済み・過去分は触らない）
+    let auto = 0, cand = 0, none = 0;
+    for (const id of newImportIds) {
+      const m = await rpc('admin_invoice_run_matching', { p_staff_key: staffKey, p_import_id: id });
+      auto += m.auto; cand += m.candidates; none += m.unmatched;
+    }
+    console.log(`名寄せ(今回投入 ${newImportIds.length}件): 自動確定 ${auto} / 候補あり ${cand} / 未照合 ${none}`);
+  } else {
+    console.log('名寄せ: 今回の新規投入は0件のためスキップ（全件再照合は --rematch-all）');
+  }
 }
 
 console.log('\n== 結果 ==');
