@@ -1648,6 +1648,25 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div id="ship-scan-result" style="display:none;margin-top:12px;padding:12px 14px;border-radius:var(--radius);font-size:14px;line-height:1.6;"></div>
     </div>
 
+    <!-- 出荷したあとの修正（当日も、あとからでも） -->
+    <div class="section" id="ship-fix">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span>&#128736; 出荷の修正（商品を減らす・増やす）</span>
+        <button class="btn btn-sm" onclick="shipFixLoad()">&#8635; 読み込み</button>
+      </div>
+      <div style="padding:10px 12px;border:1px dashed var(--border);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.9;background:var(--surface2);margin-bottom:10px;">
+        発送の準備をしたあとに商品を足したり減らしたりしたときは、ここで直します。<br>
+        ・<strong>減らす</strong>: 出荷から外すと、その商品は<strong>在庫に戻ります</strong>（また売れます）<br>
+        ・<strong>増やす</strong>: 追加したい商品のラベルをスキャンすると、その出荷に足されます<br>
+        ・日付を変えれば、<strong>前の日の出荷もあとから直せます</strong>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:10px;">
+        <div class="form-group" style="margin:0;"><label>出荷日</label>
+          <input type="date" class="form-input" id="shipFixDate" style="max-width:200px;" onchange="shipFixLoad()" /></div>
+      </div>
+      <div id="shipFixList"><div class="empty-state">「読み込み」を押すとその日の出荷が出ます</div></div>
+    </div>
+
     <div class="section" id="ship-direct">
       <div class="section-title">⚡ 注文なし出荷（直販・突然の来店）</div>
       <div style="padding:10px 12px;border:1px dashed var(--border);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.9;background:var(--surface2);margin-bottom:10px;">
@@ -1841,13 +1860,23 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="pm-completed-section">
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <div style="font-size:13px;color:var(--gold);font-weight:600;">登録済み <span id="pmCompletedCount">(0件)</span></div>
-            <button class="btn btn-danger btn-sm" onclick="pmFinishIndividual()">全部位完了</button>
           </div>
           <div class="pm-completed-grid" id="pmCompletedGrid"></div>
           <div class="pm-yield-summary" id="pmYieldSummary" style="display:none;">
             合計: <strong id="pmYieldTotal">0 kg</strong>
             / 個体: <span id="pmYieldIndWeight">0</span> kg
             → 歩留まり: <strong id="pmYieldPct">0%</strong>
+          </div>
+          <!-- 完了ボタン: 作業の最後に押す。手袋でも押せるよう大きく・赤のまま -->
+          <button id="pmFinishBtn" onclick="pmFinishIndividual()"
+            style="width:100%;min-height:68px;margin-top:14px;background:var(--red);color:#fff;
+                   border:none;border-radius:12px;font-size:21px;font-weight:800;letter-spacing:.02em;
+                   cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25);display:flex;
+                   align-items:center;justify-content:center;gap:10px;">
+            &#9989; この個体の精肉を完了する<span id="pmFinishCount" style="font-size:17px;font-weight:700;opacity:.9;"></span>
+          </button>
+          <div style="text-align:center;font-size:12.5px;color:var(--text3);margin-top:6px;">
+            押すと「精肉完了」になり、未処理の一覧から外れます
           </div>
         </div>
       </div>
@@ -3175,6 +3204,165 @@ async function shipSelectOrder(orderId) {
   maintainShippingScannerFocus();
 }
 
+/* ===== 出荷の修正（発送準備の直後も、送ったあとでも） =====
+   在庫の正しさに直結するので、必ず確認ダイアログを出し、
+   在庫の status と注文明細（order_items）を必ず両方そろえて直す。 */
+let shipFixCache = {};
+function shipFixEsc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, function(c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+async function shipFixLoad() {
+  const box = document.getElementById('shipFixList');
+  const dateEl = document.getElementById('shipFixDate');
+  if (!dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
+  const date = dateEl.value;
+  box.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
+  try {
+    const ships = await sb('GET', 'shipments', null,
+      '?shipment_date=eq.' + date + '&select=*&order=created_at.desc');
+    if (!ships.length) {
+      box.innerHTML = '<div class="empty-state">' + fmt(date) + ' の出荷はありません</div>';
+      return;
+    }
+    shipFixCache = {};
+    let html = '';
+    for (const sh of ships) {
+      const orderId = sh.order_id;
+      let order = null, items = [];
+      if (orderId) {
+        const os = await sb('GET', 'orders', null, '?id=eq.' + orderId + '&select=*');
+        order = os[0] || null;
+        items = await sb('GET', 'order_items', null,
+          '?order_id=eq.' + orderId + '&select=*&order=created_at.asc');
+      }
+      // 明細に紐づく在庫（識別コードを出すため）
+      const invIds = items.map(i => i.inventory_id).filter(Boolean);
+      let invs = [];
+      if (invIds.length) {
+        invs = await sb('GET', 'inventory', null,
+          '?id=in.(' + invIds.join(',') + ')&select=id,ident_code,part_name,weight_kg,weight,status');
+      }
+      const invById = {};
+      invs.forEach(v => { invById[v.id] = v; });
+      shipFixCache[sh.id] = { ship: sh, order: order, items: items, invById: invById };
+
+      const who = (order && (order.customer_name || order.order_code)) || (sh.notes || '出荷');
+      const rows = items.map(function(it) {
+        const inv = it.inventory_id ? invById[it.inventory_id] : null;
+        const w = (inv && (inv.weight_kg || inv.weight)) || it.weight_kg || it.weight || 0;
+        const name = (inv && inv.part_name) || it.part_name || '（品目不明）';
+        const code = inv ? inv.ident_code : '（在庫の紐付けなし）';
+        const removable = !!it.inventory_id;
+        return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;'
+          + 'padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px;background:var(--surface);">'
+          + '<div style="font-size:14px;line-height:1.6;">'
+          +   '<strong>' + shipFixEsc(name) + '</strong> ' + (w ? Number(w).toFixed(2) + 'kg' : '')
+          +   '<br><span style="font-size:12px;color:var(--text3);">' + shipFixEsc(code) + '</span>'
+          + '</div>'
+          + (removable
+              ? '<button class="btn btn-sm" style="border-color:var(--red);color:var(--red);" '
+                + 'onclick="shipFixRemoveItem(\'' + sh.id + '\',\'' + it.id + '\')">&#10134; 出荷から外す（在庫に戻す）</button>'
+              : '<span style="font-size:12px;color:var(--text3);">在庫と紐づいていないため戻せません</span>')
+          + '</div>';
+      }).join('') || '<div style="font-size:13px;color:var(--text3);padding:6px 0;">明細がありません</div>';
+
+      html += '<div style="border:1px solid var(--gold2);border-radius:var(--radius);padding:12px;margin-bottom:12px;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">'
+        +   '<strong style="font-size:15px;">' + shipFixEsc(who) + '</strong>'
+        +   '<span style="font-size:12px;color:var(--text2);">' + shipFixEsc(sh.status || '') + ' / ' + fmt(sh.shipment_date) + '</span>'
+        + '</div>'
+        + rows
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center;">'
+        +   '<input class="form-input" id="shipFixAdd-' + sh.id + '" placeholder="追加する商品のラベルをスキャン" '
+        +     'style="flex:1;min-width:220px;font-size:16px;" '
+        +     'onkeydown="if(event.key===\'Enter\'){shipFixAddItem(\'' + sh.id + '\');}" />'
+        +   '<button class="btn btn-primary btn-sm" onclick="shipFixAddItem(\'' + sh.id + '\')">&#10133; この出荷に追加</button>'
+        + '</div>'
+        + '</div>';
+    }
+    box.innerHTML = html;
+  } catch (e) {
+    box.innerHTML = '<div class="empty-state">読み込みに失敗しました: ' + shipFixEsc(e.message) + '</div>';
+  }
+}
+
+/* 出荷から外す → 在庫に戻す（注文明細の紐付けも外す） */
+async function shipFixRemoveItem(shipId, orderItemId) {
+  const c = shipFixCache[shipId];
+  if (!c) return;
+  const item = c.items.find(i => String(i.id) === String(orderItemId));
+  if (!item || !item.inventory_id) return;
+  const inv = c.invById[item.inventory_id];
+  const name = (inv && inv.part_name) || item.part_name || '商品';
+  const code = inv ? inv.ident_code : '';
+  if (!confirm('この商品を出荷から外しますか？\n\n' + name + '  ' + code
+    + '\n\n・在庫の状態が「在庫」に戻ります（また売れます）\n・注文の明細からも外れます')) return;
+  try {
+    const now = new Date().toISOString();
+    await sb('PATCH', 'inventory', { status: '在庫', updated_at: now }, '?id=eq.' + item.inventory_id);
+    await sb('PATCH', 'order_items', { inventory_id: null }, '?id=eq.' + orderItemId);
+    toast(name + ' を出荷から外しました（在庫に戻しました）');
+    playFeedbackSound(true);
+    shipFixLoad();
+  } catch (e) {
+    playFeedbackSound(false);
+    toast('外せませんでした: ' + e.message, 'error');
+  }
+}
+
+/* 出荷に商品を追加する（在庫→出荷済、注文明細に紐付け） */
+async function shipFixAddItem(shipId) {
+  const c = shipFixCache[shipId];
+  if (!c) return;
+  const input = document.getElementById('shipFixAdd-' + shipId);
+  const code = (input.value || '').trim();
+  if (!code) { toast('ラベルをスキャンしてください', 'error'); return; }
+  try {
+    const invs = await sb('GET', 'inventory', null,
+      '?ident_code=eq.' + encodeURIComponent(code) + '&deleted_at=is.null&select=*');
+    if (!invs.length) { toast('その識別コードの在庫が見つかりません: ' + code, 'error'); input.select(); return; }
+    const inv = invs[0];
+    if (inv.status === '出荷済') { toast('すでに出荷済みです: ' + code, 'error'); input.select(); return; }
+    if (inv.status === '加工済' || inv.status === '廃棄') {
+      toast('この在庫は「' + inv.status + '」のため追加できません', 'error'); input.select(); return;
+    }
+    const w = inv.weight_kg || inv.weight || 0;
+    if (!confirm('この商品を出荷に追加しますか？\n\n' + (inv.part_name || '') + '  '
+      + (w ? Number(w).toFixed(2) + 'kg' : '') + '\n' + code
+      + '\n\n在庫の状態が「出荷済」になります。')) { input.select(); return; }
+
+    const now = new Date().toISOString();
+    if (c.order) {
+      // 空いている明細行（在庫未割当）があればそこに入れ、無ければ明細を足す
+      const vacant = c.items.find(i => !i.inventory_id && (!i.part_name || i.part_name === inv.part_name));
+      if (vacant) {
+        await sb('PATCH', 'order_items', { inventory_id: inv.id }, '?id=eq.' + vacant.id);
+      } else {
+        await sb('POST', 'order_items', {
+          order_id: c.order.id,
+          inventory_id: inv.id,
+          part_name: inv.part_name,
+          species: inv.species,
+          weight: w,
+          weight_kg: w,
+          unit_price: inv.unit_price || 0
+        });
+      }
+    }
+    await sb('PATCH', 'inventory', { status: '出荷済', updated_at: now }, '?id=eq.' + inv.id);
+    input.value = '';
+    toast((inv.part_name || '商品') + ' を出荷に追加しました');
+    playFeedbackSound(true);
+    shipFixLoad();
+  } catch (e) {
+    playFeedbackSound(false);
+    toast('追加できませんでした: ' + e.message, 'error');
+  }
+}
+
 async function loadShipping() {
   // スタッフキーは求めない（キーが要るのは顧客マスタの操作だけ。2026-08-12）
   const container = document.getElementById('ship-orders');
@@ -4357,7 +4545,15 @@ function pmShowLastAction(action) {
   const printBadge = action.printed
     ? '<span class="badge badge-green">ラベル印刷済み</span>'
     : '<span class="badge badge-gray">登録のみ（ラベル未印刷）</span>';
-  body.innerHTML = `<strong>${action.part}</strong> / ${action.weight.toFixed(3)}kg → 在庫 <strong style="color:var(--gold);">${action.ident}</strong> ${printBadge}`;
+  body.innerHTML = `<strong>${action.part}</strong> / ${action.weight.toFixed(3)}kg → 在庫 <strong style="color:var(--gold);">${action.ident}</strong> ${printBadge}`
+    + `<div style="margin-top:8px;">
+        <button onclick="pmUndoPart('${action.ident}')"
+          style="min-height:44px;padding:0 18px;background:transparent;border:2px solid var(--red);
+                 color:var(--red);border-radius:8px;font-size:15px;font-weight:800;cursor:pointer;">
+          &#8630; この登録を取り消す
+        </button>
+        <span style="margin-left:8px;font-size:12.5px;color:var(--text3);">部位や重量を間違えたときはここから</span>
+      </div>`;
   card.style.display = 'block';
 }
 
@@ -4795,10 +4991,48 @@ async function pmOnWeightReceived(weight_kg) {
   }
 }
 
+// ── 登録した部位を取り消す（部位間違い・印刷キャンセル後の後始末） ──
+// 印刷ダイアログの「キャンセル」はブラウザから検知できない（b-PACはダイアログ自体が出ない）。
+// そのため「登録を止める」のではなく「登録したものをすぐ消せる」形にしている。
+// 削除は soft delete（deleted_at）なので、在庫タブの削除履歴から復元できる。
+async function pmUndoPart(identCode) {
+  const item = pmCompletedParts.find(c => c.ident_code === identCode);
+  if (!item) return;
+  if (!confirm('この登録を取り消しますか？\n\n'
+    + item.part_name + '  ' + item.weight_kg.toFixed(3) + 'kg\n'
+    + identCode + '\n\n'
+    + '在庫から外れます（削除履歴からいつでも戻せます）。\n'
+    + '印刷したラベルは貼らずに捨ててください。')) return;
+  try {
+    const now = new Date().toISOString();
+    // 在庫を soft delete（既存の削除履歴・復元の仕組みに合わせる）
+    await sb('PATCH', 'inventory', { deleted_at: now, updated_at: now },
+      '?ident_code=eq.' + encodeURIComponent(identCode) + '&deleted_at=is.null');
+    // 解体履歴も同じ識別コードの行を消す（歩留まりの二重計上を防ぐ）
+    try {
+      await sb('DELETE', 'processing_log', null,
+        '?child_ident_code=eq.' + encodeURIComponent(identCode));
+    } catch (e) { /* 履歴が消せなくても在庫の取消は成立させる */ }
+
+    pmCompletedParts = pmCompletedParts.filter(c => c.ident_code !== identCode);
+    pmRenderParts();
+    pmRenderCompleted();
+    const last = document.getElementById('pmLastAction');
+    if (last) last.style.display = 'none';
+    toast(item.part_name + ' の登録を取り消しました', 'info');
+    playFeedbackSound(true);
+  } catch (err) {
+    playFeedbackSound(false);
+    toast('取り消しに失敗しました: ' + err.message, 'error');
+  }
+}
+
 // ── 登録済み一覧描画 ──
 function pmRenderCompleted() {
   const grid = document.getElementById('pmCompletedGrid');
   document.getElementById('pmCompletedCount').textContent = `(${pmCompletedParts.length}件)`;
+  const finishCount = document.getElementById('pmFinishCount');
+  if (finishCount) finishCount.textContent = pmCompletedParts.length ? `（${pmCompletedParts.length}部位）` : '';
   pmUpdateBuybackPreview();
 
   if (!pmCompletedParts.length) {
@@ -4815,6 +5049,9 @@ function pmRenderCompleted() {
       <span class="chip-name">${c.part_name}</span>${gradeBadge}${boneBadge}
       <span class="chip-weight">${c.weight_kg.toFixed(3)}kg</span>
       <span style="font-size:10px;color:var(--text3)">${c.lot_code}</span>
+      <button onclick="pmUndoPart('${c.ident_code}')" title="この登録を取り消す"
+        style="margin-left:6px;background:transparent;border:1px solid var(--red);color:var(--red);
+               border-radius:6px;font-size:12px;font-weight:700;padding:2px 8px;cursor:pointer;">取消</button>
     </div>`;
   }).join('');
 
