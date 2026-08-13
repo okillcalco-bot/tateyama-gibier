@@ -1734,7 +1734,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <!-- Individual -->
     <div style="font-size:13px;color:var(--text2);margin:16px 0 8px;font-weight:500;">精肉する個体を選択</div>
     <input class="form-input" id="pmScanInput" placeholder="🔳 バーコードをスキャン — 読み取ると個体が開きます" onkeydown="if(event.key==='Enter'){event.preventDefault();pmScanSelect(this.value);this.value='';}" style="margin-bottom:6px;font-size:15px;padding:10px 14px;border-color:var(--gold2);" autocomplete="off" />
-    <input class="form-input" id="pmIndSearch" placeholder="個体番号で検索（例: TGC-08-T）" oninput="pmSearchIndividuals()" style="margin-bottom:6px;font-size:15px;padding:10px 14px;" />
+    <input class="form-input" id="pmIndSearch" placeholder="番号・種類で検索（例: シカ12 / 012 / TGC-08-シ）" oninput="pmSearchIndividuals()" style="margin-bottom:6px;font-size:15px;padding:10px 14px;" />
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;font-size:12px;">
       <span style="color:var(--text3);align-self:center;">クイック:</span>
       <button onclick="pmQuickSearch('TGC-TEST')" style="padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;font-size:12px;">🧪 テスト個体</button>
@@ -4155,11 +4155,19 @@ async function pmLoadRecentIndividuals() {
 }
 
 async function pmSearchIndividuals() {
-  const q = document.getElementById('pmIndSearch').value.trim();
+  const raw = document.getElementById('pmIndSearch').value.trim();
   const list = document.getElementById('pmIndList');
-  if (!q) { pmLoadRecentIndividuals(); return; }
+  if (!raw) { pmLoadRecentIndividuals(); return; }
+  // ラベル（TGC-08-シ012）だけでなく、種類（シカ）や番号（シカ12 / 012 / 12）でも探せるようにする。
+  // 空枠（捕獲日なし・先付けの通し番号だけ）も精肉モードで選べるよう、除外条件は deleted のみ。
+  const q = raw.replace(/[(),*%]/g, '');            // PostgREST/LIKE の構造文字は除去
+  const digits = q.replace(/\D/g, '');
   try {
-    const inds = await sb('GET', 'individuals', null, `?label_id=ilike.*${encodeURIComponent(q)}*&select=label_id,species,weight_total,capture_date,hunter_name,quality&order=capture_date.desc&limit=20`);
+    const qe = encodeURIComponent(q);
+    const orParts = [`label_id.ilike.*${qe}*`, `species.ilike.*${qe}*`];
+    if (digits && digits.length <= 6) orParts.push(`serial_number.eq.${parseInt(digits, 10)}`);  // 番号だけ入力→通し番号一致
+    const inds = await sb('GET', 'individuals', null,
+      `?or=(${orParts.join(',')})&deleted_at=is.null&select=label_id,species,weight_total,capture_date,hunter_name,quality,serial_number,processing_done_at,intake_status&order=created_at.desc&limit=30`);
     pmRenderIndList(inds);
   } catch(e) {
     list.innerHTML = '<div class="empty-state">検索エラー</div>';
@@ -4169,16 +4177,19 @@ async function pmSearchIndividuals() {
 function pmRenderIndList(inds) {
   const list = document.getElementById('pmIndList');
   if (!inds.length) { list.innerHTML = '<div class="empty-state">該当する個体がありません</div>'; return; }
-  list.innerHTML = inds.map(i => `
+  list.innerHTML = inds.map(i => {
+    const emptyBadge = !i.capture_date ? ' <span class="badge" style="background:var(--surface2);color:var(--text3);border:1px solid var(--border);">空枠</span>' : '';
+    const doneBadge = i.processing_done_at ? ' <span class="badge badge-green">精肉済</span>' : '';
+    return `
     <div class="pm-setup-ind-card" onclick="pmSelectIndividual('${i.label_id}')">
       <div class="ind-icon">${speciesIcon(i.species)}</div>
       <div style="flex:1;">
-        <div class="ind-label">${i.serial_number ? '#'+String(i.serial_number).padStart(3,'0')+' ' : ''}${i.label_id}</div>
+        <div class="ind-label">${i.serial_number ? '#'+String(i.serial_number).padStart(3,'0')+' ' : ''}${i.label_id}${emptyBadge}${doneBadge}</div>
         <div class="ind-meta">${i.species||'-'} / ${i.weight_total||'-'}kg / ${fmt(i.capture_date)} / ${i.hunter_name||'-'}</div>
       </div>
       <div>${i.quality === '食用不可' ? '<span class="badge badge-red">食用不可</span>' : ''}</div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 // ── 個体選択 → メイン画面へ ──
