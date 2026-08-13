@@ -122,8 +122,20 @@ async function setup(tag) {
 }
 
 console.log(out.join('\n'));
-console.log('\n== 掃除（Supabase SQL Editorで実行してください） ==');
 const hlist = hashes.map(h => `'${h}'`).join(', ');
+// 直列化の意図をより明確にする検証（Supabase SQL Editor で実行）:
+// 反映された実績の customer_id / product_id が、最終の invoice_documents / invoice_lines と一致すること。
+// A/B は「編集が先勝ちなら反映は編集後・finalize が先勝ちなら編集は拒否」なので、下のSQLは常に一致行のみを返す。
+console.log('\n== 直列化の検証（Supabase SQL Editorで実行。全行 match=true を確認） ==');
+console.log(`select i.file_name, l.id as line_id,
+  f.customer_id = d.customer_id as customer_match,
+  f.product_id  = l.product_id  as product_match
+from customer_purchase_facts f
+join invoice_lines l on l.id = f.source_id
+join invoice_documents d on d.id = l.document_id
+join invoice_imports i on i.id = d.import_id
+where f.source_kind='invoice' and i.content_hash in (${hlist}) and f.canceled_at is null;`);
+console.log('\n== 掃除（検証後にSupabase SQL Editorで実行してください） ==');
 console.log(`delete from customer_purchase_facts where source_kind='invoice' and source_id in (
   select l.id from invoice_lines l join invoice_documents d on d.id=l.document_id
   join invoice_imports i on i.id=d.import_id where i.content_hash in (${hlist}));`);
