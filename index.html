@@ -2450,7 +2450,24 @@ async function resolveIndividualByCode(code) {
   }
   // それ以外はlabel_idそのまま（カナ入りQRを直接読んだ場合など）
   const inds = await sb('GET', 'individuals', null, `?label_id=eq.${encodeURIComponent(code)}&deleted_at=is.null&select=*`);
-  return inds[0] || null;
+  if (inds.length) return inds[0];
+
+  // 救済: プレフィックスが欠けた断片や、ラベルの大きな表示（例「シ011」）、種名（シカ11）、
+  //       種コード（SK011）だけでも解決を試みる。末尾の数字＋種の手がかりからカナlabelを引く。
+  const tail = (code.match(/(\d+)\s*$/) || [])[1];
+  if (tail) {
+    const nnn = String(parseInt(tail, 10)).padStart(3, '0');
+    const cu = code.toUpperCase();
+    let kana = null;
+    for (const [name, ent] of Object.entries(QR_SPECIES)) {
+      if (code.includes(ent.kana) || code.includes(name) || cu.includes(ent.code)) { kana = ent.kana; break; }
+    }
+    if (kana) {
+      const hit = await sb('GET', 'individuals', null, `?label_id=ilike.*-${encodeURIComponent(kana)}${nnn}&deleted_at=is.null&select=*&order=created_at.desc`);
+      if (hit.length) return hit.filter(i => !i.processing_done_at)[0] || hit[0];
+    }
+  }
+  return null;
 }
 
 async function pmScanSelect(code) {
