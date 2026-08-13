@@ -7,6 +7,7 @@
 | `invoice_staging.test.sql` | 1/3 本体テスト（投入・冪等・名寄せ・数字コード・ハイフン・同時投入・RLS/認可）／80件 |
 | `invoice_confirm.test.sql` | 2/3 確認画面テスト（矛盾拒否・手動確定・商品alias・金額検算・実績反映/取消・監査・認可）／38件 |
 | `invoice_confirm_hardening.test.sql` | 2/3 ハードニング（状態ゲート・親行ロック・検索・alias残存・担当者必須・認可網羅）／41件 |
+| `phase4_usual_prices.test.sql` | 3/3（いつもの自動生成の取消除外/pin保持/saved_items不変・価格比較・portal_enabled・認可）／22件 |
 | `invoice_rollback.test.sql` | ロールバックSQLの完全性テスト（全オブジェクト削除→残存0件→復元） |
 | `concurrent-import.test.mjs` | 同時投入の冪等テスト（`Promise.all`・任意・要スタッフキー） |
 | `concurrent-finalize.test.mjs` | finalizeと編集の同時実行テスト（親行ロックの直列化・A/B/C・任意・要スタッフキー） |
@@ -17,7 +18,23 @@
 - 1/3 `invoice_staging.test.sql`: **80/80 PASS**（名寄せRPCを取込単位ロック方式へ再構築後も回帰なし）
 - 2/3 `invoice_confirm.test.sql`: **38/38 PASS**
 - 2/3 `invoice_confirm_hardening.test.sql`: **41/41 PASS**
-- E2E `invoice-import.e2e.js`: **24/24 PASS**（Playwright 390×844）
+- 3/3 `phase4_usual_prices.test.sql`: **22/22 PASS**
+- E2E `invoice-import.e2e.js`: **24/24 PASS**／`portal-config.e2e.js`: **14/14 PASS**（Playwright 390×844）
+
+## フェーズ4(3/3)（phase4_usual_prices.test.sql・2026-08-13 実測 22/22 PASS）
+
+対象: `migrations/20260813_phase4_usual_prices.sql`（本番適用済み）。
+
+- いつもの商品の自動再集計 `admin_recompute_usual_items`: `customer_purchase_facts` の
+  **canceled_at is null のみ**を集計（取消済み実績を除外）／is_pinned・is_hidden を保持／
+  実績が消えた非pin行を削除（pin行は残す）／**customer_saved_items を参照も更新もしない**。
+- 顧客別価格比較 `admin_customer_price_comparison`: 適用価格・出所（個別/ランク/標準）・
+  standard・ランク価格・個別価格・standardとの差額。resolve_unit_price に一元化。
+- ポータル利用 `admin_list_portal_enabled` / `admin_set_portal_enabled`（担当者必須・
+  security_events へ監査・住所/電話/キーは残さない）。
+- 認可: 新5RPC PUBLIC無・anon/authenticated有・SECURITY DEFINER・search_path固定。誤スタッフキー拒否。
+- E2E `portal-config.e2e.js`（390px）: タブ・一覧・価格比較（個別・差額-500）・いつもの・
+  顧客別/全再集計・トグル・担当者名なしでは状態変更しない・横スクロールなし。
 
 ## 実行方法
 

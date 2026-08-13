@@ -257,6 +257,7 @@ th,td{padding:8px 6px;font-size:.8rem}
   <div class="tab" data-tab="documents" onclick="switchTab('documents')">&#x1f4c4; 書類発行</div>
   <div class="tab" data-tab="invoice" onclick="switchTab('invoice')">&#x1f9fe; 請求書作成</div>
   <div class="tab" data-tab="invoiceimport" onclick="switchTab('invoiceimport')">&#x1f4e5; 請求書取込</div>
+  <div class="tab" data-tab="portalcfg" onclick="switchTab('portalcfg')">&#x1f6d2; ポータル設定</div>
   <div class="tab" data-tab="customers" onclick="switchTab('customers')">&#x1f464; 顧客管理</div>
   <div class="tab" data-tab="pricing" onclick="switchTab('pricing')">&#x1f3f7;&#xfe0f; 価格マスタ</div>
   <div class="tab" data-tab="pproducts" onclick="switchTab('pproducts')">&#x1f6d2; ポータル商品</div>
@@ -545,6 +546,37 @@ th,td{padding:8px 6px;font-size:.8rem}
           <th>スタンダード</th><th>ローカル</th><th>スタートメンバー</th><th>公開</th><th>注文</th><th>操作</th></tr></thead>
         <tbody id="ppBody"></tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- Tab: ポータル設定（利用可否・いつもの商品・顧客別価格の比較） -->
+  <div class="tab-content" id="tab-portalcfg">
+    <div style="font-size:12.5px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:12px;line-height:1.8;">
+      お客様の注文サイト（ポータル）の<strong>利用可否</strong>を確認・切り替えます。
+      各顧客の「価格・いつもの」で、<strong>顧客別価格の比較</strong>（適用価格と standard の差）と、
+      購入実績から自動生成した<strong>いつもの商品</strong>を確認できます。いつもの商品は購入実績（取消済みを除く）から集計され、
+      お客様が手動で保存した「お気に入り／マイリスト」は変更しません。
+    </div>
+    <div class="inv-status-badges" id="pcFilter"></div>
+    <div class="filter-bar">
+      <input class="search-input" type="text" placeholder="店名・コードで絞り込み..." id="pcSearch" oninput="renderPortalEnabled()">
+      <button class="btn btn-outline btn-sm" onclick="loadPortalEnabled()">↻ 再読込</button>
+      <button class="btn btn-outline btn-sm" onclick="recomputeAllUsual()">🧮 いつもの商品を全再集計</button>
+    </div>
+    <div class="table-wrap">
+      <table class="customer-table">
+        <thead><tr><th>コード</th><th>店名</th><th>ランク</th><th>ログイン</th><th>注文</th><th>いつもの</th><th>ポータル利用</th><th>操作</th></tr></thead>
+        <tbody id="pcBody"><tr><td colspan="8" class="loading">読み込み中…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 顧客の価格比較・いつもの Modal -->
+  <div class="modal-overlay" id="pcDetailModal">
+    <div class="modal modal-wide">
+      <span class="modal-close" onclick="closeModal('pcDetailModal')">&times;</span>
+      <h2 id="pcDetailTitle">顧客の価格・いつもの</h2>
+      <div id="pcDetailBody"></div>
     </div>
   </div>
 
@@ -888,6 +920,7 @@ function switchTab(tab){
   if(tab==='pproducts') loadPortalProducts();
   if(tab==='invoice') openInvoiceTab();
   if(tab==='invoiceimport') openInvoiceImportTab();
+  if(tab==='portalcfg') openPortalCfgTab();
   if(tab==='customers' && !custAdminUnlocked) ensureCustAdmin();
 }
 
@@ -3170,6 +3203,126 @@ function invCustSearch(){
 async function pickCustomer(custId){
   const docId=invPickDocId; hideCustPick();
   if(docId) await invSetCustomer(docId,'確定',custId);
+}
+
+/* ══════════ ポータル設定（フェーズ4 3/3: 利用可否・いつもの・価格比較） ══════════ */
+const PC_FILTERS=[['all','すべて'],['enabled','利用可'],['disabled','停止中']];
+let pcRows=[], pcFilter='all';
+async function openPortalCfgTab(){
+  const key=await staffKeyEnsure(); if(!key){ document.getElementById('pcBody').innerHTML='<tr><td colspan="8" class="empty">スタッフキーの入力が必要です</td></tr>'; return; }
+  await loadPortalEnabled();
+}
+async function loadPortalEnabled(){
+  try{
+    pcRows=await invRpc('admin_list_portal_enabled',{p_filter:pcFilter})||[];
+    renderPortalEnabled();
+  }catch(e){
+    if(String(e.message).includes('スタッフキー')) staffKeyClear();
+    document.getElementById('pcBody').innerHTML='<tr><td colspan="8" class="empty">読み込めませんでした：'+esc(e.message)+'</td></tr>';
+  }
+}
+function setPcFilter(f){ pcFilter=f; loadPortalEnabled(); }
+function renderPortalEnabled(){
+  const counts={all:pcRows.length}; // enabled/disabledはサーバ絞り込みのため概数
+  document.getElementById('pcFilter').innerHTML=PC_FILTERS.map(([k,l])=>
+    `<button class="inv-sb ${k===pcFilter?'active':''}" onclick="setPcFilter('${k}')">${l}</button>`).join('');
+  const q=(document.getElementById('pcSearch')?.value||'').trim();
+  const rows=q?pcRows.filter(r=>(r.code||'').includes(q)||(r.name||'').includes(q)):pcRows;
+  const el=document.getElementById('pcBody');
+  if(!rows.length){ el.innerHTML='<tr><td colspan="8" class="empty">該当する顧客はいません</td></tr>'; return; }
+  el.innerHTML=rows.map(r=>{
+    const on=r.portal_enabled===true;
+    return `<tr>
+      <td>${esc(r.code||'')}</td><td>${esc(r.name||'')}</td>
+      <td>${esc(rankLabel(r.price_rank))}</td>
+      <td>${r.has_login?'あり':'—'}</td>
+      <td>${r.order_count||0}</td><td>${r.usual_items||0}</td>
+      <td><span class="inv-badge ${on?'b-取込済':'b-除外'}">${on?'利用可':'停止中'}</span></td>
+      <td><div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-sm ${on?'btn-danger':'btn-green'}" onclick="togglePortal('${r.id}',${on?'false':'true'})">${on?'停止する':'利用可にする'}</button>
+        <button class="btn btn-outline btn-sm" onclick="openPortalCustDetail('${r.id}','${escAttr(r.code||'')}','${escAttr(r.name||'')}')">価格・いつもの</button>
+      </div></td></tr>`;
+  }).join('');
+}
+async function togglePortal(id,enable){
+  const by=invRequireBy(); if(!by) return;
+  if(!confirm(enable?'このお客様のポータル利用を有効にします。よろしいですか？':'このお客様のポータル利用を停止します（ログインできなくなります）。よろしいですか？')) return;
+  try{ await invRpc('admin_set_portal_enabled',{p_customer_id:id,p_enabled:enable,p_by:by}); await loadPortalEnabled(); }
+  catch(e){ alert('切り替えに失敗：'+e.message); }
+}
+async function recomputeAllUsual(){
+  const by=invRequireBy(); if(!by) return;
+  if(!confirm('全顧客の「いつもの商品」を購入実績（取消済みを除く）から再集計します。\nお客様の手動お気に入りは変更しません。よろしいですか？')) return;
+  try{
+    const r=await invRpc('admin_recompute_usual_items',{p_customer_id:null,p_by:by});
+    alert(`再集計しました：対象 ${r.customers||0} 顧客・${r.items||0} 品目`);
+    await loadPortalEnabled();
+  }catch(e){ alert('再集計に失敗：'+e.message); }
+}
+function pcMoney(n){ return n==null?'—':'¥'+Number(n).toLocaleString(); }
+async function openPortalCustDetail(id,code,name){
+  document.getElementById('pcDetailTitle').textContent=`${code} ${name} の価格・いつもの`;
+  const body=document.getElementById('pcDetailBody');
+  body.innerHTML='<div class="loading">読み込み中…</div>';
+  openModal('pcDetailModal');
+  try{
+    const [cmp,usual]=await Promise.all([
+      invRpc('admin_customer_price_comparison',{p_customer_id:id}),
+      invRpc('admin_customer_usual_items',{p_customer_id:id}),
+    ]);
+    body.innerHTML=renderPriceComparison(cmp)+renderUsualBlock(id,usual);
+  }catch(e){ body.innerHTML='<div class="empty">読み込めませんでした：'+esc(e.message)+'</div>'; }
+}
+function renderPriceComparison(cmp){
+  const rows=(cmp||[]).map(r=>{
+    const diff=r.diff_vs_standard;
+    const diffTxt=diff==null?'—':(diff===0?'±0':(diff>0?'+':'')+Number(diff).toLocaleString());
+    const diffCls=diff==null||diff===0?'':(Math.abs(diff)>0?'style="color:var(--red);font-weight:700"':'');
+    const src={customer_override:'個別',price_rank:'ランク',standard:'標準'}[r.price_source]||(r.resolved_price==null?'価格なし':'');
+    return `<tr>
+      <td>${esc(r.species||'')} ${esc(r.display_name||'')}${r.grade_label?'（'+esc(r.grade_label)+'）':''}</td>
+      <td style="text-align:right">${pcMoney(r.resolved_price)}</td>
+      <td>${esc(src)}</td>
+      <td style="text-align:right">${pcMoney(r.standard_price)}</td>
+      <td style="text-align:right">${pcMoney(r.rank_price)}</td>
+      <td style="text-align:right">${r.has_override?pcMoney(r.override_price):'—'}</td>
+      <td style="text-align:right" ${diffCls}>${diffTxt}</td>
+      <td>${r.orderable?'○':'×'}</td></tr>`;
+  }).join('');
+  return `<div class="doc-section"><h3>顧客別 価格比較（適用価格と標準の差）</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>商品</th><th>適用価格</th><th>出所</th><th>標準</th><th>ランク</th><th>個別</th><th>標準との差</th><th>注文可</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="8" class="empty">商品がありません</td></tr>'}</tbody></table></div>
+    <div style="font-size:11.5px;color:var(--text3);margin-top:6px">出所: 個別＝顧客個別価格 / ランク＝価格ランク / 標準＝standard。価格は resolve_unit_price に一元化。</div>
+  </div>`;
+}
+function renderUsualBlock(id,usual){
+  const rows=(usual||[]).map(u=>`<tr>
+    <td>${u.is_pinned?'📌':''}${u.is_hidden?'🚫':''} ${esc(u.species||'')} ${esc(u.display_name||'')}${u.grade_label?'（'+esc(u.grade_label)+'）':''}</td>
+    <td style="text-align:right">${u.purchase_count||0}</td>
+    <td style="text-align:right">${u.total_kg!=null?Number(u.total_kg).toLocaleString()+'kg':'—'}</td>
+    <td style="text-align:right">${u.avg_order_kg!=null?Number(u.avg_order_kg).toLocaleString()+'kg':'—'}</td>
+    <td>${u.last_purchased_on||'—'}</td>
+    <td>${u.avg_interval_days!=null?Math.round(u.avg_interval_days)+'日':'—'}</td>
+    <td>${esc(u.reason||'')}</td></tr>`).join('');
+  return `<div class="doc-section" style="margin-top:20px"><h3>いつもの商品（購入実績から自動生成・取消済みを除く）</h3>
+    <div style="margin-bottom:8px"><button class="btn btn-outline btn-sm" onclick="recomputeCustUsual('${id}')">🧮 この顧客のいつものを再集計</button></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>商品</th><th>回数</th><th>合計</th><th>平均/回</th><th>最終購入</th><th>平均間隔</th><th>根拠</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="7" class="empty">まだ購入実績がありません</td></tr>'}</tbody></table></div>
+    <div style="font-size:11.5px;color:var(--text3);margin-top:6px">📌=固定表示 / 🚫=非表示（人手の上書き。再集計でも保持）。お客様の手動お気に入りとは別です。</div>
+  </div>`;
+}
+async function recomputeCustUsual(id){
+  const by=invRequireBy(); if(!by) return;
+  try{
+    const r=await invRpc('admin_recompute_usual_items',{p_customer_id:id,p_by:by});
+    const usual=await invRpc('admin_customer_usual_items',{p_customer_id:id});
+    // いつものブロックだけ差し替え
+    const block=document.querySelectorAll('#pcDetailBody .doc-section');
+    if(block[1]) block[1].outerHTML=renderUsualBlock(id,usual);
+    else await openPortalCustDetail(id,'','');
+  }catch(e){ alert('再集計に失敗：'+e.message); }
 }
 
 init();
