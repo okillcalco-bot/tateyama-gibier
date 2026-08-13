@@ -1843,9 +1843,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <span id="pmBuybackPreview" style="font-size:13px;color:var(--gold);font-weight:700;margin-left:auto;"></span>
         </div>
         <div class="pm-completed-section">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
             <div style="font-size:13px;color:var(--gold);font-weight:600;">登録済み <span id="pmCompletedCount">(0件)</span></div>
-            <button class="btn btn-danger btn-sm" onclick="pmFinishIndividual()">全部位完了</button>
+            <button class="btn btn-primary" onclick="pmFinishIndividual()" style="font-size:16px;font-weight:800;padding:12px 24px;box-shadow:0 2px 8px rgba(0,0,0,0.25);">✅ 全部位完了</button>
           </div>
           <div class="pm-completed-grid" id="pmCompletedGrid"></div>
           <div class="pm-yield-summary" id="pmYieldSummary" style="display:none;">
@@ -4389,7 +4389,10 @@ function pmShowLastAction(action) {
   const printBadge = action.printed
     ? '<span class="badge badge-green">ラベル印刷済み</span>'
     : '<span class="badge badge-gray">登録のみ（ラベル未印刷）</span>';
-  body.innerHTML = `<strong>${action.part}</strong> / ${action.weight.toFixed(3)}kg → 在庫 <strong style="color:var(--gold);">${action.ident}</strong> ${printBadge}`;
+  body.innerHTML = `<strong>${action.part}</strong> / ${action.weight.toFixed(3)}kg → 在庫 <strong style="color:var(--gold);">${action.ident}</strong> ${printBadge}`
+    + `<div style="margin-top:7px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">`
+    + `<button class="btn btn-danger btn-sm" onclick="pmUndoLast()" style="font-size:12.5px;padding:5px 14px;">↩ この登録を取消</button>`
+    + `<span style="font-size:11px;color:var(--text3);">部位・重量を間違えた／印刷をキャンセルしたときはここで取消</span></div>`;
   card.style.display = 'block';
 }
 
@@ -4839,14 +4842,21 @@ function pmRenderCompleted() {
     return;
   }
 
-  grid.innerHTML = pmCompletedParts.map(c => {
+  // 同一重量（小数3桁一致）が複数ある＝二重登録の可能性 → 印を付ける
+  const wCount = {};
+  pmCompletedParts.forEach(c => { const k = (c.weight_kg || 0).toFixed(3); wCount[k] = (wCount[k] || 0) + 1; });
+
+  grid.innerHTML = pmCompletedParts.map((c, i) => {
     const gradeBadge = c.grade && c.grade !== '並' ? `<span style="font-size:10px;color:var(--gold);margin-left:2px;">${c.grade}</span>` : '';
     const boneBadge = c.bone_in ? `<span style="font-size:10px;color:#2e7d7d;margin-left:2px;">骨付き</span>` : '';
-    return `<div class="pm-completed-chip">
+    const dup = wCount[(c.weight_kg || 0).toFixed(3)] > 1;
+    return `<div class="pm-completed-chip"${dup ? ' style="border-color:var(--red);"' : ''}>
       <span>✓</span>
       <span class="chip-name">${c.part_name}</span>${gradeBadge}${boneBadge}
       <span class="chip-weight">${c.weight_kg.toFixed(3)}kg</span>
+      ${dup ? '<span title="同じ重量が複数あります（二重登録の可能性）" style="color:var(--red);font-size:11px;font-weight:700;">⚠同重量</span>' : ''}
       <span style="font-size:10px;color:var(--text3)">${c.lot_code}</span>
+      <button onclick="pmDeleteCompleted(${i})" title="この登録を取り消す（削除）" style="margin-left:2px;border:none;background:transparent;color:var(--red);font-size:16px;line-height:1;cursor:pointer;padding:0 4px;">✕</button>
     </div>`;
   }).join('');
 
@@ -4859,6 +4869,40 @@ function pmRenderCompleted() {
   document.getElementById('pmYieldIndWeight').textContent = indWeight || '?';
   document.getElementById('pmYieldPct').textContent = yieldPct.toFixed(1) + '%';
   document.getElementById('pmYieldSummary').style.display = 'flex';
+}
+
+// ── 登録済み部位の取消（誤登録・部位間違いの削除）──
+// 印刷キャンセルでは登録は止まらない（window.print()のキャンセルはJSで検知できない）ため、
+// 誤って登録した部位はここで取り消して在庫から削除する。
+async function pmDeleteCompleted(index) {
+  const item = pmCompletedParts[index];
+  if (!item) return;
+  const label = `${item.part_name} ${(item.weight_kg || 0).toFixed(3)}kg`;
+  if (!confirm(`「${label}」の登録を取り消して在庫から削除します。\n（部位・重量の間違い、印刷キャンセル後の二重登録などの修正用）\n\nよろしいですか？`)) return;
+  try {
+    if (item.ident_code) {
+      await sb('PATCH', 'inventory', { deleted_at: new Date().toISOString() }, `?ident_code=eq.${encodeURIComponent(item.ident_code)}&deleted_at=is.null`);
+      try { await sb('DELETE', 'processing_log', null, `?child_ident_code=eq.${encodeURIComponent(item.ident_code)}`); } catch (e) { /* ログ削除失敗は業務を止めない */ }
+    }
+    pmCompletedParts.splice(index, 1);
+    // 直前登録カードが削除対象なら隠す
+    if (pmLastAction && pmLastAction.ident === item.ident_code) pmShowLastAction(null);
+    pmRenderParts();
+    pmRenderCompleted();
+    playFeedbackSound(true);
+    toast(`登録を取り消しました: ${label}`);
+  } catch (e) {
+    playFeedbackSound(false);
+    toast('取消に失敗しました: ' + sbSafeMsg(e), 'error');
+  }
+}
+
+// ── 直前登録をワンタップ取消（登録直後に部位間違いに気づいたとき）──
+function pmUndoLast() {
+  if (!pmLastAction) return;
+  const idx = pmCompletedParts.map(c => c.ident_code).lastIndexOf(pmLastAction.ident);
+  if (idx < 0) { pmShowLastAction(null); return; }
+  pmDeleteCompleted(idx);
 }
 
 // ── CODE128-B バーコードSVG生成（外部ライブラリ不要）──
@@ -5019,7 +5063,16 @@ async function pmFinishIndividual() {
     toast('まだ部位が登録されていません','error');
     return;
   }
-  if (!confirm(`${pmIndividual.label_id} の精肉を完了しますか？\n${pmCompletedParts.length}部位 登録済み`)) return;
+  // 二重登録チェック: 同じ重量の部位が複数あれば警告（印刷キャンセル後の再登録などで発生）
+  const wMap = {};
+  pmCompletedParts.forEach(c => { const k = (c.weight_kg || 0).toFixed(3); (wMap[k] = wMap[k] || []).push(c); });
+  const dups = Object.values(wMap).filter(a => a.length > 1);
+  const dupWarn = dups.length
+    ? '⚠ 重量が同じ部位があります。二重登録の可能性があります:\n'
+      + dups.map(a => `・${a[0].weight_kg.toFixed(3)}kg × ${a.length}件（${a.map(c => c.part_name).join('、')}）`).join('\n')
+      + '\n\n誤登録なら「キャンセル」して一覧の ✕ で削除してください。\n\n'
+    : '';
+  if (!confirm(`${dupWarn}${pmIndividual.label_id} の精肉を完了しますか？\n${pmCompletedParts.length}部位 登録済み`)) return;
 
   try {
     // 歩留まり率 = 精肉した肉の総重量 ÷ 体重（精肉完了で自動計算・保存）
