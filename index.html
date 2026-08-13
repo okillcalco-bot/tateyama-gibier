@@ -960,6 +960,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <div class="form-group" style="min-width:120px;"><label>個数</label><input class="form-input" id="kk-pack-n" type="number" step="1" min="1" placeholder="例: 10" oninput="kkUpdateSummary()" /></div>
           <div class="form-group" style="flex:1;min-width:160px;"><label>完成品名（自動）</label><input class="form-input" id="kk-prod-name" readonly style="background:var(--surface2);" /></div>
         </div>
+        <div class="form-group" style="margin-top:8px;">
+          <label>店頭在庫（袋）にも反映する商品 <span style="color:var(--text3);font-weight:400;">— 規格に合うと自動選択。完成個数を「センター店頭在庫」に足します</span></label>
+          <select class="form-input" id="kk-sku" onchange="kkUpdateSummary()"><option value="">（店頭在庫に反映しない）</option></select>
+        </div>
         <div id="kk-summary" style="font-size:12.5px;color:var(--text2);margin-top:8px;"></div>
       </div>
 
@@ -6725,11 +6729,19 @@ async function productMoveSave() {
 /* ───────── 加工処理（スライス・ミンチ：精肉ブロック→加工品） ───────── */
 let kkMaterials = [];       // 原料ブロック（tier2 inventory 行）
 let kkStockCache = [];      // 「在庫から選ぶ」用の在庫キャッシュ
+let kkSkuProducts = [];     // 店頭在庫（袋SKU）反映用の小売商品
 
 async function loadKakou() {
   // 作業者
   const op = document.getElementById('kk-operator');
   if (op) op.innerHTML = '<option value="">選択...</option>' + PM_OPERATORS.map(n => `<option>${esc2(n)}</option>`).join('');
+  // 店頭在庫（袋SKU）の候補（完成時に「センター店頭在庫」へ反映する先）
+  try {
+    kkSkuProducts = await sb('GET', 'products', null, "?deleted_at=is.null&category=eq.小売&select=id,name,unit,stock_qty&order=name.asc") || [];
+    const sku = document.getElementById('kk-sku');
+    if (sku) sku.innerHTML = '<option value="">（店頭在庫に反映しない）</option>' +
+      kkSkuProducts.map(p => `<option value="${p.id}">${esc2(p.name)}（現在庫 ${p.stock_qty || 0}${esc2(p.unit || '')}）</option>`).join('');
+  } catch (e) { kkSkuProducts = []; }
   // 保存場所（冷凍庫）
   const loc = document.getElementById('kk-location');
   if (loc) {
@@ -6757,13 +6769,13 @@ function kkTypeChange() {
   const type = document.getElementById('kk-type').value;
   document.getElementById('kk-mince-opt').style.display = type === 'ミンチ' ? '' : 'none';
   document.getElementById('kk-slice-opt').style.display = type === 'スライス' ? '' : 'none';
-  kkUpdateProdName();
+  kkUpdateSummary();
 }
 function kkOnThickChange() {
   const sel = document.getElementById('kk-thick');
   const other = document.getElementById('kk-thick-other');
   if (other) other.style.display = sel.value === '__other' ? '' : 'none';
-  kkUpdateProdName();
+  kkUpdateSummary();
 }
 function kkThicknessMm() {
   const sel = document.getElementById('kk-thick');
@@ -6841,8 +6853,29 @@ function kkRenderMaterials() {
 }
 function kkRemoveMaterial(i) { kkMaterials.splice(i, 1); kkRenderMaterials(); kkUpdateSummary(); }
 
+// 完成品（種・厚さ・1パック重量）から店頭在庫SKU（袋）を自動で当てる
+let kkSkuAuto = null;
+function kkAutoMatchSku() {
+  const sel = document.getElementById('kk-sku'); if (!sel) return;
+  if (sel.value && sel.value !== kkSkuAuto) return;   // 手動で選んだものは尊重
+  const species = kkBlendSpecies();
+  const type = document.getElementById('kk-type').value;
+  const g = Math.round((parseFloat(document.getElementById('kk-pack-w').value) || 0) * 1000);
+  let match = null;
+  if (species && species !== 'ミックス' && g > 0) {
+    for (const p of kkSkuProducts) {
+      const n = p.name || '';
+      if (!n.includes(species) || !n.includes(g + 'g')) continue;
+      if (type === 'ミンチ') { if (n.includes('ミンチ')) { match = p; break; } }
+      else { const mm = kkThicknessMm(); if (mm != null && n.includes(mm + 'mm')) { match = p; break; } }
+    }
+  }
+  kkSkuAuto = match ? String(match.id) : null;
+  sel.value = kkSkuAuto || '';
+}
 function kkUpdateSummary() {
   kkUpdateProdName();
+  kkAutoMatchSku();
   const el = document.getElementById('kk-summary');
   if (!el) return;
   const packW = parseFloat(document.getElementById('kk-pack-w').value) || 0;
@@ -6857,6 +6890,9 @@ function kkUpdateSummary() {
     html += `　／　原料 ${matTotal.toFixed(2)}kg（歩留まり ${yld}％・端材等 ${loss.toFixed(2)}kg）`;
     if (outTotal > matTotal) html += ` <span style="color:var(--red);">※完成量が原料を超えています</span>`;
   }
+  const skuSel = document.getElementById('kk-sku');
+  const skuProd = skuSel && skuSel.value ? kkSkuProducts.find(p => String(p.id) === skuSel.value) : null;
+  if (skuProd) html += `<br><span style="color:var(--green);">🛒 店頭在庫「${esc2(skuProd.name)}」に +${packN}袋（${(skuProd.stock_qty||0)} → ${(skuProd.stock_qty||0) + packN}）</span>`;
   el.innerHTML = html;
 }
 
@@ -6929,8 +6965,12 @@ async function kkSubmit() {
   const location = document.getElementById('kk-location').value || null;
   const matTotal = kkMaterials.reduce((s, m) => s + kkMatWeight(m), 0);
   const outTotal = packW * packN;
+  const skuId = (document.getElementById('kk-sku') || {}).value || '';
+  const skuProd = skuId ? kkSkuProducts.find(p => String(p.id) === skuId) : null;
 
-  if (!confirm(`加工処理を記録します。\n\n加工: ${prodName}\n原料: ${kkMaterials.length}点 / ${matTotal.toFixed(2)}kg\n完成: ${packW}kg × ${packN}パック = ${outTotal.toFixed(2)}kg\n作業者: ${operator}\n\n原料は「加工済」になり、完成パックが${packN}件の在庫として登録されます。よろしいですか？`)) return;
+  if (!confirm(`加工処理を記録します。\n\n加工: ${prodName}\n原料: ${kkMaterials.length}点 / ${matTotal.toFixed(2)}kg\n完成: ${packW}kg × ${packN}パック = ${outTotal.toFixed(2)}kg\n作業者: ${operator}`
+    + (skuProd ? `\n店頭在庫「${skuProd.name}」に +${packN}袋（${(skuProd.stock_qty||0)} → ${(skuProd.stock_qty||0)+packN}）` : '')
+    + `\n\n原料は「加工済」になり、完成パックが${packN}件の在庫として登録されます。よろしいですか？`)) return;
 
   try {
     const { prefix, date, start } = await kkNextCodeBase(pc);
@@ -6981,7 +7021,21 @@ async function kkSubmit() {
     }));
     try { await sb('POST', 'processing_log', logRows); } catch (e) { /* ログ失敗は業務を止めない */ }
 
-    // 4. ラベル印刷
+    // 4. 店頭在庫（袋SKU）へ「完成」を反映（選択時のみ）：センター店頭在庫を個数分ふやす
+    if (skuProd) {
+      try {
+        const next = (skuProd.stock_qty || 0) + packN;
+        await sb('POST', 'product_movements', {
+          product_id: skuProd.id, product_name: skuProd.name, movement_type: '完成', qty: packN,
+          staff_name: operator, destination: 'センター', note: `加工処理から自動（${batchCode}）`
+        });
+        await sb('PATCH', 'products', { stock_qty: next, updated_at: nowIso }, `?id=eq.${skuProd.id}`);
+        try { baseSyncStock(skuProd.id, next); } catch (e) {}
+        skuProd.stock_qty = next;
+      } catch (e) { toast('店頭在庫への反映に失敗しました（加工処理は記録済み）: ' + sbSafeMsg(e), 'error'); }
+    }
+
+    // 5. ラベル印刷
     kkPrintLabels(packs, prodName, species, origin, kkMaterials);
 
     playFeedbackSound(true);
