@@ -396,7 +396,17 @@ textarea { min-height: 80px; resize: vertical; }
 #arBoard .ar-code { font-size: clamp(20px, 6vw, 34px); font-weight: 800; letter-spacing: .02em; }
 #arBoard .ar-line { font-size: clamp(13px, 3.6vw, 19px); font-weight: 600; }
 #arBoard .ar-line b { color: #ffe08a; font-weight: 800; }
+/* 引き取り撮影用ホワイトボード（右上・実際のホワイトボードの代わりに自動合成） */
+#arWhiteboard { display: none; position: absolute; right: 12px; top: 52px; max-width: 60%; background: #fff; color: #14181f; border: 3px solid #d7dce2; border-radius: 12px; padding: 10px 13px; line-height: 1.5; box-shadow: 0 3px 12px rgba(0,0,0,.45); font-weight: 700; }
+#arWhiteboard.show { display: block; }
+#arWhiteboard .wb-title { font-size: clamp(13px, 3.8vw, 18px); font-weight: 900; color: #b5451b; border-bottom: 2px solid #eee; margin-bottom: 5px; padding-bottom: 3px; }
+#arWhiteboard .wb-line { font-size: clamp(12px, 3.2vw, 16px); }
+#arWhiteboard .wb-line b { color: #0b56b0; font-weight: 800; }
 #arMsg { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.7); color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; display: none; max-width: 90%; text-align: center; }
+/* 引き取り撮影が必要な地区の通知（フォーム内） */
+#pickupNotice { display: none; margin-top: 8px; padding: 11px 13px; border-radius: 10px; background: #7a2b12; color: #fff6ee; font-weight: 800; font-size: 14px; line-height: 1.5; border: 1px solid #d0703c; }
+#pickupNotice.show { display: block; }
+#pickupNotice b { color: #ffd28a; }
 #arCam .ar-bar { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 18px calc(16px + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: space-between; background: linear-gradient(transparent, rgba(0,0,0,.55)); }
 .ar-btn { border: none; border-radius: 10px; padding: 12px 16px; font-size: 15px; font-weight: 700; cursor: pointer; background: rgba(255,255,255,.18); color: #fff; -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
 .ar-shutter { width: 72px; height: 72px; border-radius: 50%; border: 5px solid #fff; background: #fff; cursor: pointer; box-shadow: 0 0 0 3px rgba(0,0,0,.35); }
@@ -618,6 +628,10 @@ textarea { min-height: 80px; resize: vertical; }
       </div>
       <div class="form-row" id="areaPickedRow" style="display:none">
         <div id="areaPickedLabel" style="font-size:1.05rem;color:var(--gold-light);font-weight:700;"></div>
+      </div>
+      <div class="form-row">
+        <button type="button" class="now-btn" style="width:100%;padding:11px;font-size:14px;" onclick="locatePickupArea()">📍 現在地から地区を判定（引き取り撮影の要否）</button>
+        <div id="pickupNotice"></div>
       </div>
       <input type="hidden" id="captureOldTown" value="">
       <input type="hidden" id="captureArea" value="">
@@ -926,6 +940,7 @@ textarea { min-height: 80px; resize: vertical; }
 <div id="arCam">
   <video id="arVideo" autoplay playsinline muted></video>
   <div id="arBoard"></div>
+  <div id="arWhiteboard"></div>
   <div id="arMsg"></div>
   <div class="ar-bar">
     <button type="button" class="ar-btn ar-cancel" onclick="arClose()">✕ 閉じる</button>
@@ -1442,6 +1457,9 @@ function onToggleChange(field, val) {
     const row = document.getElementById('intakeStaffRow');
     if (row) row.style.display = (val && val !== '持込') ? '' : 'none';
   }
+  if (field === 'intake_method' || field === 'capture_city') {
+    if (typeof updatePickupNotice === 'function') updatePickupNotice();
+  }
 }
 
 /* ── 地区マスタ（DB）→ 市 → 地区（旧町村） → 現住所表記 のボタン選択 ──
@@ -1547,6 +1565,7 @@ function onOazaSearch() {
   document.getElementById('captureArea').value = val;
   const lbl = document.getElementById('areaPickedLabel');
   if (lbl) { lbl.textContent = '📍 捕獲場所: ' + city + ' → ' + district + ' → ' + val; document.getElementById('areaPickedRow').style.display = ''; }
+  updatePickupNotice();
   note.style.display = 'block';
   note.style.color = 'var(--gold)';
   note.textContent = `✓ 「${val}」は「${district}」の大字です。地区を自動で選びました。`;
@@ -1578,6 +1597,7 @@ function renderOazaButtons(city, district) {
       const lbl = document.getElementById('areaPickedLabel');
       lbl.textContent = '📍 捕獲場所: ' + city + ' → ' + district + ' → ' + val;
       document.getElementById('areaPickedRow').style.display = '';
+      updatePickupNotice();
     }));
   });
 }
@@ -1732,6 +1752,7 @@ function applyHunterArea(info) {
     lbl.textContent = '📍 いつもの場所: ' + info.city + (district ? ' → ' + district : '') + ' → ' + oaza;
     document.getElementById('areaPickedRow').style.display = '';
   }
+  updatePickupNotice();
   if (typeof renderMissing === 'function') renderMissing();
 }
 
@@ -2584,6 +2605,7 @@ function resetForm() {
   document.querySelectorAll('[data-field="intake_method"] [data-val="持込"]').forEach(b => b.classList.add('active'));
   const _isr = document.getElementById('intakeStaffRow'); if (_isr) _isr.style.display = 'none';
   const _is = document.getElementById('intakeStaff'); if (_is) _is.value = '';
+  const _pn = document.getElementById('pickupNotice'); if (_pn) _pn.classList.remove('show');
 
   // Clear inputs
   ['weight','age','hunterName','finisherName','bleedTime','receiveTime',
@@ -2690,6 +2712,90 @@ function districtOfOaza(city, oaza) {
   return hit ? (hit.district || '') : '';
 }
 
+/* ── 引き取り撮影が必要な地区（館山ジビエセンターから10km外・全57大字） ──
+   値は captureArea に保存される現住所表記に一致（富浦/富山/三芳/丸山は大字のみ、和田町は町名付き）。
+   全て南房総市内なので、大字のみ表記は city==='南房総市' のときだけ該当とみなす（館山市大井 等の誤判定回避）。*/
+const PICKUP_COMPANY = '合同会社アルコ';
+const CENTER = { lat: 34.9966, lng: 139.8699 };   // 館山ジビエセンター
+const PICKUP_RADIUS_KM = 10;
+const PICKUP_OAZA = new Set([
+  // 富浦地区(6)
+  '南無谷', '豊岡', '大津', '丹生', '手取', '居倉',
+  // 富山地区(17)
+  '久枝', '市部', '竹内', '高崎', '小浦', '宮谷', '合戸', '二部', '検儀谷',
+  '平久里中', '山田', '荒川', '川上', '井野', '吉沢', '平久里下', '犬掛',
+  // 三芳地区(4)
+  '増間', '上滝田', '下滝田', '山名',
+  // 丸山地区(16)
+  '白子', '古川', '岩糸', '西原', '小戸', '石堂', '珠師ケ谷', '石神', '前田',
+  '丸本郷', '石堂原', '川谷', '御子神', '宮下', '大井', '丸山平塚',
+  // 和田地区(14)
+  '和田町花園', '和田町柴', '和田町仁我浦', '和田町和田', '和田町真浦', '和田町小川',
+  '和田町黒岩', '和田町上三原', '和田町白渚', '和田町下三原', '和田町中三原',
+  '和田町松田', '和田町海発', '和田町沼'
+]);
+function isPickupArea(city, area) {
+  area = String(area == null ? '' : area).trim().replace(/^南房総市/, '');
+  if (!area) return false;
+  // 館山市の大字（大井 等）は対象外。57大字は全て南房総市。
+  if (city && city !== '南房総市') return false;
+  return PICKUP_OAZA.has(area);
+}
+function distanceKm(lat1, lng1, lat2, lng2) {
+  const R = 6371, d2r = Math.PI / 180;
+  const dLat = (lat2 - lat1) * d2r, dLng = (lng2 - lng1) * d2r;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * d2r) * Math.cos(lat2 * d2r) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+// 引き取り撮影の要否を判定してフォームに通知（gps={km, oaza} 任意）
+function updatePickupNotice(gps) {
+  const note = document.getElementById('pickupNotice');
+  if (!note) return;
+  const city = state.capture_city || '';
+  const area = (document.getElementById('captureArea')?.value || '').trim();
+  const byArea = isPickupArea(city, area);
+  const byGps = !!(gps && gps.km != null && gps.km > PICKUP_RADIUS_KM);
+  if (byArea || byGps) {
+    const where = byArea ? [city, area].filter(Boolean).join(' ')
+      : (gps && gps.oaza ? gps.oaza : 'この付近');
+    note.innerHTML = '📸 <b>写真撮影してください</b><br>' + where +
+      ' は引き取り時にホワイトボード付きの写真が必要な地区です。' +
+      (byGps && !byArea ? '（現在地はセンターから約' + gps.km.toFixed(1) + 'km）' : '') +
+      '<br>搬入登録後のカメラにホワイトボードを自動表示します。';
+    note.classList.add('show');
+  } else {
+    note.classList.remove('show');
+  }
+}
+// 現在地から地区を補助入力し、引き取り撮影の要否を判定
+function locatePickupArea() {
+  const note = document.getElementById('pickupNotice');
+  if (!navigator.geolocation) {
+    if (note) { note.classList.add('show'); note.innerHTML = 'この端末では位置情報が使えません。地区は手入力してください。'; }
+    return;
+  }
+  if (note) { note.classList.add('show'); note.innerHTML = '📍 現在地を取得しています…'; }
+  navigator.geolocation.getCurrentPosition(async function (pos) {
+    const lat = pos.coords.latitude, lng = pos.coords.longitude;
+    const km = distanceKm(lat, lng, CENTER.lat, CENTER.lng);
+    if (window.mapState) { mapState.lat = lat; mapState.lng = lng; mapState.marker = { lat: lat, lng: lng }; }
+    let oaza = '';
+    try {
+      const res = await fetch('https://mreversegeocode.gsi.go.jp/reverse-geocoder/LonLat2Address?lat=' + lat + '&lon=' + lng);
+      const j = await res.json();
+      oaza = (j && j.results && j.results.lv01Nm) ? String(j.results.lv01Nm) : '';
+    } catch (e) { /* 逆ジオコーディング不可でも距離判定は行う */ }
+    // 取得した大字名で捕獲場所を補助入力（一致すれば地区も自動確定）
+    if (oaza) {
+      const box = document.getElementById('oazaSearch');
+      if (box) { box.value = oaza; if (typeof onOazaSearch === 'function') onOazaSearch(); }
+    }
+    updatePickupNotice({ km: km, oaza: oaza });
+  }, function () {
+    if (note) { note.classList.add('show'); note.innerHTML = '現在地を取得できませんでした。地区は手入力してください。'; }
+  }, { enableHighAccuracy: true, timeout: 8000 });
+}
+
 /* 撮影用の大きな表示ボード（個体と一緒に撮る）。ホワイトボードの代わり */
 let _boardRec = null;
 const BOARD_SCALE_MIN = 0.55, BOARD_SCALE_MAX = 2.2;
@@ -2787,6 +2893,36 @@ function arRenderBoard(r) {
     (d.code ? `<div class="ar-code">${esc(d.code)}</div>` : '') +
     d.lines.map(function (x) { return `<div class="ar-line">${esc(x[0])} <b>${esc(x[1])}</b></div>`; }).join('');
 }
+// 引き取り撮影が必要か（該当地区、または搬入方法が「引取」）
+function arNeedsWhiteboard(r) {
+  r = r || {};
+  return isPickupArea(r.capture_city, r.capture_area) || r.intake_method === '引取';
+}
+function arWhiteboardData(r) {
+  r = r || {};
+  const district = districtOfOaza(r.capture_city, r.capture_area);
+  const place = [r.capture_city, district, r.capture_area].filter(Boolean).join(' ');
+  return {
+    title: '引き取り記録',
+    lines: [
+      ['日付', r.capture_date || (typeof today === 'function' ? today() : '')],
+      ['捕獲者', r.hunter_name || ''],
+      ['捕獲場所', place],
+      ['社名', PICKUP_COMPANY],
+      ['引き取り', PICKUP_COMPANY]
+    ]
+  };
+}
+function arRenderWhiteboard(r) {
+  const wb = document.getElementById('arWhiteboard');
+  if (!wb) return;
+  if (!arNeedsWhiteboard(r)) { wb.classList.remove('show'); wb.innerHTML = ''; return; }
+  const d = arWhiteboardData(r);
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  wb.innerHTML = `<div class="wb-title">${esc(d.title)}</div>` +
+    d.lines.map(function (x) { return `<div class="wb-line">${esc(x[0])}：<b>${esc(x[1])}</b></div>`; }).join('');
+  wb.classList.add('show');
+}
 function arMsg(text) {
   const el = document.getElementById('arMsg'); if (!el) return;
   if (!text) { el.style.display = 'none'; return; }
@@ -2796,11 +2932,14 @@ function arMsg(text) {
 async function arStart() {
   const r = _boardRec; if (!r) return;
   arRenderBoard(r);
+  arRenderWhiteboard(r);
+  const needsWb = arNeedsWhiteboard(r);
   // 登録直後モードでは「閉じる」を「完了（次の入力へ）」に
   const cancelBtn = document.querySelector('#arCam .ar-cancel');
   if (cancelBtn) cancelBtn.textContent = _arAfterRegister ? '✓ 完了（次へ）' : '✕ 閉じる';
   document.getElementById('arCam').classList.add('show');
-  arMsg(_arAfterRegister ? '看板を画角に入れて撮影してください（保存後、完了で次の入力へ）' : '');
+  arMsg(needsWb ? '📸 引き取り撮影：個体・看板・ホワイトボードを一緒に撮影してください'
+    : (_arAfterRegister ? '看板を画角に入れて撮影してください（保存後、完了で次の入力へ）' : ''));
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     arMsg('この端末/ブラウザではカメラを使えません（看板の内容は表示されています）'); return;
   }
@@ -2815,6 +2954,7 @@ function arStopStream() { if (_arStream) { _arStream.getTracks().forEach(functio
 function arClose() {
   arStopStream();
   const v = document.getElementById('arVideo'); if (v) v.srcObject = null;
+  const wb = document.getElementById('arWhiteboard'); if (wb) wb.classList.remove('show');
   document.getElementById('arCam').classList.remove('show');
   if (_arAfterRegister) { _arAfterRegister = false; resetForm(); }   // 登録直後に閉じたら次の入力へ
 }
@@ -2836,6 +2976,7 @@ async function arCapture() {
   if (_arFacing === 'user') { ctx.save(); ctx.translate(w, 0); ctx.scale(-1, 1); ctx.drawImage(v, 0, 0, w, h); ctx.restore(); }
   else ctx.drawImage(v, 0, 0, w, h);
   arDrawBoard(ctx, w, h, arBoardData(_boardRec));
+  if (arNeedsWhiteboard(_boardRec)) arDrawWhiteboard(ctx, w, h, arWhiteboardData(_boardRec));
   const stamp = ((_boardRec && _boardRec.label_id) || 'photo').replace(/[^\w-]/g, '_');
   const dateStr = (_boardRec && _boardRec.capture_date) || '';
   const fname = stamp + (dateStr ? '_' + dateStr : '') + '.jpg';
@@ -2887,6 +3028,50 @@ function arDrawBoard(ctx, W, H, d) {
     const kw = ctx.measureText(klabel).width;
     ctx.fillStyle = '#ffe08a'; ctx.font = '800 ' + lineF + "px 'Noto Sans JP', sans-serif";
     ctx.fillText(kv[1], x + pad + kw, cy);
+    cy += lineF + gap;
+  });
+}
+// 引き取り用ホワイトボードをcanvasの右上に描く（プレビュー #arWhiteboard と同じ内容）
+function arDrawWhiteboard(ctx, W, H, d) {
+  const scale = Math.max(1, W / 900);
+  const pad = 18 * scale, gap = 10 * scale;
+  const titleF = Math.round(26 * scale), lineF = Math.round(21 * scale);
+  ctx.textBaseline = 'top';
+  ctx.font = '900 ' + titleF + "px 'Noto Sans JP', sans-serif";
+  let maxW = ctx.measureText(d.title).width;
+  const texts = d.lines.map(function (kv) { return kv[0] + '：' + kv[1]; });
+  ctx.font = '800 ' + lineF + "px 'Noto Sans JP', sans-serif";
+  texts.forEach(function (t) { maxW = Math.max(maxW, ctx.measureText(t).width); });
+  const boxW = Math.min(W * 0.62, maxW + pad * 2);
+  const titleH = titleF + gap;
+  const boxH = pad * 2 + titleH + d.lines.length * (lineF + gap) - gap + 4 * scale;
+  const x = W - boxW - 12 * scale;
+  const y = 52 * scale;
+  const rr = 12 * scale;
+  // 枠（白ボード）
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#d7dce2'; ctx.lineWidth = 3 * scale;
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + boxW, y, x + boxW, y + boxH, rr);
+  ctx.arcTo(x + boxW, y + boxH, x, y + boxH, rr);
+  ctx.arcTo(x, y + boxH, x, y, rr);
+  ctx.arcTo(x, y, x + boxW, y, rr);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  let cy = y + pad;
+  // タイトル
+  ctx.fillStyle = '#b5451b'; ctx.font = '900 ' + titleF + "px 'Noto Sans JP', sans-serif";
+  ctx.fillText(d.title, x + pad, cy); cy += titleH;
+  // 罫線
+  ctx.strokeStyle = '#eee'; ctx.lineWidth = 2 * scale;
+  ctx.beginPath(); ctx.moveTo(x + pad, cy - gap / 2); ctx.lineTo(x + boxW - pad, cy - gap / 2); ctx.stroke();
+  d.lines.forEach(function (kv) {
+    const klabel = kv[0] + '：';
+    ctx.fillStyle = '#14181f'; ctx.font = '800 ' + lineF + "px 'Noto Sans JP', sans-serif";
+    ctx.fillText(klabel, x + pad, cy);
+    const kw = ctx.measureText(klabel).width;
+    ctx.fillStyle = '#0b56b0'; ctx.font = '800 ' + lineF + "px 'Noto Sans JP', sans-serif";
+    ctx.fillText(String(kv[1]), x + pad + kw, cy);
     cy += lineF + gap;
   });
 }
