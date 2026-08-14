@@ -2652,7 +2652,7 @@ function resetForm() {
 /* ── Today count ── */
 async function loadTodayCount() {
   try {
-    const rows = await sb('GET', 'individuals', null, `?capture_date=eq.${today()}&select=id`);
+    const rows = await sb('GET', 'individuals', null, `?capture_date=eq.${today()}&deleted_at=is.null&select=id`);
     document.getElementById('todayCount').textContent = rows.length;
   } catch(e) {
     document.getElementById('todayCount').textContent = '-';
@@ -2662,7 +2662,7 @@ async function loadTodayCount() {
 /* ── List tab ── */
 async function loadList() {
   try {
-    todayData = await sb('GET', 'individuals', null, `?capture_date=eq.${today()}&order=receive_time.desc`);
+    todayData = await sb('GET', 'individuals', null, `?capture_date=eq.${today()}&deleted_at=is.null&order=receive_time.desc`);
   } catch(e) {
     todayData = [];
   }
