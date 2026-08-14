@@ -61,19 +61,16 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   ck('「市役所の調査票も作る」欄が無い', await p.evaluate(() => !document.getElementById('surveyOn')));
   ck('捕獲場所の地図（市役所票用）が無い', await p.evaluate(() => !document.getElementById('capMapWrap')));
 
-  // 5) 捕獲者→地区の自動入力
-  const auto = await p.evaluate(() => {
-    const el = document.getElementById('hunterName');
-    el.value = '加藤茂';
-    onHunterPicked();
-    return {
-      area: document.getElementById('captureArea').value,
-      oldTown: document.getElementById('captureOldTown').value,
-      city: state.capture_city,
-      hint: document.getElementById('hunterAreaHint').textContent,
-      hintShown: document.getElementById('hunterAreaHint').style.display !== 'none',
-    };
-  });
+  // 5) 捕獲者→地区の自動入力（onHunterPicked→loadUsualは非同期。過去データ無し→静的マップにフォールバック）
+  await p.evaluate(() => { const el = document.getElementById('hunterName'); el.value = '加藤茂'; onHunterPicked(); });
+  await p.waitForTimeout(500);
+  const auto = await p.evaluate(() => ({
+    area: document.getElementById('captureArea').value,
+    oldTown: document.getElementById('captureOldTown').value,
+    city: state.capture_city,
+    hint: document.getElementById('hunterAreaHint').textContent,
+    hintShown: document.getElementById('hunterAreaHint').style.display !== 'none',
+  }));
   ck('加藤茂 → 大字「神余」を自動入力', auto.area === '神余', JSON.stringify(auto));
   ck('加藤茂 → 市町村「館山市」', auto.city === '館山市', auto.city);
   ck('加藤茂 → 地区「豊房」を補完', auto.oldTown === '豊房', auto.oldTown);
