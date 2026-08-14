@@ -632,6 +632,7 @@ textarea { min-height: 80px; resize: vertical; }
       <div class="form-row">
         <button type="button" class="now-btn" style="width:100%;padding:11px;font-size:14px;" onclick="locatePickupArea()">📍 現在地から地区を判定（引き取り撮影の要否）</button>
         <div id="pickupNotice"></div>
+        <button type="button" id="pickupCaptureBtn" style="display:none;width:100%;padding:12px;font-size:15px;margin-top:8px;background:#7a2b12;color:#fff6ee;font-weight:800;border:1px solid #d0703c;border-radius:10px;cursor:pointer;" onclick="startPickupCapture()">📋 引き取り写真を撮る（ホワイトボード）</button>
       </div>
       <input type="hidden" id="captureOldTown" value="">
       <input type="hidden" id="captureArea" value="">
@@ -925,7 +926,7 @@ textarea { min-height: 80px; resize: vertical; }
 <!-- 撮影用の大きな表示ボード（個体と一緒に撮る） -->
 <div id="boardOverlay">
   <div class="board-bar">
-    <button type="button" class="board-detail" id="boardArBtn" onclick="arStart()" style="background:#c9a13b;color:#1c1f16;">📷 看板つきで撮影</button>
+    <button type="button" class="board-detail" id="boardArBtn" onclick="arStartBoard()" style="background:#c9a13b;color:#1c1f16;">📷 看板つきで撮影</button>
     <button type="button" class="board-detail" id="boardDetailBtn" onclick="boardShowDetail()">詳細</button>
     <button type="button" class="board-detail" id="boardEditBtn" onclick="boardEdit()" style="background:#1565c0;color:#fff;">✏️ 修正</button>
     <span class="board-hint">← 左右スワイプで文字サイズ調整 →</span>
@@ -2715,6 +2716,17 @@ function districtOfOaza(city, oaza) {
 /* ── 引き取り撮影が必要な地区（館山ジビエセンターから10km外・全57大字） ──
    値は captureArea に保存される現住所表記に一致（富浦/富山/三芳/丸山は大字のみ、和田町は町名付き）。
    全て南房総市内なので、大字のみ表記は city==='南房総市' のときだけ該当とみなす（館山市大井 等の誤判定回避）。*/
+// 捕獲場所の表示ラベル。館山市は地区（旧村）を省き市＋大字のみ（例: 館山市 出野尾）。
+// 南房総市は市＋地区＋現住所表記（例: 南房総市 丸山町 宮下 / 現住所表記に町名を含む和田町はそのまま）。
+function placeLabel(r) {
+  r = r || {};
+  const city = r.capture_city || '';
+  const area = r.capture_area || '';
+  if (city === '館山市') return [city, area].filter(Boolean).join(' ');
+  const district = districtOfOaza(city, area);
+  return [city, district, area].filter(Boolean).join(' ');
+}
+
 const PICKUP_COMPANY = '合同会社アルコ';
 const CENTER = { lat: 34.9966, lng: 139.8699 };   // 館山ジビエセンター
 const PICKUP_RADIUS_KM = 10;
@@ -2761,11 +2773,14 @@ function updatePickupNotice(gps) {
     note.innerHTML = '📸 <b>写真撮影してください</b><br>' + where +
       ' は引き取り時にホワイトボード付きの写真が必要な地区です。' +
       (byGps && !byArea ? '（現在地はセンターから約' + gps.km.toFixed(1) + 'km）' : '') +
-      '<br>搬入登録後のカメラにホワイトボードを自動表示します。';
+      '<br>下の「引き取り写真を撮る」でホワイトボードだけを重ねて撮影できます。';
     note.classList.add('show');
   } else {
     note.classList.remove('show');
   }
+  // 引き取り撮影（ホワイトボード）ボタン: 該当地区 または 搬入方法=引取 のとき表示
+  const btn = document.getElementById('pickupCaptureBtn');
+  if (btn) btn.style.display = (byArea || byGps || state.intake_method === '引取') ? '' : 'none';
 }
 // 現在地から地区を補助入力し、引き取り撮影の要否を判定
 function locatePickupArea() {
@@ -2821,8 +2836,7 @@ function showBoard(r, afterRegister) {
   _boardRec = r;
   _boardAfterRegister = !!afterRegister;
   const esc2 = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const district = districtOfOaza(r.capture_city, r.capture_area);
-  const place = [r.capture_city, district, r.capture_area].filter(Boolean).join(' ');
+  const place = placeLabel(r);
   const sw = (r.weight_total != null && r.weight_total !== '') ? (r.weight_total + ' kg') : '';
   const sexWeight = [r.sex, sw].filter(Boolean).join('　');
   const rows = [
@@ -2867,16 +2881,39 @@ function boardNewInput() {
 
 /* ── 看板つきカメラ（AR風）── カメラ映像の左下に看板を重ねて撮影→端末保存 ── */
 let _arStream = null, _arFacing = 'environment', _arMsgT = null, _arAfterRegister = false;
-// 搬入登録の直後に自動でカメラを開く（撮影→端末保存→閉じると次の入力へ）
+// 撮影モード: 'board'=受け入れ後の看板（左下・個体情報）／ 'whiteboard'=引き取り記録（右上のみ）
+let _arMode = 'board';
+// 搬入登録の直後に自動でカメラを開く＝受け入れ後の「看板」撮影（ホワイトボードは出さない）
 function startCaptureAfterRegister(rec) {
   _boardRec = rec;
   _arAfterRegister = true;
+  _arMode = 'board';
+  arStart();
+}
+// 一覧の看板ボードから「看板つきで撮影」
+function arStartBoard() { _arMode = 'board'; _arAfterRegister = false; arStart(); }
+// 引き取り現場での「ホワイトボード」撮影（看板は出さない）。フォーム入力から記録を作る。
+function currentFormRec() {
+  const g = id => (document.getElementById(id)?.value || '').trim();
+  return {
+    capture_date: g('captureDate') || (typeof today === 'function' ? today() : ''),
+    hunter_name: g('hunterName'),
+    capture_city: state.capture_city || '',
+    capture_area: g('captureArea'),
+    intake_method: state.intake_method || '',
+    intake_staff: g('intakeStaff'),
+    recorder: g('recorder')
+  };
+}
+function startPickupCapture() {
+  _boardRec = currentFormRec();
+  _arAfterRegister = false;
+  _arMode = 'whiteboard';
   arStart();
 }
 function arBoardData(r) {
   r = r || {};
-  const district = districtOfOaza(r.capture_city, r.capture_area);
-  const place = [r.capture_city, district, r.capture_area].filter(Boolean).join(' ');
+  const place = placeLabel(r);
   const sw = (r.weight_total != null && r.weight_total !== '') ? (r.weight_total + ' kg') : '';
   const sexWeight = [r.sex, sw].filter(Boolean).join('　');
   const serial = (r.serial_number != null && r.serial_number !== '') ? String(r.serial_number) : '';
@@ -2900,8 +2937,7 @@ function arNeedsWhiteboard(r) {
 }
 function arWhiteboardData(r) {
   r = r || {};
-  const district = districtOfOaza(r.capture_city, r.capture_area);
-  const place = [r.capture_city, district, r.capture_area].filter(Boolean).join(' ');
+  const place = placeLabel(r);
   const taker = (r.intake_staff || r.recorder || '').toString().trim();
   return {
     title: '引き取り記録',
@@ -2917,12 +2953,10 @@ function arWhiteboardData(r) {
 function arRenderWhiteboard(r) {
   const wb = document.getElementById('arWhiteboard');
   if (!wb) return;
-  if (!arNeedsWhiteboard(r)) { wb.classList.remove('show'); wb.innerHTML = ''; return; }
   const d = arWhiteboardData(r);
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   wb.innerHTML = `<div class="wb-title">${esc(d.title)}</div>` +
     d.lines.map(function (x) { return `<div class="wb-line">${esc(x[0])}：<b>${esc(x[1])}</b></div>`; }).join('');
-  wb.classList.add('show');
 }
 function arMsg(text) {
   const el = document.getElementById('arMsg'); if (!el) return;
@@ -2932,14 +2966,24 @@ function arMsg(text) {
 }
 async function arStart() {
   const r = _boardRec; if (!r) return;
-  arRenderBoard(r);
-  arRenderWhiteboard(r);
-  const needsWb = arNeedsWhiteboard(r);
+  const whiteboardMode = _arMode === 'whiteboard';
+  // モードに応じて片方だけを表示（引き取り=右上ホワイトボードのみ／看板=左下のみ）
+  const arBoardEl = document.getElementById('arBoard');
+  const arWbEl = document.getElementById('arWhiteboard');
+  if (whiteboardMode) {
+    arRenderWhiteboard(r);
+    if (arWbEl) arWbEl.classList.add('show');
+    if (arBoardEl) arBoardEl.style.display = 'none';
+  } else {
+    arRenderBoard(r);
+    if (arBoardEl) arBoardEl.style.display = '';
+    if (arWbEl) arWbEl.classList.remove('show');
+  }
   // 登録直後モードでは「閉じる」を「完了（次の入力へ）」に
   const cancelBtn = document.querySelector('#arCam .ar-cancel');
   if (cancelBtn) cancelBtn.textContent = _arAfterRegister ? '✓ 完了（次へ）' : '✕ 閉じる';
   document.getElementById('arCam').classList.add('show');
-  arMsg(needsWb ? '📸 引き取り撮影：個体・看板・ホワイトボードを一緒に撮影してください'
+  arMsg(whiteboardMode ? '📋 引き取り写真：ホワイトボードと個体を一緒に撮影してください'
     : (_arAfterRegister ? '看板を画角に入れて撮影してください（保存後、完了で次の入力へ）' : ''));
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     arMsg('この端末/ブラウザではカメラを使えません（看板の内容は表示されています）'); return;
@@ -2956,6 +3000,7 @@ function arClose() {
   arStopStream();
   const v = document.getElementById('arVideo'); if (v) v.srcObject = null;
   const wb = document.getElementById('arWhiteboard'); if (wb) wb.classList.remove('show');
+  const arBoardEl = document.getElementById('arBoard'); if (arBoardEl) arBoardEl.style.display = '';
   document.getElementById('arCam').classList.remove('show');
   if (_arAfterRegister) { _arAfterRegister = false; resetForm(); }   // 登録直後に閉じたら次の入力へ
 }
@@ -2976,8 +3021,8 @@ async function arCapture() {
   const ctx = cv.getContext('2d');
   if (_arFacing === 'user') { ctx.save(); ctx.translate(w, 0); ctx.scale(-1, 1); ctx.drawImage(v, 0, 0, w, h); ctx.restore(); }
   else ctx.drawImage(v, 0, 0, w, h);
-  arDrawBoard(ctx, w, h, arBoardData(_boardRec));
-  if (arNeedsWhiteboard(_boardRec)) arDrawWhiteboard(ctx, w, h, arWhiteboardData(_boardRec));
+  if (_arMode === 'whiteboard') arDrawWhiteboard(ctx, w, h, arWhiteboardData(_boardRec));
+  else arDrawBoard(ctx, w, h, arBoardData(_boardRec));
   const stamp = ((_boardRec && _boardRec.label_id) || 'photo').replace(/[^\w-]/g, '_');
   const dateStr = (_boardRec && _boardRec.capture_date) || '';
   const fname = stamp + (dateStr ? '_' + dateStr : '') + '.jpg';

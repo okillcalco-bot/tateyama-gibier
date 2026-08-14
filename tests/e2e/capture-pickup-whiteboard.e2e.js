@@ -84,24 +84,37 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   });
   ck('通知: 非該当地区では非表示', noNotice === false);
 
-  // 4) ARホワイトボード: 引き取り対象の撮影で右上にホワイトボードを表示
-  const REC_PICKUP = {
-    id: 'r1', label_id: 'TGC-08-M170', serial_number: 459, species: 'イノシシ', sex: 'メス',
-    weight_total: 28, capture_date: '2026-08-14', hunter_name: '池田和博',
-    capture_city: '南房総市', capture_area: '宮下', intake_method: '引取', intake_staff: '沖浩志'
-  };
-  await p.evaluate((r) => startCaptureAfterRegister(r), REC_PICKUP);
-  await p.waitForTimeout(700);
+  // 4) 捕獲場所ラベル: 館山市は地区（旧村）を省き市＋大字のみ
+  const labels = await p.evaluate(() => ({
+    tate: placeLabel({ capture_city: '館山市', capture_area: '出野尾' }),
+    minami: placeLabel({ capture_city: '南房総市', capture_area: '宮下' }),
+  }));
+  ck('場所: 館山市は市＋大字のみ（館山市 出野尾）', labels.tate === '館山市 出野尾', labels.tate);
+  ck('場所: 南房総市は市＋地区＋大字', labels.minami === '南房総市 丸山町 宮下', labels.minami);
+
+  // 5) 引き取り撮影＝ホワイトボードのみ（右上）／看板は出さない
   const wb = await p.evaluate(() => {
+    document.getElementById('captureDate').value = '2026-08-14';
+    document.getElementById('hunterName').value = '池田和博';
+    document.getElementById('intakeStaff').value = '沖浩志';
+    state.capture_city = '南房総市';
+    document.getElementById('captureArea').value = '宮下';
+    state.intake_method = '引取';
+    startPickupCapture();
     const el = document.getElementById('arWhiteboard');
-    return { shown: el.classList.contains('show'), text: el.textContent, needs: arNeedsWhiteboard(_boardRec) };
+    return {
+      wbShown: el.classList.contains('show'), text: el.textContent,
+      boardHidden: document.getElementById('arBoard').style.display === 'none',
+      mode: _arMode,
+    };
   });
-  ck('WB: 引き取り対象で表示', wb.shown && wb.needs, JSON.stringify(wb));
-  ck('WB: 社名 合同会社アルコ', wb.text.includes('合同会社アルコ'), wb.text);
-  ck('WB: 引き取り者は入力者（人物）', wb.text.includes('引き取り者') && wb.text.includes('沖浩志'), wb.text);
-  ck('WB: 捕獲者名', wb.text.includes('池田和博'), wb.text);
-  ck('WB: 捕獲場所（宮下）', wb.text.includes('宮下'), wb.text);
-  ck('WB: 日付', wb.text.includes('2026-08-14'), wb.text);
+  await p.waitForTimeout(500);
+  ck('引取: ホワイトボードを表示', wb.wbShown, JSON.stringify(wb));
+  ck('引取: 看板（左下）は出さない', wb.boardHidden, JSON.stringify(wb));
+  ck('引取: 社名 合同会社アルコ', wb.text.includes('合同会社アルコ'), wb.text);
+  ck('引取: 引き取り者は入力者（沖浩志）', wb.text.includes('引き取り者') && wb.text.includes('沖浩志'), wb.text);
+  ck('引取: 捕獲者名', wb.text.includes('池田和博'), wb.text);
+  ck('引取: 捕獲場所（宮下）', wb.text.includes('宮下'), wb.text);
 
   // 撮影でホワイトボードが焼き込まれる（右上に白い枠）
   const drawn = await p.evaluate(() => {
@@ -110,29 +123,33 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
     const c = cv.getContext('2d');
     c.fillStyle = '#223'; c.fillRect(0, 0, cv.width, cv.height);   // 疑似映像（暗色）
     arDrawWhiteboard(c, cv.width, cv.height, arWhiteboardData(_boardRec));
-    // 右上域に白（>240）ピクセルがあること
     const px = c.getImageData(cv.width - 200, 55, 180, 120).data;
     let white = false;
     for (let i = 0; i < px.length; i += 4) { if (px[i] > 240 && px[i + 1] > 240 && px[i + 2] > 240) { white = true; break; } }
     return white;
   });
-  ck('WB: 右上にホワイトボードが焼き込まれる', drawn);
+  ck('引取: 右上にホワイトボードが焼き込まれる', drawn);
   await p.evaluate(() => arClose());
   await p.waitForTimeout(100);
 
-  // 5) 非対象（持込・非該当地区）ではホワイトボードを出さない
-  const REC_PLAIN = {
-    id: 'r2', label_id: 'TGC-08-T272', serial_number: 458, species: 'イノシシ', sex: 'オス',
-    weight_total: 34, capture_date: '2026-08-14', hunter_name: '加藤茂',
-    capture_city: '館山市', capture_area: '神余', intake_method: '持込'
+  // 6) 受け入れ後の看板撮影＝看板のみ（左下）／ホワイトボードは出さない
+  const REC_ACCEPT = {
+    id: 'r2', label_id: 'TGC-08-T274', serial_number: 460, species: 'イノシシ', sex: 'オス',
+    weight_total: 22.5, capture_date: '2026-08-14', hunter_name: '沖浩志',
+    capture_city: '館山市', capture_area: '出野尾', intake_method: '引取', intake_staff: '沖浩志'
   };
-  await p.evaluate((r) => startCaptureAfterRegister(r), REC_PLAIN);
+  await p.evaluate((r) => startCaptureAfterRegister(r), REC_ACCEPT);
   await p.waitForTimeout(600);
-  const wb2 = await p.evaluate(() => ({
-    shown: document.getElementById('arWhiteboard').classList.contains('show'),
-    needs: arNeedsWhiteboard(_boardRec),
+  const board = await p.evaluate(() => ({
+    boardShown: document.getElementById('arBoard').style.display !== 'none',
+    wbHidden: !document.getElementById('arWhiteboard').classList.contains('show'),
+    boardText: document.getElementById('arBoard').textContent,
+    mode: _arMode,
   }));
-  ck('WB: 非対象では非表示', wb2.shown === false && wb2.needs === false, JSON.stringify(wb2));
+  ck('受入: 看板（左下）を表示', board.boardShown, JSON.stringify(board));
+  ck('受入: ホワイトボードは出さない', board.wbHidden, JSON.stringify(board));
+  ck('受入: 看板の捕獲場所は「館山市 出野尾」（地区省略）', board.boardText.includes('館山市 出野尾') && !board.boardText.includes('豊房'), board.boardText);
+  ck('受入: 看板に引き取り者は出さない', !board.boardText.includes('引き取り者'), board.boardText);
   await p.evaluate(() => arClose());
   await p.waitForTimeout(100);
 
