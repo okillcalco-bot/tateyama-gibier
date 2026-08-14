@@ -512,8 +512,9 @@ textarea { min-height: 80px; resize: vertical; }
           <div class="toggle-btn" data-val="ノウサギ" style="text-align:center;grid-column:span 2;">ノウサギ</div>
         </div>
       </div>
-      <!-- 個体番号は搬入登録時に自動採番するので入力中は非表示（値はJSが保持） -->
+      <!-- 個体番号は搬入登録時に自動採番するので入力中は非表示（値はJSが保持）。修正時のみ表示・編集可 -->
       <div class="form-row" id="serialRow" style="display:none;">
+        <div id="serialEditNote" style="display:none;font-size:12px;color:var(--gold-light);font-weight:600;margin-bottom:6px;">✏️ 個体番号は必要なら手直しできます（仮-番号の確定など）</div>
         <div style="display:flex;gap:8px;align-items:flex-end;">
           <div style="flex:0 0 90px;">
             <div style="font-size:11px;color:var(--text2);margin-bottom:3px;">通し番号</div>
@@ -661,6 +662,7 @@ textarea { min-height: 80px; resize: vertical; }
           <option value="鈴木正人"><option value="池田和博"><option value="佐野淳一"><option value="田所浩之"><option value="島崎竜哉">
           <option value="曽宮民郎"><option value="西岡範周"><option value="石井隆"><option value="竹口友和"><option value="平島正章">
           <option value="竹内聖一"><option value="網代"><option value="渡辺貴浩"><option value="五十嵐訓文"><option value="鷲野瞬武">
+          <option value="野崎徹"><option value="根岸典好">
         </datalist>
       </div>
       <div class="form-row">
@@ -1507,8 +1509,12 @@ function refreshOazaList(city) {
   const dl = document.getElementById('oazaList');
   if (!dl) return;
   if (!city || !Array.isArray(areaMasterRows)) { dl.innerHTML = ''; return; }
-  const oazas = [...new Set(areaMasterRows.filter(r => r.city === city).map(r => r.oaza).filter(Boolean))];
-  dl.innerHTML = oazas.map(o => '<option value="' + o + '">').join('');
+  const set = new Set();
+  areaMasterRows.filter(r => r.city === city).forEach(r => {
+    if (r.oaza) set.add(r.oaza);
+    const lbl = areaLabelOfRow(r, city); if (lbl) set.add(lbl);   // 白浜町乙浜 の表記でも探せる
+  });
+  dl.innerHTML = [...set].map(o => '<option value="' + o + '">').join('');
 }
 
 /* 大字を入力すると、その大字が属する旧町村（地区）を自動で決める。
@@ -1519,8 +1525,8 @@ function onOazaSearch() {
   const v = (document.getElementById('oazaSearch').value || '').trim();
   if (!note) return;
   if (!v || !city || !Array.isArray(areaMasterRows)) { note.style.display = 'none'; return; }
-  // 選択中の市で完全一致する大字を探す
-  const hits = areaMasterRows.filter(r => r.city === city && r.oaza === v);
+  // 選択中の市で、大字名（乙浜）または現住所表記（白浜町乙浜）に一致するものを探す
+  const hits = areaMasterRows.filter(r => r.city === city && (r.oaza === v || areaLabelOfRow(r, city) === v));
   if (!hits.length) {
     note.style.display = 'block';
     note.style.color = 'var(--text2)';
@@ -1528,6 +1534,7 @@ function onOazaSearch() {
     return;
   }
   const district = hits[0].district;
+  const val = areaLabelOfRow(hits[0], city);   // 現住所表記（白浜町乙浜 など）に統一
   // 旧町村ボタンを描画し、該当地区を選択状態にして大字も確定する
   document.getElementById('captureOldTown').value = district || '';
   renderOazaButtons(city, district);
@@ -1535,16 +1542,23 @@ function onOazaSearch() {
   document.querySelectorAll('#districtBtns .toggle-btn').forEach(b => b.classList.toggle('active', b.textContent === district));
   // oazaBtns のうち該当大字を active に
   document.querySelectorAll('#oazaBtns .toggle-btn').forEach(b => {
-    if (b.textContent === v) { b.classList.add('active'); }
+    if (b.textContent === val) { b.classList.add('active'); }
   });
-  document.getElementById('captureArea').value = v;
+  document.getElementById('captureArea').value = val;
   const lbl = document.getElementById('areaPickedLabel');
-  if (lbl) { lbl.textContent = '📍 捕獲場所: ' + city + ' → ' + district + ' → ' + v; document.getElementById('areaPickedRow').style.display = ''; }
+  if (lbl) { lbl.textContent = '📍 捕獲場所: ' + city + ' → ' + district + ' → ' + val; document.getElementById('areaPickedRow').style.display = ''; }
   note.style.display = 'block';
   note.style.color = 'var(--gold)';
-  note.textContent = `✓ 「${v}」は「${district}」の大字です。地区を自動で選びました。`;
+  note.textContent = `✓ 「${val}」は「${district}」の大字です。地区を自動で選びました。`;
 }
 
+// 白浜町・和田町は台帳の現住所表記が旧町名つき（例: 白浜町乙浜・和田町黒岩）。その表記で選べるようにする
+const PREFIX_OLDTOWNS = ['白浜町', '和田町'];
+function areaLabelOfRow(r, city) {
+  const oaza = r.oaza || '';
+  if (city === '南房総市' && PREFIX_OLDTOWNS.indexOf(r.district || '') >= 0) return (r.district || '') + oaza;
+  return oaza;
+}
 function renderOazaButtons(city, district) {
   const row = document.getElementById('oazaRow');
   const box = document.getElementById('oazaBtns');
@@ -1552,13 +1566,17 @@ function renderOazaButtons(city, district) {
   document.getElementById('areaPickedRow').style.display = 'none';
   box.innerHTML = '';
   row.style.display = '';
-  areaOazaOf(city, district).forEach(o => {
-    box.appendChild(mkAreaBtn(o, function () {
+  const rows = Array.isArray(areaMasterRows)
+    ? areaMasterRows.filter(r => r.city === city && r.district === district)
+    : areaOazaOf(city, district).map(o => ({ oaza: o, district: district }));
+  rows.forEach(r => {
+    const val = areaLabelOfRow(r, city);
+    box.appendChild(mkAreaBtn(val, function () {
       box.querySelectorAll('.toggle-btn').forEach(x => x.classList.remove('active'));
       this.classList.add('active');
-      document.getElementById('captureArea').value = o;
+      document.getElementById('captureArea').value = val;
       const lbl = document.getElementById('areaPickedLabel');
-      lbl.textContent = '📍 捕獲場所: ' + city + ' → ' + district + ' → ' + o;
+      lbl.textContent = '📍 捕獲場所: ' + city + ' → ' + district + ' → ' + val;
       document.getElementById('areaPickedRow').style.display = '';
     }));
   });
@@ -1597,7 +1615,8 @@ const HUNTER_AREA_RAW = {
   "小川勝己":{city:"館山市",area:"神余"},"渡邊顕信":{city:"館山市",area:"神余"},"猪谷秀貴":{city:"館山市",area:"神余"},
   "細川洋海":{city:"館山市",area:"岡田"},"蟻川幸一":{city:"館山市",area:"神余"},"五十嵐訓文":{city:"南房総市",area:"大井"},
   "大木戸政明":{city:"南房総市",area:"山田"},"小田喜承示":{city:"館山市",area:"沼"},"山田千代子":{city:"館山市",area:"坂井"},
-  "藤田淳之助":{city:"南房総市",area:"白浜町滝口"},"今本孝一郎":{city:"館山市",area:"神余"}
+  "藤田淳之助":{city:"南房総市",area:"白浜町滝口"},"今本孝一郎":{city:"館山市",area:"神余"},
+  "野崎徹":{city:"南房総市",area:"下堀"},"根岸典好":{city:"南房総市",area:"海老敷"}
 };
 function _normName(s) { return String(s == null ? '' : s).replace(/\s+/g, '').trim(); }
 const HUNTER_AREA = {};
@@ -1840,9 +1859,12 @@ async function searchForEdit() {
 }
 function loadForEdit(rec) {
   editMode = true; editRecordId = rec.id; editRecord = rec;
-  // 個体番号は既存の値をそのまま表示（編集では採番し直さない）
+  // 個体番号は既存の値を表示。編集時は番号の行を出して手直しできるようにする（仮-番号の修正など）
   const _ser = document.getElementById('indSerial'); if (_ser && rec.serial_number != null) _ser.value = rec.serial_number;
   const _lab = document.getElementById('indLabelId'); if (_lab && rec.label_id) _lab.value = rec.label_id;
+  const _srow = document.getElementById('serialRow'); if (_srow) _srow.style.display = '';
+  if (_lab) { _lab.removeAttribute('readonly'); _lab.style.background = '#fff'; }   // 編集可に
+  const _snote = document.getElementById('serialEditNote'); if (_snote) _snote.style.display = '';
   // 登録済みの値を入れ直す。自動入力の目印は消して、保存済みの時刻を勝手に書き換えないようにする
   const sv = function(id, v) {
     const el = document.getElementById(id); if (!el) return;
@@ -2434,7 +2456,9 @@ async function handleSubmit() {
     try {
       if (editMode && editRecordId) {
         const pb = Object.assign({}, record);
-        if (!window.receiveMode) { delete pb.label_id; delete pb.serial_number; }
+        // 個体番号は編集画面で手直しできるので、編集時はそのまま保存する（従来は変更不可だった）。
+        // ただし空にした場合は既存値を消さない
+        if (!pb.label_id) delete pb.label_id;
         const er = await sb('PATCH', 'individuals', pb, '?id=eq.' + editRecordId);
         saved = Array.isArray(er) ? er[0] : er;
       } else if (matchedPlaceholderId) {
@@ -2567,6 +2591,10 @@ function resetForm() {
     const el = document.getElementById(id);
     if (el) { el.value = ''; if (el.dataset) el.dataset.autofill = ''; }
   });
+  // 個体番号の行を隠して読み取り専用に戻す（修正モードで出していた場合）
+  const _srow = document.getElementById('serialRow'); if (_srow) _srow.style.display = 'none';
+  const _lab = document.getElementById('indLabelId'); if (_lab) { _lab.setAttribute('readonly', ''); _lab.style.background = 'var(--bg2)'; }
+  const _snote = document.getElementById('serialEditNote'); if (_snote) _snote.style.display = 'none';
   // いつもの候補パネルを閉じる
   const _up = document.getElementById('usualPanel'); if (_up) _up.style.display = 'none';
   ['usualAreas','usualMethods','usualFinish'].forEach(id => { const b = document.getElementById(id); if (b) b.innerHTML = ''; });
