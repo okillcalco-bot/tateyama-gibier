@@ -2783,32 +2783,60 @@ function updatePickupNotice(gps) {
   if (btn) btn.style.display = (byArea || byGps || state.intake_method === '引取') ? '' : 'none';
 }
 // 現在地から地区を補助入力し、引き取り撮影の要否を判定
-function locatePickupArea() {
+function _pickupNoteMsg(html) {
   const note = document.getElementById('pickupNotice');
+  if (note) { note.classList.add('show'); note.innerHTML = html; }
+}
+async function _onPickupPosition(pos) {
+  const lat = pos.coords.latitude, lng = pos.coords.longitude;
+  const km = distanceKm(lat, lng, CENTER.lat, CENTER.lng);
+  if (window.mapState) { mapState.lat = lat; mapState.lng = lng; mapState.marker = { lat: lat, lng: lng }; }
+  let oaza = '';
+  try {
+    const res = await fetch('https://mreversegeocode.gsi.go.jp/reverse-geocoder/LonLat2Address?lat=' + lat + '&lon=' + lng);
+    const j = await res.json();
+    oaza = (j && j.results && j.results.lv01Nm) ? String(j.results.lv01Nm) : '';
+  } catch (e) { /* 逆ジオコーディング不可でも距離判定は行う */ }
+  // 取得した大字名で捕獲場所を補助入力（一致すれば地区も自動確定）
+  if (oaza) {
+    const box = document.getElementById('oazaSearch');
+    if (box) { box.value = oaza; if (typeof onOazaSearch === 'function') onOazaSearch(); }
+  }
+  updatePickupNotice({ km: km, oaza: oaza });
+  if (!isPickupArea(state.capture_city, (document.getElementById('captureArea')?.value || '')) && km <= PICKUP_RADIUS_KM) {
+    _pickupNoteMsg('📍 現在地はセンターから約' + km.toFixed(1) + 'km' + (oaza ? '（' + oaza + '付近）' : '') +
+      '。引き取り撮影の対象地区ではありません。地区が違う場合は手入力してください。');
+  }
+}
+function locatePickupArea() {
   if (!navigator.geolocation) {
-    if (note) { note.classList.add('show'); note.innerHTML = 'この端末では位置情報が使えません。地区は手入力してください。'; }
+    _pickupNoteMsg('この端末では位置情報が使えません。地区は手入力してください。');
     return;
   }
-  if (note) { note.classList.add('show'); note.innerHTML = '📍 現在地を取得しています…'; }
-  navigator.geolocation.getCurrentPosition(async function (pos) {
-    const lat = pos.coords.latitude, lng = pos.coords.longitude;
-    const km = distanceKm(lat, lng, CENTER.lat, CENTER.lng);
-    if (window.mapState) { mapState.lat = lat; mapState.lng = lng; mapState.marker = { lat: lat, lng: lng }; }
-    let oaza = '';
-    try {
-      const res = await fetch('https://mreversegeocode.gsi.go.jp/reverse-geocoder/LonLat2Address?lat=' + lat + '&lon=' + lng);
-      const j = await res.json();
-      oaza = (j && j.results && j.results.lv01Nm) ? String(j.results.lv01Nm) : '';
-    } catch (e) { /* 逆ジオコーディング不可でも距離判定は行う */ }
-    // 取得した大字名で捕獲場所を補助入力（一致すれば地区も自動確定）
-    if (oaza) {
-      const box = document.getElementById('oazaSearch');
-      if (box) { box.value = oaza; if (typeof onOazaSearch === 'function') onOazaSearch(); }
+  _pickupNoteMsg('📍 現在地を取得しています…（初回は許可を求められます）');
+  const onErr = function (err) {
+    // まず高精度で失敗 → 低精度・長めのタイムアウトで1回だけ再試行
+    if (!onErr._retried && err && (err.code === 2 || err.code === 3)) {
+      onErr._retried = true;
+      _pickupNoteMsg('📍 取得に時間がかかっています。もう一度試しています…');
+      navigator.geolocation.getCurrentPosition(_onPickupPosition, onErr,
+        { enableHighAccuracy: false, timeout: 20000, maximumAge: 60000 });
+      return;
     }
-    updatePickupNotice({ km: km, oaza: oaza });
-  }, function () {
-    if (note) { note.classList.add('show'); note.innerHTML = '現在地を取得できませんでした。地区は手入力してください。'; }
-  }, { enableHighAccuracy: true, timeout: 8000 });
+    let msg;
+    if (err && err.code === 1) {         // PERMISSION_DENIED
+      msg = '位置情報の利用が許可されていません。<br>iPhone/iPad: 設定 → プライバシーとセキュリティ → 位置情報サービス → ブラウザ（Safari/Chrome）を「このAppの使用中」に。<br>それでも不明なときは地区を手入力してください。';
+    } else if (err && err.code === 2) {  // POSITION_UNAVAILABLE
+      msg = '現在地を特定できませんでした（屋内や電波状況の影響）。屋外で再度お試しいただくか、地区を手入力してください。';
+    } else if (err && err.code === 3) {  // TIMEOUT
+      msg = '現在地の取得がタイムアウトしました。もう一度ボタンを押すか、地区を手入力してください。';
+    } else {
+      msg = '現在地を取得できませんでした。地区は手入力してください。';
+    }
+    _pickupNoteMsg('⚠️ ' + msg);
+  };
+  navigator.geolocation.getCurrentPosition(_onPickupPosition, onErr,
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
 }
 
 /* 撮影用の大きな表示ボード（個体と一緒に撮る）。ホワイトボードの代わり */
