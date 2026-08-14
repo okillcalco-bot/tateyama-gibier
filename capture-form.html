@@ -2632,9 +2632,10 @@ function arBoardData(r) {
   const place = [r.capture_city, district, r.capture_area].filter(Boolean).join(' ');
   const sw = (r.weight_total != null && r.weight_total !== '') ? (r.weight_total + ' kg') : '';
   const sexWeight = [r.sex, sw].filter(Boolean).join('　');
+  const serial = (r.serial_number != null && r.serial_number !== '') ? String(r.serial_number) : '';
   return {
     code: r.label_id || '',
-    lines: [['捕獲日', r.capture_date || ''], ['捕獲者', r.hunter_name || ''],
+    lines: [['通し番号', serial], ['捕獲日', r.capture_date || ''], ['捕獲者', r.hunter_name || ''],
             ['捕獲場所', place], ['性別・体重', sexWeight]].filter(function (x) { return x[1]; })
   };
 }

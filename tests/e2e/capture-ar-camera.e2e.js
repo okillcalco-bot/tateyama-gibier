@@ -47,6 +47,7 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   ck('カメラオーバーレイが開く', ar.shown);
   ck('左下看板に個体番号', ar.hasCode === 'TGC-08-T272', ar.hasCode);
   ck('看板に捕獲者/場所が入る', ar.board.includes('加藤茂') && ar.board.includes('神余'), ar.board);
+  ck('看板に通し番号(458)が入る', ar.board.includes('通し番号') && ar.board.includes('458'), ar.board);
   ck('フェイクカメラ映像が来ている', ar.videoReady, String(ar.videoReady));
 
   // 撮影 → 看板を焼き込んだ画像を生成（canvasが非空・保存導線）
