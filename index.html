@@ -9061,7 +9061,12 @@ async function loadMasterDatalists() {
   try {
     const as = await sb('GET', 'area_master', null, '?select=oaza,district,city&order=sort_order.asc&limit=500');
     areaMasterRows = as;   // 地区名の点検にも使う
-    if (as.length) document.getElementById('dl-area').innerHTML = [...new Set(as.map(a => a.oaza).filter(Boolean))].map(a => `<option>${esc2(a)}</option>`).join('');
+    // 捕獲票入力と同じ現住所表記で候補を出す（白浜町・和田町は旧町名つき＝白浜町乙浜／和田町黒岩）
+    const PREFIX_OLDTOWNS = ['白浜町', '和田町'];
+    const areaLabel = a => (a.city === '南房総市' && PREFIX_OLDTOWNS.indexOf(a.district || '') >= 0)
+      ? (a.district || '') + (a.oaza || '') : (a.oaza || '');
+    if (as.length) document.getElementById('dl-area').innerHTML =
+      [...new Set(as.map(areaLabel).filter(Boolean))].map(a => `<option>${esc2(a)}</option>`).join('');
   } catch (e) {}
   // 記録者・異常確認者の候補はスタッフマスタから作る（固定リストだと入社した人が出ないため）
   try {
