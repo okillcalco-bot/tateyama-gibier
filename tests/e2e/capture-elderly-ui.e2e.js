@@ -91,7 +91,75 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   });
   ck('入力済みの捕獲場所は自動上書きしない', noOverride === '手入力の場所', noOverride);
 
+  // 6) ボタン名: 搬入登録
+  ck('登録ボタンが「搬入登録」', await p.evaluate(() => document.getElementById('submitBtn').textContent.trim()) === '搬入登録');
+
+  // 7) 搬入登録の直後は撮影用ボードを直接表示（ラベル印刷・次の入力ボタン付き）
+  const board = await p.evaluate(() => {
+    showBoard({ label_id: 'TGC-08-T272', serial_number: 458, species: 'イノシシ', capture_date: '2026-08-14',
+      hunter_name: '沖浩志', capture_city: '館山市', capture_area: '布沼', sex: 'オス', weight_total: 34 }, true);
+    return {
+      shown: document.getElementById('boardOverlay').classList.contains('show'),
+      sheet: document.getElementById('boardSheet').textContent,
+      printBtn: document.getElementById('boardPrintBtn').style.display !== 'none',
+      newBtn: document.getElementById('boardNewBtn').style.display !== 'none',
+      detailHidden: document.getElementById('boardDetailBtn').style.display === 'none',
+    };
+  });
+  ck('登録直後にボードが開く', board.shown);
+  ck('ボードに個体番号が大きく出る', board.sheet.includes('TGC-08-T272'));
+  ck('ボードに「ラベル印刷」ボタン', board.printBtn);
+  ck('ボードに「次の入力へ」ボタン', board.newBtn);
+  ck('登録直後は「詳細」ボタンは隠す', board.detailHidden);
+  // ラベル印刷ボタン → ボードを閉じて印刷モーダル
+  const toPrint = await p.evaluate(() => {
+    boardPrintLabels();
+    return { boardClosed: !document.getElementById('boardOverlay').classList.contains('show'),
+             modalShown: document.getElementById('printModal').classList.contains('show') };
+  });
+  ck('ラベル印刷 → ボードを閉じ印刷モーダルを表示', toPrint.boardClosed && toPrint.modalShown, JSON.stringify(toPrint));
+
   ck('JSエラーなし', errs.length === 0, errs.join(' / '));
+
+  // 8) 採番: 共有の開始番号を正とし、古い端末カウンタ(localStorage)に負けない
+  const p2 = await ctx.newPage();
+  const errs2 = []; p2.on('pageerror', e => errs2.push(String(e)));
+  await p2.route('**/rest/v1/**', async route => {
+    const url = decodeURIComponent(route.request().url());
+    const j = x => route.fulfill({ contentType: 'application/json', body: JSON.stringify(x) });
+    if (url.includes('/app_settings') && url.includes('capture_numbering'))
+      return j([{ value: { serial_start: 458, label_start_T: 272, label_start_M: 170 } }]);
+    if (url.includes('/individuals')) {
+      if (url.includes('capture_date=not.is.null')) return j([{ serial_number: 417 }]);           // dbNext=418
+      if (url.includes('like.TGC-08-T')) return j([{ label_id: 'TGC-08-T251' }]);                  // dbLabelNext=252
+      if (url.includes('like.TGC-08-M')) return j([{ label_id: 'TGC-08-M150' }]);
+      return j([]);
+    }
+    if (url.includes('/area_master')) return j([{ city: '館山市', district: '豊房', oaza: '神余' }]);
+    return j([]);
+  });
+  await p2.goto('http://localhost:9076/capture-form.html'); await p2.waitForTimeout(500);
+  const num = await p2.evaluate(async () => {
+    // 古い端末カウンタが残っている状況を再現（高い値）
+    localStorage.setItem('tgc_next_serial_イノシシ', '999');
+    localStorage.setItem('tgc_next_label_T', '999');
+    await loadNumStart();
+    // 種別イノシシ・館山市を選ぶ
+    document.querySelector('[data-field="species"] [data-val="イノシシ"]').click();
+    document.querySelector('[data-field="capture_city"] [data-val="館山市"]').click();
+    await new Promise(r => setTimeout(r, 400));
+    return {
+      serial: document.getElementById('indSerial').value,
+      label: document.getElementById('indLabelId').value,
+      lsSerial: localStorage.getItem('tgc_next_serial_イノシシ'),
+      lsLabel: localStorage.getItem('tgc_next_label_T'),
+    };
+  });
+  ck('通し番号は開始番号458（古い端末カウンタ999を無視）', num.serial === '458', JSON.stringify(num));
+  ck('館山の管理番号はT272（開始番号優先）', num.label === 'TGC-08-T272', num.label);
+  ck('古い端末カウンタを自己修復で消す', num.lsSerial === null && num.lsLabel === null, JSON.stringify(num));
+  ck('採番ページJSエラーなし', errs2.length === 0, errs2.join(' / '));
+
   console.log(out.join('\n'));
   await b.close(); srv.close();
   process.exit(out.some(x => x.startsWith('FAIL')) ? 1 : 0);

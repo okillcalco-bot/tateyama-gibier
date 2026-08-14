@@ -805,7 +805,7 @@ textarea { min-height: 80px; resize: vertical; }
   <div id="missingBox" style="display:none;border-radius:10px;padding:14px 16px;margin:14px 0;font-size:1rem;line-height:1.8;"></div>
 
   <button type="button" onclick="toggleEditSearch()" style="background:#6c757d;color:#fff;border:none;border-radius:8px;padding:12px 18px;font-size:15px;cursor:pointer;margin-right:8px;">&#9998; 既存データを修正</button>
-  <button class="submit-btn" id="submitBtn" onclick="handleSubmit()">登録する</button>
+  <button class="submit-btn" id="submitBtn" onclick="handleSubmit()">搬入登録</button>
 </div>
 
 <!-- LIST TAB -->
@@ -871,7 +871,9 @@ textarea { min-height: 80px; resize: vertical; }
 <div id="boardOverlay">
   <div class="board-bar">
     <button type="button" class="board-detail" id="boardDetailBtn" onclick="boardShowDetail()">詳細</button>
+    <button type="button" class="board-detail" id="boardPrintBtn" onclick="boardPrintLabels()" style="display:none;">🖨 ラベル印刷</button>
     <span class="board-hint">← 左右スワイプで文字サイズ調整 →</span>
+    <button type="button" class="board-detail" id="boardNewBtn" onclick="boardNewInput()" style="display:none;background:#2e7d32;color:#fff;">＋ 次の入力へ</button>
     <button type="button" class="board-close" onclick="closeBoard()">✕ 閉じる</button>
   </div>
   <div class="board-sheet" id="boardSheet"></div>
@@ -962,9 +964,17 @@ async function refreshIndividualNumber() {
         `?species=eq.イノシシ&serial_number=not.is.null&capture_date=not.is.null&select=serial_number&order=serial_number.desc&limit=1`);
       dbNext = rows.length > 0 ? (rows[0].serial_number || 0) + 1 : 1;
     } catch(e) { dbNext = 1; }
-    // 開始番号設定（app_settings の serial_start）と端末カウンタのうち大きい方を採用
-    const lsVal = parseInt(localStorage.getItem('tgc_next_serial_イノシシ') || '0') || 0;
-    nextSerial = Math.max(dbNext, lsVal, numStart('serial_start'));
+    // 開始番号設定（app_settings の serial_start）があればそれを正とする。
+    // 端末ごとの localStorage カウンタは番号ドリフトの原因になるため、開始番号設定があるときは使わない
+    // （さらに古い端末カウンタは消して自己修復する）。設定が無いときだけ端末カウンタを併用。
+    const startSerial = numStart('serial_start');
+    if (startSerial > 0) {
+      nextSerial = Math.max(dbNext, startSerial);
+      localStorage.removeItem('tgc_next_serial_イノシシ');
+    } else {
+      const lsVal = parseInt(localStorage.getItem('tgc_next_serial_イノシシ') || '0') || 0;
+      nextSerial = Math.max(dbNext, lsVal);
+    }
   } else {
     const lsKey = `tgc_next_serial_${prefix}`;
     nextSerial = parseInt(localStorage.getItem(lsKey) || '0');
@@ -992,8 +1002,15 @@ async function refreshIndividualNumber() {
         dbLabelNext = isNaN(n) ? 1 : n + 1;
       }
     } catch (e) { dbLabelNext = 1; }
-    const lsLabel = parseInt(localStorage.getItem(lsLabelKey) || '0') || 0;
-    labelNum = Math.max(dbLabelNext, lsLabel, numStart('label_start_' + prefix));
+    // 管理番号も開始番号設定を正とする（端末カウンタのドリフトを無視・自己修復）
+    const startLabel = numStart('label_start_' + prefix);
+    if (startLabel > 0) {
+      labelNum = Math.max(dbLabelNext, startLabel);
+      localStorage.removeItem(lsLabelKey);
+    } else {
+      const lsLabel = parseInt(localStorage.getItem(lsLabelKey) || '0') || 0;
+      labelNum = Math.max(dbLabelNext, lsLabel);
+    }
   } else {
     labelNum = nextSerial;
   }
@@ -1031,7 +1048,7 @@ async function checkSerialPlaceholder() {
     const rows = await sb('GET', 'individuals', null,
       `?species=eq.イノシシ&serial_number=eq.${serial}&capture_date=is.null&deleted_at=is.null&select=id&limit=1`);
     if (rows.length) {
-      note.textContent = `✓ 通し番号 ${serial} は先に用意した空枠です。登録するとそこに入ります。`;
+      note.textContent = `✓ 通し番号 ${serial} は先に用意した空枠です。搬入登録するとそこに入ります。`;
       note.style.display = 'block';
     } else {
       note.style.display = 'none';
@@ -1739,7 +1756,7 @@ function loadForEdit(rec) {
 }
 function cancelEditMode() {
   editMode = false; editRecordId = null; editRecord = null;
-  document.getElementById('submitBtn').textContent = '登録する';
+  document.getElementById('submitBtn').textContent = '搬入登録';
   const bar = document.getElementById('editModeBar'); if (bar) bar.style.display = 'none';
   resetForm();
 }
@@ -2190,7 +2207,7 @@ async function handleSubmit() {
     if (missing.length) parts.push(`【未入力 ${missing.length}件】\n・${missing.join('\n・')}`);
     if (warns.length) parts.push(`【確認してください ${warns.length}件】\n・${warns.join('\n・')}`);
     if (!confirm(`${parts.join('\n\n')}\n\nこのまま保存しますか？\n（あとから「既存データを修正」や業務アプリで直せます）`)) {
-      btn.disabled = false; btn.textContent = '登録する';
+      btn.disabled = false; btn.textContent = '搬入登録';
       return;
     }
   }
@@ -2202,7 +2219,7 @@ async function handleSubmit() {
     // Use individual number fields
     const labelId = document.getElementById('indLabelId').value;
     const serial = parseInt(document.getElementById('indSerial').value) || 1;
-    if (!labelId && !window.hunterMode) { alert('個体管理番号が生成されていません。種別と市町村を選択してください。'); btn.disabled=false; btn.textContent='登録する'; return; }
+    if (!labelId && !window.hunterMode) { alert('個体管理番号が生成されていません。種別と市町村を選択してください。'); btn.disabled=false; btn.textContent='搬入登録'; return; }
 
     // 通し番号（連番）はイノシシのみ。新規登録時にDBの最大+1を自動採番（この次から連番）。
     // ただし、手入力の番号が「先に用意した空枠」（通し番号だけ登録済みで捕獲日が未入力）と一致すれば、
@@ -2286,7 +2303,7 @@ async function handleSubmit() {
     }
 
     if (window.hunterMode) {
-      btn.disabled = false; btn.textContent = '登録する';
+      btn.disabled = false; btn.textContent = '搬入登録';
       window._hunterDoneRecord = record;
       resetForm();
       const _h = new URLSearchParams(location.search).get('hunter');
@@ -2298,25 +2315,29 @@ async function handleSubmit() {
     await svAfterSave(saved || record);
     // Skip counter increment when editing
     if (editMode) { cancelEditMode(); showPrintModal(record); loadTodayCount(); return; }
-    // Advance localStorage counters
+    // 端末カウンタを進める。ただしイノシシで共有の開始番号設定があるときは、
+    // 端末ドリフト防止のため端末カウンタは書かない（採番は app_settings を正とする）。
     const _serialKey = getSerialKey(state.species);
-    if (_serialKey) localStorage.setItem(_serialKey, String(serial + 1));
+    const _serialShared = state.species === 'イノシシ' && numStart('serial_start') > 0;
+    if (_serialKey && !_serialShared) localStorage.setItem(_serialKey, String(serial + 1));
     if (state.species === 'イノシシ') {
-      // イノシシは管理番号カウンターも別途進める
       const _prefix = getIndividualPrefix(state.species, state.capture_city);
-      const _labelKey = `tgc_next_label_${_prefix}`;
-      const _labelNum = parseInt(document.getElementById('indLabelId').dataset.labelNum || '1');
-      localStorage.setItem(_labelKey, String(_labelNum + 1));
+      if (numStart('label_start_' + _prefix) <= 0) {
+        const _labelKey = `tgc_next_label_${_prefix}`;
+        const _labelNum = parseInt(document.getElementById('indLabelId').dataset.labelNum || '1');
+        localStorage.setItem(_labelKey, String(_labelNum + 1));
+      }
     }
 
-    showPrintModal(saved || record);
+    // 搬入登録の直後は「撮影用ボード」を先に表示（ラベル印刷はボードのボタンから）
+    showBoard(saved || record, true);
     loadTodayCount();
 
   } catch(e) {
     alert('エラー: ' + e.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = '登録する';
+    btn.textContent = '搬入登録';
   }
 }
 
@@ -2535,8 +2556,10 @@ function showBoardScaleTip() {
   showBoardScaleTip._t = setTimeout(() => tip.classList.remove('show'), 900);
 }
 
-function showBoard(r) {
+let _boardAfterRegister = false;
+function showBoard(r, afterRegister) {
   _boardRec = r;
+  _boardAfterRegister = !!afterRegister;
   const esc2 = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const district = districtOfOaza(r.capture_city, r.capture_area);
   const place = [r.capture_city, district, r.capture_area].filter(Boolean).join(' ');
@@ -2553,7 +2576,10 @@ function showBoard(r) {
   document.getElementById('boardSheet').innerHTML = rows.map(([k, v, small]) =>
     `<div class="brd-row"><div class="brd-k">${k}</div><div class="brd-v${small ? ' small' : ''}">${esc2(v) || '—'}</div></div>`
   ).join('');
-  document.getElementById('boardDetailBtn').style.display = r.__sample ? 'none' : '';
+  // 搬入登録の直後は「撮影用ボード」を先に出す。詳細は隠し、ラベル印刷・次の入力ボタンを出す
+  document.getElementById('boardDetailBtn').style.display = (r.__sample || afterRegister) ? 'none' : '';
+  const pb = document.getElementById('boardPrintBtn'); if (pb) pb.style.display = afterRegister ? '' : 'none';
+  const nb = document.getElementById('boardNewBtn'); if (nb) nb.style.display = afterRegister ? '' : 'none';
   applyBoardScale(false);
   document.getElementById('boardOverlay').classList.add('show');
 }
@@ -2566,8 +2592,23 @@ function showBoardSample() {
     capture_city: '南房総市', capture_area: '白間津', sex: 'メス', weight_total: 21.3
   });
 }
-function closeBoard() { document.getElementById('boardOverlay').classList.remove('show'); }
+function closeBoard() {
+  document.getElementById('boardOverlay').classList.remove('show');
+  if (_boardAfterRegister) { _boardAfterRegister = false; resetForm(); }   // 登録直後の閉じるは次の入力へ
+}
 function boardShowDetail() { if (_boardRec) showDetail(_boardRec); }
+// 登録直後ボードから: ラベル印刷（ボードを閉じて印刷モーダルを出す。閉じるでの自動リセットは止める）
+function boardPrintLabels() {
+  _boardAfterRegister = false;
+  document.getElementById('boardOverlay').classList.remove('show');
+  if (_boardRec) showPrintModal(_boardRec);
+}
+// 登録直後ボードから: 次の入力へ（フォームをリセット）
+function boardNewInput() {
+  _boardAfterRegister = false;
+  document.getElementById('boardOverlay').classList.remove('show');
+  resetForm();
+}
 
 /* ボード上で左右スワイプ → 文字サイズを調整。縦スクロールは邪魔しない（横移動が主のときだけ効く） */
 (function setupBoardSwipe() {
@@ -2685,7 +2726,7 @@ function wtKey(k) {
     document.querySelectorAll('button').forEach(b => { if (b.textContent.includes('既存データを修正')) hide(b); });
     const bar = document.createElement('div');
     bar.style.cssText = 'background:rgba(200,164,90,.15);border:1px solid var(--gold2);color:var(--gold);border-radius:8px;padding:10px 14px;margin:10px 12px;font-size:13.5px;line-height:1.7;';
-    bar.innerHTML = '🏹 <strong>捕獲者入力モード</strong> — わかるところだけ入れて「登録する」を押してください。個体番号・受入・検査の記録はセンターのスタッフが行います。';
+    bar.innerHTML = '🏹 <strong>捕獲者入力モード</strong> — わかるところだけ入れて「搬入登録」を押してください。個体番号・受入・検査の記録はセンターのスタッフが行います。';
     const first = document.querySelector('.section');
     if (first) first.parentNode.insertBefore(bar, first);
   }
