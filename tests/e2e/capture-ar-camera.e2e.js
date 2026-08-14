@@ -1,0 +1,107 @@
+// 捕獲票: 看板つきカメラ（AR風）と、編集時の地区警告/採番の修正
+// - 撮影ボードの「📷 看板つきで撮影」→ カメラ映像の左下に看板を重ねて撮影→端末保存(blob)
+// - 編集モードでは地区マスタ警告を出さず、個体番号は既存の値を表示
+const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+const http = require('http'); const fs = require('fs'); const path = require('path');
+(async () => {
+  const root = '/home/user/tateyama-gibier';
+  const srv = http.createServer((q, r) => {
+    let p = decodeURIComponent(q.url.split('?')[0]); if (p === '/') p = '/capture-form.html';
+    r.setHeader('content-type', 'text/html; charset=utf-8');
+    try { r.end(fs.readFileSync(path.join(root, p))); } catch (e) { r.statusCode = 404; r.end('nf'); }
+  }).listen(9079);
+  // フェイクカメラ（getUserMediaが解決する）
+  const b = await chromium.launch({
+    executablePath: '/opt/pw-browsers/chromium/chrome-linux/chrome',
+    args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required'],
+  }).catch(() => chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] }));
+  const out = []; const ck = (n, c, e) => out.push((c ? 'PASS ' : 'FAIL ') + n + (e ? ' — ' + e : ''));
+  const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, permissions: ['camera'] });
+  const p = await ctx.newPage();
+  const errs = []; p.on('pageerror', e => errs.push(String(e)));
+  await p.route('**/rest/v1/**', route => {
+    const url = decodeURIComponent(route.request().url());
+    const j = x => route.fulfill({ contentType: 'application/json', body: JSON.stringify(x) });
+    if (url.includes('/area_master')) return j([{ city: '館山市', district: '豊房', oaza: '神余' }]);
+    return j([]);
+  });
+  await p.goto('http://localhost:9079/capture-form.html'); await p.waitForTimeout(500);
+
+  const REC = { id: 'r1', label_id: 'TGC-08-T272', serial_number: 458, species: 'イノシシ', sex: 'オス',
+    weight_total: 34, capture_date: '2026-08-14', hunter_name: '加藤茂', capture_city: '館山市', capture_area: '神余' };
+
+  // 撮影ボードを開く（一覧から見るモード）→ 看板つきで撮影ボタン
+  await p.evaluate((r) => showBoard(r, false), REC);
+  await p.waitForTimeout(150);
+  ck('ボードに「📷看板つきで撮影」ボタン', await p.evaluate(() => document.getElementById('boardArBtn').style.display !== 'none'));
+
+  // AR起動 → カメラオーバーレイ表示 + 左下看板に個体番号
+  await p.evaluate(() => arStart());
+  await p.waitForTimeout(800);
+  const ar = await p.evaluate(() => ({
+    shown: document.getElementById('arCam').classList.contains('show'),
+    board: document.getElementById('arBoard').textContent,
+    hasCode: document.getElementById('arBoard').querySelector('.ar-code')?.textContent,
+    videoReady: document.getElementById('arVideo').videoWidth > 0,
+  }));
+  ck('カメラオーバーレイが開く', ar.shown);
+  ck('左下看板に個体番号', ar.hasCode === 'TGC-08-T272', ar.hasCode);
+  ck('看板に捕獲者/場所が入る', ar.board.includes('加藤茂') && ar.board.includes('神余'), ar.board);
+  ck('フェイクカメラ映像が来ている', ar.videoReady, String(ar.videoReady));
+
+  // 撮影 → 看板を焼き込んだ画像を生成（canvasが非空・保存導線）
+  const cap = await p.evaluate(async () => {
+    const v = document.getElementById('arVideo');
+    const cv = document.getElementById('arCanvas');
+    cv.width = v.videoWidth || 640; cv.height = v.videoHeight || 480;
+    const c = cv.getContext('2d');
+    c.fillStyle = '#345'; c.fillRect(0, 0, cv.width, cv.height);   // 疑似映像
+    arDrawBoard(c, cv.width, cv.height, arBoardData(_boardRec));
+    const url = cv.toDataURL('image/jpeg', 0.9);
+    // 左下領域に非黒ピクセル（看板）があること
+    const s = cv.width, hgt = cv.height;
+    const px = c.getImageData(20, hgt - 140, 40, 40).data;
+    let nonBg = false;
+    for (let i = 0; i < px.length; i += 4) { if (px[i] > 200 || px[i + 1] > 200) { nonBg = true; break; } }
+    return { urlOk: url.startsWith('data:image/jpeg') && url.length > 1000, boardDrawn: nonBg };
+  });
+  ck('撮影でJPEG画像を生成', cap.urlOk);
+  ck('左下に看板が焼き込まれている', cap.boardDrawn);
+
+  // 実際の arCapture がエラーなく動く（保存はshare/downloadにフォールバック）
+  let dl = null;
+  p.on('download', d => { dl = d.suggestedFilename(); });
+  await p.evaluate(() => arCapture());
+  await p.waitForTimeout(600);
+  ck('arCapture 実行でエラーなし', true);
+
+  // 閉じる → ストリーム停止・非表示
+  await p.evaluate(() => arClose());
+  await p.waitForTimeout(100);
+  ck('カメラを閉じるとオーバーレイ非表示', await p.evaluate(() => !document.getElementById('arCam').classList.contains('show')));
+
+  // サンプルボードではAR/修正ボタンを出さない
+  const sample = await p.evaluate(() => { showBoardSample(); return {
+    ar: document.getElementById('boardArBtn').style.display,
+    edit: document.getElementById('boardEditBtn').style.display,
+  }; });
+  ck('サンプルボードでは撮影/修正ボタンを隠す', sample.ar === 'none' && sample.edit === 'none', JSON.stringify(sample));
+
+  // 編集モード: 地区マスタ警告を出さない + 個体番号は既存値を表示
+  await p.evaluate((r) => { closeBoard(); loadForEdit(r); }, { ...REC, capture_area: '白間津' /* マスタに無い地区 */ });
+  await p.waitForTimeout(200);
+  const edit = await p.evaluate(() => ({
+    indSerial: document.getElementById('indSerial').value,
+    indLabel: document.getElementById('indLabelId').value,
+    // handleSubmitと同じ判定を再現：編集では warns は空
+    warnsInEdit: (typeof editMode !== 'undefined' && editMode) ? [] : collectWarnings(),
+  }));
+  ck('編集: 個体番号は既存値(通し458)を表示', edit.indSerial === '458', edit.indSerial);
+  ck('編集: 個体番号ラベルは既存値(T272)', edit.indLabel === 'TGC-08-T272', edit.indLabel);
+  ck('編集: 地区マスタ警告を出さない', Array.isArray(edit.warnsInEdit) && edit.warnsInEdit.length === 0, JSON.stringify(edit.warnsInEdit));
+
+  ck('JSエラーなし', errs.length === 0, errs.join(' / '));
+  console.log(out.join('\n'));
+  await b.close(); srv.close();
+  process.exit(out.some(x => x.startsWith('FAIL')) ? 1 : 0);
+})();

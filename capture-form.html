@@ -375,6 +375,20 @@ textarea { min-height: 80px; resize: vertical; }
 #boardOverlay .brd-v { flex: 1; font-size: calc(clamp(40px, 13vw, 76px) * var(--bscale)); font-weight: 800; line-height: 1.05; letter-spacing: 0.01em; word-break: break-all; }
 #boardOverlay .brd-v.small { font-size: calc(clamp(28px, 8.5vw, 52px) * var(--bscale)); }
 #boardScaleTip { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); background: rgba(35,39,28,.92); color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 700; z-index: 3; opacity: 0; transition: opacity .2s; pointer-events: none; }
+
+/* 看板つきカメラ（AR風・カメラ映像の左下に看板を重ねて撮影） */
+#arCam { display: none; position: fixed; inset: 0; z-index: 10000; background: #000; }
+#arCam.show { display: block; }
+#arVideo { width: 100%; height: 100%; object-fit: cover; background: #000; }
+#arBoard { position: absolute; left: 12px; bottom: 108px; max-width: 74%; background: rgba(0,0,0,.62); color: #fff; border-radius: 12px; padding: 10px 14px; line-height: 1.35; text-shadow: 0 1px 2px rgba(0,0,0,.8); }
+#arBoard .ar-code { font-size: clamp(20px, 6vw, 34px); font-weight: 800; letter-spacing: .02em; }
+#arBoard .ar-line { font-size: clamp(13px, 3.6vw, 19px); font-weight: 600; }
+#arBoard .ar-line b { color: #ffe08a; font-weight: 800; }
+#arMsg { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.7); color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; display: none; max-width: 90%; text-align: center; }
+#arCam .ar-bar { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 18px calc(16px + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: space-between; background: linear-gradient(transparent, rgba(0,0,0,.55)); }
+.ar-btn { border: none; border-radius: 10px; padding: 12px 16px; font-size: 15px; font-weight: 700; cursor: pointer; background: rgba(255,255,255,.18); color: #fff; -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+.ar-shutter { width: 72px; height: 72px; border-radius: 50%; border: 5px solid #fff; background: #fff; cursor: pointer; box-shadow: 0 0 0 3px rgba(0,0,0,.35); }
+.ar-shutter:active { transform: scale(0.94); }
 #boardScaleTip.show { opacity: 1; }
 
 /* Animations */
@@ -885,6 +899,7 @@ textarea { min-height: 80px; resize: vertical; }
 <!-- 撮影用の大きな表示ボード（個体と一緒に撮る） -->
 <div id="boardOverlay">
   <div class="board-bar">
+    <button type="button" class="board-detail" id="boardArBtn" onclick="arStart()" style="background:#c9a13b;color:#1c1f16;">📷 看板つきで撮影</button>
     <button type="button" class="board-detail" id="boardDetailBtn" onclick="boardShowDetail()">詳細</button>
     <button type="button" class="board-detail" id="boardEditBtn" onclick="boardEdit()" style="background:#1565c0;color:#fff;">✏️ 修正</button>
     <button type="button" class="board-detail" id="boardPrintBtn" onclick="boardPrintLabels()" style="display:none;">🖨 ラベル印刷</button>
@@ -894,6 +909,19 @@ textarea { min-height: 80px; resize: vertical; }
   </div>
   <div class="board-sheet" id="boardSheet"></div>
   <div id="boardScaleTip"></div>
+</div>
+
+<!-- 看板つきカメラ（AR風）: カメラ映像の左下に看板を重ねて撮影→端末保存 -->
+<div id="arCam">
+  <video id="arVideo" autoplay playsinline muted></video>
+  <div id="arBoard"></div>
+  <div id="arMsg"></div>
+  <div class="ar-bar">
+    <button type="button" class="ar-btn ar-cancel" onclick="arClose()">✕ 閉じる</button>
+    <button type="button" class="ar-shutter" id="arShutterBtn" onclick="arCapture()" aria-label="撮影"></button>
+    <button type="button" class="ar-btn ar-flip" onclick="arFlip()">🔄 切替</button>
+  </div>
+  <canvas id="arCanvas" style="display:none;"></canvas>
 </div>
 
 <script>
@@ -1727,6 +1755,9 @@ async function searchForEdit() {
 }
 function loadForEdit(rec) {
   editMode = true; editRecordId = rec.id; editRecord = rec;
+  // 個体番号は既存の値をそのまま表示（編集では採番し直さない）
+  const _ser = document.getElementById('indSerial'); if (_ser && rec.serial_number != null) _ser.value = rec.serial_number;
+  const _lab = document.getElementById('indLabelId'); if (_lab && rec.label_id) _lab.value = rec.label_id;
   // 登録済みの値を入れ直す。自動入力の目印は消して、保存済みの時刻を勝手に書き換えないようにする
   const sv = function(id, v) {
     const el = document.getElementById(id); if (!el) return;
@@ -2227,9 +2258,10 @@ async function handleSubmit() {
   const btn = document.getElementById('submitBtn');
   if (!state.species) { alert('種別を選択してください'); return; }
   if (!state.sex) { alert('性別を選択してください'); return; }
-  // 未入力があってもそのまま保存できるが、何が抜けているかは必ずその場で知らせる
+  // 未入力があってもそのまま保存できるが、何が抜けているかは必ずその場で知らせる。
+  // 編集（既存データの修正）では地区マスタ照合の警告は出さない（保存済みの値を毎回警告しないため）
   const missing = collectMissing();
-  const warns = collectWarnings();
+  const warns = editMode ? [] : collectWarnings();
   if (missing.length || warns.length) {
     const parts = [];
     if (missing.length) parts.push(`【未入力 ${missing.length}件】\n・${missing.join('\n・')}`);
@@ -2615,6 +2647,7 @@ function showBoard(r, afterRegister) {
   const eb = document.getElementById('boardEditBtn'); if (eb) eb.style.display = (r.__sample || afterRegister) ? 'none' : '';
   const pb = document.getElementById('boardPrintBtn'); if (pb) pb.style.display = afterRegister ? '' : 'none';
   const nb = document.getElementById('boardNewBtn'); if (nb) nb.style.display = afterRegister ? '' : 'none';
+  const ab = document.getElementById('boardArBtn'); if (ab) ab.style.display = r.__sample ? 'none' : '';
   applyBoardScale(false);
   document.getElementById('boardOverlay').classList.add('show');
 }
@@ -2643,6 +2676,127 @@ function boardNewInput() {
   _boardAfterRegister = false;
   document.getElementById('boardOverlay').classList.remove('show');
   resetForm();
+}
+
+/* ── 看板つきカメラ（AR風）── カメラ映像の左下に看板を重ねて撮影→端末保存 ── */
+let _arStream = null, _arFacing = 'environment', _arMsgT = null;
+function arBoardData(r) {
+  r = r || {};
+  const district = districtOfOaza(r.capture_city, r.capture_area);
+  const place = [r.capture_city, district, r.capture_area].filter(Boolean).join(' ');
+  const sw = (r.weight_total != null && r.weight_total !== '') ? (r.weight_total + ' kg') : '';
+  const sexWeight = [r.sex, sw].filter(Boolean).join('　');
+  return {
+    code: r.label_id || '',
+    lines: [['捕獲日', r.capture_date || ''], ['捕獲者', r.hunter_name || ''],
+            ['捕獲場所', place], ['性別・体重', sexWeight]].filter(function (x) { return x[1]; })
+  };
+}
+function arRenderBoard(r) {
+  const d = arBoardData(r);
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  document.getElementById('arBoard').innerHTML =
+    (d.code ? `<div class="ar-code">${esc(d.code)}</div>` : '') +
+    d.lines.map(function (x) { return `<div class="ar-line">${esc(x[0])} <b>${esc(x[1])}</b></div>`; }).join('');
+}
+function arMsg(text) {
+  const el = document.getElementById('arMsg'); if (!el) return;
+  if (!text) { el.style.display = 'none'; return; }
+  el.textContent = text; el.style.display = 'block';
+  clearTimeout(_arMsgT); _arMsgT = setTimeout(function () { el.style.display = 'none'; }, 3500);
+}
+async function arStart() {
+  const r = _boardRec; if (!r) return;
+  arRenderBoard(r);
+  document.getElementById('arCam').classList.add('show');
+  arMsg('');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    arMsg('この端末/ブラウザではカメラを使えません'); return;
+  }
+  try {
+    _arStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: _arFacing }, audio: false });
+    const v = document.getElementById('arVideo'); v.srcObject = _arStream; await v.play().catch(function () {});
+  } catch (e) {
+    arMsg('カメラを開けませんでした（カメラの許可が必要です。HTTPSでのみ動作）');
+  }
+}
+function arStopStream() { if (_arStream) { _arStream.getTracks().forEach(function (t) { t.stop(); }); _arStream = null; } }
+function arClose() {
+  arStopStream();
+  const v = document.getElementById('arVideo'); if (v) v.srcObject = null;
+  document.getElementById('arCam').classList.remove('show');
+}
+async function arFlip() {
+  _arFacing = (_arFacing === 'environment') ? 'user' : 'environment';
+  arStopStream();
+  try {
+    _arStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: _arFacing }, audio: false });
+    const v = document.getElementById('arVideo'); v.srcObject = _arStream; await v.play().catch(function () {});
+  } catch (e) { arMsg('カメラ切替に失敗しました'); }
+}
+async function arCapture() {
+  const v = document.getElementById('arVideo');
+  const w = v.videoWidth, h = v.videoHeight;
+  if (!w || !h) { arMsg('カメラの準備中です。少し待って撮影してください'); return; }
+  const cv = document.getElementById('arCanvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  if (_arFacing === 'user') { ctx.save(); ctx.translate(w, 0); ctx.scale(-1, 1); ctx.drawImage(v, 0, 0, w, h); ctx.restore(); }
+  else ctx.drawImage(v, 0, 0, w, h);
+  arDrawBoard(ctx, w, h, arBoardData(_boardRec));
+  const stamp = ((_boardRec && _boardRec.label_id) || 'photo').replace(/[^\w-]/g, '_');
+  const dateStr = (_boardRec && _boardRec.capture_date) || '';
+  const fname = stamp + (dateStr ? '_' + dateStr : '') + '.jpg';
+  cv.toBlob(async function (blob) {
+    if (!blob) { arMsg('画像の生成に失敗しました'); return; }
+    const file = new File([blob], fname, { type: 'image/jpeg' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file] }); arMsg('保存/共有しました'); return; }
+      catch (e) { if (e && e.name === 'AbortError') { arMsg(''); return; } }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+    arMsg('写真を保存しました（端末のダウンロード/写真を確認）');
+  }, 'image/jpeg', 0.9);
+}
+// 看板をcanvasの左下に描く（プレビュー #arBoard と同じ内容）
+function arDrawBoard(ctx, W, H, d) {
+  const scale = Math.max(1, W / 900);
+  const pad = 18 * scale, gap = 8 * scale;
+  const codeF = Math.round(34 * scale), lineF = Math.round(20 * scale);
+  ctx.textBaseline = 'top';
+  const lines = d.lines.map(function (x) { return x[0] + '  ' + x[1]; });
+  const codeH = d.code ? codeF + gap : 0;
+  const boxH = pad * 2 + codeH + (lines.length ? lines.length * (lineF + gap) - gap : 0);
+  ctx.font = '800 ' + codeF + "px 'Noto Sans JP', sans-serif";
+  let maxW = d.code ? ctx.measureText(d.code).width : 0;
+  ctx.font = '700 ' + lineF + "px 'Noto Sans JP', sans-serif";
+  lines.forEach(function (t) { maxW = Math.max(maxW, ctx.measureText(t).width); });
+  const boxW = Math.min(W - 24 * scale, maxW + pad * 2);
+  const x = 12 * scale;
+  const y = Math.max(12 * scale, H - boxH - 108 * scale);
+  const rr = 12 * scale;
+  ctx.fillStyle = 'rgba(0,0,0,0.62)';
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + boxW, y, x + boxW, y + boxH, rr);
+  ctx.arcTo(x + boxW, y + boxH, x, y + boxH, rr);
+  ctx.arcTo(x, y + boxH, x, y, rr);
+  ctx.arcTo(x, y, x + boxW, y, rr);
+  ctx.closePath(); ctx.fill();
+  let cy = y + pad;
+  if (d.code) { ctx.fillStyle = '#fff'; ctx.font = '800 ' + codeF + "px 'Noto Sans JP', sans-serif"; ctx.fillText(d.code, x + pad, cy); cy += codeF + gap; }
+  d.lines.forEach(function (kv) {
+    ctx.fillStyle = '#fff'; ctx.font = '700 ' + lineF + "px 'Noto Sans JP', sans-serif";
+    const klabel = kv[0] + '  ';
+    ctx.fillText(klabel, x + pad, cy);
+    const kw = ctx.measureText(klabel).width;
+    ctx.fillStyle = '#ffe08a'; ctx.font = '800 ' + lineF + "px 'Noto Sans JP', sans-serif";
+    ctx.fillText(kv[1], x + pad + kw, cy);
+    cy += lineF + gap;
+  });
 }
 
 /* ボード上で左右スワイプ → 文字サイズを調整。縦スクロールは邪魔しない（横移動が主のときだけ効く） */
