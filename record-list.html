@@ -348,7 +348,7 @@ async function loadData() {
   document.getElementById('emptyMsg').style.display = 'none';
   try {
     allData = await sb('GET', 'individuals', null,
-      '?order=capture_date.desc,serial_number.desc&limit=2000');
+      '?deleted_at=is.null&order=capture_date.desc,serial_number.desc&limit=2000');
     document.getElementById('totalCount').textContent = 'å¨' + allData.length + 'ä»¶';
     applyFilters();
   } catch(e) {
@@ -561,7 +561,8 @@ async function confirmDelete() {
   closeDeleteModal();
   try {
     for (const id of pendingDeleteIds) {
-      await sb('DELETE', 'individuals', null, '?id=eq.' + id);
+      // 物理削除は禁止（市役所提出データの改ざん耐性のため）。論理削除（deleted_at）に統一。
+      await sb('PATCH', 'individuals', { deleted_at: new Date().toISOString() }, '?id=eq.' + id);
     }
     showToast(pendingDeleteIds.length + 'ä»¶ãåé¤ãã¾ãã');
     pendingDeleteIds = [];
