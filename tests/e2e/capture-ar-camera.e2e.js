@@ -100,6 +100,38 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   ck('編集: 個体番号ラベルは既存値(T272)', edit.indLabel === 'TGC-08-T272', edit.indLabel);
   ck('編集: 地区マスタ警告を出さない', Array.isArray(edit.warnsInEdit) && edit.warnsInEdit.length === 0, JSON.stringify(edit.warnsInEdit));
 
+  // ラベル印刷は捕獲票入力から撤去
+  ck('ラベル印刷モーダルが存在しない', await p.evaluate(() => !document.getElementById('printModal')));
+  ck('ボードにラベル印刷ボタンが存在しない', await p.evaluate(() => !document.getElementById('boardPrintBtn')));
+  ck('showPrintModal関数が存在しない', await p.evaluate(() => typeof showPrintModal === 'undefined'));
+
+  // 搬入登録の直後は自動でカメラが開く（startCaptureAfterRegister）
+  await p.evaluate(() => { cancelEditMode(); });
+  await p.evaluate((r) => startCaptureAfterRegister(r), REC);
+  await p.waitForTimeout(600);
+  const auto = await p.evaluate(() => ({
+    camShown: document.getElementById('arCam').classList.contains('show'),
+    boardShown: document.getElementById('boardOverlay').classList.contains('show'),
+    code: document.getElementById('arBoard').querySelector('.ar-code')?.textContent,
+    cancelText: document.querySelector('#arCam .ar-cancel').textContent,
+  }));
+  ck('登録直後: カメラが自動で開く', auto.camShown, JSON.stringify(auto));
+  ck('登録直後: 撮影ボード画面は出さない', auto.boardShown === false);
+  ck('登録直後: 看板に個体番号', auto.code === 'TGC-08-T272', auto.code);
+  ck('登録直後: 閉じるボタンが「完了（次へ）」', auto.cancelText.includes('完了'), auto.cancelText);
+
+  // 完了（閉じる）で次の入力へ＝フォームリセット
+  await p.evaluate(() => arClose());
+  await p.waitForTimeout(150);
+  const afterClose = await p.evaluate(() => ({
+    camHidden: !document.getElementById('arCam').classList.contains('show'),
+    weight: document.getElementById('weight').value,
+    hunter: document.getElementById('hunterName').value,
+    editMode: typeof editMode !== 'undefined' ? editMode : null,
+  }));
+  ck('完了でカメラを閉じる', afterClose.camHidden);
+  ck('完了で次の入力へ（フォームがリセット）', afterClose.weight === '' && afterClose.hunter === '', JSON.stringify(afterClose));
+
   ck('JSエラーなし', errs.length === 0, errs.join(' / '));
   console.log(out.join('\n'));
   await b.close(); srv.close();
