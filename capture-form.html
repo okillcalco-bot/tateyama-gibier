@@ -16,15 +16,18 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #0d0f0a; --surface: #141710; --surface2: #1c1f16;
-  --border: #2a2e22; --border2: #363b2a;
-  --gold: #c8a45a; --gold2: #a07e38; --gold-light: #e8c878;
-  --text: #e8e4d8; --text2: #8a8670; --text3: #5a5848;
-  --red: #c85050; --green: #6a9e5a; --blue: #5a8cd8;
+  /* 白地・高コントラスト（高齢者でも見やすいライトテーマ） */
+  --bg: #ffffff; --bg2: #f2f5ee; --surface: #ffffff; --surface2: #eef2e8;
+  --border: #c8d0bd; --border2: #aab59a;
+  /* アクセントは白地で読める濃い緑（ブランド色） */
+  --gold: #256d1f; --gold2: #2f7d27; --gold-light: #1c5417;
+  --text: #141414; --text2: #4a4f43; --text3: #74796b;
+  --red: #c62828; --green: #2e7d32; --blue: #1565c0;
   --radius: 8px;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { font-size: 16px; -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+/* 高齢者が多いので基準文字を大きめに（18px） */
+html { font-size: 18px; -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   font-family: 'Noto Sans JP', sans-serif;
   background: var(--bg);
@@ -64,14 +67,14 @@ input, select, textarea, button { font-family: inherit; font-size: 1rem; }
   border-bottom: 2px solid var(--border);
 }
 .tab {
-  flex: 1; padding: 14px; text-align: center;
-  font-weight: 500; font-size: 1rem;
-  color: var(--text3); cursor: pointer;
+  flex: 1; padding: 16px; text-align: center;
+  font-weight: 600; font-size: 1.12rem;
+  color: var(--text2); cursor: pointer;
   border-bottom: 3px solid transparent;
   transition: all 0.2s;
   -webkit-user-select: none; user-select: none;
 }
-.tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+.tab.active { color: var(--gold); border-bottom-color: var(--gold); font-weight: 700; }
 
 /* Tab panels */
 .tab-panel { display: none; padding: 16px; padding-bottom: 100px; }
@@ -87,10 +90,10 @@ input, select, textarea, button { font-family: inherit; font-size: 1rem; }
 }
 .section-head {
   padding: 14px 16px;
-  font-weight: 700; font-size: 0.95rem;
-  color: var(--gold);
+  font-weight: 700; font-size: 1.18rem;
+  color: #fff;
   border-bottom: 1px solid var(--border);
-  background: var(--surface2);
+  background: var(--gold);
 }
 .section-body { padding: 16px; }
 
@@ -98,37 +101,44 @@ input, select, textarea, button { font-family: inherit; font-size: 1rem; }
 .form-row { margin-bottom: 16px; }
 .form-row:last-child { margin-bottom: 0; }
 .form-label {
-  display: block; margin-bottom: 6px;
-  font-size: 0.85rem; color: var(--text2); font-weight: 500;
+  display: block; margin-bottom: 7px;
+  font-size: 1.02rem; color: var(--text); font-weight: 600;
+}
+/* 必須マーク（市役所提出用ではなく、台帳に必要な項目） */
+.req-badge {
+  display: inline-block; margin-left: 6px; vertical-align: middle;
+  background: var(--red); color: #fff; font-size: 0.72rem; font-weight: 700;
+  border-radius: 5px; padding: 1px 7px; letter-spacing: 0.02em;
 }
 
 /* Toggle buttons */
 .toggle-group { display: flex; gap: 8px; flex-wrap: wrap; }
 .toggle-btn {
-  flex: 1; min-width: 80px; min-height: 48px;
+  flex: 1; min-width: 84px; min-height: 56px;
   display: flex; align-items: center; justify-content: center;
   background: var(--surface2); border: 2px solid var(--border2);
-  border-radius: var(--radius); color: var(--text2);
-  font-size: 1rem; font-weight: 500; cursor: pointer;
-  transition: all 0.15s; padding: 8px 12px;
+  border-radius: var(--radius); color: var(--text);
+  font-size: 1.12rem; font-weight: 600; cursor: pointer;
+  transition: all 0.15s; padding: 10px 12px;
   -webkit-user-select: none; user-select: none;
 }
 .toggle-btn.active {
-  background: rgba(200,164,90,0.15);
+  background: rgba(37,109,31,0.13);
   border-color: var(--gold);
   color: var(--gold-light);
+  font-weight: 700;
 }
 .toggle-btn:active { transform: scale(0.97); }
 
 /* Inputs */
 .input, .select-wrap select, textarea {
-  width: 100%; padding: 12px 14px;
-  background: var(--surface2); border: 1px solid var(--border2);
+  width: 100%; padding: 14px 14px;
+  background: #fff; border: 1.5px solid var(--border2);
   border-radius: var(--radius); color: var(--text);
-  font-size: 1rem; outline: none; transition: border-color 0.2s;
-  color-scheme: dark;
+  font-size: 1.12rem; outline: none; transition: border-color 0.2s;
+  color-scheme: light;
 }
-input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(0.8); cursor: pointer; }
+input[type="time"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 .time-wrap { display:flex; gap:6px; align-items:center; }
 .time-wrap .input { flex:1; }
 .now-btn { padding:10px 12px; background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius); color:var(--gold); font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; flex-shrink:0; }
@@ -177,7 +187,7 @@ textarea { min-height: 80px; resize: vertical; }
   border: 2px solid #fff; border-top: none; border-left: none;
   transform: rotate(45deg) translateY(-1px);
 }
-.check-text { font-size: 0.85rem; line-height: 1.3; }
+.check-text { font-size: 1rem; line-height: 1.35; }
 
 /* Alerts */
 .alert {
@@ -199,14 +209,26 @@ textarea { min-height: 80px; resize: vertical; }
 .edit-result-row{padding:10px 12px;margin:4px 0;background:#fff;border:1px solid #dee2e6;border-radius:6px;cursor:pointer;font-size:14px;line-height:1.5;}
 .edit-result-row:hover{background:#e8f4fd;border-color:#0d6efd;}
 .submit-btn {
-  width: 100%; padding: 18px; margin-top: 16px;
+  width: 100%; padding: 20px; margin-top: 16px;
   background: linear-gradient(135deg, var(--gold), var(--gold2));
-  color: #111; font-size: 1.2rem; font-weight: 700;
+  color: #fff; font-size: 1.35rem; font-weight: 800;
   border: none; border-radius: var(--radius);
   cursor: pointer; transition: all 0.2s;
-  min-height: 60px;
+  min-height: 66px;
 }
 .submit-btn:active { transform: scale(0.98); opacity: 0.9; }
+
+/* 体重用の大きな数字キーパッド（高齢者向け・「.」の切替不要） */
+.wt-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.wt-key {
+  min-height: 60px; font-size: 1.6rem; font-weight: 700;
+  background: var(--surface2); color: var(--text);
+  border: 1.5px solid var(--border2); border-radius: var(--radius);
+  cursor: pointer; -webkit-user-select: none; user-select: none;
+}
+.wt-key:active { background: rgba(37,109,31,0.13); border-color: var(--gold); }
+.wt-key.wt-dot { color: var(--gold); font-weight: 800; }
+.wt-key.wt-del { color: var(--red); }
 .submit-btn:disabled {
   opacity: 0.4; cursor: not-allowed; transform: none;
 }
@@ -403,7 +425,7 @@ textarea { min-height: 80px; resize: vertical; }
     <div class="section-head">基本情報</div>
     <div class="section-body">
       <div class="form-row">
-        <label class="form-label">種別</label>
+        <label class="form-label">種別<span class="req-badge">必須</span></label>
         <div class="toggle-group" data-field="species" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <div class="toggle-btn" data-val="イノシシ" style="text-align:center;">&#x1F417; イノシシ</div>
           <div class="toggle-btn" data-val="シカ" style="text-align:center;">&#x1F98C; シカ</div>
@@ -439,8 +461,24 @@ textarea { min-height: 80px; resize: vertical; }
         </div>
       </div>
       <div class="form-row">
-        <label class="form-label">体重 (kg)</label>
-        <input type="number" class="input" id="weight" placeholder="0.0" step="0.1" min="0" inputmode="decimal">
+        <label class="form-label">体重 (kg)<span class="req-badge">必須</span></label>
+        <input type="text" class="input" id="weight" placeholder="0.0" inputmode="decimal" autocomplete="off"
+          style="font-size:1.7rem;text-align:center;font-weight:700;" oninput="renderMissing()">
+        <div class="wt-pad" aria-label="体重の数字キーパッド">
+          <button type="button" class="wt-key" onclick="wtKey('7')">7</button>
+          <button type="button" class="wt-key" onclick="wtKey('8')">8</button>
+          <button type="button" class="wt-key" onclick="wtKey('9')">9</button>
+          <button type="button" class="wt-key" onclick="wtKey('4')">4</button>
+          <button type="button" class="wt-key" onclick="wtKey('5')">5</button>
+          <button type="button" class="wt-key" onclick="wtKey('6')">6</button>
+          <button type="button" class="wt-key" onclick="wtKey('1')">1</button>
+          <button type="button" class="wt-key" onclick="wtKey('2')">2</button>
+          <button type="button" class="wt-key" onclick="wtKey('3')">3</button>
+          <button type="button" class="wt-key wt-dot" onclick="wtKey('.')">・</button>
+          <button type="button" class="wt-key" onclick="wtKey('0')">0</button>
+          <button type="button" class="wt-key wt-del" onclick="wtKey('del')">⌫</button>
+        </div>
+        <div style="font-size:0.82rem;color:var(--text2);margin-top:5px;">はかりの数字を、上のボタンで入れられます（「・」が小数点）。</div>
       </div>
       <div class="form-row">
         <label class="form-label">推定年齢 (歳)</label>
@@ -455,16 +493,16 @@ textarea { min-height: 80px; resize: vertical; }
     <div class="section-body">
       <div class="form-row" style="display:flex;gap:10px;">
         <div style="flex:1;">
-          <label class="form-label">捕獲日</label>
+          <label class="form-label">捕獲日<span class="req-badge">必須</span></label>
           <input type="date" class="input" id="captureDate">
         </div>
         <div style="flex:1;">
-          <label class="form-label">捕獲時刻</label>
+          <label class="form-label">捕獲時刻<span class="req-badge">必須</span></label>
           <div class="time-wrap">
             <input type="time" class="input" id="captureTime">
             <button type="button" class="now-btn" onclick="setNow('captureTime')">今</button>
           </div>
-          <div class="field-note" style="font-size:11px;color:var(--text2);margin-top:4px;">※捕獲個体を初めて目視した時間</div>
+          <div class="field-note" style="font-size:12px;color:var(--text2);margin-top:4px;">※捕獲個体を初めて目視した時間</div>
         </div>
       </div>
       <div class="form-row">
@@ -472,24 +510,6 @@ textarea { min-height: 80px; resize: vertical; }
         <div class="toggle-group" data-field="juvenile">
           <div class="toggle-btn active" data-val="成獣">成獣</div>
           <div class="toggle-btn" data-val="幼獣">幼獣</div>
-        </div>
-      </div>
-      <div class="form-row">
-        <div style="display:flex;gap:10px;">
-          <div style="flex:1;">
-            <label class="form-label">体長（cm・市役所票用）</label>
-            <input type="number" class="input" id="bodyLength" placeholder="70" step="1" min="0" inputmode="numeric">
-          </div>
-          <div style="flex:1;">
-            <label class="form-label">処理方法（市役所票用）</label>
-            <select class="input" id="disposalMethod">
-              <option value="販売（館山ジビエセンター）">販売（館山ジビエセンター）</option>
-              <option value="焼却施設搬入">焼却施設搬入</option>
-              <option value="埋却">埋却</option>
-              <option value="自家消費">自家消費</option>
-              <option value="その他">その他</option>
-            </select>
-          </div>
         </div>
       </div>
       <div class="form-row">
@@ -502,7 +522,7 @@ textarea { min-height: 80px; resize: vertical; }
         </div>
       </div>
       <div class="form-row">
-        <label class="form-label">捕獲市町村</label>
+        <label class="form-label">捕獲市町村<span class="req-badge">必須</span></label>
         <div class="toggle-group" data-field="capture_city">
           <div class="toggle-btn" data-val="館山市">館山市</div>
           <div class="toggle-btn" data-val="南房総市">南房総市</div>
@@ -515,39 +535,22 @@ textarea { min-height: 80px; resize: vertical; }
         <div id="oazaSearchNote" style="display:none;font-size:12px;color:var(--gold);margin-top:4px;"></div>
       </div>
       <div class="form-row" id="districtRow" style="display:none">
-        <label class="form-label">地区（旧町村）</label>
+        <label class="form-label">地区（旧町村）<span class="req-badge">必須</span></label>
         <div class="toggle-group" id="districtBtns"></div>
       </div>
       <div class="form-row" id="oazaRow" style="display:none">
-        <label class="form-label">現住所表記</label>
+        <label class="form-label">現住所表記<span class="req-badge">必須</span></label>
         <div class="toggle-group" id="oazaBtns" style="max-height:230px;overflow-y:auto;"></div>
       </div>
       <div class="form-row" id="areaPickedRow" style="display:none">
-        <div id="areaPickedLabel" style="font-size:14px;color:var(--gold-light);font-weight:600;"></div>
+        <div id="areaPickedLabel" style="font-size:1.05rem;color:var(--gold-light);font-weight:700;"></div>
       </div>
       <input type="hidden" id="captureOldTown" value="">
       <input type="hidden" id="captureArea" value="">
       <div class="form-row">
-        <label class="form-label">捕獲場所の地図（市役所票の×印用・任意）</label>
-        <div style="display:flex;gap:8px;margin-bottom:6px;">
-          <button type="button" class="now-btn" style="flex:1;" onclick="capMapLocate()">📍 現在地を記録</button>
-          <button type="button" class="now-btn" style="flex:1;" onclick="capMapToggle()">🗺 地図で指定</button>
-        </div>
-        <div id="capMapWrap" style="display:none;">
-          <div id="capMap" style="position:relative;width:100%;height:300px;overflow:hidden;border:1px solid var(--border2);border-radius:8px;background:#dde5dd;touch-action:none;cursor:crosshair;"></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
-            <div class="field-note" style="font-size:11px;color:var(--text2);">地図をタップすると赤✕が付きます（ドラッグで移動・出典: 国土地理院）</div>
-            <div style="display:flex;gap:6px;">
-              <button type="button" class="now-btn" onclick="capMapZoom(1)">＋</button>
-              <button type="button" class="now-btn" onclick="capMapZoom(-1)">－</button>
-            </div>
-          </div>
-        </div>
-        <div id="capMapStatus" class="field-note" style="font-size:11px;color:var(--gold);margin-top:4px;"></div>
-      </div>
-      <div class="form-row">
-        <label class="form-label">捕獲者名</label>
-        <input type="text" class="input" id="hunterName" placeholder="氏名" list="hunterList" autocomplete="off" onblur="checkHunterNameWarning('hunterName','hunterNameWarning')">
+        <label class="form-label">捕獲者名<span class="req-badge">必須</span></label>
+        <input type="text" class="input" id="hunterName" placeholder="氏名" list="hunterList" autocomplete="off" onchange="onHunterPicked()" onblur="checkHunterNameWarning('hunterName','hunterNameWarning')">
+        <div id="hunterAreaHint" style="display:none;font-size:0.9rem;color:var(--gold-light);font-weight:600;margin-top:4px;"></div>
         <div id="hunterNameWarning" style="display:none;color:#e0a020;font-size:12px;font-weight:600;margin-top:4px;"></div>
         <datalist id="hunterList">
           <option value="小谷忠雄"><option value="石渡裕"><option value="諏訪文二"><option value="押元修一"><option value="正木敏順">
@@ -591,7 +594,7 @@ textarea { min-height: 80px; resize: vertical; }
         </datalist>
       </div>
       <div class="form-row">
-        <label class="form-label">捕獲方法</label>
+        <label class="form-label">捕獲方法<span class="req-badge">必須</span></label>
         <div class="toggle-group" data-field="capture_method">
           <div class="toggle-btn" data-val="くくり罠">くくり罠</div>
           <div class="toggle-btn" data-val="箱罠">箱罠</div>
@@ -608,10 +611,6 @@ textarea { min-height: 80px; resize: vertical; }
           <div class="toggle-btn" data-val="左後脚">左後脚</div>
           <div class="toggle-btn" data-val="鼻" style="grid-column:1/-1;">鼻</div>
         </div>
-      </div>
-      <div class="form-row" id="trapSetRow" style="display:none;">
-        <label class="form-label">わな設置日（任意・市役所票用）</label>
-        <input type="date" class="input" id="trapSetDate">
       </div>
       <div class="form-row" id="boxTrapRow" style="display:none;">
         <div style="display:flex;gap:10px;">
@@ -631,7 +630,7 @@ textarea { min-height: 80px; resize: vertical; }
         <div id="finisherNameWarning" style="display:none;color:#e0a020;font-size:12px;font-weight:600;margin-top:4px;"></div>
       </div>
       <div class="form-row">
-        <label class="form-label">止めさし方法</label>
+        <label class="form-label">止めさし方法<span class="req-badge">必須</span></label>
         <div class="toggle-group" data-field="finishing_method">
           <div class="toggle-btn" data-val="電気">電気</div>
           <div class="toggle-btn" data-val="銃">銃</div>
@@ -661,7 +660,7 @@ textarea { min-height: 80px; resize: vertical; }
     <div class="section-body">
       <div class="form-row" style="display:flex;gap:10px;">
         <div style="flex:1;">
-          <label class="form-label">放血開始</label>
+          <label class="form-label">放血開始<span class="req-badge">必須</span></label>
           <div class="time-wrap">
             <input type="time" class="input time-track" id="bleedTime" oninput="checkBleedingToIntakeTime()">
             <button type="button" class="now-btn" onclick="setNow('bleedTime')">今</button>
@@ -678,7 +677,7 @@ textarea { min-height: 80px; resize: vertical; }
       </div>
       <div class="form-row" style="display:flex;gap:10px;margin-top:16px;">
         <div style="flex:1;">
-          <label class="form-label">受入時刻</label>
+          <label class="form-label">受入時刻<span class="req-badge">必須</span></label>
           <div class="time-wrap">
             <input type="time" class="input time-track" id="receiveTime" oninput="checkBleedingToIntakeTime()">
             <div id="bleedIntakeWarning" style="display:none;color:#e05555;font-size:12px;font-weight:600;margin-top:4px;"></div>
@@ -778,13 +777,6 @@ textarea { min-height: 80px; resize: vertical; }
         </div>
       </div>
       <div class="form-row">
-        <label class="form-label">処理区分</label>
-        <div class="toggle-group" data-field="processing_type">
-          <div class="toggle-btn active" data-val="分割">分割</div>
-          <div class="toggle-btn" data-val="背割り熟成">背割り熟成</div>
-        </div>
-      </div>
-      <div class="form-row">
         <label class="form-label">品質判定</label>
         <div class="toggle-group" data-field="quality">
           <div class="toggle-btn active" data-val="良">良</div>
@@ -793,7 +785,7 @@ textarea { min-height: 80px; resize: vertical; }
         </div>
       </div>
       <div class="form-row">
-        <label class="form-label">記録者名</label>
+        <label class="form-label">記録者名<span class="req-badge">必須</span></label>
         <select class="input" id="recorder">
           <option value="">― 選択してください ―</option>
         </select>
@@ -805,73 +797,12 @@ textarea { min-height: 80px; resize: vertical; }
     </div>
   </div>
 
-  <!-- 市役所の調査票（任意） -->
-  <div style="border:2px dashed var(--gold,#8d6a1d);border-radius:10px;padding:14px;margin:16px 0;background:#fffdf6;">
-    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:16px;font-weight:700;">
-      <input type="checkbox" id="surveyOn" onchange="surveyToggle()" style="width:22px;height:22px;">
-      🏛 市役所の調査票も作る
-    </label>
-    <div style="font-size:12.5px;color:var(--text2);margin-top:6px;line-height:1.7;">
-      紙で出す方はチェック不要です。チェックすると<strong>有害鳥獣捕獲票</strong>・<strong>図面</strong>・<strong>写真票</strong>をそれぞれ別のページ（PDF）として作れます。入力済みの内容はそのまま引き継ぎます。
-    </div>
-
-    <div id="surveyBox" style="display:none;margin-top:14px;">
-      <div class="form-row"><label class="form-label">捕獲票提出者名</label>
-        <input type="text" class="input" id="svSubmitter" placeholder="空欄 = 捕獲者と同じ"></div>
-      <div class="form-row"><label class="form-label">捕獲場所（小字）</label>
-        <input type="text" class="input" id="svKoaza" placeholder="任意"></div>
-      <div class="form-row"><label class="form-label">体長（cm）<span style="color:var(--text2);font-size:11px;">※票の「体長・体重」欄</span></label>
-        <input type="number" class="input" id="svBodyLen" step="1" min="0" inputmode="decimal" placeholder="例: 105"></div>
-      <div class="form-row"><label class="form-label">幼獣ですか</label>
-        <div class="toggle-group" data-field="is_juvenile">
-          <div class="toggle-btn" data-val="成獣">成獣</div>
-          <div class="toggle-btn" data-val="幼獣">幼獣</div>
-        </div></div>
-      <div class="form-row"><label class="form-label">箱わな番号<span style="color:var(--text2);font-size:11px;">※市貸与の箱わなのとき</span></label>
-        <input type="text" class="input" id="svTrapNo" placeholder="例: 3-12"></div>
-      <div class="form-row"><label class="form-label">餌の種類<span style="color:var(--text2);font-size:11px;">※箱わなのとき</span></label>
-        <input type="text" class="input" id="svBait" placeholder="例: 米ぬか"></div>
-      <div class="form-row"><label class="form-label">わな設置日</label>
-        <input type="date" class="input" id="svTrapSet"></div>
-      <div class="form-row"><label class="form-label">捕獲個体の処理方法</label>
-        <select class="input" id="svDisposal">
-          <option value="販売（館山ジビエセンター）">販売（館山ジビエセンター）</option>
-          <option value="販売（ジビエ堂）">販売（ジビエ堂）</option>
-          <option value="販売（ヴィルトファクトリー）">販売（ヴィルトファクトリー）</option>
-          <option value="焼却施設搬入">焼却施設搬入</option>
-          <option value="埋却">埋却</option>
-          <option value="自家消費">自家消費</option>
-          <option value="その他">その他</option>
-        </select></div>
-      <div class="form-row"><label class="form-label">捕獲者の電話番号</label>
-        <input type="text" class="input" id="svHunterTel" placeholder="例: 070-1410-8808"></div>
-      <div class="form-row"><label class="form-label">止め刺し者の電話番号</label>
-        <input type="text" class="input" id="svFinisherTel" placeholder="空欄 = 捕獲者と同じ"></div>
-      <div class="form-row"><label class="form-label">その他特記事項</label>
-        <input type="text" class="input" id="svNotes" placeholder="例: 協力員等"></div>
-
-      <div style="border-top:1px solid var(--border,#ddd);margin:14px 0 10px;padding-top:12px;">
-        <div style="font-size:15px;font-weight:700;margin-bottom:4px;">📷 写真票の写真</div>
-        <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.7;">
-          <strong>従事者証（名札）が写るように</strong>撮ってください。アップロード時に自動で軽く圧縮します。<br>
-          PDFを出してから1週間後に、写真は自動で削除されます（保存容量を増やさないため）。
-        </div>
-        <div class="form-row"><label class="form-label">① 尾を切る前</label>
-          <input type="file" accept="image/*" id="svPhoto1" onchange="svPickPhoto(this,'before')"></div>
-        <div class="form-row"><label class="form-label">② 尾を切った後</label>
-          <input type="file" accept="image/*" id="svPhoto2" onchange="svPickPhoto(this,'after')"></div>
-        <div class="form-row"><label class="form-label">③ その他（任意）</label>
-          <input type="file" accept="image/*" id="svPhoto3" onchange="svPickPhoto(this,'extra')"></div>
-        <div id="svPhotoPreview" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;"></div>
-      </div>
-
-      <div style="font-size:12.5px;color:var(--text2);line-height:1.8;background:#f4f6f0;border-radius:8px;padding:10px 12px;">
-        ⚠️ 地図ページには<strong>「🗺 地図で指定」で記録した捕獲地点</strong>が朱色の✕で入ります。位置が未記録だと地図ページは出せません。
-      </div>
-    </div>
+  <!-- 市役所提出用の入力はこの画面から外しました。票・図面・写真票のPDFは「搬入一覧」から出せます -->
+  <div style="border:1.5px solid var(--border2);border-radius:10px;padding:12px 14px;margin:16px 0;background:var(--surface2);font-size:0.95rem;color:var(--text2);line-height:1.7;">
+    🏛 <strong>市役所提出用（有害鳥獣捕獲票・図面・写真票）</strong>は、<strong>「搬入一覧」</strong>で個体を開いて「市役所票を表示・印刷」から出せます。
   </div>
 
-  <div id="missingBox" style="display:none;border-radius:10px;padding:12px 14px;margin:14px 0;font-size:14px;line-height:1.8;"></div>
+  <div id="missingBox" style="display:none;border-radius:10px;padding:14px 16px;margin:14px 0;font-size:1rem;line-height:1.8;"></div>
 
   <button type="button" onclick="toggleEditSearch()" style="background:#6c757d;color:#fff;border:none;border-radius:8px;padding:12px 18px;font-size:15px;cursor:pointer;margin-right:8px;">&#9998; 既存データを修正</button>
   <button class="submit-btn" id="submitBtn" onclick="handleSubmit()">登録する</button>
@@ -1558,6 +1489,82 @@ function renderOazaButtons(city, district) {
   });
 }
 
+/* ── 捕獲者と地区の紐付け（過去の台帳から最頻の捕獲場所を自動入力） ──
+   捕獲者名を選ぶと、その人がいつも捕っている市町村・大字を自動で入れる。
+   違うときは市町村・地区・現住所のボタンで選び直せる。編集/受入モードでは自動変更しない。 */
+const HUNTER_AREA_RAW = {
+  "石井":{city:"南房総市",area:"白渚"},"加藤茂":{city:"館山市",area:"神余"},"小林亮":{city:"南房総市",area:"上滝田"},
+  "山口修":{city:"館山市",area:"小原"},"岩浪優":{city:"南房総市",area:"宮下"},"斉藤佐":{city:"館山市",area:"大井"},
+  "杉美樹":{city:"南房総市",area:"和田町黒岩"},"村田勝":{city:"館山市",area:"神余"},"沖浩志":{city:"館山市",area:"布沼"},
+  "石渡裕":{city:"館山市",area:"東長田"},"遠藤茂":{city:"南房総市",area:"沓見"},"野崎徹":{city:"南房総市",area:"下堀"},
+  "錦織泰":{city:"館山市",area:"佐野"},"長田等":{city:"館山市",area:"神余"},"須田茂":{city:"館山市",area:"竹原"},
+  "高橋修":{city:"館山市",area:"安東"},"東俊道":{city:"館山市",area:"神余"},"中尾明久":{city:"館山市",area:"神余"},
+  "井上則夫":{city:"南房総市",area:"珠師ケ谷"},"井上定男":{city:"館山市",area:"宝貝"},"佐野庄司":{city:"館山市",area:"坂田"},
+  "佐野徳幸":{city:"館山市",area:"東長田"},"佐野正人":{city:"南房総市",area:"白浜町白浜"},"八橋伸行":{city:"館山市",area:"西長田"},
+  "加藤吉一":{city:"館山市",area:"神余"},"原田幸夫":{city:"館山市",area:"坂田"},"塩倉千春":{city:"館山市",area:"茂名"},
+  "大和田薫":{city:"館山市",area:"大神宮"},"安田邦夫":{city:"館山市",area:"南条"},"安田顕典":{city:"館山市",area:"大井"},
+  "安西和宏":{city:"南房総市",area:"白浜町滝口"},"安西正和":{city:"館山市",area:"古茂口"},"寺田裕樹":{city:"館山市",area:"藤原"},
+  "小原光弘":{city:"南房総市",area:"白浜町白浜"},"小川龍馬":{city:"館山市",area:"山荻"},"小谷耕作":{city:"館山市",area:"茂名"},
+  "山下洋一":{city:"館山市",area:"神余"},"山崎善夫":{city:"館山市",area:"笠名"},"山根秀人":{city:"館山市",area:"小原"},
+  "岩崎信道":{city:"館山市",area:"岡田"},"岩嵜正一":{city:"館山市",area:"神余"},"川口哲雄":{city:"館山市",area:"洲宮"},
+  "川名達也":{city:"南房総市",area:"上滝田"},"平島正章":{city:"館山市",area:"笠名"},"平嶋好和":{city:"館山市",area:"竜岡"},
+  "押元修一":{city:"館山市",area:"竹原"},"押元陸雄":{city:"館山市",area:"竹原"},"早川萬専":{city:"館山市",area:"竜岡"},
+  "木曽信之":{city:"南房総市",area:"白浜町白浜"},"本橋理一":{city:"館山市",area:"竜岡"},"村田光夫":{city:"館山市",area:"藤原"},
+  "松坂義之":{city:"館山市",area:"神余"},"松橋合気":{city:"館山市",area:"神余"},"森下茂一":{city:"館山市",area:"神余"},
+  "榛沢仁之":{city:"館山市",area:"沼"},"正木敏順":{city:"館山市",area:"古茂口"},"武士俣渉":{city:"館山市",area:"沼"},
+  "池田和博":{city:"南房総市",area:"平久里下"},"河上好夫":{city:"館山市",area:"正木"},"渡邉利男":{city:"館山市",area:"山本"},
+  "溝口和基":{city:"南房総市",area:"山名"},"片桐玄徳":{city:"館山市",area:"高井"},"田口和利":{city:"館山市",area:"神余"},
+  "白石秀一":{city:"南房総市",area:"山名"},"眞田良兒":{city:"南房総市",area:"石堂"},"石井茂夫":{city:"館山市",area:"上真倉"},
+  "福留拓也":{city:"南房総市",area:"白浜町乙浜"},"竹口友和":{city:"南房総市",area:"白浜町乙浜"},"遠藤道子":{city:"南房総市",area:"白浜町滝口"},
+  "鈴木政孝":{city:"館山市",area:"布沼"},"鈴木正人":{city:"南房総市",area:"白浜町白浜"},"鈴木輝男":{city:"館山市",area:"香"},
+  "飯沼敬之":{city:"館山市",area:"浜田"},"高間好章":{city:"館山市",area:"竜岡"},"鷲野瞬武":{city:"南房総市",area:"和田町和田"},
+  "北原一彦":{city:"館山市",area:"神余"},"寺澤健治":{city:"館山市",area:"神余"},"小峰和也":{city:"館山市",area:"神余"},
+  "小川勝己":{city:"館山市",area:"神余"},"渡邊顕信":{city:"館山市",area:"神余"},"猪谷秀貴":{city:"館山市",area:"神余"},
+  "細川洋海":{city:"館山市",area:"岡田"},"蟻川幸一":{city:"館山市",area:"神余"},"五十嵐訓文":{city:"南房総市",area:"大井"},
+  "大木戸政明":{city:"南房総市",area:"山田"},"小田喜承示":{city:"館山市",area:"沼"},"山田千代子":{city:"館山市",area:"坂井"},
+  "藤田淳之助":{city:"南房総市",area:"白浜町滝口"},"今本孝一郎":{city:"館山市",area:"神余"}
+};
+function _normName(s) { return String(s == null ? '' : s).replace(/\s+/g, '').trim(); }
+const HUNTER_AREA = {};
+Object.keys(HUNTER_AREA_RAW).forEach(k => { HUNTER_AREA[_normName(k)] = HUNTER_AREA_RAW[k]; });
+function hunterUsualArea(name) { const n = _normName(name); return n ? (HUNTER_AREA[n] || null) : null; }
+
+function onHunterPicked() {
+  const el = document.getElementById('hunterName');
+  const hint = document.getElementById('hunterAreaHint');
+  if (!el || !hint) return;
+  const info = hunterUsualArea(el.value);
+  if (!info) { hint.style.display = 'none'; return; }
+  const locked = (typeof editMode !== 'undefined' && editMode) || window.receiveMode;
+  const areaSet = (document.getElementById('captureArea').value || '').trim();
+  if (!locked && !areaSet) applyHunterArea(info);
+  hint.style.display = 'block';
+  hint.textContent = '📍 この人はいつも ' + info.city + ' ' + info.area + '（違うときは市町村・地区で選び直せます）';
+}
+function applyHunterArea(info) {
+  const g = document.querySelector('[data-field="capture_city"]');
+  if (g) g.querySelectorAll('.toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.val === info.city));
+  state.capture_city = info.city;
+  updateAreaDropdown(info.city);            // 市の地区ボタンを描画（captureAreaはここで一旦リセット）
+  refreshIndividualNumber();                // イノシシは市でT/M採番が変わる
+  const oaza = info.area;
+  const district = (typeof districtOfOaza === 'function') ? districtOfOaza(info.city, oaza) : '';
+  if (district) {
+    document.querySelectorAll('#districtBtns .toggle-btn').forEach(b => b.classList.toggle('active', b.textContent === district));
+    renderOazaButtons(info.city, district); // 大字ボタンを描画（captureAreaを一旦リセット）
+    document.querySelectorAll('#oazaBtns .toggle-btn').forEach(b => b.classList.toggle('active', b.textContent === oaza));
+  }
+  // 確定値は描画のあと最後にセット（リセットされないように）
+  document.getElementById('captureOldTown').value = district || '';
+  document.getElementById('captureArea').value = oaza;
+  const lbl = document.getElementById('areaPickedLabel');
+  if (lbl) {
+    lbl.textContent = '📍 いつもの場所: ' + info.city + (district ? ' → ' + district : '') + ' → ' + oaza;
+    document.getElementById('areaPickedRow').style.display = '';
+  }
+  if (typeof renderMissing === 'function') renderMissing();
+}
+
 /* ── Checkboxes ── */
 function setupCheckboxes() {
   document.querySelectorAll('#captureAnomalies .check-item').forEach(item => {
@@ -1706,7 +1713,7 @@ function loadForEdit(rec) {
   sv('memo', rec.memo);
   ['species','sex','weather','capture_city','capture_method',
    'finishing_method','hit_location','gutting','hunter_health',
-   'has_fetus','processing_type','quality'].forEach(function(field) {
+   'has_fetus','quality'].forEach(function(field) {
     const val = rec[field]; if (!val) return;
     const grp = document.querySelector('[data-field="' + field + '"]'); if (!grp) return;
     grp.querySelectorAll('.toggle-btn').forEach(function(b) { b.classList.remove('active'); });
@@ -1742,7 +1749,9 @@ const SV_KEEP_DAYS = 7;          // PDFを出してから写真を残す日数
 let svPhotos = { before: null, after: null, extra: null };  // {dataUrl, blob}
 
 function surveyToggle() {
-  const on = document.getElementById('surveyOn').checked;
+  const onEl = document.getElementById('surveyOn');
+  if (!onEl) return;   // 市役所調査票欄は入力画面から撤去済み（票は搬入一覧から出力）
+  const on = onEl.checked;
   document.getElementById('surveyBox').style.display = on ? 'block' : 'none';
   if (on) {
     // 入力済みの内容を引き継ぐ
@@ -2234,11 +2243,8 @@ async function handleSubmit() {
       finishing_method: state.finishing_method,
       trap_part: state.trap_part || null,
       is_juvenile: state.juvenile === '幼獣',
-      body_length_cm: parseFloat(document.getElementById('bodyLength').value) || null,
-      trap_set_date: document.getElementById('trapSetDate').value || null,
-      trap_number: document.getElementById('trapNumber').value.trim() || null,
-      bait_type: document.getElementById('baitType').value.trim() || null,
-      disposal_method: document.getElementById('disposalMethod').value,
+      trap_number: (document.getElementById('trapNumber')?.value || '').trim() || null,
+      bait_type: (document.getElementById('baitType')?.value || '').trim() || null,
       finisher_name: document.getElementById('finisherName').value.trim() || null,
       capture_lat: (window.mapState && mapState.marker) ? mapState.marker.lat : null,
       capture_lng: (window.mapState && mapState.marker) ? mapState.marker.lng : null,
@@ -2253,7 +2259,6 @@ async function handleSubmit() {
       hunter_health_issues: state.hunter_health === '異常あり' ? document.getElementById('healthIssues').value : '',
       organ_anomalies: state.gutting === 'あり' ? collectAnomalyTexts('organAnomalies', state.organAnomalies) : '',
       has_fetus: state.has_fetus === 'あり',
-      processing_type: state.processing_type,
       quality: state.quality,
       recorder: document.getElementById('recorder').value,
       memo: document.getElementById('memo').value
@@ -2394,7 +2399,6 @@ function showPrintModal(record) {
     <div class="label-card">
       <h4>背割り管理ラベル</h4>
       <div class="label-code">${record.label_id}</div>
-      <div class="label-row"><span class="lk">処理区分</span><span class="lv">${record.processing_type}</span></div>
       <div class="label-row"><span class="lk">日付</span><span class="lv">${record.capture_date}</span></div>
       <div class="label-row"><span class="lk">種別</span><span class="lv">${record.species}</span></div>
     </div>`;
@@ -2415,11 +2419,10 @@ function resetForm() {
   });
   // Restore defaults
   state.gutting = 'なし'; state.has_fetus = 'なし'; state.hunter_health = '良好';
-  state.processing_type = '分割'; state.quality = '良';
+  state.quality = '良';
   // Re-activate default buttons
   document.querySelectorAll('[data-field="gutting"] [data-val="なし"]').forEach(b => b.classList.add('active'));
   document.querySelectorAll('[data-field="hunter_health"] [data-val="良好"]').forEach(b => b.classList.add('active'));
-  document.querySelectorAll('[data-field="processing_type"] [data-val="分割"]').forEach(b => b.classList.add('active'));
   document.querySelectorAll('[data-field="quality"] [data-val="良"]').forEach(b => b.classList.add('active'));
 
   // Clear inputs
@@ -2611,7 +2614,7 @@ function showDetail(r) {
     ['捕獲時異常', r.capture_anomalies], ['内臓異常', r.organ_anomalies],
     ['健康状態', r.hunter_health_ok ? '良好' : '異常あり'],
     ['胎児', r.has_fetus ? 'あり' : 'なし'],
-    ['処理区分', r.processing_type], ['品質', r.quality],
+    ['品質', r.quality],
     ['記録者', r.recorder], ['メモ', r.memo]
   ];
   document.getElementById('detailBody').innerHTML = fields
@@ -2637,6 +2640,25 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 document.getElementById('weight').addEventListener('focus', function() {
   this.select();
 });
+
+// 体重の数字キーパッド（大きなボタンで入力・「.」の切替不要）
+function wtKey(k) {
+  const el = document.getElementById('weight');
+  if (!el) return;
+  let v = String(el.value || '');
+  if (k === 'del') {
+    v = v.slice(0, -1);
+  } else if (k === '.') {
+    if (!v.includes('.')) v = (v === '' ? '0' : v) + '.';
+  } else {
+    const dot = v.indexOf('.');
+    if (dot >= 0 && v.length - dot > 2) return;   // 小数点以下2桁まで
+    if (v === '0') v = k;                          // 先頭の0は置き換え
+    else v = v + k;
+  }
+  el.value = v;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
 </script>
 <script>
 // 捕獲者ごとの共有リンク: capture-form.html?hunter=氏名 で名前が入った状態で開く
@@ -2658,7 +2680,7 @@ document.getElementById('weight').addEventListener('focus', function() {
       const el = document.getElementById(id);
       if (el) hide(el.closest('div[style*="flex:1"]') || el.closest('.form-row'));
     });
-    ['has_fetus', 'processing_type', 'quality'].forEach(f => hide(document.querySelector('[data-field="' + f + '"]')?.closest('.form-row')));
+    ['has_fetus', 'quality'].forEach(f => hide(document.querySelector('[data-field="' + f + '"]')?.closest('.form-row')));
     hide(document.getElementById('recorder')?.closest('.form-row'));
     document.querySelectorAll('button').forEach(b => { if (b.textContent.includes('既存データを修正')) hide(b); });
     const bar = document.createElement('div');
@@ -2800,7 +2822,6 @@ function updateMethodRows(){
   const m = state.capture_method;
   const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
   show('trapPartRow', m === 'くくり罠');
-  show('trapSetRow', m === 'くくり罠' || m === '箱罠');
   show('boxTrapRow', m === '箱罠');
   // 被弾部位は銃使用時のみ
   const hitRow = document.querySelector('[data-field="hit_location"]');
