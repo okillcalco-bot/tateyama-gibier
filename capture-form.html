@@ -846,21 +846,6 @@ textarea { min-height: 80px; resize: vertical; }
   </div>
 </div>
 
-<!-- Print Modal -->
-<div class="modal-overlay" id="printModal">
-  <div class="modal">
-    <div class="modal-head">
-      <h3>登録完了 - ラベル印刷</h3>
-      <div class="modal-close" onclick="closePrintModal()">&times;</div>
-    </div>
-    <div class="modal-body">
-      <div class="print-labels" id="printLabels"></div>
-      <button class="print-btn" onclick="window.print()">&#x1F5A8;&#xFE0F; ラベルを印刷</button>
-      <button class="new-btn" onclick="printModalCityForm()">🏛 市役所票を表示・印刷（任意）</button>
-      <button class="new-btn" onclick="closePrintModal();resetForm();">新規入力に戻る</button>
-    </div>
-  </div>
-</div>
 
 <!-- Hunter Done Modal（捕獲者モード送信完了。市役所票は任意で出す） -->
 <div class="modal-overlay" id="hunterDoneModal">
@@ -902,7 +887,6 @@ textarea { min-height: 80px; resize: vertical; }
     <button type="button" class="board-detail" id="boardArBtn" onclick="arStart()" style="background:#c9a13b;color:#1c1f16;">📷 看板つきで撮影</button>
     <button type="button" class="board-detail" id="boardDetailBtn" onclick="boardShowDetail()">詳細</button>
     <button type="button" class="board-detail" id="boardEditBtn" onclick="boardEdit()" style="background:#1565c0;color:#fff;">✏️ 修正</button>
-    <button type="button" class="board-detail" id="boardPrintBtn" onclick="boardPrintLabels()" style="display:none;">🖨 ラベル印刷</button>
     <span class="board-hint">← 左右スワイプで文字サイズ調整 →</span>
     <button type="button" class="board-detail" id="boardNewBtn" onclick="boardNewInput()" style="display:none;background:#2e7d32;color:#fff;">＋ 次の入力へ</button>
     <button type="button" class="board-close" onclick="closeBoard()">✕ 閉じる</button>
@@ -2376,8 +2360,8 @@ async function handleSubmit() {
     }
     // 市役所の調査票がONなら、追加項目と写真を保存してPDFを出す
     await svAfterSave(saved || record);
-    // Skip counter increment when editing
-    if (editMode) { cancelEditMode(); showPrintModal(record); loadTodayCount(); return; }
+    // Skip counter increment when editing（修正はラベル印刷を出さず搬入一覧へ戻る）
+    if (editMode) { cancelEditMode(); loadTodayCount(); const lt = document.querySelector('[data-tab="list"]'); if (lt) lt.click(); return; }
     // 端末カウンタを進める。ただしイノシシで共有の開始番号設定があるときは、
     // 端末ドリフト防止のため端末カウンタは書かない（採番は app_settings を正とする）。
     const _serialKey = getSerialKey(state.species);
@@ -2392,8 +2376,8 @@ async function handleSubmit() {
       }
     }
 
-    // 搬入登録の直後は「撮影用ボード」を先に表示（ラベル印刷はボードのボタンから）
-    showBoard(saved || record, true);
+    // 搬入登録の直後は自動で「看板つきカメラ」を開く（ラベル印刷は捕獲票入力では使わない）
+    startCaptureAfterRegister(saved || record);
     loadTodayCount();
 
   } catch(e) {
@@ -2456,43 +2440,6 @@ async function hunterDoneCityForm(){
   hunterDoneClose();
   try { await cityFormPrint(window._hunterDoneRecord || {}); } catch(_e){ alert('市役所票の表示に失敗しました: ' + _e.message); }
 }
-async function printModalCityForm(){
-  if (!window._lastPrintRecord) { alert('直前の登録データが見つかりません'); return; }
-  try { await cityFormPrint(window._lastPrintRecord); } catch(_e){ alert('市役所票の表示に失敗しました: ' + _e.message); }
-}
-function showPrintModal(record) {
-  window._lastPrintRecord = record;
-  const labels = document.getElementById('printLabels');
-  labels.innerHTML = `
-    <div class="label-card">
-      <h4>本体管理ラベル</h4>
-      <div class="label-code">${record.label_id}</div>
-      <div class="label-row"><span class="lk">種別</span><span class="lv">${record.species}</span></div>
-      <div class="label-row"><span class="lk">体重</span><span class="lv">${record.weight_total || '-'} kg</span></div>
-      <div class="label-row"><span class="lk">捕獲日</span><span class="lv">${record.capture_date}</span></div>
-      <div class="label-row"><span class="lk">捕獲者</span><span class="lv">${record.hunter_name || '-'}</span></div>
-      <div class="label-row"><span class="lk">品質</span><span class="lv">${record.quality}</span></div>
-    </div>
-    <div class="label-card">
-      <h4>放射能検査用ラベル</h4>
-      <div class="label-code">${record.label_id}</div>
-      <div class="label-row"><span class="lk">捕獲日</span><span class="lv">${record.capture_date}</span></div>
-      <div class="label-row"><span class="lk">捕獲地</span><span class="lv">${record.capture_city || ''} ${record.capture_area || ''}</span></div>
-      <div class="label-row"><span class="lk">種別</span><span class="lv">${record.species}</span></div>
-    </div>
-    <div class="label-card">
-      <h4>背割り管理ラベル</h4>
-      <div class="label-code">${record.label_id}</div>
-      <div class="label-row"><span class="lk">日付</span><span class="lv">${record.capture_date}</span></div>
-      <div class="label-row"><span class="lk">種別</span><span class="lv">${record.species}</span></div>
-    </div>`;
-  document.getElementById('printModal').classList.add('show');
-}
-
-function closePrintModal() {
-  document.getElementById('printModal').classList.remove('show');
-}
-
 /* ── Reset form ── */
 function resetForm() {
   // Reset toggles
@@ -2645,7 +2592,6 @@ function showBoard(r, afterRegister) {
   // 搬入登録の直後は「撮影用ボード」を先に出す。詳細・修正は隠し、ラベル印刷・次の入力ボタンを出す
   document.getElementById('boardDetailBtn').style.display = (r.__sample || afterRegister) ? 'none' : '';
   const eb = document.getElementById('boardEditBtn'); if (eb) eb.style.display = (r.__sample || afterRegister) ? 'none' : '';
-  const pb = document.getElementById('boardPrintBtn'); if (pb) pb.style.display = afterRegister ? '' : 'none';
   const nb = document.getElementById('boardNewBtn'); if (nb) nb.style.display = afterRegister ? '' : 'none';
   const ab = document.getElementById('boardArBtn'); if (ab) ab.style.display = r.__sample ? 'none' : '';
   applyBoardScale(false);
@@ -2665,12 +2611,6 @@ function closeBoard() {
   if (_boardAfterRegister) { _boardAfterRegister = false; resetForm(); }   // 登録直後の閉じるは次の入力へ
 }
 function boardShowDetail() { if (_boardRec) showDetail(_boardRec); }
-// 登録直後ボードから: ラベル印刷（ボードを閉じて印刷モーダルを出す。閉じるでの自動リセットは止める）
-function boardPrintLabels() {
-  _boardAfterRegister = false;
-  document.getElementById('boardOverlay').classList.remove('show');
-  if (_boardRec) showPrintModal(_boardRec);
-}
 // 登録直後ボードから: 次の入力へ（フォームをリセット）
 function boardNewInput() {
   _boardAfterRegister = false;
@@ -2679,16 +2619,23 @@ function boardNewInput() {
 }
 
 /* ── 看板つきカメラ（AR風）── カメラ映像の左下に看板を重ねて撮影→端末保存 ── */
-let _arStream = null, _arFacing = 'environment', _arMsgT = null;
+let _arStream = null, _arFacing = 'environment', _arMsgT = null, _arAfterRegister = false;
+// 搬入登録の直後に自動でカメラを開く（撮影→端末保存→閉じると次の入力へ）
+function startCaptureAfterRegister(rec) {
+  _boardRec = rec;
+  _arAfterRegister = true;
+  arStart();
+}
 function arBoardData(r) {
   r = r || {};
   const district = districtOfOaza(r.capture_city, r.capture_area);
   const place = [r.capture_city, district, r.capture_area].filter(Boolean).join(' ');
   const sw = (r.weight_total != null && r.weight_total !== '') ? (r.weight_total + ' kg') : '';
   const sexWeight = [r.sex, sw].filter(Boolean).join('　');
+  const serial = (r.serial_number != null && r.serial_number !== '') ? String(r.serial_number) : '';
   return {
     code: r.label_id || '',
-    lines: [['捕獲日', r.capture_date || ''], ['捕獲者', r.hunter_name || ''],
+    lines: [['通し番号', serial], ['捕獲日', r.capture_date || ''], ['捕獲者', r.hunter_name || ''],
             ['捕獲場所', place], ['性別・体重', sexWeight]].filter(function (x) { return x[1]; })
   };
 }
@@ -2708,10 +2655,13 @@ function arMsg(text) {
 async function arStart() {
   const r = _boardRec; if (!r) return;
   arRenderBoard(r);
+  // 登録直後モードでは「閉じる」を「完了（次の入力へ）」に
+  const cancelBtn = document.querySelector('#arCam .ar-cancel');
+  if (cancelBtn) cancelBtn.textContent = _arAfterRegister ? '✓ 完了（次へ）' : '✕ 閉じる';
   document.getElementById('arCam').classList.add('show');
-  arMsg('');
+  arMsg(_arAfterRegister ? '看板を画角に入れて撮影してください（保存後、完了で次の入力へ）' : '');
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    arMsg('この端末/ブラウザではカメラを使えません'); return;
+    arMsg('この端末/ブラウザではカメラを使えません（看板の内容は表示されています）'); return;
   }
   try {
     _arStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: _arFacing }, audio: false });
@@ -2725,6 +2675,7 @@ function arClose() {
   arStopStream();
   const v = document.getElementById('arVideo'); if (v) v.srcObject = null;
   document.getElementById('arCam').classList.remove('show');
+  if (_arAfterRegister) { _arAfterRegister = false; resetForm(); }   // 登録直後に閉じたら次の入力へ
 }
 async function arFlip() {
   _arFacing = (_arFacing === 'environment') ? 'user' : 'environment';

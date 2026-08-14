@@ -94,30 +94,24 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   // 6) ボタン名: 搬入登録
   ck('登録ボタンが「搬入登録」', await p.evaluate(() => document.getElementById('submitBtn').textContent.trim()) === '搬入登録');
 
-  // 7) 搬入登録の直後は撮影用ボードを直接表示（ラベル印刷・次の入力ボタン付き）
+  // 7) 搬入登録の直後は自動でカメラ（看板つき撮影）。ラベル印刷は無い
   const board = await p.evaluate(() => {
-    showBoard({ label_id: 'TGC-08-T272', serial_number: 458, species: 'イノシシ', capture_date: '2026-08-14',
-      hunter_name: '沖浩志', capture_city: '館山市', capture_area: '布沼', sex: 'オス', weight_total: 34 }, true);
+    startCaptureAfterRegister({ label_id: 'TGC-08-T272', serial_number: 458, species: 'イノシシ', capture_date: '2026-08-14',
+      hunter_name: '沖浩志', capture_city: '館山市', capture_area: '布沼', sex: 'オス', weight_total: 34 });
     return {
-      shown: document.getElementById('boardOverlay').classList.contains('show'),
-      sheet: document.getElementById('boardSheet').textContent,
-      printBtn: document.getElementById('boardPrintBtn').style.display !== 'none',
-      newBtn: document.getElementById('boardNewBtn').style.display !== 'none',
-      detailHidden: document.getElementById('boardDetailBtn').style.display === 'none',
+      camShown: document.getElementById('arCam').classList.contains('show'),
+      boardShown: document.getElementById('boardOverlay').classList.contains('show'),
+      code: document.getElementById('arBoard').querySelector('.ar-code')?.textContent,
+      noPrintModal: !document.getElementById('printModal'),
+      noPrintBtn: !document.getElementById('boardPrintBtn'),
     };
   });
-  ck('登録直後にボードが開く', board.shown);
-  ck('ボードに個体番号が大きく出る', board.sheet.includes('TGC-08-T272'));
-  ck('ボードに「ラベル印刷」ボタン', board.printBtn);
-  ck('ボードに「次の入力へ」ボタン', board.newBtn);
-  ck('登録直後は「詳細」ボタンは隠す', board.detailHidden);
-  // ラベル印刷ボタン → ボードを閉じて印刷モーダル
-  const toPrint = await p.evaluate(() => {
-    boardPrintLabels();
-    return { boardClosed: !document.getElementById('boardOverlay').classList.contains('show'),
-             modalShown: document.getElementById('printModal').classList.contains('show') };
-  });
-  ck('ラベル印刷 → ボードを閉じ印刷モーダルを表示', toPrint.boardClosed && toPrint.modalShown, JSON.stringify(toPrint));
+  ck('登録直後にカメラが自動で開く', board.camShown, JSON.stringify(board));
+  ck('登録直後は撮影ボード画面を出さない', board.boardShown === false);
+  ck('カメラの看板に個体番号が出る', board.code === 'TGC-08-T272', board.code);
+  ck('ラベル印刷モーダルは存在しない', board.noPrintModal);
+  ck('ボードにラベル印刷ボタンは存在しない', board.noPrintBtn);
+  await p.evaluate(() => arClose());
 
   ck('JSエラーなし', errs.length === 0, errs.join(' / '));
 
