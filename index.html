@@ -713,7 +713,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <!-- セクション：受入・解体情報 -->
       <div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px;">▌ 受入・解体情報</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-        <div class="form-group"><label>受入方法</label><select class="form-input" id="ind-f-intake_method"><option value="">選択...</option><option>持込</option><option>出張止め刺し</option></select></div>
+        <div class="form-group"><label>受入方法</label><select class="form-input" id="ind-f-intake_method"><option value="">選択...</option><option>持込</option><option>引取</option><option>出張止め刺し</option></select></div>
         <div class="form-group"><label>出張対応者</label><input class="form-input" id="ind-f-intake_staff" placeholder="例: 沖 / 今泉" /></div>
         <div class="form-group"><label>内臓の活用</label><input class="form-input" id="ind-f-organs_use" placeholder="例: 心臓・レバーを販売用に保管" /></div>
         <div class="form-group"><label>皮の状態</label><select class="form-input" id="ind-f-hide_status"><option value="">選択...</option><option>販売可</option><option>保管中</option><option>加工中</option><option>廃棄</option></select></div>
@@ -959,6 +959,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <div class="form-group" style="min-width:140px;"><label>1パックの重さ(kg)</label><input class="form-input" id="kk-pack-w" type="number" step="0.1" min="0.01" placeholder="例: 1" oninput="kkUpdateSummary()" /></div>
           <div class="form-group" style="min-width:120px;"><label>個数</label><input class="form-input" id="kk-pack-n" type="number" step="1" min="1" placeholder="例: 10" oninput="kkUpdateSummary()" /></div>
           <div class="form-group" style="flex:1;min-width:160px;"><label>完成品名（自動）</label><input class="form-input" id="kk-prod-name" readonly style="background:var(--surface2);" /></div>
+        </div>
+        <div class="form-group" style="margin-top:8px;">
+          <label>店頭在庫（袋）にも反映する商品 <span style="color:var(--text3);font-weight:400;">— 規格に合うと自動選択。完成個数を「センター店頭在庫」に足します</span></label>
+          <select class="form-input" id="kk-sku" onchange="kkUpdateSummary()"><option value="">（店頭在庫に反映しない）</option></select>
         </div>
         <div id="kk-summary" style="font-size:12.5px;color:var(--text2);margin-top:8px;"></div>
       </div>
@@ -1734,7 +1738,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <!-- Individual -->
     <div style="font-size:13px;color:var(--text2);margin:16px 0 8px;font-weight:500;">精肉する個体を選択</div>
     <input class="form-input" id="pmScanInput" placeholder="🔳 バーコードをスキャン — 読み取ると個体が開きます" onkeydown="if(event.key==='Enter'){event.preventDefault();pmScanSelect(this.value);this.value='';}" style="margin-bottom:6px;font-size:15px;padding:10px 14px;border-color:var(--gold2);" autocomplete="off" />
-    <input class="form-input" id="pmIndSearch" placeholder="個体番号で検索（例: TGC-08-T）" oninput="pmSearchIndividuals()" style="margin-bottom:6px;font-size:15px;padding:10px 14px;" />
+    <input class="form-input" id="pmIndSearch" placeholder="番号・種類で検索（例: シカ12 / 012 / TGC-08-シ）" oninput="pmSearchIndividuals()" style="margin-bottom:6px;font-size:15px;padding:10px 14px;" />
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;font-size:12px;">
       <span style="color:var(--text3);align-self:center;">クイック:</span>
       <button onclick="pmQuickSearch('TGC-TEST')" style="padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;font-size:12px;">🧪 テスト個体</button>
@@ -1839,9 +1843,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <span id="pmBuybackPreview" style="font-size:13px;color:var(--gold);font-weight:700;margin-left:auto;"></span>
         </div>
         <div class="pm-completed-section">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
             <div style="font-size:13px;color:var(--gold);font-weight:600;">登録済み <span id="pmCompletedCount">(0件)</span></div>
-            <button class="btn btn-danger btn-sm" onclick="pmFinishIndividual()">全部位完了</button>
+            <button class="btn btn-primary" onclick="pmFinishIndividual()" style="font-size:16px;font-weight:800;padding:12px 24px;box-shadow:0 2px 8px rgba(0,0,0,0.25);">✅ 全部位完了</button>
           </div>
           <div class="pm-completed-grid" id="pmCompletedGrid"></div>
           <div class="pm-yield-summary" id="pmYieldSummary" style="display:none;">
@@ -2450,7 +2454,24 @@ async function resolveIndividualByCode(code) {
   }
   // それ以外はlabel_idそのまま（カナ入りQRを直接読んだ場合など）
   const inds = await sb('GET', 'individuals', null, `?label_id=eq.${encodeURIComponent(code)}&deleted_at=is.null&select=*`);
-  return inds[0] || null;
+  if (inds.length) return inds[0];
+
+  // 救済: プレフィックスが欠けた断片や、ラベルの大きな表示（例「シ011」）、種名（シカ11）、
+  //       種コード（SK011）だけでも解決を試みる。末尾の数字＋種の手がかりからカナlabelを引く。
+  const tail = (code.match(/(\d+)\s*$/) || [])[1];
+  if (tail) {
+    const nnn = String(parseInt(tail, 10)).padStart(3, '0');
+    const cu = code.toUpperCase();
+    let kana = null;
+    for (const [name, ent] of Object.entries(QR_SPECIES)) {
+      if (code.includes(ent.kana) || code.includes(name) || cu.includes(ent.code)) { kana = ent.kana; break; }
+    }
+    if (kana) {
+      const hit = await sb('GET', 'individuals', null, `?label_id=ilike.*-${encodeURIComponent(kana)}${nnn}&deleted_at=is.null&select=*&order=created_at.desc`);
+      if (hit.length) return hit.filter(i => !i.processing_done_at)[0] || hit[0];
+    }
+  }
+  return null;
 }
 
 async function pmScanSelect(code) {
@@ -4155,11 +4176,19 @@ async function pmLoadRecentIndividuals() {
 }
 
 async function pmSearchIndividuals() {
-  const q = document.getElementById('pmIndSearch').value.trim();
+  const raw = document.getElementById('pmIndSearch').value.trim();
   const list = document.getElementById('pmIndList');
-  if (!q) { pmLoadRecentIndividuals(); return; }
+  if (!raw) { pmLoadRecentIndividuals(); return; }
+  // ラベル（TGC-08-シ012）だけでなく、種類（シカ）や番号（シカ12 / 012 / 12）でも探せるようにする。
+  // 空枠（捕獲日なし・先付けの通し番号だけ）も精肉モードで選べるよう、除外条件は deleted のみ。
+  const q = raw.replace(/[(),*%]/g, '');            // PostgREST/LIKE の構造文字は除去
+  const digits = q.replace(/\D/g, '');
   try {
-    const inds = await sb('GET', 'individuals', null, `?label_id=ilike.*${encodeURIComponent(q)}*&select=label_id,species,weight_total,capture_date,hunter_name,quality&order=capture_date.desc&limit=20`);
+    const qe = encodeURIComponent(q);
+    const orParts = [`label_id.ilike.*${qe}*`, `species.ilike.*${qe}*`];
+    if (digits && digits.length <= 6) orParts.push(`serial_number.eq.${parseInt(digits, 10)}`);  // 番号だけ入力→通し番号一致
+    const inds = await sb('GET', 'individuals', null,
+      `?or=(${orParts.join(',')})&deleted_at=is.null&select=label_id,species,weight_total,capture_date,hunter_name,quality,serial_number,processing_done_at,intake_status&order=created_at.desc&limit=30`);
     pmRenderIndList(inds);
   } catch(e) {
     list.innerHTML = '<div class="empty-state">検索エラー</div>';
@@ -4169,16 +4198,19 @@ async function pmSearchIndividuals() {
 function pmRenderIndList(inds) {
   const list = document.getElementById('pmIndList');
   if (!inds.length) { list.innerHTML = '<div class="empty-state">該当する個体がありません</div>'; return; }
-  list.innerHTML = inds.map(i => `
+  list.innerHTML = inds.map(i => {
+    const emptyBadge = !i.capture_date ? ' <span class="badge" style="background:var(--surface2);color:var(--text3);border:1px solid var(--border);">空枠</span>' : '';
+    const doneBadge = i.processing_done_at ? ' <span class="badge badge-green">精肉済</span>' : '';
+    return `
     <div class="pm-setup-ind-card" onclick="pmSelectIndividual('${i.label_id}')">
       <div class="ind-icon">${speciesIcon(i.species)}</div>
       <div style="flex:1;">
-        <div class="ind-label">${i.serial_number ? '#'+String(i.serial_number).padStart(3,'0')+' ' : ''}${i.label_id}</div>
+        <div class="ind-label">${i.serial_number ? '#'+String(i.serial_number).padStart(3,'0')+' ' : ''}${i.label_id}${emptyBadge}${doneBadge}</div>
         <div class="ind-meta">${i.species||'-'} / ${i.weight_total||'-'}kg / ${fmt(i.capture_date)} / ${i.hunter_name||'-'}</div>
       </div>
       <div>${i.quality === '食用不可' ? '<span class="badge badge-red">食用不可</span>' : ''}</div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 // ── 個体選択 → メイン画面へ ──
@@ -4357,7 +4389,10 @@ function pmShowLastAction(action) {
   const printBadge = action.printed
     ? '<span class="badge badge-green">ラベル印刷済み</span>'
     : '<span class="badge badge-gray">登録のみ（ラベル未印刷）</span>';
-  body.innerHTML = `<strong>${action.part}</strong> / ${action.weight.toFixed(3)}kg → 在庫 <strong style="color:var(--gold);">${action.ident}</strong> ${printBadge}`;
+  body.innerHTML = `<strong>${action.part}</strong> / ${action.weight.toFixed(3)}kg → 在庫 <strong style="color:var(--gold);">${action.ident}</strong> ${printBadge}`
+    + `<div style="margin-top:7px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">`
+    + `<button class="btn btn-danger btn-sm" onclick="pmUndoLast()" style="font-size:12.5px;padding:5px 14px;">↩ この登録を取消</button>`
+    + `<span style="font-size:11px;color:var(--text3);">部位・重量を間違えた／印刷をキャンセルしたときはここで取消</span></div>`;
   card.style.display = 'block';
 }
 
@@ -4807,14 +4842,21 @@ function pmRenderCompleted() {
     return;
   }
 
-  grid.innerHTML = pmCompletedParts.map(c => {
+  // 同一重量（小数3桁一致）が複数ある＝二重登録の可能性 → 印を付ける
+  const wCount = {};
+  pmCompletedParts.forEach(c => { const k = (c.weight_kg || 0).toFixed(3); wCount[k] = (wCount[k] || 0) + 1; });
+
+  grid.innerHTML = pmCompletedParts.map((c, i) => {
     const gradeBadge = c.grade && c.grade !== '並' ? `<span style="font-size:10px;color:var(--gold);margin-left:2px;">${c.grade}</span>` : '';
     const boneBadge = c.bone_in ? `<span style="font-size:10px;color:#2e7d7d;margin-left:2px;">骨付き</span>` : '';
-    return `<div class="pm-completed-chip">
+    const dup = wCount[(c.weight_kg || 0).toFixed(3)] > 1;
+    return `<div class="pm-completed-chip"${dup ? ' style="border-color:var(--red);"' : ''}>
       <span>✓</span>
       <span class="chip-name">${c.part_name}</span>${gradeBadge}${boneBadge}
       <span class="chip-weight">${c.weight_kg.toFixed(3)}kg</span>
+      ${dup ? '<span title="同じ重量が複数あります（二重登録の可能性）" style="color:var(--red);font-size:11px;font-weight:700;">⚠同重量</span>' : ''}
       <span style="font-size:10px;color:var(--text3)">${c.lot_code}</span>
+      <button onclick="pmDeleteCompleted(${i})" title="この登録を取り消す（削除）" style="margin-left:2px;border:none;background:transparent;color:var(--red);font-size:16px;line-height:1;cursor:pointer;padding:0 4px;">✕</button>
     </div>`;
   }).join('');
 
@@ -4827,6 +4869,40 @@ function pmRenderCompleted() {
   document.getElementById('pmYieldIndWeight').textContent = indWeight || '?';
   document.getElementById('pmYieldPct').textContent = yieldPct.toFixed(1) + '%';
   document.getElementById('pmYieldSummary').style.display = 'flex';
+}
+
+// ── 登録済み部位の取消（誤登録・部位間違いの削除）──
+// 印刷キャンセルでは登録は止まらない（window.print()のキャンセルはJSで検知できない）ため、
+// 誤って登録した部位はここで取り消して在庫から削除する。
+async function pmDeleteCompleted(index) {
+  const item = pmCompletedParts[index];
+  if (!item) return;
+  const label = `${item.part_name} ${(item.weight_kg || 0).toFixed(3)}kg`;
+  if (!confirm(`「${label}」の登録を取り消して在庫から削除します。\n（部位・重量の間違い、印刷キャンセル後の二重登録などの修正用）\n\nよろしいですか？`)) return;
+  try {
+    if (item.ident_code) {
+      await sb('PATCH', 'inventory', { deleted_at: new Date().toISOString() }, `?ident_code=eq.${encodeURIComponent(item.ident_code)}&deleted_at=is.null`);
+      try { await sb('DELETE', 'processing_log', null, `?child_ident_code=eq.${encodeURIComponent(item.ident_code)}`); } catch (e) { /* ログ削除失敗は業務を止めない */ }
+    }
+    pmCompletedParts.splice(index, 1);
+    // 直前登録カードが削除対象なら隠す
+    if (pmLastAction && pmLastAction.ident === item.ident_code) pmShowLastAction(null);
+    pmRenderParts();
+    pmRenderCompleted();
+    playFeedbackSound(true);
+    toast(`登録を取り消しました: ${label}`);
+  } catch (e) {
+    playFeedbackSound(false);
+    toast('取消に失敗しました: ' + sbSafeMsg(e), 'error');
+  }
+}
+
+// ── 直前登録をワンタップ取消（登録直後に部位間違いに気づいたとき）──
+function pmUndoLast() {
+  if (!pmLastAction) return;
+  const idx = pmCompletedParts.map(c => c.ident_code).lastIndexOf(pmLastAction.ident);
+  if (idx < 0) { pmShowLastAction(null); return; }
+  pmDeleteCompleted(idx);
 }
 
 // ── CODE128-B バーコードSVG生成（外部ライブラリ不要）──
@@ -4987,7 +5063,16 @@ async function pmFinishIndividual() {
     toast('まだ部位が登録されていません','error');
     return;
   }
-  if (!confirm(`${pmIndividual.label_id} の精肉を完了しますか？\n${pmCompletedParts.length}部位 登録済み`)) return;
+  // 二重登録チェック: 同じ重量の部位が複数あれば警告（印刷キャンセル後の再登録などで発生）
+  const wMap = {};
+  pmCompletedParts.forEach(c => { const k = (c.weight_kg || 0).toFixed(3); (wMap[k] = wMap[k] || []).push(c); });
+  const dups = Object.values(wMap).filter(a => a.length > 1);
+  const dupWarn = dups.length
+    ? '⚠ 重量が同じ部位があります。二重登録の可能性があります:\n'
+      + dups.map(a => `・${a[0].weight_kg.toFixed(3)}kg × ${a.length}件（${a.map(c => c.part_name).join('、')}）`).join('\n')
+      + '\n\n誤登録なら「キャンセル」して一覧の ✕ で削除してください。\n\n'
+    : '';
+  if (!confirm(`${dupWarn}${pmIndividual.label_id} の精肉を完了しますか？\n${pmCompletedParts.length}部位 登録済み`)) return;
 
   try {
     // 歩留まり率 = 精肉した肉の総重量 ÷ 体重（精肉完了で自動計算・保存）
@@ -6697,11 +6782,19 @@ async function productMoveSave() {
 /* ───────── 加工処理（スライス・ミンチ：精肉ブロック→加工品） ───────── */
 let kkMaterials = [];       // 原料ブロック（tier2 inventory 行）
 let kkStockCache = [];      // 「在庫から選ぶ」用の在庫キャッシュ
+let kkSkuProducts = [];     // 店頭在庫（袋SKU）反映用の小売商品
 
 async function loadKakou() {
   // 作業者
   const op = document.getElementById('kk-operator');
   if (op) op.innerHTML = '<option value="">選択...</option>' + PM_OPERATORS.map(n => `<option>${esc2(n)}</option>`).join('');
+  // 店頭在庫（袋SKU）の候補（完成時に「センター店頭在庫」へ反映する先）
+  try {
+    kkSkuProducts = await sb('GET', 'products', null, "?deleted_at=is.null&category=eq.小売&select=id,name,unit,stock_qty&order=name.asc") || [];
+    const sku = document.getElementById('kk-sku');
+    if (sku) sku.innerHTML = '<option value="">（店頭在庫に反映しない）</option>' +
+      kkSkuProducts.map(p => `<option value="${p.id}">${esc2(p.name)}（現在庫 ${p.stock_qty || 0}${esc2(p.unit || '')}）</option>`).join('');
+  } catch (e) { kkSkuProducts = []; }
   // 保存場所（冷凍庫）
   const loc = document.getElementById('kk-location');
   if (loc) {
@@ -6729,13 +6822,13 @@ function kkTypeChange() {
   const type = document.getElementById('kk-type').value;
   document.getElementById('kk-mince-opt').style.display = type === 'ミンチ' ? '' : 'none';
   document.getElementById('kk-slice-opt').style.display = type === 'スライス' ? '' : 'none';
-  kkUpdateProdName();
+  kkUpdateSummary();
 }
 function kkOnThickChange() {
   const sel = document.getElementById('kk-thick');
   const other = document.getElementById('kk-thick-other');
   if (other) other.style.display = sel.value === '__other' ? '' : 'none';
-  kkUpdateProdName();
+  kkUpdateSummary();
 }
 function kkThicknessMm() {
   const sel = document.getElementById('kk-thick');
@@ -6813,8 +6906,29 @@ function kkRenderMaterials() {
 }
 function kkRemoveMaterial(i) { kkMaterials.splice(i, 1); kkRenderMaterials(); kkUpdateSummary(); }
 
+// 完成品（種・厚さ・1パック重量）から店頭在庫SKU（袋）を自動で当てる
+let kkSkuAuto = null;
+function kkAutoMatchSku() {
+  const sel = document.getElementById('kk-sku'); if (!sel) return;
+  if (sel.value && sel.value !== kkSkuAuto) return;   // 手動で選んだものは尊重
+  const species = kkBlendSpecies();
+  const type = document.getElementById('kk-type').value;
+  const g = Math.round((parseFloat(document.getElementById('kk-pack-w').value) || 0) * 1000);
+  let match = null;
+  if (species && species !== 'ミックス' && g > 0) {
+    for (const p of kkSkuProducts) {
+      const n = p.name || '';
+      if (!n.includes(species) || !n.includes(g + 'g')) continue;
+      if (type === 'ミンチ') { if (n.includes('ミンチ')) { match = p; break; } }
+      else { const mm = kkThicknessMm(); if (mm != null && n.includes(mm + 'mm')) { match = p; break; } }
+    }
+  }
+  kkSkuAuto = match ? String(match.id) : null;
+  sel.value = kkSkuAuto || '';
+}
 function kkUpdateSummary() {
   kkUpdateProdName();
+  kkAutoMatchSku();
   const el = document.getElementById('kk-summary');
   if (!el) return;
   const packW = parseFloat(document.getElementById('kk-pack-w').value) || 0;
@@ -6829,6 +6943,9 @@ function kkUpdateSummary() {
     html += `　／　原料 ${matTotal.toFixed(2)}kg（歩留まり ${yld}％・端材等 ${loss.toFixed(2)}kg）`;
     if (outTotal > matTotal) html += ` <span style="color:var(--red);">※完成量が原料を超えています</span>`;
   }
+  const skuSel = document.getElementById('kk-sku');
+  const skuProd = skuSel && skuSel.value ? kkSkuProducts.find(p => String(p.id) === skuSel.value) : null;
+  if (skuProd) html += `<br><span style="color:var(--green);">🛒 店頭在庫「${esc2(skuProd.name)}」に +${packN}袋（${(skuProd.stock_qty||0)} → ${(skuProd.stock_qty||0) + packN}）</span>`;
   el.innerHTML = html;
 }
 
@@ -6901,8 +7018,12 @@ async function kkSubmit() {
   const location = document.getElementById('kk-location').value || null;
   const matTotal = kkMaterials.reduce((s, m) => s + kkMatWeight(m), 0);
   const outTotal = packW * packN;
+  const skuId = (document.getElementById('kk-sku') || {}).value || '';
+  const skuProd = skuId ? kkSkuProducts.find(p => String(p.id) === skuId) : null;
 
-  if (!confirm(`加工処理を記録します。\n\n加工: ${prodName}\n原料: ${kkMaterials.length}点 / ${matTotal.toFixed(2)}kg\n完成: ${packW}kg × ${packN}パック = ${outTotal.toFixed(2)}kg\n作業者: ${operator}\n\n原料は「加工済」になり、完成パックが${packN}件の在庫として登録されます。よろしいですか？`)) return;
+  if (!confirm(`加工処理を記録します。\n\n加工: ${prodName}\n原料: ${kkMaterials.length}点 / ${matTotal.toFixed(2)}kg\n完成: ${packW}kg × ${packN}パック = ${outTotal.toFixed(2)}kg\n作業者: ${operator}`
+    + (skuProd ? `\n店頭在庫「${skuProd.name}」に +${packN}袋（${(skuProd.stock_qty||0)} → ${(skuProd.stock_qty||0)+packN}）` : '')
+    + `\n\n原料は「加工済」になり、完成パックが${packN}件の在庫として登録されます。よろしいですか？`)) return;
 
   try {
     const { prefix, date, start } = await kkNextCodeBase(pc);
@@ -6953,7 +7074,21 @@ async function kkSubmit() {
     }));
     try { await sb('POST', 'processing_log', logRows); } catch (e) { /* ログ失敗は業務を止めない */ }
 
-    // 4. ラベル印刷
+    // 4. 店頭在庫（袋SKU）へ「完成」を反映（選択時のみ）：センター店頭在庫を個数分ふやす
+    if (skuProd) {
+      try {
+        const next = (skuProd.stock_qty || 0) + packN;
+        await sb('POST', 'product_movements', {
+          product_id: skuProd.id, product_name: skuProd.name, movement_type: '完成', qty: packN,
+          staff_name: operator, destination: 'センター', note: `加工処理から自動（${batchCode}）`
+        });
+        await sb('PATCH', 'products', { stock_qty: next, updated_at: nowIso }, `?id=eq.${skuProd.id}`);
+        try { baseSyncStock(skuProd.id, next); } catch (e) {}
+        skuProd.stock_qty = next;
+      } catch (e) { toast('店頭在庫への反映に失敗しました（加工処理は記録済み）: ' + sbSafeMsg(e), 'error'); }
+    }
+
+    // 5. ラベル印刷
     kkPrintLabels(packs, prodName, species, origin, kkMaterials);
 
     playFeedbackSound(true);
