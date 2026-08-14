@@ -736,7 +736,6 @@ textarea { min-height: 80px; resize: vertical; }
         <div class="toggle-group" data-field="intake_method" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <div class="toggle-btn active" data-val="持込">捕獲者が持込</div>
           <div class="toggle-btn" data-val="引取">センターが引取</div>
-          <div class="toggle-btn" data-val="出張止め刺し" style="grid-column:1/-1;">出張止め刺し（センター対応）</div>
         </div>
       </div>
       <div class="form-row" id="intakeStaffRow" style="display:none;">
@@ -2470,6 +2469,8 @@ async function handleSubmit() {
       intake_method: state.intake_method || '持込',
       intake_staff: (state.intake_method && state.intake_method !== '持込')
         ? ((document.getElementById('intakeStaff')?.value || '').trim() || null) : null,
+      // 引取のときは「止めさし・引取あり（買取−3,000円）」を自動でチェック
+      stopkill_pickup: state.intake_method === '引取',
       recorder: document.getElementById('recorder').value,
       memo: document.getElementById('memo').value
     };

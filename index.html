@@ -713,7 +713,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <!-- セクション：受入・解体情報 -->
       <div style="font-size:12px;color:var(--gold);font-weight:600;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:4px;">▌ 受入・解体情報</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-        <div class="form-group"><label>受入方法</label><select class="form-input" id="ind-f-intake_method"><option value="">選択...</option><option>持込</option><option>引取</option><option>出張止め刺し</option></select></div>
+        <div class="form-group"><label>受入方法</label><select class="form-input" id="ind-f-intake_method" onchange="onIntakeMethodChange()"><option value="">選択...</option><option>持込</option><option>引取</option></select></div>
         <div class="form-group"><label>出張対応者</label><input class="form-input" id="ind-f-intake_staff" placeholder="例: 沖 / 今泉" /></div>
         <div class="form-group"><label>内臓の活用</label><input class="form-input" id="ind-f-organs_use" placeholder="例: 心臓・レバーを販売用に保管" /></div>
         <div class="form-group"><label>皮の状態</label><select class="form-input" id="ind-f-hide_status"><option value="">選択...</option><option>販売可</option><option>保管中</option><option>加工中</option><option>廃棄</option></select></div>
@@ -5411,6 +5411,7 @@ function indOpenNew() {
   indEditId = null;
   document.getElementById('indModalTitle').textContent = '新規個体登録';
   IND_ALL_FIELDS.forEach(f => indSetField(f, ''));
+  indSetField('intake_method', '持込');   // 基本は持込をデフォルトに
   document.getElementById('ind-f-stopkill_pickup').checked = false;
   indRenderButcherStaff();
   updateBuybackHint();
@@ -5466,6 +5467,12 @@ function calcBuyback(weight, rank, yieldPct, stopkillPickup) {
   let base = Math.round(weight * unit * f);
   if (stopkillPickup) base -= 3000;
   return Math.max(0, base);
+}
+// 受入方法の変更時：引取なら「止めさし・引取あり（−3,000円）」を自動チェック
+function onIntakeMethodChange() {
+  const m = document.getElementById('ind-f-intake_method').value;
+  const cb = document.getElementById('ind-f-stopkill_pickup');
+  if (m === '引取' && cb && !cb.checked) { cb.checked = true; recalcBuyback(); }
 }
 // 入力変更時：買取価格を自動計算して欄に反映
 function recalcBuyback() {
