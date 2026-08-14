@@ -2902,6 +2902,7 @@ function arWhiteboardData(r) {
   r = r || {};
   const district = districtOfOaza(r.capture_city, r.capture_area);
   const place = [r.capture_city, district, r.capture_area].filter(Boolean).join(' ');
+  const taker = (r.intake_staff || r.recorder || '').toString().trim();
   return {
     title: '引き取り記録',
     lines: [
@@ -2909,7 +2910,7 @@ function arWhiteboardData(r) {
       ['捕獲者', r.hunter_name || ''],
       ['捕獲場所', place],
       ['社名', PICKUP_COMPANY],
-      ['引き取り', PICKUP_COMPANY]
+      ['引き取り者', taker]
     ]
   };
 }

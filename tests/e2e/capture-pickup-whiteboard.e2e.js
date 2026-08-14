@@ -88,7 +88,7 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   const REC_PICKUP = {
     id: 'r1', label_id: 'TGC-08-M170', serial_number: 459, species: 'イノシシ', sex: 'メス',
     weight_total: 28, capture_date: '2026-08-14', hunter_name: '池田和博',
-    capture_city: '南房総市', capture_area: '宮下', intake_method: '引取'
+    capture_city: '南房総市', capture_area: '宮下', intake_method: '引取', intake_staff: '沖浩志'
   };
   await p.evaluate((r) => startCaptureAfterRegister(r), REC_PICKUP);
   await p.waitForTimeout(700);
@@ -98,6 +98,7 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   });
   ck('WB: 引き取り対象で表示', wb.shown && wb.needs, JSON.stringify(wb));
   ck('WB: 社名 合同会社アルコ', wb.text.includes('合同会社アルコ'), wb.text);
+  ck('WB: 引き取り者は入力者（人物）', wb.text.includes('引き取り者') && wb.text.includes('沖浩志'), wb.text);
   ck('WB: 捕獲者名', wb.text.includes('池田和博'), wb.text);
   ck('WB: 捕獲場所（宮下）', wb.text.includes('宮下'), wb.text);
   ck('WB: 日付', wb.text.includes('2026-08-14'), wb.text);
