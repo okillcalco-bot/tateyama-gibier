@@ -876,6 +876,9 @@ textarea { min-height: 80px; resize: vertical; }
       <div class="modal-close" onclick="closeDetailModal()">&times;</div>
     </div>
     <div class="modal-body" id="detailBody"></div>
+    <div style="padding:14px 16px;border-top:1px solid var(--border);">
+      <button type="button" onclick="detailEdit()" style="width:100%;padding:14px;background:#1565c0;color:#fff;border:none;border-radius:var(--radius);font-size:1.1rem;font-weight:700;cursor:pointer;">✏️ この個体を修正する</button>
+    </div>
   </div>
 </div>
 
@@ -883,6 +886,7 @@ textarea { min-height: 80px; resize: vertical; }
 <div id="boardOverlay">
   <div class="board-bar">
     <button type="button" class="board-detail" id="boardDetailBtn" onclick="boardShowDetail()">詳細</button>
+    <button type="button" class="board-detail" id="boardEditBtn" onclick="boardEdit()" style="background:#1565c0;color:#fff;">✏️ 修正</button>
     <button type="button" class="board-detail" id="boardPrintBtn" onclick="boardPrintLabels()" style="display:none;">🖨 ラベル印刷</button>
     <span class="board-hint">← 左右スワイプで文字サイズ調整 →</span>
     <button type="button" class="board-detail" id="boardNewBtn" onclick="boardNewInput()" style="display:none;background:#2e7d32;color:#fff;">＋ 次の入力へ</button>
@@ -1770,7 +1774,7 @@ function loadForEdit(rec) {
   document.getElementById('submitBtn').textContent = '修正を保存する';
   const bar = document.getElementById('editModeBar');
   document.getElementById('editModeLabel').textContent =
-    (rec.individual_number || '個体') + '（' + (rec.capture_date || '') + '）';
+    (rec.label_id || rec.individual_number || '個体') + '（' + (rec.capture_date || '') + '）';
   bar.style.display = '';
   const ft = document.querySelector('[data-tab="form"]'); if (ft) ft.click();
   document.getElementById('editSearchPanel').style.display = 'none';
@@ -2606,8 +2610,9 @@ function showBoard(r, afterRegister) {
   document.getElementById('boardSheet').innerHTML = rows.map(([k, v, small]) =>
     `<div class="brd-row"><div class="brd-k">${k}</div><div class="brd-v${small ? ' small' : ''}">${esc2(v) || '—'}</div></div>`
   ).join('');
-  // 搬入登録の直後は「撮影用ボード」を先に出す。詳細は隠し、ラベル印刷・次の入力ボタンを出す
+  // 搬入登録の直後は「撮影用ボード」を先に出す。詳細・修正は隠し、ラベル印刷・次の入力ボタンを出す
   document.getElementById('boardDetailBtn').style.display = (r.__sample || afterRegister) ? 'none' : '';
+  const eb = document.getElementById('boardEditBtn'); if (eb) eb.style.display = (r.__sample || afterRegister) ? 'none' : '';
   const pb = document.getElementById('boardPrintBtn'); if (pb) pb.style.display = afterRegister ? '' : 'none';
   const nb = document.getElementById('boardNewBtn'); if (nb) nb.style.display = afterRegister ? '' : 'none';
   applyBoardScale(false);
@@ -2670,7 +2675,9 @@ function boardNewInput() {
   sheet.addEventListener('pointercancel', end);
 })();
 
+let _detailRec = null;
 function showDetail(r) {
+  _detailRec = r;
   document.getElementById('detailTitle').textContent = r.label_id || '詳細';
   const fields = [
     ['種別', r.species], ['性別', r.sex], ['体重', (r.weight_total || '-') + ' kg'],
@@ -2697,6 +2704,20 @@ function showDetail(r) {
 
 function closeDetailModal() {
   document.getElementById('detailModal').classList.remove('show');
+}
+// 詳細モーダルから修正へ（フォームに読み込み、捕獲票入力タブへ）
+function detailEdit() {
+  const r = _detailRec; if (!r) return;
+  closeDetailModal();
+  document.getElementById('boardOverlay').classList.remove('show');
+  loadForEdit(r);
+}
+// 撮影ボードから修正へ
+function boardEdit() {
+  const r = _boardRec; if (!r) return;
+  _boardAfterRegister = false;
+  document.getElementById('boardOverlay').classList.remove('show');
+  loadForEdit(r);
 }
 
 /* ── Close modals on overlay click ── */
