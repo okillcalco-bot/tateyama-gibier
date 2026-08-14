@@ -658,6 +658,18 @@ textarea { min-height: 80px; resize: vertical; }
   <div class="section">
     <div class="section-head">搬入・処理情報</div>
     <div class="section-body">
+      <div class="form-row">
+        <label class="form-label">搬入方法<span class="req-badge">必須</span></label>
+        <div class="toggle-group" data-field="intake_method" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="toggle-btn active" data-val="持込">捕獲者が持込</div>
+          <div class="toggle-btn" data-val="引取">センターが引取</div>
+          <div class="toggle-btn" data-val="出張止め刺し" style="grid-column:1/-1;">出張止め刺し（センター対応）</div>
+        </div>
+      </div>
+      <div class="form-row" id="intakeStaffRow" style="display:none;">
+        <label class="form-label">引取・出張の担当（職員）<span class="req-badge">必須</span></label>
+        <input type="text" class="input" id="intakeStaff" placeholder="例: 沖 / 今泉" list="hunterList" autocomplete="off">
+      </div>
       <div class="form-row" style="display:flex;gap:10px;">
         <div style="flex:1;">
           <label class="form-label">放血開始<span class="req-badge">必須</span></label>
@@ -1164,7 +1176,7 @@ let editMode = false, editRecordId = null, editRecord = null;
 const state = {
   species: '', sex: '', weather: '', capture_city: '', capture_method: '', trap_part: '', juvenile: '成獣',
   finishing_method: '', gutting: 'なし',
-  hunter_health: '良好', has_fetus: 'なし', processing_type: '分割', quality: '良',
+  hunter_health: '良好', has_fetus: 'なし', processing_type: '分割', quality: '良', intake_method: '持込',
   captureAnomalies: new Set(), organAnomalies: new Set()
 };
 let todayData = [];
@@ -1381,6 +1393,11 @@ function onToggleChange(field, val) {
   }
   if (field === 'hunter_health') {
     document.getElementById('healthIssueRow').style.display = val === '異常あり' ? 'block' : 'none';
+  }
+  if (field === 'intake_method') {
+    // 「引取」「出張止め刺し」のときだけ担当者欄を出す
+    const row = document.getElementById('intakeStaffRow');
+    if (row) row.style.display = (val && val !== '持込') ? '' : 'none';
   }
 }
 
@@ -1730,7 +1747,7 @@ function loadForEdit(rec) {
   sv('memo', rec.memo);
   ['species','sex','weather','capture_city','capture_method',
    'finishing_method','hit_location','gutting','hunter_health',
-   'has_fetus','quality'].forEach(function(field) {
+   'has_fetus','quality','intake_method'].forEach(function(field) {
     const val = rec[field]; if (!val) return;
     const grp = document.querySelector('[data-field="' + field + '"]'); if (!grp) return;
     grp.querySelectorAll('.toggle-btn').forEach(function(b) { b.classList.remove('active'); });
@@ -1742,6 +1759,11 @@ function loadForEdit(rec) {
     const fg = document.querySelector('[data-field="has_fetus"]');
     if (fg) { fg.style.opacity = '0.4'; fg.style.pointerEvents = 'none'; }
   }
+  // 搬入方法が引取・出張なら担当者欄を出して値を戻す
+  const _isr = document.getElementById('intakeStaffRow');
+  if (_isr) _isr.style.display = (rec.intake_method && rec.intake_method !== '持込') ? '' : 'none';
+  const _is = document.getElementById('intakeStaff');
+  if (_is && rec.intake_staff) _is.value = rec.intake_staff;
   const sel = document.getElementById('recorder');
   if (sel && rec.recorder) sel.value = rec.recorder;
   checkBleedingToIntakeTime();
@@ -2133,6 +2155,8 @@ const MISSING_CHECKS = [
       ? (document.querySelector('[data-field="hit_location"] .toggle-btn.active')?.dataset.val || '') : 'skip' },
   { label: '放血時刻', get: () => document.getElementById('bleedTime')?.value },
   { label: '施設受入時刻', get: () => document.getElementById('receiveTime')?.value },
+  { label: '引取・出張の担当', get: () => (state.intake_method && state.intake_method !== '持込')
+      ? (document.getElementById('intakeStaff')?.value || '') : 'skip' },
   { label: '記録者名', get: () => document.getElementById('recorder')?.value },
 ];
 /* 未入力とは別の「内容の確認」。地区名の誤りと、放血→受入が1時間を超えていないか。
@@ -2277,6 +2301,9 @@ async function handleSubmit() {
       organ_anomalies: state.gutting === 'あり' ? collectAnomalyTexts('organAnomalies', state.organAnomalies) : '',
       has_fetus: state.has_fetus === 'あり',
       quality: state.quality,
+      intake_method: state.intake_method || '持込',
+      intake_staff: (state.intake_method && state.intake_method !== '持込')
+        ? ((document.getElementById('intakeStaff')?.value || '').trim() || null) : null,
       recorder: document.getElementById('recorder').value,
       memo: document.getElementById('memo').value
     };
@@ -2440,11 +2467,14 @@ function resetForm() {
   });
   // Restore defaults
   state.gutting = 'なし'; state.has_fetus = 'なし'; state.hunter_health = '良好';
-  state.quality = '良';
+  state.quality = '良'; state.intake_method = '持込';
   // Re-activate default buttons
   document.querySelectorAll('[data-field="gutting"] [data-val="なし"]').forEach(b => b.classList.add('active'));
   document.querySelectorAll('[data-field="hunter_health"] [data-val="良好"]').forEach(b => b.classList.add('active'));
   document.querySelectorAll('[data-field="quality"] [data-val="良"]').forEach(b => b.classList.add('active'));
+  document.querySelectorAll('[data-field="intake_method"] [data-val="持込"]').forEach(b => b.classList.add('active'));
+  const _isr = document.getElementById('intakeStaffRow'); if (_isr) _isr.style.display = 'none';
+  const _is = document.getElementById('intakeStaff'); if (_is) _is.value = '';
 
   // Clear inputs
   ['weight','age','hunterName','bleedTime','receiveTime',
@@ -2722,11 +2752,41 @@ function wtKey(k) {
       if (el) hide(el.closest('div[style*="flex:1"]') || el.closest('.form-row'));
     });
     ['has_fetus', 'quality'].forEach(f => hide(document.querySelector('[data-field="' + f + '"]')?.closest('.form-row')));
+    // 捕獲者は自分で持ち込むので搬入方法欄は隠す（既定「持込」で保存）
+    hide(document.querySelector('[data-field="intake_method"]')?.closest('.form-row'));
+    hide(document.getElementById('intakeStaffRow'));
     hide(document.getElementById('recorder')?.closest('.form-row'));
     document.querySelectorAll('button').forEach(b => { if (b.textContent.includes('既存データを修正')) hide(b); });
     const bar = document.createElement('div');
     bar.style.cssText = 'background:rgba(200,164,90,.15);border:1px solid var(--gold2);color:var(--gold);border-radius:8px;padding:10px 14px;margin:10px 12px;font-size:13.5px;line-height:1.7;';
     bar.innerHTML = '🏹 <strong>捕獲者入力モード</strong> — わかるところだけ入れて「搬入登録」を押してください。個体番号・受入・検査の記録はセンターのスタッフが行います。';
+    const first = document.querySelector('.section');
+    if (first) first.parentNode.insertBefore(bar, first);
+  }
+
+  // ── 職員フィールド入力モード（?staff=氏名・引取に行った職員用）──
+  //   フル画面のまま、記録者・引取担当を氏名で埋め、搬入方法を「引取」に既定する。
+  const staffName = params.get('staff');
+  if (staffName && h === null && !params.get('receive')) {
+    window.staffFieldMode = true;
+    // 記録者にセット（スタッフ読込が後から来ても入るよう少し待って補完）
+    const setRecorder = () => {
+      const sel = document.getElementById('recorder');
+      if (!sel) return;
+      if (![...sel.options].some(o => o.value === staffName)) {
+        const o = document.createElement('option'); o.value = staffName; o.textContent = staffName; sel.appendChild(o);
+      }
+      sel.value = staffName;
+    };
+    setRecorder(); setTimeout(setRecorder, 800);
+    // 搬入方法＝引取、担当＝氏名
+    state.intake_method = '引取';
+    document.querySelectorAll('[data-field="intake_method"] .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.val === '引取'));
+    const isr = document.getElementById('intakeStaffRow'); if (isr) isr.style.display = '';
+    const is = document.getElementById('intakeStaff'); if (is && !is.value) is.value = staffName;
+    const bar = document.createElement('div');
+    bar.style.cssText = 'background:rgba(21,101,192,.10);border:1px solid var(--blue);color:var(--blue);border-radius:8px;padding:10px 14px;margin:10px 12px;font-size:1rem;line-height:1.7;font-weight:600;';
+    bar.innerHTML = '🚚 <strong>職員フィールド入力モード</strong> — 記録者・引取担当を「' + staffName + '」で用意しました。搬入方法は初期「引取」です（持込に変更も可）。';
     const first = document.querySelector('.section');
     if (first) first.parentNode.insertBefore(bar, first);
   }

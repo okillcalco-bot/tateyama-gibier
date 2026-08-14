@@ -160,6 +160,47 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   ck('古い端末カウンタを自己修復で消す', num.lsSerial === null && num.lsLabel === null, JSON.stringify(num));
   ck('採番ページJSエラーなし', errs2.length === 0, errs2.join(' / '));
 
+  // 9) 搬入方法（持込/引取）: 引取で担当者欄が出る
+  const intake = await p.evaluate(() => {
+    const before = document.getElementById('intakeStaffRow').style.display;
+    document.querySelector('[data-field="intake_method"] [data-val="引取"]').click();
+    const after = document.getElementById('intakeStaffRow').style.display;
+    document.querySelector('[data-field="intake_method"] [data-val="持込"]').click();
+    const back = document.getElementById('intakeStaffRow').style.display;
+    return { before, after, back, method: state.intake_method };
+  });
+  ck('既定は持込で担当者欄は隠れる', intake.before === 'none');
+  ck('引取を選ぶと担当者欄が出る', intake.after !== 'none', intake.after);
+  ck('持込に戻すと担当者欄は隠れる', intake.back === 'none');
+
+  // 10) 職員フィールド入力リンク ?staff=氏名
+  const p3 = await ctx.newPage();
+  const errs3 = []; p3.on('pageerror', e => errs3.push(String(e)));
+  await p3.route('**/rest/v1/**', route => {
+    const url = decodeURIComponent(route.request().url());
+    const j = x => route.fulfill({ contentType: 'application/json', body: JSON.stringify(x) });
+    if (url.includes('/staff')) return j([{ name: '沖浩志' }, { name: '今泉' }]);
+    return j([]);
+  });
+  await p3.goto('http://localhost:9076/capture-form.html?staff=' + encodeURIComponent('沖浩志'));
+  await p3.waitForTimeout(1000);
+  const staff = await p3.evaluate(() => ({
+    recorder: document.getElementById('recorder').value,
+    intakeStaff: document.getElementById('intakeStaff').value,
+    method: state.intake_method,
+    rowShown: document.getElementById('intakeStaffRow').style.display !== 'none',
+    banner: document.body.textContent.includes('職員フィールド入力モード'),
+    hunterEmpty: document.getElementById('hunterName').value === '',
+    fullForm: document.getElementById('recorder').closest('.form-row').style.display !== 'none',
+  }));
+  ck('?staff= → 記録者を沖浩志に', staff.recorder === '沖浩志', JSON.stringify(staff));
+  ck('?staff= → 引取担当を沖浩志に', staff.intakeStaff === '沖浩志');
+  ck('?staff= → 搬入方法は引取・担当者欄表示', staff.method === '引取' && staff.rowShown);
+  ck('?staff= → 職員モードの案内を表示', staff.banner);
+  ck('?staff= → 捕獲者名は空（本人=記録者と別）', staff.hunterEmpty);
+  ck('?staff= → フル画面（記録者欄も表示）', staff.fullForm);
+  ck('職員リンクJSエラーなし', errs3.length === 0, errs3.join(' / '));
+
   console.log(out.join('\n'));
   await b.close(); srv.close();
   process.exit(out.some(x => x.startsWith('FAIL')) ? 1 : 0);
