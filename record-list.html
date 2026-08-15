@@ -286,6 +286,28 @@ async function sb(method, table, body, query) {
   return text ? JSON.parse(text) : null;
 }
 
+// RPC + staff key（個体の書込はスタッフ認証つきRPC経由へ。P0-2）
+async function sbRpc(fn, args) {
+  const res = await fetch(SB_URL + '/rest/v1/rpc/' + fn, {
+    method: 'POST',
+    headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify(args || {})
+  });
+  const t = await res.text();
+  if (!res.ok) { const e = new Error(t || ('HTTP ' + res.status)); e.status = res.status; throw e; }
+  return t ? JSON.parse(t) : null;
+}
+function staffKeyGet() { try { return localStorage.getItem('tg_staff_key') || sessionStorage.getItem('tg_staff_key') || ''; } catch (e) { return ''; } }
+function staffKeyClear() { try { localStorage.removeItem('tg_staff_key'); sessionStorage.removeItem('tg_staff_key'); } catch (e) {} }
+async function staffKeyEnsure() {
+  let k = staffKeyGet();
+  if (!k) { k = (prompt('スタッフキーを入力してください') || '').trim(); if (!k) return ''; }
+  try { if (!await sbRpc('staff_key_ok', { p_staff_key: k })) { alert('スタッフキーが違います'); staffKeyClear(); return ''; } }
+  catch (e) { alert('認証エラー: ' + e.message); return ''; }
+  try { localStorage.setItem('tg_staff_key', k); } catch (e) { try { sessionStorage.setItem('tg_staff_key', k); } catch (_e) {} }
+  return k;
+}
+
 let allData = [];
 let filteredData = [];
 let sortCol = 'capture_date';
@@ -322,12 +344,14 @@ async function submitQuick() {
   status.textContent = 'ç»é²ä¸­â¦';
   status.style.color = 'var(--text2)';
   try {
-    await sb('POST', 'individuals', {
+    const key = await staffKeyEnsure();
+    if (!key) { status.textContent = 'スタッフキーが未確認のため中止しました'; status.style.color = 'var(--red)'; return; }
+    await sbRpc('staff_individual_create', { p_staff_key: key, p_payload: {
       serial_number: serial,
       label_id: mgmt,
       capture_date: date,
       species: species
-    });
+    } });
     status.textContent = 'â ç»é²ãã¾ãã: ' + mgmt;
     status.style.color = 'var(--green2)';
     document.getElementById('qSerial').value = '';
@@ -528,7 +552,9 @@ async function saveField(el) {
 
 async function patchRecord(id, body) {
   try {
-    await sb('PATCH', 'individuals', body, '?id=eq.' + id);
+    const key = await staffKeyEnsure();
+    if (!key) { showToast('スタッフキーが未確認のため保存を中止しました', true); return; }
+    await sbRpc('staff_individual_update', { p_staff_key: key, p_id: id, p_patch: body });
     showToast('ä¿å­ãã¾ãã');
   } catch(e) {
     showToast('ä¿å­ã¨ã©ã¼: ' + e.message, true);
@@ -562,9 +588,12 @@ async function confirmDelete() {
   closeDeleteModal();
   if (!ids.length) return;
   try {
+    const key = await staffKeyEnsure();
+    if (!key) { showToast('スタッフキーが未確認のため中止しました', true); return; }
     for (const id of ids) {
       // 物理削除は禁止（市役所提出データの改ざん耐性のため）。論理削除（deleted_at）に統一。
-      await sb('PATCH', 'individuals', { deleted_at: new Date().toISOString() }, '?id=eq.' + id);
+      // スタッフ認証つきRPCで論理削除（監査ログに残す）。
+      await sbRpc('staff_individual_soft_delete', { p_staff_key: key, p_id: id, p_reason: '搬入一覧からの削除' });
     }
     showToast(ids.length + 'ä»¶ãåé¤ãã¾ãã');
     pendingDeleteIds = [];

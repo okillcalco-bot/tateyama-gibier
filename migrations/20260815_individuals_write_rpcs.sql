@@ -275,6 +275,29 @@ $$;
 revoke all on function staff_individual_update(text, uuid, jsonb) from public;
 grant execute on function staff_individual_update(text, uuid, jsonb) to anon, authenticated;
 
+-- ── スタッフによる新規個体の作成（広い列・監査。id/created_at/deleted_atは自動） ──
+create or replace function staff_individual_create(
+  p_staff_key text,
+  p_payload jsonb
+) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_allow text[]; v_row individuals;
+begin
+  perform _ind_require_staff(p_staff_key);
+  if coalesce(p_payload ->> 'label_id','') = '' then raise exception '個体管理番号は必須です'; end if;
+  select array_agg(a.attname::text) into v_allow
+    from pg_attribute a
+   where a.attrelid = 'public.individuals'::regclass and a.attnum > 0 and not a.attisdropped
+     and a.attname not in ('id','created_at','deleted_at');
+  v_row := _ind_apply('insert', null, p_payload, v_allow);
+  insert into individual_audit(action, actor, target_id, label_id, after)
+  values ('create','staff', v_row.id, v_row.label_id, to_jsonb(v_row));
+  return jsonb_build_object('id', v_row.id, 'label_id', v_row.label_id);
+end;
+$$;
+revoke all on function staff_individual_create(text, jsonb) from public;
+grant execute on function staff_individual_create(text, jsonb) to anon, authenticated;
+
 -- ── 論理削除（理由つき監査） ──────────────────────────────────────────
 create or replace function staff_individual_soft_delete(
   p_staff_key text,
@@ -320,6 +343,74 @@ end;
 $$;
 revoke all on function staff_individual_restore(text, uuid, text) from public;
 grant execute on function staff_individual_restore(text, uuid, text) to anon, authenticated;
+
+-- ── ラベル指定のスタッフ操作（index.htmlはlabel_idをキーに扱うため） ─────
+create or replace function staff_individual_update_by_label(
+  p_staff_key text, p_label text, p_patch jsonb
+) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_id uuid;
+begin
+  perform _ind_require_staff(p_staff_key);
+  select id into v_id from individuals where label_id = p_label and deleted_at is null limit 1;
+  if v_id is null then raise exception '個体が見つかりません: %', p_label; end if;
+  return staff_individual_update(p_staff_key, v_id, p_patch);
+end;
+$$;
+revoke all on function staff_individual_update_by_label(text, text, jsonb) from public;
+grant execute on function staff_individual_update_by_label(text, text, jsonb) to anon, authenticated;
+
+create or replace function staff_individual_soft_delete_by_label(
+  p_staff_key text, p_label text, p_reason text default null
+) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_id uuid;
+begin
+  perform _ind_require_staff(p_staff_key);
+  select id into v_id from individuals where label_id = p_label and deleted_at is null limit 1;
+  if v_id is null then raise exception '個体が見つかりません: %', p_label; end if;
+  return staff_individual_soft_delete(p_staff_key, v_id, p_reason);
+end;
+$$;
+revoke all on function staff_individual_soft_delete_by_label(text, text, text) from public;
+grant execute on function staff_individual_soft_delete_by_label(text, text, text) to anon, authenticated;
+
+create or replace function staff_individual_restore_by_label(
+  p_staff_key text, p_label text, p_reason text default null
+) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_id uuid;
+begin
+  perform _ind_require_staff(p_staff_key);
+  select id into v_id from individuals where label_id = p_label and deleted_at is not null
+   order by deleted_at desc limit 1;
+  if v_id is null then raise exception '削除済みの個体が見つかりません: %', p_label; end if;
+  return staff_individual_restore(p_staff_key, v_id, p_reason);
+end;
+$$;
+revoke all on function staff_individual_restore_by_label(text, text, text) from public;
+grant execute on function staff_individual_restore_by_label(text, text, text) to anon, authenticated;
+
+-- 過去分の一括「精肉完了」（管理者操作・単一Tx・監査） ──────────────────
+create or replace function staff_mark_processing_done_before(
+  p_staff_key text, p_before date
+) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_ids uuid[]; v_now timestamptz := now();
+begin
+  perform _ind_require_staff(p_staff_key);
+  select array_agg(id) into v_ids from individuals
+   where capture_date < p_before and processing_done_at is null and deleted_at is null;
+  if v_ids is null then return jsonb_build_object('count', 0); end if;
+  update individuals set processing_done_at = v_now where id = any(v_ids);
+  insert into individual_audit(action, actor, target_id, label_id, reason)
+  select 'processing_done','staff', i.id, i.label_id, '過去分一括完了(<' || p_before || ')'
+    from individuals i where i.id = any(v_ids);
+  return jsonb_build_object('count', array_length(v_ids, 1));
+end;
+$$;
+revoke all on function staff_mark_processing_done_before(text, date) from public;
+grant execute on function staff_mark_processing_done_before(text, date) to anon, authenticated;
 
 -- ── 個体番号の変更（単一Tx・FKカスケード・在庫コード同期・監査） ─────────
 -- label_id を更新すると inventory.individual_id / processing_log.individual_id は

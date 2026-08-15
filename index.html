@@ -2937,7 +2937,7 @@ async function loadProcessingSetup() {
 async function procMarkDone(labelId) {
   if (!confirm(`${labelId} を「精肉完了」にしますか？\n（部位の登録なしで完了扱いになり、未処理一覧から消えます。「完了済み」タブからいつでも戻せます）`)) return;
   try {
-    await sb('PATCH', 'individuals', { processing_done_at: new Date().toISOString() }, `?label_id=eq.${encodeURIComponent(labelId)}`);
+    await indWrite('staff_individual_update_by_label', { p_label: labelId, p_patch: { processing_done_at: new Date().toISOString() } });
     toast(`${labelId} を精肉完了にしました`);
     loadProcessingSetup();
   } catch(e) { toast('更新に失敗しました: ' + e.message, 'error'); }
@@ -2945,7 +2945,7 @@ async function procMarkDone(labelId) {
 
 async function procMarkUndone(labelId) {
   try {
-    await sb('PATCH', 'individuals', { processing_done_at: null }, `?label_id=eq.${encodeURIComponent(labelId)}`);
+    await indWrite('staff_individual_update_by_label', { p_label: labelId, p_patch: { processing_done_at: null } });
     toast(`${labelId} を未処理に戻しました`);
     loadProcessingSetup();
   } catch(e) { toast('更新に失敗しました: ' + e.message, 'error'); }
@@ -2960,7 +2960,7 @@ async function procBulkDone() {
     const targets = await sb('GET', 'individuals', null, `?capture_date=lt.${d.trim()}&processing_done_at=is.null&deleted_at=is.null&select=label_id`);
     if (!targets.length) { toast('対象の個体はありませんでした'); return; }
     if (!confirm(`${d} より前に捕獲された ${targets.length}頭 を「精肉完了」にします。よろしいですか？`)) return;
-    await sb('PATCH', 'individuals', { processing_done_at: new Date().toISOString() }, `?capture_date=lt.${d.trim()}&processing_done_at=is.null&deleted_at=is.null`);
+    await indWrite('staff_mark_processing_done_before', { p_before: d.trim() });
     toast(`${targets.length}頭を精肉完了にしました`);
     loadProcessingSetup();
   } catch(e) { toast('一括更新に失敗しました: ' + e.message, 'error'); }
@@ -5093,7 +5093,7 @@ async function pmFinishIndividual() {
       const bb = calcBuyback(indW, pmIndividual.meat_rank, yieldNum, !!pmIndividual.stopkill_pickup);
       if (bb != null) patch.buyback_amount = bb;
     }
-    await sb('PATCH', 'individuals', patch, `?label_id=eq.${encodeURIComponent(pmIndividual.label_id)}`);
+    await indWrite('staff_individual_update_by_label', { p_label: pmIndividual.label_id, p_patch: patch });
 
     const yieldPct = yieldNum != null ? yieldNum : '-';
     const bbMsg = (pmIndividual.meat_rank && yieldNum != null)
@@ -5116,6 +5116,7 @@ document.getElementById('pmOverlay').addEventListener('click', (e) => {
 
 /* ===== 個体管理 ===== */
 let indEditId = null;
+let indEditUuid = null;   // 編集対象のUUID（RPCのp_id用）
 const indCache = new Map();
 let indSortCol = 'capture_date';
 let indSortAsc = false;   // 既定は新しい順（直近入力した個体をすぐ確認できるように）
@@ -5214,7 +5215,7 @@ async function pendingDelete(id) {
   const who = r ? `${r.species || '獣種未定'} ${r.weight_total ? r.weight_total + 'kg ' : ''}/ ${r.hunter_name || '捕獲者不明'} / ${fmt(r.capture_date)}` : 'この連絡';
   if (!confirm(`搬入待ちの連絡を削除しますか？\n\n${who}\n\n削除履歴に入るので、あとから戻せます。`)) return;
   try {
-    await sb('PATCH', 'individuals', { deleted_at: new Date().toISOString() }, `?id=eq.${id}`);
+    await indWrite('staff_individual_soft_delete', { p_id: id, p_reason: '搬入待ちの削除' });
     toast('搬入待ちの連絡を削除しました');
     loadPendingIntake();
     refreshNavBadges();
@@ -5229,7 +5230,9 @@ async function pendingDeleteAll() {
   if (!rows.length) { toast('搬入待ちはありません'); return; }
   if (!confirm(`搬入待ちの ${rows.length}件 をすべて削除しますか？\n\n削除履歴に入るので、あとから戻せます。`)) return;
   try {
-    await sb('PATCH', 'individuals', { deleted_at: new Date().toISOString() }, '?intake_status=eq.搬入待ち&deleted_at=is.null');
+    const key = await staffKeyEnsure();
+    if (!key) { toast('スタッフキーが未確認のため中止しました', 'error'); return; }
+    for (const r of rows) { await baseRpc('staff_individual_soft_delete', { p_staff_key: key, p_id: r.id, p_reason: '搬入待ちの一括削除' }); }
     toast(`搬入待ち ${rows.length}件 を削除しました`);
     loadPendingIntake();
     refreshNavBadges();
@@ -5278,7 +5281,7 @@ async function indDelete(labelId) {
   if (!requireAdmin('個体の削除')) return;
   if (!confirm(`「${labelId}」を削除しますか？\n削除履歴からいつでも復元できます。`)) return;
   try {
-    await sb('PATCH', 'individuals', { deleted_at: new Date().toISOString() }, '?label_id=eq.' + encodeURIComponent(labelId));
+    await indWrite('staff_individual_soft_delete_by_label', { p_label: labelId, p_reason: '個体の削除' });
     toast(`${labelId} を削除しました`);
     indLoad();
   } catch(e) { toast('削除エラー: ' + e.message, 'error'); }
@@ -5290,7 +5293,9 @@ async function indBulkDelete() {
   if (!ids.length) return;
   if (!confirm(`${ids.length}件を削除しますか？\n削除履歴からいつでも復元できます。`)) return;
   try {
-    await Promise.all(ids.map(id => sb('PATCH', 'individuals', { deleted_at: new Date().toISOString() }, '?label_id=eq.' + encodeURIComponent(id))));
+    const key = await staffKeyEnsure();
+    if (!key) { toast('スタッフキーが未確認のため中止しました', 'error'); return; }
+    for (const id of ids) { await baseRpc('staff_individual_soft_delete_by_label', { p_staff_key: key, p_label: id, p_reason: '個体の一括削除' }); }
     toast(`${ids.length}件を削除しました`);
     document.getElementById('indSelectAll').checked = false;
     indLoad();
@@ -5325,7 +5330,7 @@ function indHideTrash() {
 async function indRestore(labelId) {
   if (!requireAdmin('削除済み個体の復元')) return;
   try {
-    await sb('PATCH', 'individuals', { deleted_at: null }, '?label_id=eq.' + encodeURIComponent(labelId));
+    await indWrite('staff_individual_restore_by_label', { p_label: labelId, p_reason: '削除済み個体の復元' });
     toast(`${labelId} を復元しました`);
     indShowTrash();
   } catch(e) { toast('復元エラー: ' + e.message, 'error'); }
@@ -5409,7 +5414,7 @@ function indToggleButcher(name) {
 }
 
 function indOpenNew() {
-  indEditId = null;
+  indEditId = null; indEditUuid = null;
   document.getElementById('indModalTitle').textContent = '新規個体登録';
   IND_ALL_FIELDS.forEach(f => indSetField(f, ''));
   indSetField('intake_method', '持込');   // 基本は持込をデフォルトに
@@ -5426,6 +5431,7 @@ function indOpenEdit(labelId) {
   const i = indCache.get(labelId);
   if (!i) { toast('データが見つかりません。再読み込みしてください。', 'error'); return; }
   indEditId = i.label_id;
+  indEditUuid = i.id;
   document.getElementById('indModalTitle').textContent = '個体情報編集：' + i.label_id;
   IND_ALL_FIELDS.forEach(f => indSetField(f, i[f]));
   // bool fields
@@ -5563,12 +5569,9 @@ async function indValidateNumbers(labelId, serial, editingId) {
         + `［OK］削除済みの個体を復元して、今の内容で上書きする\n`
         + `［キャンセル］別の番号で登録する`);
       if (!ok) return `別の番号を入力してください。`;
-      try {
-        await sb('PATCH', 'individuals', { deleted_at: null }, `?label_id=eq.${encodeURIComponent(labelId)}`);
-        indRestoredLabel = labelId;   // 保存を「新規」ではなく「上書き」に切り替える
-        toast(`削除済みの ${labelId} を復元しました。続けて保存します`);
-        return null;
-      } catch (e) { return '復元に失敗しました。通信を確認してください。'; }
+      // 実際の復元＋上書きは保存時（indSave）にスタッフ認証つきRPCで行う
+      indRestoredLabel = labelId;   // 保存を「新規」ではなく「復元→上書き」に切り替える
+      return null;
     }
     if (dup.length && dup[0].label_id !== editingId) {
       const d = dup[0];
@@ -5688,29 +5691,34 @@ async function indSave() {
     // 解体担当者は全員外した場合も反映させたいので、空のときはnullを送る
     const bs = document.getElementById('ind-f-butcher_staff');
     if (bs) payload.butcher_staff = bs.value.trim() || null;
+    // 個体データの書込はスタッフキー認証つきRPC経由（P0-2: anon直接更新の廃止に向けて）
+    const key = await staffKeyEnsure();
+    if (!key) { toast('スタッフキーが未確認のため保存を中止しました', 'error'); btn.disabled = false; btn.textContent = '保存'; return; }
     if (indEditId) {
       const labelChanged = label_id && label_id !== indEditId;
-      if (labelChanged) {
-        if (!confirm(`個体管理番号を変更します。\n\n　${indEditId}　→　${label_id}\n\nこの個体に紐づく在庫・加工の記録も新しい番号に付け替わります。よろしいですか？`)) {
-          btn.disabled = false; btn.textContent = '保存'; return;
-        }
-        payload.label_id = label_id;   // 番号自体を更新（在庫等はFKのCASCADEで自動追従）
+      if (labelChanged && !confirm(`個体管理番号を変更します。\n\n　${indEditId}　→　${label_id}\n\nこの個体に紐づく在庫・加工の記録も新しい番号に付け替わります。よろしいですか？`)) {
+        btn.disabled = false; btn.textContent = '保存'; return;
       }
-      // WHERE は元の番号で特定（更新後は新番号になる）
-      await sb('PATCH', 'individuals', payload, '?label_id=eq.' + encodeURIComponent(indEditId));
+      // label_id は relabel 専用RPCで変更（個別の監査・在庫コード同期・単一Tx）
+      const patch = Object.assign({}, payload); delete patch.label_id;
+      await baseRpc('staff_individual_update', { p_staff_key: key, p_id: indEditUuid, p_patch: patch });
       if (labelChanged) {
-        // 在庫の非正規化コード(individual_code)も新番号へ同期（FK対象外のため）
-        try { await sb('PATCH', 'inventory', { individual_code: label_id }, '?individual_id=eq.' + encodeURIComponent(label_id)); } catch (e) { /* 在庫が無ければ何もしない */ }
+        await baseRpc('staff_individual_relabel', { p_staff_key: key, p_id: indEditUuid, p_new_label: label_id, p_reason: '個体情報編集' });
       }
       toast('保存しました');
     } else if (indRestoredLabel === label_id) {
-      // 削除済みだった個体を復元した場合は、新規ではなく上書きになる
-      await sb('PATCH', 'individuals', payload, '?label_id=eq.' + encodeURIComponent(label_id));
+      // 削除済みだった個体を復元して上書き（復元→更新を単一のスタッフ操作として）
+      const del = await sb('GET', 'individuals', null, '?label_id=eq.' + encodeURIComponent(label_id) + '&select=id&limit=1');
+      const rid = del && del[0] && del[0].id;
+      if (!rid) throw new Error('復元対象が見つかりません');
+      await baseRpc('staff_individual_restore', { p_staff_key: key, p_id: rid, p_reason: '削除個体の復元' });
+      const patch = Object.assign({}, payload); delete patch.label_id;
+      await baseRpc('staff_individual_update', { p_staff_key: key, p_id: rid, p_patch: patch });
       toast(`${label_id} を復元して登録しました`);
       indRestoredLabel = null;
     } else {
       payload.label_id = label_id;
-      await sb('POST', 'individuals', payload);
+      await baseRpc('staff_individual_create', { p_staff_key: key, p_payload: payload });
       toast('登録しました');
     }
     indCloseModal();
@@ -5979,7 +5987,7 @@ async function loadAging() {
 async function agingStart(labelId) {
   if (!confirm(`${labelId} の半身熟成を開始しますか？\n（開始日から精肉日までの日数を自動計算します）`)) return;
   try {
-    await sb('PATCH', 'individuals', { aging_method: '熟成', aging_started_at: new Date().toISOString(), aging_ended_at: null }, '?label_id=eq.' + encodeURIComponent(labelId));
+    await indWrite('staff_individual_update_by_label', { p_label: labelId, p_patch: { aging_method: '熟成', aging_started_at: new Date().toISOString(), aging_ended_at: null } });
     toast(`${labelId} の熟成を開始しました`);
     loadAging(); refreshNavBadges();
   } catch (err) { toast('熟成開始に失敗しました: ' + sbSafeMsg(err), 'error'); }
@@ -5987,7 +5995,7 @@ async function agingStart(labelId) {
 
 async function agingDirect(labelId) {
   try {
-    await sb('PATCH', 'individuals', { aging_method: '直接分割', aging_started_at: null, aging_ended_at: null }, '?label_id=eq.' + encodeURIComponent(labelId));
+    await indWrite('staff_individual_update_by_label', { p_label: labelId, p_patch: { aging_method: '直接分割', aging_started_at: null, aging_ended_at: null } });
     toast(`${labelId} は熟成なしで精肉待ちにしました`);
     loadAging(); refreshNavBadges();
   } catch (err) { toast('更新に失敗しました: ' + sbSafeMsg(err), 'error'); }
@@ -5996,7 +6004,7 @@ async function agingDirect(labelId) {
 async function agingFinish(labelId) {
   if (!confirm(`${labelId} の熟成を完了して精肉待ちにしますか？`)) return;
   try {
-    await sb('PATCH', 'individuals', { aging_ended_at: new Date().toISOString() }, '?label_id=eq.' + encodeURIComponent(labelId));
+    await indWrite('staff_individual_update_by_label', { p_label: labelId, p_patch: { aging_ended_at: new Date().toISOString() } });
     toast(`${labelId} を精肉待ちにしました`);
     loadAging(); refreshNavBadges();
   } catch (err) { toast('更新に失敗しました: ' + sbSafeMsg(err), 'error'); }
@@ -7288,6 +7296,13 @@ async function baseRpc(fn, args) {
   return await sb('POST', 'rpc/' + fn, args || {});
 }
 
+// スタッフ認証つきの個体書込RPC（P0-2: anon直接更新の廃止に向けて）
+async function indWrite(fn, args) {
+  const key = await staffKeyEnsure();
+  if (!key) throw new Error('スタッフキーが未確認です');
+  return await baseRpc(fn, Object.assign({ p_staff_key: key }, args || {}));
+}
+
 // センター在庫が変わったらBASEへ反映（対応付け済み商品のみ・失敗しても業務は止めない）
 async function baseSyncStock(productId, newStock) {
   try {
@@ -8197,10 +8212,12 @@ async function radSave() {
   const btn = document.getElementById('rad-save-btn');
   btn.disabled = true;
   try {
-    const ids = radPending.map(p => `"${p.label_id}"`).join(',');
-    await sb('PATCH', 'individuals',
-      { radiation_test_date: date, radiation_result_date: date, radiation_result: radResult, updated_at: new Date().toISOString() },
-      `?label_id=in.(${ids})`);
+    const key = await staffKeyEnsure();
+    if (!key) { toast('スタッフキーが未確認のため中止しました', 'error'); btn.disabled = false; return; }
+    const radPatch = { radiation_test_date: date, radiation_result_date: date, radiation_result: radResult };
+    for (const p of radPending) {
+      await baseRpc('staff_individual_update_by_label', { p_staff_key: key, p_label: p.label_id, p_patch: radPatch });
+    }
     playFeedbackSound(true);
     const n = radPending.length;
     document.getElementById('rad-save-msg').innerHTML = `<span style="color:var(--green);">✅ ${n}個体を ${date} で記録しました（${esc2(radResult)}）</span>`;
@@ -8614,12 +8631,12 @@ async function findingsOpen(labelId) {
 async function findingsSave() {
   if (!findingsLabelId) return;
   try {
-    await sb('PATCH', 'individuals', {
+    await indWrite('staff_individual_update_by_label', { p_label: findingsLabelId, p_patch: {
       has_fetus: document.getElementById('fnd-fetus').value === 'true',
       organ_anomalies: document.getElementById('fnd-organ').value.trim() || null,
       capture_anomalies: document.getElementById('fnd-capture').value.trim() || null,
       processing_notes: document.getElementById('fnd-notes').value.trim() || null
-    }, `?label_id=eq.${encodeURIComponent(findingsLabelId)}`);
+    } });
     document.getElementById('findingsModal').style.display = 'none';
     toast(`${findingsLabelId} の解体所見を保存しました`);
     playFeedbackSound(true);

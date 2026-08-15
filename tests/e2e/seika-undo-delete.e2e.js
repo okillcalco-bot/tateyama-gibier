@@ -21,12 +21,20 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   await p.route('**/rest/v1/**', async route => {
     const req = route.request(); const url = decodeURIComponent(req.url()); const m = req.method();
     const j = x => route.fulfill({ contentType: 'application/json', body: JSON.stringify(x) });
+    // 個体書込はRPC経由（P0-2）。精肉完了は staff_individual_update_by_label で来る
+    if (url.includes('/rpc/staff_key_ok')) return j(true);
+    if (url.includes('/rpc/staff_individual_update_by_label')) {
+      const a = req.postDataJSON() || {};
+      rest.patches.push({ url: '/individuals(rpc)', body: a.p_patch, label: a.p_label });
+      return j({ id: 'x', label_id: a.p_label });
+    }
     if (url.includes('/inventory') && m === 'PATCH') { rest.patches.push({ url, body: req.postDataJSON() }); return j([{}]); }
     if (url.includes('/processing_log') && m === 'DELETE') { rest.deletes.push(url); return route.fulfill({ status: 204, body: '' }); }
     if (url.includes('/individuals') && m === 'PATCH') { rest.patches.push({ url, body: req.postDataJSON() }); return j([{}]); }
     return j([]);
   });
   await p.goto('http://localhost:9075/index.html'); await p.waitForTimeout(500);
+  await p.evaluate(() => { try { localStorage.setItem('tg_staff_key', 'test-key'); } catch (e) {} });
 
   // 精肉メイン画面の前提globalを用意（pmRenderParts等が参照）
   const setup = async (parts) => p.evaluate((parts) => {
@@ -73,7 +81,7 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   await p.waitForTimeout(150);
   msg = await p.evaluate(() => window._m);
   ck('二重登録なし → 警告文なし', !msg.includes('二重登録の可能性'), msg.slice(0, 30));
-  ck('二重登録なし → individuals を精肉完了PATCH', rest.patches.some(x => x.url.includes('/individuals') && x.body && x.body.processing_done_at));
+  ck('二重登録なし → 精肉完了をRPC(staff_individual_update_by_label)で保存', rest.patches.some(x => x.url.includes('individuals') && x.body && x.body.processing_done_at), JSON.stringify(rest.patches.map(x => x.url)));
 
   // 5) 直前取消（pmUndoLast）：直前identを削除
   rest.patches = [];
