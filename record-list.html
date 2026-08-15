@@ -517,6 +517,7 @@ function renderTable() {
   document.getElementById('dataTable').style.display = 'table';
   document.getElementById('emptyMsg').style.display = 'none';
 
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   tbody.innerHTML = filteredData.map(r => {
     const complete = isComplete(r);
     const speciesBadge = r.species === 'ã¤ãã·ã·' ? 'badge-green' :
@@ -524,10 +525,10 @@ function renderTable() {
     return `<tr id="row-${r.id}" data-id="${r.id}">
       <td><input type="checkbox" class="row-check" data-id="${r.id}" onchange="updateSelectedCount()"></td>
       <td><span class="cell-edit" contenteditable="true" data-field="serial_number" data-id="${r.id}"
-        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${r.serial_number || ''}</span></td>
+        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${esc(r.serial_number)}</span></td>
       <td><span class="cell-edit" contenteditable="true" data-field="label_id" data-id="${r.id}"
-        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)" style="font-family:monospace;">${r.label_id || ''}</span></td>
-      <td><input type="date" class="cell-select" value="${r.capture_date || ''}"
+        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)" style="font-family:monospace;">${esc(r.label_id)}</span></td>
+      <td><input type="date" class="cell-select" value="${esc(r.capture_date)}"
         data-field="capture_date" data-id="${r.id}" onchange="saveField(this)"></td>
       <td><select class="cell-select" data-field="species" data-id="${r.id}" onchange="saveField(this)">
         <option value="">-</option>
@@ -542,22 +543,22 @@ function renderTable() {
         <option value="ã¡ã¹" ${r.sex==='ã¡ã¹'?'selected':''}>â ã¡ã¹</option>
       </select></td>
       <td><span class="cell-edit" contenteditable="true" data-field="capture_area" data-id="${r.id}"
-        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${r.capture_area || ''}</span></td>
+        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${esc(r.capture_area)}</span></td>
       <td><span class="cell-edit" contenteditable="true" data-field="hunter_name" data-id="${r.id}"
-        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${r.hunter_name || ''}</span></td>
+        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${esc(r.hunter_name)}</span></td>
       <td><span class="cell-edit" contenteditable="true" data-field="weight_total" data-id="${r.id}"
-        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${r.weight_total != null ? r.weight_total : ''}</span></td>
+        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${esc(r.weight_total != null ? r.weight_total : '')}</span></td>
       <td><span class="cell-edit" contenteditable="true" data-field="weight_carcass" data-id="${r.id}"
-        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${r.weight_carcass != null ? r.weight_carcass : ''}</span></td>
+        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${esc(r.weight_carcass != null ? r.weight_carcass : '')}</span></td>
       <td><span class="cell-edit" contenteditable="true" data-field="capture_time" data-id="${r.id}"
-        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${r.capture_time || ''}</span></td>
+        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${esc(r.capture_time)}</span></td>
       <td><span class="cell-edit" contenteditable="true" data-field="bleed_time" data-id="${r.id}"
-        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${r.bleed_time || ''}</span></td>
+        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${esc(r.bleed_time)}</span></td>
       <td><span class="cell-edit" contenteditable="true" data-field="receive_time" data-id="${r.id}"
-        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${r.receive_time || ''}</span></td>
+        onblur="saveCell(this)" onkeydown="cellKeydown(event,this)">${esc(r.receive_time)}</span></td>
       <td><span class="badge ${complete ? 'badge-green' : 'badge-amber'}">${complete ? 'å®äº' : 'æªå®'}</span></td>
       <td>
-        <button class="btn btn-danger" style="padding:4px 8px;font-size:12px;" onclick="deleteSingle(${r.id},'${(r.label_id||'').replace(/'/g,"\\'")}')">åé¤</button>
+        <button class="btn btn-danger del-btn" style="padding:4px 8px;font-size:12px;" data-id="${esc(r.id)}" data-label="${esc(r.label_id)}">åé¤</button>
       </td>
     </tr>`;
   }).join('');
@@ -614,6 +615,11 @@ async function patchRecord(id, body) {
 }
 
 // ââ Delete ââ
+// 削除ボタンは onclick にデータを埋め込まず data-* ＋ 委譲リスナーで扱う（XSS対策）
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest && e.target.closest('.del-btn');
+  if (btn) deleteSingle(btn.dataset.id, btn.dataset.label || '');
+});
 function deleteSingle(id, label) {
   pendingDeleteIds = [id];
   document.getElementById('deleteModalMsg').textContent =

@@ -2134,12 +2134,13 @@ async function searchForEdit() {
       resEl.innerHTML = '<div style="padding:8px;color:#666;">該当する記録が見つかりませんでした。</div>';
       return;
     }
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     resEl.innerHTML = window._editRows.map(function(r, i) {
       return '<div class="edit-result-row" onclick="loadForEdit(window._editRows[' + i + '])">' +
-        '<strong>' + (r.individual_number || '番号なし') + '</strong>' +
-        ' &nbsp; ' + (r.species || '') + ' ' + (r.sex || '') +
-        '<br><small style="color:#666;">' + (r.capture_date || '') +
-        (r.recorder ? ' / ' + r.recorder : '') + '</small></div>';
+        '<strong>' + esc(r.label_id || r.individual_number || '番号なし') + '</strong>' +
+        ' &nbsp; ' + esc(r.species || '') + ' ' + esc(r.sex || '') +
+        '<br><small style="color:#666;">' + esc(r.capture_date || '') +
+        (r.recorder ? ' / ' + esc(r.recorder) : '') + '</small></div>';
     }).join('');
   } catch(e) {
     resEl.innerHTML = '<div style="color:#c00;padding:8px;">エラー: ' + e.message + '</div>';
@@ -3098,23 +3099,31 @@ function renderList() {
   [...todayData].sort((a, b) => akey(a) < akey(b) ? -1 : akey(a) > akey(b) ? 1 : 0)
     .forEach((r, i) => { dayNo[r.id] = i + 1; });
 
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   container.innerHTML = todayData.map(r => {
     const emojiMap = {'イノシシ':'&#x1F417;','シカ':'&#x1F98C;','アライグマ':'&#x1F99D;','ハクビシン':'&#x1F43C;','キョン':'&#x1F98C;','タヌキ':'&#x1F99D;','ノウサギ':'&#x1F430;'};
     const emoji = emojiMap[r.species] || '&#x1F43E;';
     const qClass = r.quality === '良' ? 'q-good' : r.quality === '可' ? 'q-ok' : 'q-bad';
-    return `<div class="card" onclick='showBoard(${JSON.stringify(r).replace(/'/g, "&#39;")})'>
+    // onclickにJSONを埋め込まず data-cardid＋委譲リスナーで開く（XSS対策）。id はUUID。
+    return `<div class="card" data-cardid="${esc(r.id)}">
       <div class="day-no">${dayNo[r.id] || '-'}</div>
       <div class="card-emoji">${emoji}</div>
       <div class="card-info">
-        <div class="card-label">${(r.serial_number != null ? '#' + r.serial_number + ' ' : '') + (r.label_id || '-')}</div>
-        <div class="card-detail">${r.capture_time || ''} / ${r.hunter_name || '-'}</div>
+        <div class="card-label">${(r.serial_number != null ? '#' + r.serial_number + ' ' : '') + esc(r.label_id || '-')}</div>
+        <div class="card-detail">${esc(r.capture_time)} / ${esc(r.hunter_name || '-')}</div>
       </div>
       <div class="card-meta">
         <div class="card-weight">${r.weight_total || '-'} kg</div>
-        <div class="card-quality ${qClass}">${r.quality || '-'}</div>
+        <div class="card-quality ${qClass}">${esc(r.quality || '-')}</div>
       </div>
     </div>`;
   }).join('');
+  container.querySelectorAll('.card[data-cardid]').forEach(el => {
+    el.addEventListener('click', () => {
+      const rec = todayData.find(x => String(x.id) === el.dataset.cardid);
+      if (rec) showBoard(rec);
+    });
+  });
 }
 
 /* 大字（capture_area）から旧町村（地区）を逆引き。分からなければ空 */

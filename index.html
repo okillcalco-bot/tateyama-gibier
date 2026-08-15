@@ -3094,11 +3094,11 @@ async function traceSearch() {
 
     // Capture details
     html += `<div class="trace-detail">
-      <div><span class="trace-detail-label">捕獲:</span> ${fmt(ind.capture_date)} ${ind.capture_time || ''} ${ind.capture_city || ''} ${ind.capture_area || ''}</div>
-      <div><span class="trace-detail-label">猟師:</span> ${ind.hunter_name || '-'}</div>
-      <div><span class="trace-detail-label">捕獲方法:</span> ${ind.capture_method || '-'} / ${ind.finishing_method || '-'}</div>
+      <div><span class="trace-detail-label">捕獲:</span> ${fmt(ind.capture_date)} ${esc2(ind.capture_time)} ${esc2(ind.capture_city)} ${esc2(ind.capture_area)}</div>
+      <div><span class="trace-detail-label">猟師:</span> ${esc2(ind.hunter_name || '-')}</div>
+      <div><span class="trace-detail-label">捕獲方法:</span> ${esc2(ind.capture_method || '-')} / ${esc2(ind.finishing_method || '-')}</div>
       <div><span class="trace-detail-label">品質:</span> ${ind.quality || '-'}</div>
-      ${ind.memo ? `<div><span class="trace-detail-label">備考:</span> ${ind.memo}</div>` : ''}
+      ${ind.memo ? `<div><span class="trace-detail-label">備考:</span> ${esc2(ind.memo)}</div>` : ''}
     </div>`;
 
     // Parts
@@ -4209,7 +4209,7 @@ function pmRenderIndList(inds) {
       <div class="ind-icon">${speciesIcon(i.species)}</div>
       <div style="flex:1;">
         <div class="ind-label">${i.serial_number ? '#'+String(i.serial_number).padStart(3,'0')+' ' : ''}${i.label_id}${emptyBadge}${doneBadge}</div>
-        <div class="ind-meta">${i.species||'-'} / ${i.weight_total||'-'}kg / ${fmt(i.capture_date)} / ${i.hunter_name||'-'}</div>
+        <div class="ind-meta">${esc2(i.species||'-')} / ${i.weight_total||'-'}kg / ${fmt(i.capture_date)} / ${esc2(i.hunter_name||'-')}</div>
       </div>
       <div>${i.quality === '食用不可' ? '<span class="badge badge-red">食用不可</span>' : ''}</div>
     </div>`;
@@ -5166,8 +5166,8 @@ function indRender() {
     <td>${i.sex || '-'}</td>
     <td>${i.weight_total != null ? i.weight_total + ' kg' : '-'}</td>
     <td>${fmt(i.capture_date)}</td>
-    <td>${[i.capture_city, i.capture_area].filter(Boolean).join(' ') || '-'}</td>
-    <td>${i.hunter_name || '-'}</td>
+    <td>${esc2([i.capture_city, i.capture_area].filter(Boolean).join(' ') || '-')}</td>
+    <td>${esc2(i.hunter_name || '-')}</td>
     <td>${i.quality || '-'}</td>
     <td style="white-space:nowrap;">
       <button class="btn btn-sm" onclick="findingsOpen('${i.label_id}')" title="胎児の有無・内臓所見（解体中でも追記OK）">🔬 所見</button>
@@ -5194,7 +5194,7 @@ async function loadPendingIntake() {
       ${rows.map(r => `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);margin-bottom:8px;">
         <div style="font-size:14px;line-height:1.7;">
           <strong>${speciesIcon(r.species)} ${r.species || '獣種未定'} ${r.weight_total ? r.weight_total + 'kg' : ''}</strong>
-          <span style="color:var(--text2);"> / ${r.hunter_name || '捕獲者不明'} / ${fmt(r.capture_date)} ${r.capture_time || ''} / ${[r.capture_city, r.capture_area].filter(Boolean).join(' ') || '-'} / ${r.capture_method || '-'}</span>
+          <span style="color:var(--text2);"> / ${esc2(r.hunter_name || '捕獲者不明')} / ${fmt(r.capture_date)} ${esc2(r.capture_time)} / ${esc2([r.capture_city, r.capture_area].filter(Boolean).join(' ') || '-')} / ${esc2(r.capture_method || '-')}</span>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           <a class="btn btn-primary btn-sm" href="capture-form.html?receive=${r.id}">✅ 受入する（個体番号を付ける）</a>
@@ -5317,7 +5317,7 @@ async function indShowTrash() {
       <td>${i.species || '-'}</td>
       <td>${i.weight_total != null ? i.weight_total + ' kg' : '-'}</td>
       <td>${fmt(i.capture_date)}</td>
-      <td>${i.hunter_name || '-'}</td>
+      <td>${esc2(i.hunter_name || '-')}</td>
       <td style="color:var(--red);font-size:12px;">${new Date(i.deleted_at).toLocaleString('ja-JP')}</td>
       <td><button class="btn btn-sm" onclick="indRestore('${i.label_id}')">復元</button></td>
     </tr>`).join('');
