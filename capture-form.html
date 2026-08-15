@@ -1655,8 +1655,9 @@ function onOazaSearch() {
   note.textContent = `✓ 「${val}」は「${district}」の大字です。地区を自動で選びました。`;
 }
 
-// 白浜町・和田町は台帳の現住所表記が旧町名つき（例: 白浜町乙浜・和田町黒岩）。その表記で選べるようにする
-const PREFIX_OLDTOWNS = ['白浜町', '和田町'];
+// 南房総市で現住所に旧町名が残る4町（富浦町・千倉町・白浜町・和田町）は旧町名つきで表記
+// （例: 富浦町南無谷・千倉町白間津・白浜町乙浜・和田町黒岩）。三芳村・丸山町・富山町は大字のみ。
+const PREFIX_OLDTOWNS = ['富浦町', '千倉町', '白浜町', '和田町'];
 function areaLabelOfRow(r, city) {
   const oaza = r.oaza || '';
   if (city === '南房総市' && PREFIX_OLDTOWNS.indexOf(r.district || '') >= 0) return (r.district || '') + oaza;
@@ -2880,8 +2881,8 @@ const PICKUP_COMPANY = '合同会社アルコ';
 const CENTER = { lat: 34.9966, lng: 139.8699 };   // 館山ジビエセンター
 const PICKUP_RADIUS_KM = 10;
 const PICKUP_OAZA = new Set([
-  // 富浦地区(6)
-  '南無谷', '豊岡', '大津', '丹生', '手取', '居倉',
+  // 富浦地区(6) 富浦町は現住所に旧町名が残る
+  '富浦町南無谷', '富浦町豊岡', '富浦町大津', '富浦町丹生', '富浦町手取', '富浦町居倉',
   // 富山地区(17)
   '久枝', '市部', '竹内', '高崎', '小浦', '宮谷', '合戸', '二部', '検儀谷',
   '平久里中', '山田', '荒川', '川上', '井野', '吉沢', '平久里下', '犬掛',

@@ -18,6 +18,8 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
     { city: '南房総市', district: '白浜町', oaza: '滝口', address_label: '南房総市白浜町滝口' },
     { city: '南房総市', district: '和田町', oaza: '黒岩', address_label: '南房総市和田町黒岩' },
     { city: '南房総市', district: '三芳村', oaza: '海老敷', address_label: '南房総市三芳村海老敷' },
+    { city: '南房総市', district: '富浦町', oaza: '南無谷', address_label: '南房総市富浦町南無谷' },
+    { city: '南房総市', district: '千倉町', oaza: '白間津', address_label: '南房総市千倉町白間津' },
     { city: '館山市', district: '豊房', oaza: '神余', address_label: '館山市神余' },
   ];
   await p.route('**/rest/v1/**', route => {
@@ -46,6 +48,10 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   ck('和田町の大字が「和田町黒岩」表記で出る', wada.includes('和田町黒岩'), JSON.stringify(wada));
   const sanbu = await p.evaluate(() => { renderOazaButtons('南房総市', '三芳村'); return [...document.querySelectorAll('#oazaBtns .toggle-btn')].map(x => x.textContent); });
   ck('三芳村など旧村は従来どおり大字のみ（海老敷）', sanbu.includes('海老敷') && !sanbu.includes('三芳村海老敷'), JSON.stringify(sanbu));
+  const tomiura = await p.evaluate(() => { renderOazaButtons('南房総市', '富浦町'); return [...document.querySelectorAll('#oazaBtns .toggle-btn')].map(x => x.textContent); });
+  ck('富浦町は旧町名つき（富浦町南無谷）', tomiura.includes('富浦町南無谷'), JSON.stringify(tomiura));
+  const chikura = await p.evaluate(() => { renderOazaButtons('南房総市', '千倉町'); return [...document.querySelectorAll('#oazaBtns .toggle-btn')].map(x => x.textContent); });
+  ck('千倉町は旧町名つき（千倉町白間津）', chikura.includes('千倉町白間津'), JSON.stringify(chikura));
 
   // 白浜町乙浜のボタンを押すと captureArea が現住所表記で入る
   const pick = await p.evaluate(() => {

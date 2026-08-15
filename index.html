@@ -9064,7 +9064,7 @@ async function loadMasterDatalists() {
     const as = await sb('GET', 'area_master', null, '?select=oaza,district,city&order=sort_order.asc&limit=500');
     areaMasterRows = as;   // 地区名の点検にも使う
     // 捕獲票入力と同じ現住所表記で候補を出す（白浜町・和田町は旧町名つき＝白浜町乙浜／和田町黒岩）
-    const PREFIX_OLDTOWNS = ['白浜町', '和田町'];
+    const PREFIX_OLDTOWNS = ['富浦町', '千倉町', '白浜町', '和田町'];
     const areaLabel = a => (a.city === '南房総市' && PREFIX_OLDTOWNS.indexOf(a.district || '') >= 0)
       ? (a.district || '') + (a.oaza || '') : (a.oaza || '');
     if (as.length) document.getElementById('dl-area').innerHTML =
