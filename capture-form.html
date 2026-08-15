@@ -123,10 +123,11 @@ input, select, textarea, button { font-family: inherit; font-size: 1rem; }
   -webkit-user-select: none; user-select: none;
 }
 .toggle-btn.active {
-  background: rgba(37,109,31,0.13);
+  background: var(--gold);
   border-color: var(--gold);
-  color: var(--gold-light);
-  font-weight: 700;
+  color: #fff;
+  font-weight: 800;
+  box-shadow: 0 0 0 3px rgba(37,109,31,0.30);
 }
 .toggle-btn:active { transform: scale(0.97); }
 
@@ -238,7 +239,8 @@ textarea { min-height: 80px; resize: vertical; }
 .usual-chip { border: 2px solid var(--border2); background: var(--surface2); color: var(--text); border-radius: 999px; padding: 10px 16px; font-size: 1.05rem; font-weight: 600; cursor: pointer; -webkit-user-select: none; user-select: none; }
 .usual-chip .u-n { color: var(--text3); font-size: 0.82rem; font-weight: 600; margin-left: 4px; }
 .usual-chip.top { border-color: var(--gold); background: rgba(37,109,31,0.10); }
-.usual-chip.active { border-color: var(--gold); background: rgba(37,109,31,0.16); color: var(--gold-light); font-weight: 800; }
+.usual-chip.active { border-color: var(--gold); background: var(--gold); color: #fff; font-weight: 800; box-shadow: 0 0 0 3px rgba(37,109,31,0.30); }
+.usual-chip.active .u-n { color: rgba(255,255,255,.85); }
 .usual-chip:active { transform: scale(0.97); }
 .submit-btn:disabled {
   opacity: 0.4; cursor: not-allowed; transform: none;
@@ -476,9 +478,18 @@ textarea { min-height: 80px; resize: vertical; }
         <div id="hunterNameWarning" style="display:none;color:#e0a020;font-size:12px;font-weight:600;margin-top:4px;"></div>
       </div>
 
+      <div class="form-row" style="position:relative;">
+        <label class="form-label">搬入者（捕獲者と別のとき）</label>
+        <input type="text" class="input" id="carrierName" placeholder="空欄＝捕獲者と同じ（かな・漢字で予測）" autocomplete="off" oninput="onCarrierInput()" onfocus="onCarrierInput()">
+        <div id="carrierSuggest" style="display:none;"></div>
+      </div>
+
       <!-- いつもの（過去データから頻度順・タップで入力） -->
       <div id="usualPanel" style="display:none;">
-        <div class="usual-group"><div class="usual-label">いつもの捕獲場所（タップで入力）</div><div class="usual-chips" id="usualAreas"></div></div>
+        <div class="usual-group">
+          <div class="usual-label">いつもの捕獲場所（タップで入力）　<button type="button" onclick="pickNewArea()" style="background:var(--surface2);border:1px solid var(--gold);color:var(--gold-light);border-radius:999px;padding:5px 14px;font-size:0.92rem;font-weight:700;cursor:pointer;">🆕 別の地区を選ぶ</button></div>
+          <div class="usual-chips" id="usualAreas"></div>
+        </div>
         <div class="usual-group"><div class="usual-label">いつもの捕獲方法</div><div class="usual-chips" id="usualMethods"></div></div>
         <div class="usual-group"><div class="usual-label">いつもの止めさし方法</div><div class="usual-chips" id="usualFinish"></div></div>
       </div>
@@ -503,6 +514,7 @@ textarea { min-height: 80px; resize: vertical; }
           <div class="toggle-btn" data-val="電気">電気</div>
           <div class="toggle-btn" data-val="その他">その他</div>
         </div>
+        <div class="field-note" style="font-size:12px;color:var(--text2);margin-top:6px;">※止めさし方法は<b>初めに行った手法</b>を選択してください</div>
       </div>
       <div class="form-row" style="position:relative;">
         <label class="form-label">止め刺し者（捕獲者と別の場合のみ）</label>
@@ -587,7 +599,7 @@ textarea { min-height: 80px; resize: vertical; }
     <div class="section-body">
       <div class="form-row" style="display:flex;flex-wrap:wrap;gap:12px 28px;align-items:flex-start;">
         <div style="flex:1 1 150px;min-width:0;">
-          <label class="form-label">捕獲日<span class="req-badge">必須</span></label>
+          <label class="form-label">持込日<span class="req-badge">必須</span></label>
           <input type="date" class="input" id="captureDate">
         </div>
         <div style="flex:1 1 150px;min-width:0;">
@@ -899,6 +911,7 @@ textarea { min-height: 80px; resize: vertical; }
     <button type="button" class="now-btn" style="width:100%;padding:12px;font-size:14px;" onclick="showBoardSample()">📷 撮影用ボードの見本を表示（文字サイズを調整）</button>
     <div style="font-size:11.5px;color:var(--text2);margin-top:4px;line-height:1.6;">一覧の個体を押すと、その個体の情報が大きな文字で出ます（個体と一緒に撮影用）。ボード上で<strong>左右にスワイプ</strong>すると文字サイズを変えられます。</div>
   </div>
+  <div id="prevDayInfo" style="display:none;margin-bottom:10px;padding:11px 13px;border-radius:10px;background:var(--surface2);border:1px solid var(--border2);font-size:13px;color:var(--text2);line-height:1.6;"></div>
   <div class="card-list" id="cardList"></div>
   <div id="listEmpty" style="text-align:center;padding:40px;color:var(--text3);display:none;">
     本日の搬入データはありません
@@ -1427,6 +1440,11 @@ function positionNameSuggest(inp, box) {
 }
 function onHunterInput() { renderNameSuggest('hunterName', 'hunterSuggest', 'pickHunterSuggest'); }
 function onFinisherInput() { renderNameSuggest('finisherName', 'finisherSuggest', 'pickFinisherSuggest'); }
+function onCarrierInput() { renderNameSuggest('carrierName', 'carrierSuggest', 'pickCarrierSuggest'); }
+function pickCarrierSuggest(name) {
+  const inp = document.getElementById('carrierName'); if (inp) inp.value = name;
+  const box = document.getElementById('carrierSuggest'); if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+}
 function pickHunterSuggest(name) {
   const inp = document.getElementById('hunterName'); if (inp) inp.value = name;
   const box = document.getElementById('hunterSuggest'); if (box) { box.style.display = 'none'; box.innerHTML = ''; }
@@ -1439,7 +1457,7 @@ function pickFinisherSuggest(name) {
   if (typeof checkHunterNameWarning === 'function') checkHunterNameWarning('finisherName', 'finisherNameWarning');
 }
 (function setupNameSuggest() {
-  const boxes = ['hunterSuggest', 'finisherSuggest'];
+  const boxes = ['hunterSuggest', 'finisherSuggest', 'carrierSuggest'];
   boxes.forEach(function (bid) {
     const box = document.getElementById(bid); if (!box) return;
     // タップ（pointerdown）で確定。blur より先に発火させて候補選択を確実に
@@ -1879,6 +1897,16 @@ function editArea() {
   const c = document.getElementById('cityRow'); if (c) c.style.display = '';
   if (state.capture_city && typeof updateAreaDropdown === 'function') updateAreaDropdown(state.capture_city);
 }
+// 「別の地区を選ぶ」→ いつもの場所を解除して選択UIを開き、そこへスクロール（スクロール量を減らす）
+function pickNewArea() {
+  document.getElementById('captureArea').value = '';
+  const pr = document.getElementById('areaPickedRow'); if (pr) pr.style.display = 'none';
+  editArea();
+  const row = document.getElementById('cityRow');
+  if (row && row.scrollIntoView) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (typeof updatePickupNotice === 'function') updatePickupNotice();
+  if (typeof renderMissing === 'function') renderMissing();
+}
 function clearAreaDone() {
   const b = document.getElementById('areaDoneRow'); if (b) b.style.display = 'none';
   const c = document.getElementById('cityRow'); if (c) c.style.display = '';
@@ -2022,6 +2050,7 @@ function loadForEdit(rec) {
   };
   sv('captureDate', rec.capture_date);
   sv('captureTime', rec.capture_time);
+  sv('carrierName', rec.carrier_name);
   updateMishitRef();
   sv('captureArea', rec.capture_area);
   if (rec.capture_area) {
@@ -2601,6 +2630,7 @@ async function handleSubmit() {
         ? ((document.getElementById('intakeStaff')?.value || '').trim() || null) : null,
       // 引取のときは「止めさし・引取あり（買取−3,000円）」を自動でチェック
       stopkill_pickup: state.intake_method === '引取',
+      carrier_name: (document.getElementById('carrierName')?.value || '').trim() || null,
       recorder: document.getElementById('recorder').value,
       memo: document.getElementById('memo').value
     };
@@ -2763,7 +2793,7 @@ async function hunterDoneCityForm(){
 /* ── Reset form ── */
 function resetForm() {
   clearAreaDone();
-  ['hunterSuggest', 'finisherSuggest'].forEach(id => { const e = document.getElementById(id); if (e) { e.style.display = 'none'; e.innerHTML = ''; } });
+  ['hunterSuggest', 'finisherSuggest', 'carrierSuggest'].forEach(id => { const e = document.getElementById(id); if (e) { e.style.display = 'none'; e.innerHTML = ''; } });
   // Reset toggles
   document.querySelectorAll('.toggle-group').forEach(group => {
     const field = group.dataset.field;
@@ -2783,7 +2813,7 @@ function resetForm() {
   const _pn = document.getElementById('pickupNotice'); if (_pn) _pn.classList.remove('show');
 
   // Clear inputs
-  ['weight','age','hunterName','finisherName','bleedTime','receiveTime',
+  ['weight','age','hunterName','finisherName','carrierName','bleedTime','receiveTime',
    'transportStart','processTime','healthIssues','memo','recorder'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.value = ''; if (el.dataset) el.dataset.autofill = ''; }
@@ -2842,6 +2872,21 @@ async function loadList() {
     todayData = [];
   }
   renderList();
+  loadPrevDayInfo();
+}
+// 前回搬入日の最終番号を表示（本日の番号がこれ以降か＝サンプル入力の判別の目安に）
+async function loadPrevDayInfo() {
+  const el = document.getElementById('prevDayInfo'); if (!el) return;
+  try {
+    const rows = await sb('GET', 'individuals', null,
+      `?capture_date=lt.${today()}&deleted_at=is.null&species=eq.イノシシ&select=capture_date,serial_number,label_id&order=capture_date.desc,serial_number.desc&limit=1`);
+    if (rows && rows.length && rows[0].serial_number != null) {
+      const r = rows[0];
+      el.innerHTML = '📌 前回（' + (r.capture_date || '') + '）の最終番号　<b style="color:var(--gold-light);font-size:15px;">通し ' + r.serial_number + ' ／ ' + (r.label_id || '') + '</b>'
+        + '<br><span style="font-size:11px;">本日の番号がこれ以降か確認（サンプル入力の判別の目安）</span>';
+      el.style.display = '';
+    } else { el.style.display = 'none'; }
+  } catch (e) { el.style.display = 'none'; }
 }
 
 function renderList() {
