@@ -1400,6 +1400,30 @@ function renderNameSuggest(inputId, boxId, pickFnName) {
   if (!hits.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
   box.innerHTML = hits.map(h => `<div class="hsg-item" data-name="${esc(h.name)}" data-pick="${pickFnName}">${esc(h.name)}${h.furi ? `<span class="hsg-furi">${esc(h.furi)}</span>` : ''}</div>`).join('');
   box.style.display = 'block';
+  positionNameSuggest(inp, box);
+}
+// セクションの overflow:hidden で候補が見切れないよう、画面基準(fixed)で入力欄の直下に配置。
+// 下に入らない場合は上に開き、高さは画面内に収める。
+function positionNameSuggest(inp, box) {
+  const r = inp.getBoundingClientRect();
+  const gap = 2, margin = 8;
+  const below = window.innerHeight - r.bottom - margin;
+  const above = r.top - margin;
+  box.style.position = 'fixed';
+  box.style.marginTop = '0';
+  box.style.left = r.left + 'px';
+  box.style.right = 'auto';
+  box.style.width = r.width + 'px';
+  if (below < 180 && above > below) {
+    // 下の余白が狭い → 上に開く
+    box.style.top = 'auto';
+    box.style.bottom = (window.innerHeight - r.top + gap) + 'px';
+    box.style.maxHeight = Math.max(140, above) + 'px';
+  } else {
+    box.style.bottom = 'auto';
+    box.style.top = (r.bottom + gap) + 'px';
+    box.style.maxHeight = Math.max(140, below) + 'px';
+  }
 }
 function onHunterInput() { renderNameSuggest('hunterName', 'hunterSuggest', 'pickHunterSuggest'); }
 function onFinisherInput() { renderNameSuggest('finisherName', 'finisherSuggest', 'pickFinisherSuggest'); }
