@@ -489,9 +489,9 @@ textarea { min-height: 80px; resize: vertical; }
       <div class="form-row">
         <label class="form-label">止めさし方法<span class="req-badge">必須</span></label>
         <div class="toggle-group" data-field="finishing_method">
-          <div class="toggle-btn" data-val="電気">電気</div>
-          <div class="toggle-btn" data-val="銃">銃</div>
           <div class="toggle-btn" data-val="ナイフ">ナイフ</div>
+          <div class="toggle-btn" data-val="銃">銃</div>
+          <div class="toggle-btn" data-val="電気">電気</div>
           <div class="toggle-btn" data-val="その他">その他</div>
         </div>
       </div>
@@ -581,9 +581,9 @@ textarea { min-height: 80px; resize: vertical; }
           <input type="date" class="input" id="captureDate">
         </div>
         <div style="flex:1;">
-          <label class="form-label">捕獲時刻<span class="req-badge">必須</span></label>
+          <label class="form-label">目視時刻<span class="req-badge">必須</span></label>
           <div class="time-wrap">
-            <input type="time" class="input" id="captureTime">
+            <input type="time" class="input" id="captureTime" oninput="updateMishitRef()">
             <button type="button" class="now-btn" onclick="setNow('captureTime')">今</button>
           </div>
           <div class="field-note" style="font-size:12px;color:var(--text2);margin-top:4px;">※捕獲個体を初めて目視した時間</div>
@@ -745,6 +745,7 @@ textarea { min-height: 80px; resize: vertical; }
       <div class="form-row" style="display:flex;gap:10px;">
         <div style="flex:1;">
           <label class="form-label">放血開始<span class="req-badge">必須</span></label>
+          <div id="mishitRef" style="display:none;font-size:12px;color:var(--gold-light);font-weight:700;margin-bottom:4px;"></div>
           <div class="time-wrap">
             <input type="time" class="input time-track" id="bleedTime" oninput="checkBleedingToIntakeTime()">
             <button type="button" class="now-btn" onclick="setNow('bleedTime')">今</button>
@@ -1263,6 +1264,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const now = new Date();
   document.getElementById('captureDate').value = formatDate(now);
   document.getElementById('captureTime').value = formatTime(now);
+  if (typeof updateMishitRef === 'function') updateMishitRef();
   // 採番の開始番号（全端末共通）は、番号を作り始める前に読む
   await loadNumStart();
   setupToggles();
@@ -1299,6 +1301,15 @@ function setNow(id) {
   // elapsedの再計算が必要な場合
   if (id === 'bleedTime' || id === 'receiveTime') calcElapsed();
   if (id === 'receiveTime') syncProcessTime();
+  if (id === 'captureTime') updateMishitRef();
+}
+// 目視時刻を放血開始の近くに参考表示（止めさしのタイミングの目安に）
+function updateMishitRef() {
+  const ref = document.getElementById('mishitRef');
+  if (!ref) return;
+  const t = (document.getElementById('captureTime')?.value || '').trim();
+  if (t) { ref.textContent = '👁 目視時刻 ' + t + '（参考）'; ref.style.display = ''; }
+  else { ref.style.display = 'none'; }
 }
 
 /* "10:00"/"1000" に分を足して "HH:MM" を返す。読めない書き方なら null */
@@ -1894,6 +1905,7 @@ function loadForEdit(rec) {
   };
   sv('captureDate', rec.capture_date);
   sv('captureTime', rec.capture_time);
+  updateMishitRef();
   sv('captureArea', rec.capture_area);
   if (rec.capture_area) {
     const lbl = document.getElementById('areaPickedLabel');
@@ -2309,7 +2321,7 @@ async function svCleanupOldPhotos() {
    「空欄のまま一旦保存」はできるが、何が抜けているかは必ず見えるようにする。 */
 const MISSING_CHECKS = [
   { label: '捕獲年月日', get: () => document.getElementById('captureDate')?.value },
-  { label: '捕獲時刻', get: () => document.getElementById('captureTime')?.value },
+  { label: '目視時刻', get: () => document.getElementById('captureTime')?.value },
   { label: '捕獲場所（大字）', get: () => document.getElementById('captureArea')?.value },
   { label: '捕獲者', get: () => document.getElementById('hunterName')?.value },
   { label: '体重', get: () => document.getElementById('weight')?.value },
@@ -2636,6 +2648,7 @@ function resetForm() {
   const now = new Date();
   document.getElementById('captureDate').value = formatDate(now);
   document.getElementById('captureTime').value = formatTime(now);
+  if (typeof updateMishitRef === 'function') updateMishitRef();
 
   // Clear checkboxes
   document.querySelectorAll('.check-item').forEach(c => c.classList.remove('checked'));
