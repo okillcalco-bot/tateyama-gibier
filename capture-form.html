@@ -1051,6 +1051,27 @@ function updateDeviceRevokeVis() {
   if (el) el.style.display = staffKeyGet() ? 'inline-block' : 'none';
 }
 window.addEventListener('DOMContentLoaded', updateDeviceRevokeVis);
+
+// 共有リンク(#skey=…)でこの端末を一度だけ認証する。
+// 管理者がセンターの各端末でリンクを開くだけ＝現場スタッフはキー入力不要。
+// 生キーはURLフラグメントのみ（サーバへ送られない）→トークン化して即URLから消す。端末に生キーは残さない。
+async function setupDeviceFromHash() {
+  let h = ''; try { h = location.hash || ''; } catch (e) {}
+  const m = h.match(/[#&]skey=([^&]+)/);
+  if (!m) return;
+  let key = ''; try { key = decodeURIComponent(m[1]).trim(); } catch (e) { key = (m[1] || '').trim(); }
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { try { location.hash = ''; } catch (_e) {} }
+  if (!key) return;
+  try {
+    const res = await sbRpc('staff_device_register', { p_staff_key: key, p_label: (navigator.userAgent || '').slice(0, 60) });
+    if (res && res.token) {
+      try { localStorage.setItem(TG_TOKEN_KEY, res.token); } catch (e) { try { sessionStorage.setItem(TG_TOKEN_KEY, res.token); } catch (_e) {} }
+      updateDeviceRevokeVis();
+      alert('この端末を認証しました。以後この端末では、編集・削除・正式番号での登録に再入力は不要です。');
+    } else { alert('認証リンクが正しくありません'); }
+  } catch (e) { alert('端末の認証に失敗しました: ' + (e.message || e)); }
+}
+window.addEventListener('DOMContentLoaded', setupDeviceFromHash);
 // ネットワーク起因（オフライン/タイムアウト/5xx）のみ再送対象。4xx/RLSは再送しない
 function isRetryable(e) {
   const s = e && e.status;

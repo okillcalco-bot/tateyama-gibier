@@ -579,6 +579,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <span>個体一覧</span>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           <button class="btn" onclick="indShowTrash()" id="indTrashBtn">🗑 削除履歴</button>
+          <button class="btn" onclick="copyDeviceSetupLink()" title="現場端末をキー入力なしで認証するリンクをコピー（各端末で一度開くだけ）">🔗端末認証リンク</button>
           <button class="btn" id="deviceRevokeBtn" onclick="staffDeviceRevoke()" style="display:none;" title="この端末の個体編集の認証を解除（共有端末・紛失時）">🔓認証解除</button>
           <button class="btn btn-danger" id="indBulkDelBtn" style="display:none;" onclick="indBulkDelete()">選択削除</button>
           <button class="btn btn-primary" onclick="indOpenNew()">＋ 新規登録</button>
@@ -7330,6 +7331,20 @@ function updateDeviceRevokeVis() {
   if (el) el.style.display = deviceTokenGet() ? 'inline-block' : 'none';
 }
 window.addEventListener('DOMContentLoaded', updateDeviceRevokeVis);
+
+// 管理者用: 現場端末をキー入力なしで認証するための共有リンクをコピー。
+// 各センター端末でこのリンクを一度開くだけで端末トークンが設定される（生キーはURLから即消去）。
+async function copyDeviceSetupLink() {
+  let key = staffKeyGet();                 // 業務OSのRLS用に既に入っている生キー
+  if (!key) { key = await staffKeyEnsure(); }
+  if (!key) { toast('スタッフキーが未確認のため中止しました', 'error'); return; }
+  const base = location.origin;
+  const capLink = base + '/capture-form.html#skey=' + encodeURIComponent(key);
+  const recLink = base + '/record-list.html#skey=' + encodeURIComponent(key);
+  const text = '【現場端末の認証リンク（各端末で一度だけ開く）】\n捕獲票入力: ' + capLink + '\n搬入一覧: ' + recLink;
+  try { await navigator.clipboard.writeText(text); toast('認証リンクをコピーしました。各端末で一度開けば以後は入力不要です'); }
+  catch (e) { prompt('この内容を各端末へ送ってください（各端末で一度開く）:', text); }
+}
 
 // スタッフ認証つきの個体書込RPC（P0-2: anon直接更新の廃止に向けて）
 async function indWrite(fn, args) {
