@@ -586,8 +586,18 @@ async function saveCell(el) {
 async function saveField(el) {
   const field = el.dataset.field;
   const id = el.dataset.id;
-  const val = el.value || null;
-  await patchRecord(id, { [field]: val });
+  const val = (el.value !== undefined && el.value !== null) ? el.value : ((el.textContent || '').trim() || null);
+  // 個体番号は統合RPCで変更（FKカスケード＋在庫コード同期＋削除済み含む重複禁止）
+  if (field === 'label_id') {
+    try {
+      const key = await staffKeyEnsure();
+      if (!key) { showToast('スタッフキーが未確認のため中止しました', true); return; }
+      await sbRpc('staff_individual_edit', { p_staff_key: key, p_id: id, p_patch: {}, p_new_label: (val || '').trim(), p_reason: '搬入一覧での番号変更' });
+      showToast('保存しました');
+    } catch (e) { showToast('保存エラー: ' + e.message, true); }
+  } else {
+    await patchRecord(id, { [field]: val });
+  }
   const row = allData.find(r => String(r.id) === String(id));
   if (row) row[field] = val;
 }

@@ -1079,6 +1079,19 @@ function isRetryable(e) {
   return s >= 500 && s < 600;              // サーバ側の一時障害
 }
 
+// 公開登録(public_capture_submit)で送ってよい項目だけに絞る（サーバは許可外キーを拒否する）。
+// label_id/serial_number/intake_status/受入時刻/品質/担当者などの正式・受入情報は含めない。
+const PUBLIC_SUBMIT_KEYS = ['species','sex','weight_total','age_estimate','capture_date','capture_time',
+  'weather','capture_city','capture_area','capture_koaza','hunter_name','capture_method','finishing_method',
+  'trap_part','trap_set_date','trap_number','bait_type','is_juvenile','finisher_name','capture_lat','capture_lng',
+  'hit_location','bleed_time','bleed_location','gutting','capture_anomalies','hunter_health_ok','hunter_health_issues',
+  'organ_anomalies','has_fetus','intake_method','carrier_name','memo','notes','submitter_name','special_notes',
+  'body_length_cm','disposal_method'];
+// センター受入(staff_capture_intake)で送ってよい項目（正式番号・受入情報を含む）
+const STAFF_INTAKE_KEYS = PUBLIC_SUBMIT_KEYS.concat(['label_id','serial_number','intake_status',
+  'receive_time','transport_start','process_time','quality','intake_staff','stopkill_pickup','recorder']);
+function pickKeys(obj, keys) { const o = {}; for (const k of keys) { if (obj[k] !== undefined) o[k] = obj[k]; } return o; }
+
 /* ── Individual numbering ── */
 function getIndividualPrefix(species, city) {
   if (species === 'イノシシ') return city === '南房総市' ? 'M' : 'T';
@@ -2525,7 +2538,16 @@ async function svAfterSave(rec) {
       if (kind === 'extra') { patch.photo_extra = path; uploaded.photo_extra = path; }
     }
   } catch (e) { alert('写真のアップロードに失敗しました。票だけ作ります。\n' + String(e.message || e).slice(0, 120)); }
-  try { await sbRpc('public_capture_update_survey', { p_label_id: labelId, p_patch: patch }); } catch (e) {}
+  try {
+    if (window._submissionToken) {
+      // 登録直後: 提出者トークンで自分の個体に調査票を追記
+      await sbRpc('public_capture_update_survey', { p_submission_token: window._submissionToken, p_patch: patch, p_request_id: newRequestId() });
+    } else {
+      // 編集経由など: スタッフ認証で更新
+      const key = await staffKeyEnsure();
+      if (key && (rec.id || editRecordId)) await sbRpc('staff_individual_update', { p_staff_key: key, p_id: (rec.id || editRecordId), p_patch: patch });
+    }
+  } catch (e) {}
   const merged = Object.assign({}, rec, patch, uploaded, {
     label_id: labelId,
     hunter_tel: (document.getElementById('svHunterTel')?.value || '').trim(),
@@ -2553,8 +2575,12 @@ async function svCleanupOldPhotos() {
           headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ prefixes: paths }),
         });
-        await sbRpc('public_capture_update_survey', { p_label_id: r.label_id,
-          p_patch: { photo_tail_before: null, photo_tail_after: null, photo_extra: null } });
+        // DBの写真参照クリアはスタッフ操作（提出者トークンは短命のため）。認証があるときだけ実施。
+        const _k = staffKeyGet();
+        if (_k) {
+          const _row = await sb('GET', 'individuals', null, '?label_id=eq.' + encodeURIComponent(r.label_id) + '&select=id&limit=1');
+          if (_row && _row[0]) await sbRpc('staff_individual_update', { p_staff_key: _k, p_id: _row[0].id, p_patch: { photo_tail_before: null, photo_tail_after: null, photo_extra: null } });
+        }
       } catch (e) { /* 1件失敗しても他を続ける */ }
     }
     if (rows.length) console.log(`調査票の写真を${rows.length}件分 自動削除しました（提出から${SV_KEEP_DAYS}日経過）`);
@@ -2736,35 +2762,40 @@ async function handleSubmit() {
 
     let saved;
     const reqId = newRequestId();
+    window._submissionToken = null;
     try {
       if (editMode && editRecordId) {
-        // 既存データの修正はスタッフ操作。スタッフキー認証つきRPCで更新する。
+        // 既存データの修正はスタッフ操作。編集＋番号変更を単一txで（統合RPC）。
         const key = await staffKeyEnsure();
         if (!key) { alert('スタッフキーが未確認のため保存を中止しました'); btn.disabled = false; btn.textContent = '搬入登録'; return; }
-        const patch = Object.assign({}, record);
-        delete patch.label_id;   // 個体番号は relabel 専用RPCで変更（改ざん防止）
-        await sbRpc('staff_individual_update', { p_staff_key: key, p_id: editRecordId, p_patch: patch });
-        // 個体番号を変更した場合は relabel（FKカスケード＋在庫コード同期を単一Txで）
+        const patch = pickKeys(record, STAFF_INTAKE_KEYS); delete patch.label_id;
         const newLabel = (record.label_id || '').trim();
-        if (newLabel && editRecord && newLabel !== editRecord.label_id) {
-          await sbRpc('staff_individual_relabel', { p_staff_key: key, p_id: editRecordId, p_new_label: newLabel, p_reason: '捕獲票入力の編集' });
-        }
+        const relabel = (newLabel && editRecord && newLabel !== editRecord.label_id) ? newLabel : null;
+        await sbRpc('staff_individual_edit', { p_staff_key: key, p_id: editRecordId, p_patch: patch, p_new_label: relabel, p_reason: '捕獲票入力の編集' });
         saved = Object.assign({}, record, { id: editRecordId });
-      } else {
-        // 新規登録（捕獲者の直接入力）。空枠うめ・冪等はサーバ側RPCが担う。
-        const res = await sbRpc('public_capture_submit', { p_payload: record, p_request_id: reqId });
+      } else if (window.hunterMode) {
+        // 一般捕獲者の登録: 公開RPC。仮番号・搬入待ちはサーバが付与。正式情報は送らない。
+        const res = await sbRpc('public_capture_submit', { p_payload: pickKeys(record, PUBLIC_SUBMIT_KEYS), p_request_id: reqId });
         saved = Object.assign({}, record, res || {});
+        window._submissionToken = res && res.submission_token;
+      } else {
+        // センター受入（スタッフ）: 端末トークン必須。正式番号採番・空枠充当・受入情報。
+        const key = await staffKeyEnsure();
+        if (!key) { alert('スタッフキーが未確認のため保存を中止しました'); btn.disabled = false; btn.textContent = '搬入登録'; return; }
+        const res = await sbRpc('staff_capture_intake', { p_staff_key: key, p_payload: pickKeys(record, STAFF_INTAKE_KEYS), p_request_id: reqId });
+        saved = Object.assign({}, record, res || {});
+        window._submissionToken = res && res.submission_token;
       }
     } catch(e) {
-      if (editMode || !isRetryable(e)) {
-        // 編集の失敗、または入力不備(4xx)はキューに積まず、その場で知らせる
+      // 一般捕獲者のオフライン一時障害のみ端末キューへ（冪等に再送）。編集・受入・4xxはその場で通知。
+      if (window.hunterMode && !editMode && isRetryable(e)) {
+        queueRecord(pickKeys(record, PUBLIC_SUBMIT_KEYS), reqId);
+        saved = Object.assign({}, record, { _queued: true });
+      } else {
         alert('保存できませんでした: ' + (e.message || e));
         btn.disabled = false; btn.textContent = '搬入登録';
         return;
       }
-      // オフライン等の一時障害のみ端末キューへ（request_idで冪等に再送）
-      queueRecord(record, reqId);
-      saved = Object.assign({}, record, { _queued: true });
     }
 
     if (window.hunterMode) {
@@ -3453,9 +3484,11 @@ async function arUploadPhoto(blob) {
   });
   if (!res.ok) throw new Error(await res.text());
   const url = `${SB_URL}/storage/v1/object/public/${SV_BUCKET}/${path}`;
-  // 登録済み個体で看板写真なら、市役所提出用の主画像として image_url に保存
+  // 登録済み個体で看板写真なら、市役所提出用の主画像として image_url に保存。
+  // 任意URLは渡さず object_path のみ。提出者トークン（登録直後）か端末トークン（撮り直し）で認証。
   if (r.label_id && mode === 'board') {
-    await sbRpc('public_attach_capture_photo', { p_label_id: r.label_id, p_image_url: url });
+    const cred = window._submissionToken || await staffKeyEnsure();
+    if (cred) await sbRpc('public_attach_capture_photo', { p_credential: cred, p_label_id: r.label_id, p_object_path: path, p_request_id: newRequestId() });
   }
   return url;
 }

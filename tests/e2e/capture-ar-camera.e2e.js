@@ -28,10 +28,10 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
     const req = route.request();
     const url = decodeURIComponent(req.url());
     const j = x => route.fulfill({ contentType: 'application/json', body: JSON.stringify(x) });
-    // 看板写真の紐付けはRPC public_attach_capture_photo 経由（P0-2）
+    // 看板写真の紐付けはRPC public_attach_capture_photo 経由（object_path＋認証情報・P0-2 v2）
     if (url.includes('/rpc/public_attach_capture_photo') && req.method() === 'POST') {
-      try { const b = JSON.parse(req.postData() || '{}'); if (b.p_image_url) patchedImageUrl = b.p_image_url; } catch (e) {}
-      return j({ id: 'r1', label_id: 'TGC-08-T272' });
+      try { const b = JSON.parse(req.postData() || '{}'); patchedImageUrl = b.p_object_path; global._attachCred = b.p_credential; } catch (e) {}
+      return j({ id: 'r1', label_id: 'TGC-08-T272', image_url: 'x' });
     }
     if (url.includes('/area_master')) return j([{ city: '館山市', district: '豊房', oaza: '神余' }]);
     return j([]);
@@ -80,14 +80,16 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   ck('撮影でJPEG画像を生成', cap.urlOk);
   ck('左下に看板が焼き込まれている', cap.boardDrawn);
 
-  // 実際の arCapture がエラーなく動く → サーバー(capture-photos)へアップロード＋image_url紐づけ
+  // 実際の arCapture がエラーなく動く → サーバー(capture-photos)へアップロード＋object_path紐づけ
   let dl = null;
   p.on('download', d => { dl = d.suggestedFilename(); });
+  await p.evaluate(() => { window._submissionToken = 'st_tok'; });   // 登録直後の提出者トークン
   await p.evaluate(() => arCapture());
   await p.waitForTimeout(800);
   ck('arCapture 実行でエラーなし', true);
   ck('撮影画像をサーバー(capture-photos)へ保存', uploads.length > 0, JSON.stringify(uploads));
-  ck('看板写真を個体のimage_urlに紐づけ', typeof patchedImageUrl === 'string' && patchedImageUrl.includes('capture-photos'), String(patchedImageUrl));
+  ck('看板写真を object_path で紐づけ（任意URLでない）', typeof patchedImageUrl === 'string' && patchedImageUrl.includes('.jpg') && !patchedImageUrl.startsWith('http'), String(patchedImageUrl));
+  ck('紐付けは提出者/端末トークンで認証', global._attachCred === 'st_tok', String(global._attachCred));
   ck('サーバー保存成功時は端末ダウンロードしない', dl === null, String(dl));
 
   // 閉じる → ストリーム停止・非表示

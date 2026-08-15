@@ -5701,12 +5701,9 @@ async function indSave() {
       if (labelChanged && !confirm(`個体管理番号を変更します。\n\n　${indEditId}　→　${label_id}\n\nこの個体に紐づく在庫・加工の記録も新しい番号に付け替わります。よろしいですか？`)) {
         btn.disabled = false; btn.textContent = '保存'; return;
       }
-      // label_id は relabel 専用RPCで変更（個別の監査・在庫コード同期・単一Tx）
+      // 編集＋番号変更を単一トランザクションで（統合RPC）。番号は削除済み含め重複不可。
       const patch = Object.assign({}, payload); delete patch.label_id;
-      await baseRpc('staff_individual_update', { p_staff_key: key, p_id: indEditUuid, p_patch: patch });
-      if (labelChanged) {
-        await baseRpc('staff_individual_relabel', { p_staff_key: key, p_id: indEditUuid, p_new_label: label_id, p_reason: '個体情報編集' });
-      }
+      await baseRpc('staff_individual_edit', { p_staff_key: key, p_id: indEditUuid, p_patch: patch, p_new_label: labelChanged ? label_id : null, p_reason: '個体情報編集' });
       toast('保存しました');
     } else if (indRestoredLabel === label_id) {
       // 削除済みだった個体を復元して上書き（復元→更新を単一のスタッフ操作として）
