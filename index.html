@@ -579,6 +579,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <span>個体一覧</span>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           <button class="btn" onclick="indShowTrash()" id="indTrashBtn">🗑 削除履歴</button>
+          <button class="btn" id="deviceRevokeBtn" onclick="staffDeviceRevoke()" style="display:none;" title="この端末の個体編集の認証を解除（共有端末・紛失時）">🔓認証解除</button>
           <button class="btn btn-danger" id="indBulkDelBtn" style="display:none;" onclick="indBulkDelete()">選択削除</button>
           <button class="btn btn-primary" onclick="indOpenNew()">＋ 新規登録</button>
         </div>
@@ -5230,7 +5231,7 @@ async function pendingDeleteAll() {
   if (!rows.length) { toast('搬入待ちはありません'); return; }
   if (!confirm(`搬入待ちの ${rows.length}件 をすべて削除しますか？\n\n削除履歴に入るので、あとから戻せます。`)) return;
   try {
-    const key = await staffKeyEnsure();
+    const key = await staffTokenEnsure();
     if (!key) { toast('スタッフキーが未確認のため中止しました', 'error'); return; }
     for (const r of rows) { await baseRpc('staff_individual_soft_delete', { p_staff_key: key, p_id: r.id, p_reason: '搬入待ちの一括削除' }); }
     toast(`搬入待ち ${rows.length}件 を削除しました`);
@@ -5293,7 +5294,7 @@ async function indBulkDelete() {
   if (!ids.length) return;
   if (!confirm(`${ids.length}件を削除しますか？\n削除履歴からいつでも復元できます。`)) return;
   try {
-    const key = await staffKeyEnsure();
+    const key = await staffTokenEnsure();
     if (!key) { toast('スタッフキーが未確認のため中止しました', 'error'); return; }
     for (const id of ids) { await baseRpc('staff_individual_soft_delete_by_label', { p_staff_key: key, p_label: id, p_reason: '個体の一括削除' }); }
     toast(`${ids.length}件を削除しました`);
@@ -5692,7 +5693,7 @@ async function indSave() {
     const bs = document.getElementById('ind-f-butcher_staff');
     if (bs) payload.butcher_staff = bs.value.trim() || null;
     // 個体データの書込はスタッフキー認証つきRPC経由（P0-2: anon直接更新の廃止に向けて）
-    const key = await staffKeyEnsure();
+    const key = await staffTokenEnsure();
     if (!key) { toast('スタッフキーが未確認のため保存を中止しました', 'error'); btn.disabled = false; btn.textContent = '保存'; return; }
     if (indEditId) {
       const labelChanged = label_id && label_id !== indEditId;
@@ -7296,9 +7297,43 @@ async function baseRpc(fn, args) {
   return await sb('POST', 'rpc/' + fn, args || {});
 }
 
+// 個体書込RPC用の端末トークン認証（生キーは端末に保存しない・失効可能・30日スライド）。
+// 注: 業務OSのRLSは既存の x-staff-key（生キー）方式のまま。ここは個体書込RPC専用の追加認証。
+async function staffTokenEnsure() {
+  let tok = '';
+  try { tok = localStorage.getItem('tg_device_token') || sessionStorage.getItem('tg_device_token') || ''; } catch (e) {}
+  if (tok) {
+    try { if (await baseRpc('staff_token_ok', { p_token: tok })) return tok; } catch (e) {}
+    try { localStorage.removeItem('tg_device_token'); sessionStorage.removeItem('tg_device_token'); } catch (e) {}
+  }
+  // 既にRLS用の生キーが入っていれば、それでトークンを発行（追加入力なし）
+  let k = staffKeyGet();
+  if (!k) { k = (prompt('スタッフキーを入力してください（この端末を認証します。以後再入力不要）') || '').trim(); if (!k) return ''; }
+  let res;
+  try { res = await baseRpc('staff_device_register', { p_staff_key: k, p_label: (navigator.userAgent || '').slice(0, 60) }); }
+  catch (e) { alert('認証エラー: ' + (e.message || e)); return ''; }
+  if (!res || !res.token) { alert('スタッフキーが違います'); return ''; }
+  try { localStorage.setItem('tg_device_token', res.token); } catch (e) {}
+  updateDeviceRevokeVis();
+  return res.token;
+}
+async function staffDeviceRevoke() {
+  let tok = ''; try { tok = localStorage.getItem('tg_device_token') || ''; } catch (e) {}
+  if (tok) { try { await baseRpc('staff_device_revoke', { p_token: tok }); } catch (e) {} }
+  try { localStorage.removeItem('tg_device_token'); sessionStorage.removeItem('tg_device_token'); } catch (e) {}
+  updateDeviceRevokeVis();
+  toast('この端末の個体編集の認証を解除しました');
+}
+function deviceTokenGet() { try { return localStorage.getItem('tg_device_token') || sessionStorage.getItem('tg_device_token') || ''; } catch (e) { return ''; } }
+function updateDeviceRevokeVis() {
+  const el = document.getElementById('deviceRevokeBtn');
+  if (el) el.style.display = deviceTokenGet() ? 'inline-block' : 'none';
+}
+window.addEventListener('DOMContentLoaded', updateDeviceRevokeVis);
+
 // スタッフ認証つきの個体書込RPC（P0-2: anon直接更新の廃止に向けて）
 async function indWrite(fn, args) {
-  const key = await staffKeyEnsure();
+  const key = await staffTokenEnsure();
   if (!key) throw new Error('スタッフキーが未確認です');
   return await baseRpc(fn, Object.assign({ p_staff_key: key }, args || {}));
 }
@@ -8212,7 +8247,7 @@ async function radSave() {
   const btn = document.getElementById('rad-save-btn');
   btn.disabled = true;
   try {
-    const key = await staffKeyEnsure();
+    const key = await staffTokenEnsure();
     if (!key) { toast('スタッフキーが未確認のため中止しました', 'error'); btn.disabled = false; return; }
     const radPatch = { radiation_test_date: date, radiation_result_date: date, radiation_result: radResult };
     for (const p of radPending) {

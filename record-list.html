@@ -154,6 +154,7 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-colo
   </div>
   <div style="display:flex;gap:8px;">
     <button class="btn btn-amber" onclick="exportXLSX()">â¬ Excelåºå</button>
+    <button class="btn btn-secondary" id="deviceRevokeBtn" onclick="staffDeviceRevoke()" style="display:none;" title="この端末のスタッフ認証を解除（共有端末・紛失時）">🔓認証解除</button>
     <button class="btn btn-secondary" onclick="loadData()">ð æ´æ°</button>
   </div>
 </div>
@@ -297,16 +298,38 @@ async function sbRpc(fn, args) {
   if (!res.ok) { const e = new Error(t || ('HTTP ' + res.status)); e.status = res.status; throw e; }
   return t ? JSON.parse(t) : null;
 }
-function staffKeyGet() { try { return localStorage.getItem('tg_staff_key') || sessionStorage.getItem('tg_staff_key') || ''; } catch (e) { return ''; } }
-function staffKeyClear() { try { localStorage.removeItem('tg_staff_key'); sessionStorage.removeItem('tg_staff_key'); } catch (e) {} }
+// 端末には生キーを保存せず、失効可能な端末トークンを使う（30日スライド失効）
+const TG_TOKEN_KEY = 'tg_device_token';
+function staffKeyGet() { try { return localStorage.getItem(TG_TOKEN_KEY) || sessionStorage.getItem(TG_TOKEN_KEY) || ''; } catch (e) { return ''; } }
+function staffKeyClear() { try { localStorage.removeItem(TG_TOKEN_KEY); sessionStorage.removeItem(TG_TOKEN_KEY); } catch (e) {} }
 async function staffKeyEnsure() {
-  let k = staffKeyGet();
-  if (!k) { k = (prompt('スタッフキーを入力してください') || '').trim(); if (!k) return ''; }
-  try { if (!await sbRpc('staff_key_ok', { p_staff_key: k })) { alert('スタッフキーが違います'); staffKeyClear(); return ''; } }
-  catch (e) { alert('認証エラー: ' + e.message); return ''; }
-  try { localStorage.setItem('tg_staff_key', k); } catch (e) { try { sessionStorage.setItem('tg_staff_key', k); } catch (_e) {} }
-  return k;
+  let tok = staffKeyGet();
+  if (tok) {
+    try { if (await sbRpc('staff_token_ok', { p_token: tok })) return tok; } catch (e) {}
+    staffKeyClear();
+  }
+  const k = (prompt('スタッフキーを入力してください（この端末を認証します。以後再入力不要）') || '').trim();
+  if (!k) return '';
+  let res;
+  try { res = await sbRpc('staff_device_register', { p_staff_key: k, p_label: (navigator.userAgent || '').slice(0, 60) }); }
+  catch (e) { alert(String(e.message || e).includes('スタッフキー') ? 'スタッフキーが違います' : ('認証エラー: ' + e.message)); return ''; }
+  if (!res || !res.token) { alert('スタッフキーが違います'); return ''; }
+  try { localStorage.setItem(TG_TOKEN_KEY, res.token); } catch (e) { try { sessionStorage.setItem(TG_TOKEN_KEY, res.token); } catch (_e) {} }
+  updateDeviceRevokeVis();
+  return res.token;
 }
+async function staffDeviceRevoke() {
+  const tok = staffKeyGet();
+  if (tok) { try { await sbRpc('staff_device_revoke', { p_token: tok }); } catch (e) {} }
+  staffKeyClear();
+  updateDeviceRevokeVis();
+  alert('この端末の認証を解除しました。次回の編集・削除時に再認証が必要です。');
+}
+function updateDeviceRevokeVis() {
+  const el = document.getElementById('deviceRevokeBtn');
+  if (el) el.style.display = staffKeyGet() ? 'inline-block' : 'none';
+}
+window.addEventListener('DOMContentLoaded', updateDeviceRevokeVis);
 
 let allData = [];
 let filteredData = [];

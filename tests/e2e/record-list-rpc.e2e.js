@@ -22,13 +22,15 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
       let body = {}; try { body = JSON.parse(req.postData() || '{}'); } catch (e) {}
       rpc.push({ fn, body });
       if (fn === 'staff_key_ok') return j(true);
+      if (fn === 'staff_token_ok') return j(true);          // 端末トークン有効
+      if (fn === 'staff_device_register') return j({ token: 'tok-1', expires_at: '2026-09-14' });
       return j({ id: 'x', label_id: (body.p_payload && body.p_payload.label_id) || 'L' });
     }
     if (url.includes('/individuals') && (m === 'POST' || m === 'PATCH')) { directWrites.push(m); return j([]); }
     return j([]);
   });
   await p.goto('http://localhost:9092/record-list.html'); await p.waitForTimeout(400);
-  await p.evaluate(() => { try { localStorage.setItem('tg_staff_key', 'test-key'); } catch (e) {} });
+  await p.evaluate(() => { try { localStorage.setItem('tg_device_token', 'tok-1'); } catch (e) {} });
 
   // 削除: 論理削除RPCで来る
   await p.evaluate(() => { pendingDeleteIds = ['id-1', 'id-2']; return confirmDelete(); });

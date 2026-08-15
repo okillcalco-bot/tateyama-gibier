@@ -437,6 +437,7 @@ textarea { min-height: 80px; resize: vertical; }
   <div style="display:flex;align-items:center;gap:8px;">
     <span class="offline-badge" id="offlineBadge">オフライン</span>
     <span class="offline-badge" id="pendingBadge" style="background:var(--gold2);cursor:pointer;" onclick="showPendingModal()" title="タップで未送信データを確認"></span>
+    <span id="deviceRevokeBtn" onclick="staffDeviceRevoke()" style="display:none;font-size:12px;color:var(--text2);cursor:pointer;border:1px solid var(--border);border-radius:8px;padding:5px 8px;white-space:nowrap;" title="この端末のスタッフ認証を解除（共有端末・紛失時）">🔓認証解除</span>
     <div class="header-badge">今日の搬入: <strong id="todayCount">-</strong>頭</div>
   </div>
 </div>
@@ -1014,17 +1015,42 @@ async function sbRpc(fn, args) {
   return t ? JSON.parse(t) : null;
 }
 
-// スタッフキー（既存データの編集・削除・個体番号変更に必要。捕獲者の新規登録には不要）
-function staffKeyGet() { try { return localStorage.getItem('tg_staff_key') || sessionStorage.getItem('tg_staff_key') || ''; } catch (e) { return ''; } }
-function staffKeyClear() { try { localStorage.removeItem('tg_staff_key'); sessionStorage.removeItem('tg_staff_key'); } catch (e) {} }
+// スタッフ認証（既存データの編集・削除・個体番号変更に必要。捕獲者の新規登録には不要）
+// 端末には「生のスタッフキー」を保存せず、失効可能な端末トークンを保存する。
+// 初回だけスタッフキーで端末を認証→トークンを発行。以後この端末では再入力不要（最終利用から30日で失効）。
+const TG_TOKEN_KEY = 'tg_device_token';
+function staffKeyGet() { try { return localStorage.getItem(TG_TOKEN_KEY) || sessionStorage.getItem(TG_TOKEN_KEY) || ''; } catch (e) { return ''; } }
+function staffKeyClear() { try { localStorage.removeItem(TG_TOKEN_KEY); sessionStorage.removeItem(TG_TOKEN_KEY); } catch (e) {} }
 async function staffKeyEnsure() {
-  let k = staffKeyGet();
-  if (!k) { k = (prompt('スタッフキーを入力してください（既存データの編集・削除に必要）') || '').trim(); if (!k) return ''; }
-  try { if (!await sbRpc('staff_key_ok', { p_staff_key: k })) { alert('スタッフキーが違います'); staffKeyClear(); return ''; } }
-  catch (e) { alert('認証エラー: ' + e.message); return ''; }
-  try { localStorage.setItem('tg_staff_key', k); } catch (e) { try { sessionStorage.setItem('tg_staff_key', k); } catch (_e) {} }
-  return k;
+  let tok = staffKeyGet();
+  if (tok) {
+    try { if (await sbRpc('staff_token_ok', { p_token: tok })) return tok; } catch (e) {}
+    staffKeyClear();   // 失効/期限切れ → 破棄して再認証
+  }
+  const k = (prompt('スタッフキーを入力してください（この端末を認証します。以後この端末では再入力不要）') || '').trim();
+  if (!k) return '';
+  let res;
+  try { res = await sbRpc('staff_device_register', { p_staff_key: k, p_label: (navigator.userAgent || '').slice(0, 60) }); }
+  catch (e) { alert(String(e.message || e).includes('スタッフキー') ? 'スタッフキーが違います' : ('認証エラー: ' + e.message)); return ''; }
+  if (!res || !res.token) { alert('スタッフキーが違います'); return ''; }
+  try { localStorage.setItem(TG_TOKEN_KEY, res.token); } catch (e) { try { sessionStorage.setItem(TG_TOKEN_KEY, res.token); } catch (_e) {} }
+  updateDeviceRevokeVis();
+  return res.token;
 }
+// 「この端末の認証を解除」（共有端末・紛失時に）
+async function staffDeviceRevoke() {
+  const tok = staffKeyGet();
+  if (tok) { try { await sbRpc('staff_device_revoke', { p_token: tok }); } catch (e) {} }
+  staffKeyClear();
+  updateDeviceRevokeVis();
+  alert('この端末の認証を解除しました。次回の編集・削除時に再認証が必要です。');
+}
+// 認証済み端末のときだけ「認証解除」ボタンを見せる
+function updateDeviceRevokeVis() {
+  const el = document.getElementById('deviceRevokeBtn');
+  if (el) el.style.display = staffKeyGet() ? 'inline-block' : 'none';
+}
+window.addEventListener('DOMContentLoaded', updateDeviceRevokeVis);
 // ネットワーク起因（オフライン/タイムアウト/5xx）のみ再送対象。4xx/RLSは再送しない
 function isRetryable(e) {
   const s = e && e.status;
