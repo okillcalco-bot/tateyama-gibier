@@ -413,6 +413,13 @@ textarea { min-height: 80px; resize: vertical; }
 .ar-shutter:active { transform: scale(0.94); }
 #boardScaleTip.show { opacity: 1; }
 
+/* 捕獲者名の予測候補（ふりがな対応） */
+#hunterSuggest { position: absolute; left: 0; right: 0; top: 100%; margin-top: 2px; z-index: 60; background: var(--card, #fff); border: 1px solid var(--border2, #bbb); border-radius: 10px; max-height: 300px; overflow-y: auto; box-shadow: 0 8px 24px rgba(0,0,0,.28); }
+.hsg-item { padding: 13px 14px; font-size: 1.1rem; font-weight: 600; cursor: pointer; border-bottom: 1px solid var(--border, #eee); }
+.hsg-item:last-child { border-bottom: none; }
+.hsg-item:active { background: rgba(201,161,59,.22); }
+.hsg-furi { color: var(--text2, #888); font-size: 0.85rem; font-weight: 400; margin-left: 8px; }
+
 /* Animations */
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .section { animation: fadeIn 0.3s ease; }
@@ -460,9 +467,11 @@ textarea { min-height: 80px; resize: vertical; }
   <div class="section">
     <div class="section-head">① まず捕獲者</div>
     <div class="section-body">
-      <div class="form-row">
+      <div class="form-row" style="position:relative;">
         <label class="form-label">捕獲者名<span class="req-badge">必須</span></label>
-        <input type="text" class="input" id="hunterName" placeholder="氏名を入力・選択" list="hunterList" autocomplete="off" onchange="onHunterPicked()" onblur="checkHunterNameWarning('hunterName','hunterNameWarning')">
+        <input type="text" class="input" id="hunterName" placeholder="氏名（かな・漢字どちらでも予測）" autocomplete="off" oninput="onHunterInput()" onfocus="onHunterInput()" onchange="onHunterPicked()" onblur="checkHunterNameWarning('hunterName','hunterNameWarning')">
+        <div id="hunterSuggest" style="display:none;"></div>
+        <div class="field-note" style="font-size:11px;color:var(--text2);margin-top:4px;">「かとう」など<b>ふりがな</b>でも候補が出ます</div>
         <div id="hunterAreaHint" style="display:none;font-size:0.9rem;color:var(--gold-light);font-weight:600;margin-top:4px;"></div>
         <div id="hunterNameWarning" style="display:none;color:#e0a020;font-size:12px;font-weight:600;margin-top:4px;"></div>
       </div>
@@ -605,7 +614,14 @@ textarea { min-height: 80px; resize: vertical; }
           <div class="toggle-btn" data-val="雪">&#x2744;&#xFE0F; 雪</div>
         </div>
       </div>
-      <div class="form-row">
+      <div class="form-row" id="areaDoneRow" style="display:none">
+        <div style="display:flex;align-items:center;gap:10px;justify-content:space-between;background:rgba(94,140,74,.16);border:1px solid var(--gold);border-radius:10px;padding:11px 12px;">
+          <div id="areaDoneLabel" style="font-size:1.05rem;color:var(--gold-light);font-weight:800;"></div>
+          <button type="button" onclick="editArea()" style="flex:none;background:none;border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer;">変更する</button>
+        </div>
+        <div style="font-size:11px;color:var(--text2);margin-top:4px;">※捕獲者の「いつもの場所」から自動入力されました。地区の再入力は不要です。違う場合だけ「変更する」で選び直してください。</div>
+      </div>
+      <div class="form-row" id="cityRow">
         <label class="form-label">捕獲市町村<span class="req-badge">必須</span></label>
         <div class="toggle-group" data-field="capture_city">
           <div class="toggle-btn" data-val="館山市">館山市</div>
@@ -1353,13 +1369,58 @@ function today() { return formatDate(new Date()); }
 async function refreshAutocomplete() {
   try {
     // 捕獲者台帳に登録のある人のみ（逝去・返納は除外）
-    const hs = await sb('GET', 'hunters', null, '?select=name,memo&deleted_at=is.null&order=name.asc&limit=500');
-    const names = [...new Set(hs.filter(h => !['逝去', '返納'].includes(h.memo)).map(h => h.name).filter(Boolean))];
+    const hs = await sb('GET', 'hunters', null, '?select=name,memo,furigana&deleted_at=is.null&order=name.asc&limit=500');
+    const active = hs.filter(h => !['逝去', '返納'].includes(h.memo) && h.name);
+    const names = [...new Set(active.map(h => h.name))];
     window._hunterNames = names;
+    // 予測候補用（氏名＋ふりがな）。同名は最初の1件だけ
+    const seen = new Set();
+    window._hunterList = active.filter(h => { if (seen.has(h.name)) return false; seen.add(h.name); return true; })
+      .map(h => ({ name: h.name, furi: h.furigana || '' }));
     const hl = document.getElementById('hunterList');
     if (hl && names.length) hl.innerHTML = names.map(h => '<option value="' + h + '">').join('');
   } catch(e) { /* オフライン時はHTMLの固定リストのまま（台帳チェックも行わない） */ }
 }
+// カタカナ→ひらがな・空白除去（かな検索の正規化）
+function _toHira(s) {
+  return String(s == null ? '' : s).replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60)).replace(/\s/g, '').toLowerCase();
+}
+// 捕獲者名の予測候補（氏名の一部 or ふりがなの一部で一致）
+function onHunterInput() {
+  const inp = document.getElementById('hunterName');
+  const box = document.getElementById('hunterSuggest');
+  if (!inp || !box) return;
+  const raw = (inp.value || '').trim();
+  const q = _toHira(raw);
+  const list = window._hunterList || [];
+  if (!q) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const hits = list.filter(h => h.name.includes(raw) || _toHira(h.furi).includes(q) || _toHira(h.name).includes(q)).slice(0, 12);
+  if (!hits.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.innerHTML = hits.map(h => `<div class="hsg-item" data-name="${esc(h.name)}">${esc(h.name)}${h.furi ? `<span class="hsg-furi">${esc(h.furi)}</span>` : ''}</div>`).join('');
+  box.style.display = 'block';
+}
+function pickHunterSuggest(name) {
+  const inp = document.getElementById('hunterName');
+  if (inp) inp.value = name;
+  const box = document.getElementById('hunterSuggest');
+  if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+  if (typeof onHunterPicked === 'function') onHunterPicked();
+  if (typeof checkHunterNameWarning === 'function') checkHunterNameWarning('hunterName', 'hunterNameWarning');
+}
+(function setupHunterSuggest() {
+  const box = document.getElementById('hunterSuggest');
+  if (!box) return;
+  // タップ（pointerdown）で確定。blur より先に発火させて候補選択を確実に
+  box.addEventListener('pointerdown', function (e) {
+    const it = e.target.closest('.hsg-item');
+    if (it) { e.preventDefault(); pickHunterSuggest(it.dataset.name); }
+  });
+  // 入力欄外をタップしたら閉じる
+  document.addEventListener('pointerdown', function (e) {
+    if (!box.contains(e.target) && e.target.id !== 'hunterName') { box.style.display = 'none'; }
+  });
+})();
 /* 捕獲者名・止め刺し者名が台帳に無い場合の扱い。
    センター側（予測変換あり）: 台帳から選べば漢字誤りを防げる。台帳に無い名前なら
    「新しい捕獲者として仮登録」するか確認する（誤字ならキャンセルして直す）。
@@ -1455,7 +1516,7 @@ function setupToggles() {
 }
 
 function onToggleChange(field, val) {
-  if (field === 'capture_city') updateAreaDropdown(val);
+  if (field === 'capture_city') { clearAreaDone(); updateAreaDropdown(val); }
   if (field === 'species' || field === 'capture_city') refreshIndividualNumber();
   if (field === 'gutting') {
     document.getElementById('organSection').style.display = val === 'あり' ? 'block' : 'none';
@@ -1763,8 +1824,27 @@ function applyHunterArea(info) {
     lbl.textContent = '📍 いつもの場所: ' + info.city + (district ? ' → ' + district : '') + ' → ' + oaza;
     document.getElementById('areaPickedRow').style.display = '';
   }
+  // いつもの場所で確定 → 地区の選択UIは畳んで「入力済み」を明示（再入力不要）
+  if (oaza) setAreaDone([info.city, district, oaza].filter(Boolean).join(' '));
   updatePickupNotice();
   if (typeof renderMissing === 'function') renderMissing();
+}
+// 捕獲場所が確定済み（いつもの場所など）→ 選択UIを畳んで「入力済み」バナーを出す
+function setAreaDone(label) {
+  const dl = document.getElementById('areaDoneLabel'); if (dl) dl.textContent = '✓ 捕獲場所 入力済み: ' + label;
+  const show = document.getElementById('areaDoneRow'); if (show) show.style.display = '';
+  ['cityRow', 'oazaSearchRow', 'districtRow', 'oazaRow', 'areaPickedRow'].forEach(id => {
+    const e = document.getElementById(id); if (e) e.style.display = 'none';
+  });
+}
+function editArea() {
+  const b = document.getElementById('areaDoneRow'); if (b) b.style.display = 'none';
+  const c = document.getElementById('cityRow'); if (c) c.style.display = '';
+  if (state.capture_city && typeof updateAreaDropdown === 'function') updateAreaDropdown(state.capture_city);
+}
+function clearAreaDone() {
+  const b = document.getElementById('areaDoneRow'); if (b) b.style.display = 'none';
+  const c = document.getElementById('cityRow'); if (c) c.style.display = '';
 }
 
 /* ── Checkboxes ── */
@@ -2603,6 +2683,8 @@ async function hunterDoneCityForm(){
 }
 /* ── Reset form ── */
 function resetForm() {
+  clearAreaDone();
+  const _hs = document.getElementById('hunterSuggest'); if (_hs) { _hs.style.display = 'none'; _hs.innerHTML = ''; }
   // Reset toggles
   document.querySelectorAll('.toggle-group').forEach(group => {
     const field = group.dataset.field;
