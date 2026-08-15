@@ -84,13 +84,17 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   });
   ck('通知: 非該当地区では非表示', noNotice === false);
 
-  // 4) 捕獲場所ラベル: 館山市は地区（旧村）を省き市＋大字のみ
+  // 4) 捕獲場所ラベル: 地区（旧町村）は入れず市＋大字。白浜町/和田町は大字に旧町名を含む
   const labels = await p.evaluate(() => ({
     tate: placeLabel({ capture_city: '館山市', capture_area: '出野尾' }),
     minami: placeLabel({ capture_city: '南房総市', capture_area: '宮下' }),
+    shirahama: placeLabel({ capture_city: '南房総市', capture_area: '白浜町白浜' }),
+    wada: placeLabel({ capture_city: '南房総市', capture_area: '和田町黒岩' }),
   }));
   ck('場所: 館山市は市＋大字のみ（館山市 出野尾）', labels.tate === '館山市 出野尾', labels.tate);
-  ck('場所: 南房総市は市＋地区＋大字', labels.minami === '南房総市 丸山町 宮下', labels.minami);
+  ck('場所: 南房総市も地区名は入れず市＋大字（南房総市 宮下）', labels.minami === '南房総市 宮下', labels.minami);
+  ck('場所: 白浜町は大字に旧町名（南房総市 白浜町白浜）', labels.shirahama === '南房総市 白浜町白浜', labels.shirahama);
+  ck('場所: 和田町は大字に旧町名（南房総市 和田町黒岩）', labels.wada === '南房総市 和田町黒岩', labels.wada);
 
   // 5) 引き取り撮影＝ホワイトボードのみ（右上）／看板は出さない
   const wb = await p.evaluate(() => {

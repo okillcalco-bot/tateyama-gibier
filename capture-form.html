@@ -434,7 +434,7 @@ textarea { min-height: 80px; resize: vertical; }
   </div>
   <div style="display:flex;align-items:center;gap:8px;">
     <span class="offline-badge" id="offlineBadge">オフライン</span>
-    <span class="offline-badge" id="pendingBadge" style="background:var(--gold2)"></span>
+    <span class="offline-badge" id="pendingBadge" style="background:var(--gold2);cursor:pointer;" onclick="showPendingModal()" title="タップで未送信データを確認"></span>
     <div class="header-badge">今日の搬入: <strong id="todayCount">-</strong>頭</div>
   </div>
 </div>
@@ -2665,6 +2665,47 @@ async function syncPending() {
   if (remaining.length < queue.length) loadTodayCount();
 }
 
+// 未送信（端末内キュー）の中身を確認・削除・今すぐ送信
+function showPendingModal() {
+  const queue = JSON.parse(localStorage.getItem('tgc_queue') || '[]');
+  let ov = document.getElementById('pendingModal');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'pendingModal';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+    ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+    document.body.appendChild(ov);
+  }
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const rows = queue.map((r, i) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;">
+      <div style="font-size:14px;line-height:1.5;">
+        <b>${esc(r.hunter_name || '(捕獲者未入力)')}</b> ／ ${esc(r.species || '')} ${r.weight_total ? esc(r.weight_total) + 'kg' : ''}<br>
+        <span style="color:var(--text2);font-size:12px;">${esc(r.capture_date || '')} ${esc(r.capture_city || '')}${esc(r.capture_area || '')}</span>
+      </div>
+      <button type="button" onclick="deletePending(${i})" style="flex:none;background:#7a2b12;color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;">削除</button>
+    </div>`).join('');
+  ov.innerHTML = `<div style="background:var(--card,#fff);border-radius:14px;max-width:520px;width:100%;max-height:80vh;overflow-y:auto;padding:18px;">
+      <div style="font-size:17px;font-weight:800;margin-bottom:4px;">未送信データ（端末内・${queue.length}件）</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">オフライン等で送信待ちのデータです。通信が戻ると自動送信されます。不要なら削除できます。</div>
+      ${queue.length ? rows : '<div style="color:var(--text2);padding:20px;text-align:center;">未送信データはありません</div>'}
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        ${queue.length ? '<button type="button" id="pendingSyncBtn" onclick="syncPending().then(showPendingModal)" style="flex:1;background:var(--gold);color:#1c1f16;border:none;border-radius:10px;padding:12px;font-weight:800;cursor:pointer;">今すぐ送信を試す</button>' : ''}
+        <button type="button" onclick="document.getElementById('pendingModal').remove()" style="flex:1;background:rgba(120,120,120,.15);border:1px solid var(--border2);color:var(--text);border-radius:10px;padding:12px;font-weight:700;cursor:pointer;">閉じる</button>
+      </div>
+    </div>`;
+}
+function deletePending(i) {
+  const queue = JSON.parse(localStorage.getItem('tgc_queue') || '[]');
+  const r = queue[i];
+  if (!r) return;
+  const label = (r.hunter_name || '(捕獲者未入力)') + ' ／ ' + (r.capture_date || '') + ' ' + (r.capture_city || '') + (r.capture_area || '');
+  if (!confirm('この未送信データを削除しますか？\n\n' + label + '\n\n※端末内のデータを削除します（元に戻せません）')) return;
+  queue.splice(i, 1);
+  localStorage.setItem('tgc_queue', JSON.stringify(queue));
+  updatePendingBadge();
+  showPendingModal();
+}
+
 window.addEventListener('online', () => {
   document.getElementById('offlineBadge').classList.remove('show');
   syncPending();
@@ -2812,15 +2853,14 @@ function districtOfOaza(city, oaza) {
 /* ── 引き取り撮影が必要な地区（館山ジビエセンターから10km外・全57大字） ──
    値は captureArea に保存される現住所表記に一致（富浦/富山/三芳/丸山は大字のみ、和田町は町名付き）。
    全て南房総市内なので、大字のみ表記は city==='南房総市' のときだけ該当とみなす（館山市大井 等の誤判定回避）。*/
-// 捕獲場所の表示ラベル。館山市は地区（旧村）を省き市＋大字のみ（例: 館山市 出野尾）。
-// 南房総市は市＋地区＋現住所表記（例: 南房総市 丸山町 宮下 / 現住所表記に町名を含む和田町はそのまま）。
+// 看板・撮影用の捕獲場所ラベル。地区（旧町村＝豊房/神戸/西岬/富山/三芳/丸山 等）は入れず、
+// 市＋大字（現住所表記）で表示。白浜町・和田町は大字自体に旧町名を含む（白浜町白浜/和田町黒岩）
+// ため、そのまま大字で正しく表示される（例: 館山市 神余 / 南房総市 宮下 / 南房総市 白浜町白浜）。
 function placeLabel(r) {
   r = r || {};
   const city = r.capture_city || '';
   const area = r.capture_area || '';
-  if (city === '館山市') return [city, area].filter(Boolean).join(' ');
-  const district = districtOfOaza(city, area);
-  return [city, district, area].filter(Boolean).join(' ');
+  return [city, area].filter(Boolean).join(' ');
 }
 
 const PICKUP_COMPANY = '合同会社アルコ';
