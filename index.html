@@ -5195,8 +5195,9 @@ async function pendingDelete(id) {
   } catch (e) {}
   const who = r ? `${r.species || '獣種未定'} ${r.weight_total ? r.weight_total + 'kg ' : ''}/ ${r.hunter_name || '捕獲者不明'} / ${fmt(r.capture_date)}` : 'この連絡';
   if (!confirm(`搬入待ちの連絡を削除しますか？\n\n${who}\n\n削除履歴に入るので、あとから戻せます。`)) return;
+  const _reason = askReason('削除'); if (!_reason) { toast('削除理由が未入力のため中止しました', 'error'); return; }
   try {
-    await indWrite('staff_individual_soft_delete', { p_id: id, p_reason: '搬入待ちの削除' });
+    await indWrite('staff_individual_soft_delete', { p_id: id, p_reason: _reason });
     toast('搬入待ちの連絡を削除しました');
     loadPendingIntake();
     refreshNavBadges();
@@ -5213,7 +5214,8 @@ async function pendingDeleteAll() {
   try {
     const key = await staffTokenEnsure();
     if (!key) { toast('スタッフキーが未確認のため中止しました', 'error'); return; }
-    for (const r of rows) { await baseRpc('staff_individual_soft_delete', { p_staff_key: key, p_id: r.id, p_reason: '搬入待ちの一括削除' }); }
+    const _reason = askReason('一括削除'); if (!_reason) { toast('理由が未入力のため中止しました', 'error'); return; }
+    for (const r of rows) { await baseRpc('staff_individual_soft_delete', { p_staff_key: key, p_id: r.id, p_reason: _reason }); }
     toast(`搬入待ち ${rows.length}件 を削除しました`);
     loadPendingIntake();
     refreshNavBadges();
@@ -5262,7 +5264,8 @@ async function indDelete(labelId) {
   if (!requireAdmin('個体の削除')) return;
   if (!confirm(`「${labelId}」を削除しますか？\n削除履歴からいつでも復元できます。`)) return;
   try {
-    await indWrite('staff_individual_soft_delete_by_label', { p_label: labelId, p_reason: '個体の削除' });
+    const _reason = askReason('削除'); if (!_reason) { toast('削除理由が未入力のため中止しました', 'error'); return; }
+    await indWrite('staff_individual_soft_delete_by_label', { p_label: labelId, p_reason: _reason });
     toast(`${labelId} を削除しました`);
     indLoad();
   } catch(e) { toast('削除エラー: ' + e.message, 'error'); }
@@ -5276,7 +5279,8 @@ async function indBulkDelete() {
   try {
     const key = await staffTokenEnsure();
     if (!key) { toast('スタッフキーが未確認のため中止しました', 'error'); return; }
-    for (const id of ids) { await baseRpc('staff_individual_soft_delete_by_label', { p_staff_key: key, p_label: id, p_reason: '個体の一括削除' }); }
+    const _reason = askReason('一括削除'); if (!_reason) { toast('理由が未入力のため中止しました', 'error'); return; }
+    for (const id of ids) { await baseRpc('staff_individual_soft_delete_by_label', { p_staff_key: key, p_label: id, p_reason: _reason }); }
     toast(`${ids.length}件を削除しました`);
     document.getElementById('indSelectAll').checked = false;
     indLoad();
@@ -5311,7 +5315,8 @@ function indHideTrash() {
 async function indRestore(labelId) {
   if (!requireAdmin('削除済み個体の復元')) return;
   try {
-    await indWrite('staff_individual_restore_by_label', { p_label: labelId, p_reason: '削除済み個体の復元' });
+    const _reason = askReason('復元'); if (!_reason) { toast('復元理由が未入力のため中止しました', 'error'); return; }
+    await indWrite('staff_individual_restore_by_label', { p_label: labelId, p_reason: _reason });
     toast(`${labelId} を復元しました`);
     indShowTrash();
   } catch(e) { toast('復元エラー: ' + e.message, 'error'); }
@@ -7327,6 +7332,12 @@ async function copyDeviceSetupLink() {
     '\n※対象端末でこのリンクを一度開くと、捕獲票入力・搬入一覧の両方が認証されます。';
   try { await navigator.clipboard.writeText(text); toast('認証リンクを発行しコピーしました（10分・1回限り）'); }
   catch (e) { prompt('この認証リンクを対象端末で一度だけ開いてください（10分・1回限り）:', text); }
+}
+
+// 削除・復元の理由は監査に残すため人手入力を必須にする（空なら null＝中止）
+function askReason(what) {
+  const r = (prompt((what || '操作') + 'の理由を入力してください（監査記録に残ります）\n例: 重複・誤登録・テスト入力・訂正') || '').trim();
+  return r || null;
 }
 
 // スタッフ認証つきの個体書込RPC（P0-2: anon直接更新の廃止に向けて）

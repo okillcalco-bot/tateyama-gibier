@@ -1,7 +1,10 @@
 -- rollback of 20260816_capture_rpcs_v2.sql
--- v2で追加した関数・表を撤去し、直前（individuals_write_rpcs + staff_device_tokens +
--- recovery_ratelimit_fix 適用後）の定義へ戻す。
--- 注意: 直前定義は Codex 指摘の脆弱性を含むため、通常はロールバックしないこと。
+-- ★★ FORWARD-ONLY 方針 ★★
+-- 本セキュリティ改修は「巻き戻さない（forward-only）」。不具合は新しい追加マイグレーションで前進修正する。
+-- このファイルは「機能をまるごと撤去する安全な teardown」として使う（脆弱な旧認証へ戻すためではない）:
+--   teardown 手順 = v2で追加した関数・表を撤去し、クライアントも同PRごと revert する。
+--   直前(individuals_write_rpcs+staff_device_tokens)の関数定義は Codex 指摘の脆弱性を含むため、
+--   本ファイル単体での「旧定義の再現」は行わない（安全な状態へ戻すには上位版の再適用が必要）。
 --
 -- 完全復元は次の順で prior マイグレーションのCREATE OR REPLACE群を再適用してもよい:
 --   20260815_individuals_write_rpcs.sql → 20260815_staff_device_tokens.sql →

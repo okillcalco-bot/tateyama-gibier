@@ -1,6 +1,9 @@
 -- rollback of 20260815_recovery_ratelimit_fix.sql
--- 直前（20260815_staff_device_tokens.sql 適用後）の定義へ戻す。
--- 注意: この定義は回復コード試行制限が無い状態なので、通常はロールバックしないこと。
+-- ★★ FORWARD-ONLY / 通常運用では使用しないこと ★★
+-- このファイルは「回復コード試行制限が無い脆弱な状態」へ戻す。セキュリティ上、通常手順として
+-- 適用してはならない。不具合時は巻き戻しではなく forward-fix（新しい追加マイグレーション）で対応する。
+-- 参考用として直前定義を残すのみ。実行するのは、直後に上位版(20260816_capture_rpcs_v2_fixes.sql)を
+-- 再適用して安全状態に戻す前提の緊急復旧に限る。
 
 create or replace function staff_key_ok(p_staff_key text)
 returns boolean

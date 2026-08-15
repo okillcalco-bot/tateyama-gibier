@@ -32,11 +32,14 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   await p.evaluate(() => { try { localStorage.setItem('tg_device_token', 'tok-1'); } catch (e) {} });
 
   // 削除: 論理削除RPCで来る
+  // 削除理由の入力（prompt）に応答してから確定
+  p.on('dialog', d => d.accept('誤登録（テスト）'));
   await p.evaluate(() => { pendingDeleteIds = ['id-1', 'id-2']; return confirmDelete(); });
   await p.waitForTimeout(300);
   const dels = rpc.filter(c => c.fn === 'staff_individual_soft_delete');
   ck('削除は staff_individual_soft_delete RPC', dels.length === 2, JSON.stringify(rpc.map(c => c.fn)));
   ck('削除RPCに p_id とキーを渡す', dels[0] && dels[0].body.p_id === 'id-1' && !!dels[0].body.p_staff_key, JSON.stringify(dels[0] && dels[0].body));
+  ck('削除RPCに人手入力の理由を渡す', dels[0] && dels[0].body.p_reason === '誤登録（テスト）', JSON.stringify(dels[0] && dels[0].body.p_reason));
 
   // 登録: staff_individual_create RPCで来る
   await p.evaluate(() => {

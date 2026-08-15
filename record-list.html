@@ -639,13 +639,15 @@ async function confirmDelete() {
   const ids = [...pendingDeleteIds];
   closeDeleteModal();
   if (!ids.length) return;
+  // 削除理由は監査に残すため人手で入力（必須）
+  const reason = (prompt('削除の理由を入力してください（例: 重複・誤登録・テスト入力）\n※監査記録に残ります') || '').trim();
+  if (!reason) { showToast('削除理由が未入力のため中止しました', true); return; }
   try {
     const key = await staffKeyEnsure();
     if (!key) { showToast('スタッフキーが未確認のため中止しました', true); return; }
     for (const id of ids) {
-      // 物理削除は禁止（市役所提出データの改ざん耐性のため）。論理削除（deleted_at）に統一。
-      // スタッフ認証つきRPCで論理削除（監査ログに残す）。
-      await sbRpc('staff_individual_soft_delete', { p_staff_key: key, p_id: id, p_reason: '搬入一覧からの削除' });
+      // 物理削除は禁止（市役所提出データの改ざん耐性のため）。論理削除＋監査。
+      await sbRpc('staff_individual_soft_delete', { p_staff_key: key, p_id: id, p_reason: reason });
     }
     showToast(ids.length + 'ä»¶ãåé¤ãã¾ãã');
     pendingDeleteIds = [];
