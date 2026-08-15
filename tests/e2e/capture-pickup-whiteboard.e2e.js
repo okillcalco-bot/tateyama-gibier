@@ -44,6 +44,7 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
     kamari: isPickupArea('館山市', '神余'),              // 対象外
     akashi: isPickupArea('南房総市', '明石'),            // 10km内(対象外)
     withPref: isPickupArea('南房総市', '南房総市宮下'),  // 南房総市付きでも吸収
+    tomiura: isPickupArea('南房総市', '富浦町南無谷'),   // 富浦地区(対象・旧町名つき)
   }));
   ck('判定: 南房総市宮下=対象', jud.miyashita === true);
   ck('判定: 南房総市和田町黒岩=対象', jud.kuroiwa === true);
@@ -51,6 +52,7 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   ck('判定: 館山市大井=対象外（同名だが市が違う）', jud.ooiTate === false);
   ck('判定: 館山市神余=対象外', jud.kamari === false);
   ck('判定: 南房総市明石=対象外（10km内）', jud.akashi === false);
+  ck('判定: 富浦町南無谷=対象（旧町名つき）', jud.tomiura === true);
   ck('判定: 「南房総市」接頭も吸収して対象', jud.withPref === true);
 
   // 2) 距離判定（センターから10km超で対象扱い）
@@ -90,11 +92,15 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
     minami: placeLabel({ capture_city: '南房総市', capture_area: '宮下' }),
     shirahama: placeLabel({ capture_city: '南房総市', capture_area: '白浜町白浜' }),
     wada: placeLabel({ capture_city: '南房総市', capture_area: '和田町黒岩' }),
+    tomiura: placeLabel({ capture_city: '南房総市', capture_area: '富浦町南無谷' }),
+    chikura: placeLabel({ capture_city: '南房総市', capture_area: '千倉町白間津' }),
   }));
   ck('場所: 館山市は市＋大字のみ（館山市 出野尾）', labels.tate === '館山市 出野尾', labels.tate);
   ck('場所: 南房総市も地区名は入れず市＋大字（南房総市 宮下）', labels.minami === '南房総市 宮下', labels.minami);
   ck('場所: 白浜町は大字に旧町名（南房総市 白浜町白浜）', labels.shirahama === '南房総市 白浜町白浜', labels.shirahama);
   ck('場所: 和田町は大字に旧町名（南房総市 和田町黒岩）', labels.wada === '南房総市 和田町黒岩', labels.wada);
+  ck('場所: 富浦町も旧町名（南房総市 富浦町南無谷）', labels.tomiura === '南房総市 富浦町南無谷', labels.tomiura);
+  ck('場所: 千倉町も旧町名（南房総市 千倉町白間津）', labels.chikura === '南房総市 千倉町白間津', labels.chikura);
 
   // 5) 引き取り撮影＝ホワイトボードのみ（右上）／看板は出さない
   const wb = await p.evaluate(() => {
