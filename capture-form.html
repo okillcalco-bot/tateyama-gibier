@@ -2848,13 +2848,25 @@ function newRequestId() {
   return 'req-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 }
 function loadQueue() {
-  let q = [];
-  try { q = JSON.parse(localStorage.getItem('tgc_queue') || '[]'); } catch (e) { q = []; }
-  // 旧形式（生レコードの配列）を新形式へ正規化
-  return q.map(it => (it && it.payload) ? it : {
-    operation: 'submit', payload: it, client_request_id: newRequestId(),
-    queued_at: new Date().toISOString(), retry_count: 0, last_error: null
+  let raw = [];
+  try { raw = JSON.parse(localStorage.getItem('tgc_queue') || '[]'); } catch (e) { raw = []; }
+  // 旧形式（生レコードの配列）を新形式へ正規化。正規化したら「一度だけ」即保存して
+  // client_request_id を固定する（DB成功→レスポンス喪失→再起動でも同じIDで冪等再送）。
+  let migrated = false;
+  const q = raw.map(it => {
+    if (it && it.payload && it.client_request_id) return it;
+    migrated = true;
+    return {
+      operation: (it && it.operation) || 'submit',
+      payload: (it && it.payload) ? it.payload : it,
+      client_request_id: (it && it.client_request_id) || newRequestId(),
+      queued_at: (it && it.queued_at) || new Date().toISOString(),
+      retry_count: (it && it.retry_count) || 0,
+      last_error: (it && it.last_error) || null
+    };
   });
+  if (migrated) { try { localStorage.setItem('tgc_queue', JSON.stringify(q)); } catch (e) {} }
+  return q;
 }
 function saveQueue(q) { localStorage.setItem('tgc_queue', JSON.stringify(q)); updatePendingBadge(); }
 
