@@ -66,9 +66,11 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
     const inp = document.getElementById('finisherName'); inp.value = 'おき'; onFinisherInput();
     const box = document.getElementById('finisherSuggest');
     const items = [...box.querySelectorAll('.hsg-item')].map(x => x.dataset.name);
-    return { shown: box.style.display !== 'none', items };
+    const r = box.getBoundingClientRect();
+    return { shown: box.style.display !== 'none', items, pos: box.style.position, top: r.top, bottom: r.bottom, vh: window.innerHeight };
   });
   ck('止め刺し者もふりがな予測（おき→沖浩志）', fin.shown && fin.items.includes('沖浩志'), JSON.stringify(fin));
+  ck('候補が画面内に収まる（見切れない）', fin.pos === 'fixed' && fin.top >= 0 && fin.bottom <= fin.vh + 1, JSON.stringify(fin));
   await p.evaluate(() => { pickFinisherSuggest('沖浩志'); });
   ck('止め刺し者候補選択で入力', await p.evaluate(() => document.getElementById('finisherName').value) === '沖浩志');
 
