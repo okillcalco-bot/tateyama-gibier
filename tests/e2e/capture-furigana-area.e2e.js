@@ -74,6 +74,15 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   await p.evaluate(() => { pickFinisherSuggest('沖浩志'); });
   ck('止め刺し者候補選択で入力', await p.evaluate(() => document.getElementById('finisherName').value) === '沖浩志');
 
+  // 4c) 搬入者も同じふりがな予測
+  const car = await p.evaluate(() => {
+    const inp = document.getElementById('carrierName'); inp.value = 'かとう'; onCarrierInput();
+    return [...document.querySelectorAll('#carrierSuggest .hsg-item')].map(x => x.dataset.name);
+  });
+  ck('搬入者もふりがな予測（かとう→加藤茂）', car.includes('加藤茂'), JSON.stringify(car));
+  await p.evaluate(() => { pickCarrierSuggest('加藤茂'); });
+  ck('搬入者候補選択で入力', await p.evaluate(() => document.getElementById('carrierName').value) === '加藤茂');
+
   // 5) いつもの捕獲場所を入れると地区UIが畳まれ「入力済み」バナー
   const done = await p.evaluate(() => {
     applyHunterArea({ city: '館山市', area: '神余' });
@@ -99,6 +108,19 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   });
   ck('変更するでバナー非表示', edit.banner === false);
   ck('変更するで市町村選択が戻る', edit.cityShown);
+
+  // 7) 「別の地区を選ぶ」でいつもの場所を解除して選択UIを開く
+  const nw = await p.evaluate(() => {
+    applyHunterArea({ city: '館山市', area: '神余' });   // いつものを入れて畳む
+    pickNewArea();
+    return {
+      area: document.getElementById('captureArea').value,
+      banner: document.getElementById('areaDoneRow').style.display !== 'none',
+      cityShown: document.getElementById('cityRow').style.display !== 'none',
+    };
+  });
+  ck('別の地区: いつもの場所を解除（captureArea空）', nw.area === '', JSON.stringify(nw));
+  ck('別の地区: 選択UIが開く', nw.banner === false && nw.cityShown, JSON.stringify(nw));
 
   ck('JSエラーなし', errs.length === 0, errs.join(' / '));
   console.log(out.join('\n'));
