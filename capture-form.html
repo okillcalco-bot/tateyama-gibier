@@ -1002,6 +1002,36 @@ async function sb(method, table, body, query = '') {
   return t ? JSON.parse(t) : [];
 }
 
+// RPC呼び出し（書込はRPC経由へ移行中。P0-2セキュリティ対応）
+async function sbRpc(fn, args) {
+  const res = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, {
+    method: 'POST',
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(args || {})
+  });
+  const t = await res.text();
+  if (!res.ok) { const e = new Error(t || ('HTTP ' + res.status)); e.status = res.status; throw e; }
+  return t ? JSON.parse(t) : null;
+}
+
+// スタッフキー（既存データの編集・削除・個体番号変更に必要。捕獲者の新規登録には不要）
+function staffKeyGet() { try { return localStorage.getItem('tg_staff_key') || sessionStorage.getItem('tg_staff_key') || ''; } catch (e) { return ''; } }
+function staffKeyClear() { try { localStorage.removeItem('tg_staff_key'); sessionStorage.removeItem('tg_staff_key'); } catch (e) {} }
+async function staffKeyEnsure() {
+  let k = staffKeyGet();
+  if (!k) { k = (prompt('スタッフキーを入力してください（既存データの編集・削除に必要）') || '').trim(); if (!k) return ''; }
+  try { if (!await sbRpc('staff_key_ok', { p_staff_key: k })) { alert('スタッフキーが違います'); staffKeyClear(); return ''; } }
+  catch (e) { alert('認証エラー: ' + e.message); return ''; }
+  try { localStorage.setItem('tg_staff_key', k); } catch (e) { try { sessionStorage.setItem('tg_staff_key', k); } catch (_e) {} }
+  return k;
+}
+// ネットワーク起因（オフライン/タイムアウト/5xx）のみ再送対象。4xx/RLSは再送しない
+function isRetryable(e) {
+  const s = e && e.status;
+  if (s == null) return true;              // fetch自体が失敗（オフライン等）
+  return s >= 500 && s < 600;              // サーバ側の一時障害
+}
+
 /* ── Individual numbering ── */
 function getIndividualPrefix(species, city) {
   if (species === 'イノシシ') return city === '南房総市' ? 'M' : 'T';
@@ -2427,7 +2457,7 @@ async function svMakeSheets(rec, uploaded) {
   }
   // 出力した日時を記録（この日から SV_KEEP_DAYS 後に写真を消す）
   if (r.label_id) {
-    try { await sb('PATCH', 'individuals', { survey_downloaded_at: new Date().toISOString() }, '?label_id=eq.' + encodeURIComponent(r.label_id)); } catch (e) {}
+    try { await sbRpc('public_capture_update_survey', { p_label_id: r.label_id, p_patch: { survey_downloaded_at: new Date().toISOString() } }); } catch (e) {}
   }
 }
 
@@ -2448,7 +2478,7 @@ async function svAfterSave(rec) {
       if (kind === 'extra') { patch.photo_extra = path; uploaded.photo_extra = path; }
     }
   } catch (e) { alert('写真のアップロードに失敗しました。票だけ作ります。\n' + String(e.message || e).slice(0, 120)); }
-  try { await sb('PATCH', 'individuals', patch, '?label_id=eq.' + encodeURIComponent(labelId)); } catch (e) {}
+  try { await sbRpc('public_capture_update_survey', { p_label_id: labelId, p_patch: patch }); } catch (e) {}
   const merged = Object.assign({}, rec, patch, uploaded, {
     label_id: labelId,
     hunter_tel: (document.getElementById('svHunterTel')?.value || '').trim(),
@@ -2476,8 +2506,8 @@ async function svCleanupOldPhotos() {
           headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ prefixes: paths }),
         });
-        await sb('PATCH', 'individuals', { photo_tail_before: null, photo_tail_after: null, photo_extra: null },
-          '?label_id=eq.' + encodeURIComponent(r.label_id));
+        await sbRpc('public_capture_update_survey', { p_label_id: r.label_id,
+          p_patch: { photo_tail_before: null, photo_tail_after: null, photo_extra: null } });
       } catch (e) { /* 1件失敗しても他を続ける */ }
     }
     if (rows.length) console.log(`調査票の写真を${rows.length}件分 自動削除しました（提出から${SV_KEEP_DAYS}日経過）`);
@@ -2658,26 +2688,36 @@ async function handleSubmit() {
     };
 
     let saved;
+    const reqId = newRequestId();
     try {
       if (editMode && editRecordId) {
-        const pb = Object.assign({}, record);
-        // 個体番号は編集画面で手直しできるので、編集時はそのまま保存する（従来は変更不可だった）。
-        // ただし空にした場合は既存値を消さない
-        if (!pb.label_id) delete pb.label_id;
-        const er = await sb('PATCH', 'individuals', pb, '?id=eq.' + editRecordId);
-        saved = Array.isArray(er) ? er[0] : er;
-      } else if (matchedPlaceholderId) {
-        // 先に用意した空枠（通し番号だけの行）に登録する
-        const er = await sb('PATCH', 'individuals', record, '?id=eq.' + matchedPlaceholderId);
-        saved = Array.isArray(er) ? er[0] : er;
+        // 既存データの修正はスタッフ操作。スタッフキー認証つきRPCで更新する。
+        const key = await staffKeyEnsure();
+        if (!key) { alert('スタッフキーが未確認のため保存を中止しました'); btn.disabled = false; btn.textContent = '搬入登録'; return; }
+        const patch = Object.assign({}, record);
+        delete patch.label_id;   // 個体番号は relabel 専用RPCで変更（改ざん防止）
+        await sbRpc('staff_individual_update', { p_staff_key: key, p_id: editRecordId, p_patch: patch });
+        // 個体番号を変更した場合は relabel（FKカスケード＋在庫コード同期を単一Txで）
+        const newLabel = (record.label_id || '').trim();
+        if (newLabel && editRecord && newLabel !== editRecord.label_id) {
+          await sbRpc('staff_individual_relabel', { p_staff_key: key, p_id: editRecordId, p_new_label: newLabel, p_reason: '捕獲票入力の編集' });
+        }
+        saved = Object.assign({}, record, { id: editRecordId });
       } else {
-        saved = await sb('POST', 'individuals', record);
+        // 新規登録（捕獲者の直接入力）。空枠うめ・冪等はサーバ側RPCが担う。
+        const res = await sbRpc('public_capture_submit', { p_payload: record, p_request_id: reqId });
+        saved = Object.assign({}, record, res || {});
       }
-      if (Array.isArray(saved)) saved = saved[0];
     } catch(e) {
-      // Offline - queue
-      queueRecord(record);
-      saved = record;
+      if (editMode || !isRetryable(e)) {
+        // 編集の失敗、または入力不備(4xx)はキューに積まず、その場で知らせる
+        alert('保存できませんでした: ' + (e.message || e));
+        btn.disabled = false; btn.textContent = '搬入登録';
+        return;
+      }
+      // オフライン等の一時障害のみ端末キューへ（request_idで冪等に再送）
+      queueRecord(record, reqId);
+      saved = Object.assign({}, record, { _queued: true });
     }
 
     if (window.hunterMode) {
@@ -2719,45 +2759,75 @@ async function handleSubmit() {
   }
 }
 
-/* ── Offline queue ── */
-function queueRecord(record) {
-  const queue = JSON.parse(localStorage.getItem('tgc_queue') || '[]');
-  queue.push(record);
-  localStorage.setItem('tgc_queue', JSON.stringify(queue));
-  updatePendingBadge();
+/* ── Offline queue（P1-3 再設計） ──
+ * 各要素: { operation, payload, client_request_id, queued_at, retry_count, last_error }
+ * ・ネット/タイムアウト/5xx のみ再送。4xx/RLS は再送せず「送信不可」として保持
+ * ・client_request_id でサーバ側が冪等化（二重登録を防ぐ）
+ * ・旧形式（生レコード）も読み込めるよう正規化する
+ */
+function newRequestId() {
+  try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+  return 'req-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+function loadQueue() {
+  let q = [];
+  try { q = JSON.parse(localStorage.getItem('tgc_queue') || '[]'); } catch (e) { q = []; }
+  // 旧形式（生レコードの配列）を新形式へ正規化
+  return q.map(it => (it && it.payload) ? it : {
+    operation: 'submit', payload: it, client_request_id: newRequestId(),
+    queued_at: new Date().toISOString(), retry_count: 0, last_error: null
+  });
+}
+function saveQueue(q) { localStorage.setItem('tgc_queue', JSON.stringify(q)); updatePendingBadge(); }
+
+function queueRecord(record, reqId) {
+  const q = loadQueue();
+  q.push({ operation: 'submit', payload: record, client_request_id: reqId || newRequestId(),
+           queued_at: new Date().toISOString(), retry_count: 0, last_error: null });
+  saveQueue(q);
 }
 
 function updatePendingBadge() {
-  const queue = JSON.parse(localStorage.getItem('tgc_queue') || '[]');
+  const q = loadQueue();
   const badge = document.getElementById('pendingBadge');
-  if (queue.length > 0) {
+  if (q.length > 0) {
     badge.classList.add('show');
-    badge.textContent = `未送信: ${queue.length}件`;
+    const blocked = q.filter(it => it.retry_count >= 0 && it.last_error && it.last_error.blocked).length;
+    badge.textContent = `未送信: ${q.length}件` + (blocked ? `（要確認 ${blocked}）` : '');
   } else {
     badge.classList.remove('show');
   }
 }
 
 async function syncPending() {
-  updatePendingBadge();
-  const queue = JSON.parse(localStorage.getItem('tgc_queue') || '[]');
-  if (queue.length === 0) return;
+  const q = loadQueue();
+  if (q.length === 0) { updatePendingBadge(); return; }
   const remaining = [];
-  for (const record of queue) {
+  let sent = 0;
+  for (const it of q) {
+    // 送信不可（4xx/RLS）と判定済みのものは自動再送しない（ユーザーが確認・削除する）
+    if (it.last_error && it.last_error.blocked) { remaining.push(it); continue; }
     try {
-      await sb('POST', 'individuals', record);
-    } catch(e) {
-      remaining.push(record);
+      await sbRpc('public_capture_submit', { p_payload: it.payload, p_request_id: it.client_request_id });
+      sent++;
+    } catch (e) {
+      if (isRetryable(e)) {
+        it.retry_count = (it.retry_count || 0) + 1;
+        it.last_error = { blocked: false, message: String(e.message || e), at: new Date().toISOString() };
+      } else {
+        // 入力不備・権限エラー等は再送しても直らない。保持して知らせる
+        it.last_error = { blocked: true, message: String(e.message || e), at: new Date().toISOString() };
+      }
+      remaining.push(it);
     }
   }
-  localStorage.setItem('tgc_queue', JSON.stringify(remaining));
-  updatePendingBadge();
-  if (remaining.length < queue.length) loadTodayCount();
+  saveQueue(remaining);
+  if (sent > 0) loadTodayCount();
 }
 
 // 未送信（端末内キュー）の中身を確認・削除・今すぐ送信
 function showPendingModal() {
-  const queue = JSON.parse(localStorage.getItem('tgc_queue') || '[]');
+  const queue = loadQueue();
   let ov = document.getElementById('pendingModal');
   if (!ov) {
     ov = document.createElement('div');
@@ -2767,13 +2837,22 @@ function showPendingModal() {
     document.body.appendChild(ov);
   }
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const rows = queue.map((r, i) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;">
+  const opLabel = op => op === 'submit' ? '新規登録' : (op || '登録');
+  const rows = queue.map((it, i) => {
+    const r = it.payload || {};
+    const blocked = it.last_error && it.last_error.blocked;
+    const note = blocked
+      ? `<span style="color:#7a2b12;font-size:12px;font-weight:700;">⚠ 送信できません（要確認）：${esc(it.last_error.message).slice(0, 80)}</span>`
+      : (it.retry_count ? `<span style="color:var(--text2);font-size:12px;">再送待ち（${it.retry_count}回失敗）</span>` : '');
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px;border:1px solid ${blocked ? '#c46' : 'var(--border)'};border-radius:8px;margin-bottom:8px;">
       <div style="font-size:14px;line-height:1.5;">
+        <span style="font-size:11px;color:var(--text2);">${esc(opLabel(it.operation))}</span><br>
         <b>${esc(r.hunter_name || '(捕獲者未入力)')}</b> ／ ${esc(r.species || '')} ${r.weight_total ? esc(r.weight_total) + 'kg' : ''}<br>
-        <span style="color:var(--text2);font-size:12px;">${esc(r.capture_date || '')} ${esc(r.capture_city || '')}${esc(r.capture_area || '')}</span>
+        <span style="color:var(--text2);font-size:12px;">${esc(r.capture_date || '')} ${esc(r.capture_city || '')}${esc(r.capture_area || '')}</span>${note ? '<br>' + note : ''}
       </div>
       <button type="button" onclick="deletePending(${i})" style="flex:none;background:#7a2b12;color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;">削除</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   ov.innerHTML = `<div style="background:var(--card,#fff);border-radius:14px;max-width:520px;width:100%;max-height:80vh;overflow-y:auto;padding:18px;">
       <div style="font-size:17px;font-weight:800;margin-bottom:4px;">未送信データ（端末内・${queue.length}件）</div>
       <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">オフライン等で送信待ちのデータです。通信が戻ると自動送信されます。不要なら削除できます。</div>
@@ -2785,14 +2864,14 @@ function showPendingModal() {
     </div>`;
 }
 function deletePending(i) {
-  const queue = JSON.parse(localStorage.getItem('tgc_queue') || '[]');
-  const r = queue[i];
-  if (!r) return;
+  const queue = loadQueue();
+  const it = queue[i];
+  if (!it) return;
+  const r = it.payload || {};
   const label = (r.hunter_name || '(捕獲者未入力)') + ' ／ ' + (r.capture_date || '') + ' ' + (r.capture_city || '') + (r.capture_area || '');
   if (!confirm('この未送信データを削除しますか？\n\n' + label + '\n\n※端末内のデータを削除します（元に戻せません）')) return;
   queue.splice(i, 1);
-  localStorage.setItem('tgc_queue', JSON.stringify(queue));
-  updatePendingBadge();
+  saveQueue(queue);
   showPendingModal();
 }
 
@@ -3329,7 +3408,7 @@ async function arUploadPhoto(blob) {
   const url = `${SB_URL}/storage/v1/object/public/${SV_BUCKET}/${path}`;
   // 登録済み個体で看板写真なら、市役所提出用の主画像として image_url に保存
   if (r.label_id && mode === 'board') {
-    await sb('PATCH', 'individuals', { image_url: url }, '?label_id=eq.' + encodeURIComponent(r.label_id));
+    await sbRpc('public_attach_capture_photo', { p_label_id: r.label_id, p_image_url: url });
   }
   return url;
 }

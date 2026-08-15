@@ -37,8 +37,10 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   await p.evaluate(() => deletePending(0));
   await p.waitForTimeout(100);
   const after = await p.evaluate(() => JSON.parse(localStorage.getItem('tgc_queue') || '[]'));
-  ck('削除で1件減る', after.length === 1, JSON.stringify(after.map(x => x.hunter_name)));
-  ck('残るのは沖浩志', after[0] && after[0].hunter_name === '沖浩志', JSON.stringify(after));
+  ck('削除で1件減る', after.length === 1, JSON.stringify(after.map(x => (x.payload || x).hunter_name)));
+  // P1-3: キューは {operation,payload,client_request_id,...} 形式に正規化される
+  ck('残るのは沖浩志', after[0] && after[0].payload && after[0].payload.hunter_name === '沖浩志', JSON.stringify(after));
+  ck('正規化: client_request_idを持つ', !!(after[0] && after[0].client_request_id), JSON.stringify(after[0]));
   const badge2 = await p.evaluate(() => document.getElementById('pendingBadge').textContent);
   ck('バッジが1件に更新', badge2.includes('1'), badge2);
 

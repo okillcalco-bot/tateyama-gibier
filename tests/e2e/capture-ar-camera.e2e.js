@@ -28,9 +28,10 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
     const req = route.request();
     const url = decodeURIComponent(req.url());
     const j = x => route.fulfill({ contentType: 'application/json', body: JSON.stringify(x) });
-    if (url.includes('/individuals') && req.method() === 'PATCH') {
-      try { const b = JSON.parse(req.postData() || '{}'); if (b.image_url) patchedImageUrl = b.image_url; } catch (e) {}
-      return j([]);
+    // 看板写真の紐付けはRPC public_attach_capture_photo 経由（P0-2）
+    if (url.includes('/rpc/public_attach_capture_photo') && req.method() === 'POST') {
+      try { const b = JSON.parse(req.postData() || '{}'); if (b.p_image_url) patchedImageUrl = b.p_image_url; } catch (e) {}
+      return j({ id: 'r1', label_id: 'TGC-08-T272' });
     }
     if (url.includes('/area_master')) return j([{ city: '館山市', district: '豊房', oaza: '神余' }]);
     return j([]);

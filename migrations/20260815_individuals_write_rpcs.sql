@@ -209,6 +209,44 @@ $$;
 revoke all on function public_attach_capture_photo(text, text, text) from public;
 grant execute on function public_attach_capture_photo(text, text, text) to anon, authenticated;
 
+-- ── 調査票の追記（提出者本人が自分の登録個体へ調査票項目/写真を紐付け・列限定） ──
+-- 買取・肉ランク・放射能等の業務/監査項目は対象外（改ざん防止）。
+create or replace function public_capture_update_survey(
+  p_label_id text,
+  p_patch jsonb,
+  p_request_id text default null
+) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  c_allow constant text[] := array[
+    'submitter_name','capture_koaza','body_length_cm','is_juvenile','trap_number',
+    'bait_type','trap_set_date','disposal_method','special_notes',
+    'photo_tail_before','photo_tail_after','photo_extra','map_image','survey_downloaded_at'
+  ];
+  v_id uuid; v_row individuals; v_prior jsonb;
+begin
+  if p_request_id is not null and p_request_id <> '' then
+    select result into v_prior from request_log where client_request_id = p_request_id;
+    if v_prior is not null then return v_prior; end if;
+  end if;
+  select id into v_id from individuals where label_id = p_label_id and deleted_at is null limit 1;
+  if v_id is null then raise exception '個体が見つかりません: %', p_label_id; end if;
+  v_row := _ind_apply('update', v_id, p_patch, c_allow);
+  insert into individual_audit(action, actor, target_id, label_id)
+  values ('update_survey','public', v_id, p_label_id);
+  declare v_res jsonb := jsonb_build_object('id', v_row.id, 'label_id', v_row.label_id);
+  begin
+    if p_request_id is not null and p_request_id <> '' then
+      insert into request_log(client_request_id, fn, result)
+      values (p_request_id, 'public_capture_update_survey', v_res) on conflict do nothing;
+    end if;
+    return v_res;
+  end;
+end;
+$$;
+revoke all on function public_capture_update_survey(text, jsonb, text) from public;
+grant execute on function public_capture_update_survey(text, jsonb, text) to anon, authenticated;
+
 -- ── スタッフ編集（広い列・監査。id/created_at/label_id/deleted_at は変更不可） ──
 create or replace function staff_individual_update(
   p_staff_key text,
