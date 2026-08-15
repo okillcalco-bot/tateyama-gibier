@@ -490,8 +490,8 @@ textarea { min-height: 80px; resize: vertical; }
           <div class="usual-label">いつもの捕獲場所（タップで入力）　<button type="button" onclick="pickNewArea()" style="background:var(--surface2);border:1px solid var(--gold);color:var(--gold-light);border-radius:999px;padding:5px 14px;font-size:0.92rem;font-weight:700;cursor:pointer;">🆕 別の地区を選ぶ</button></div>
           <div class="usual-chips" id="usualAreas"></div>
         </div>
-        <div class="usual-group"><div class="usual-label">いつもの捕獲方法</div><div class="usual-chips" id="usualMethods"></div></div>
-        <div class="usual-group"><div class="usual-label">いつもの止めさし方法</div><div class="usual-chips" id="usualFinish"></div></div>
+        <div class="usual-group"><div class="usual-label">いつもの捕獲方法　<button type="button" onclick="pickNewMethod()" style="background:var(--surface2);border:1px solid var(--gold);color:var(--gold-light);border-radius:999px;padding:5px 14px;font-size:0.92rem;font-weight:700;cursor:pointer;">🆕 別の方法を選ぶ</button></div><div class="usual-chips" id="usualMethods"></div></div>
+        <div class="usual-group"><div class="usual-label">いつもの止めさし方法　<button type="button" onclick="pickNewFinish()" style="background:var(--surface2);border:1px solid var(--gold);color:var(--gold-light);border-radius:999px;padding:5px 14px;font-size:0.92rem;font-weight:700;cursor:pointer;">🆕 別の方法を選ぶ</button></div><div class="usual-chips" id="usualFinish"></div></div>
       </div>
 
       <div class="form-row">
@@ -506,7 +506,7 @@ textarea { min-height: 80px; resize: vertical; }
         <input type="text" class="input" id="healthIssues" placeholder="症状を入力">
       </div>
 
-      <div class="form-row">
+      <div class="form-row" id="finishRow">
         <label class="form-label">止めさし方法<span class="req-badge">必須</span></label>
         <div class="toggle-group" data-field="finishing_method">
           <div class="toggle-btn" data-val="ナイフ">ナイフ</div>
@@ -709,7 +709,7 @@ textarea { min-height: 80px; resize: vertical; }
           <option value="野崎徹"><option value="根岸典好">
         </datalist>
       </div>
-      <div class="form-row">
+      <div class="form-row" id="methodRow">
         <label class="form-label">捕獲方法<span class="req-badge">必須</span></label>
         <div class="toggle-group" data-field="capture_method">
           <div class="toggle-btn" data-val="くくり罠">くくり罠</div>
@@ -1823,6 +1823,8 @@ async function loadUsual() {
     if (topMethods.length && !state.capture_method) applyUsualToggle('capture_method', topMethods[0][0]);
     if (topFinish.length && !state.finishing_method) applyUsualToggle('finishing_method', topFinish[0][0]);
   }
+  // いつものが使える通常入力時は、後ろの選択トグルを畳む（「別の方法を選ぶ」で開ける）
+  applyMethodCollapse(topMethods.length > 0, topFinish.length > 0, locked);
   // 過去データが無ければ従来の静的マップでヒントだけ出す
   if (!rows.length && hint) {
     const info = hunterUsualArea(name);
@@ -1840,6 +1842,25 @@ function renderUsualChips(containerId, items) {
   }).join('');
   const btns = box.querySelectorAll('.usual-chip');
   items.forEach(function (it, i) { if (btns[i]) btns[i].addEventListener('click', function () { it.apply(); markUsualActive(); }); });
+}
+// いつものが使える通常入力時は後ろの選択トグル（捕獲方法・止めさし方法）を畳む
+function applyMethodCollapse(hasMethod, hasFinish, locked) {
+  const mr = document.getElementById('methodRow');
+  const fr = document.getElementById('finishRow');
+  if (mr) mr.style.display = (!locked && hasMethod) ? 'none' : '';
+  if (fr) fr.style.display = (!locked && hasFinish) ? 'none' : '';
+}
+function showMethodRows() {
+  const mr = document.getElementById('methodRow'); if (mr) mr.style.display = '';
+  const fr = document.getElementById('finishRow'); if (fr) fr.style.display = '';
+}
+function pickNewMethod() {
+  const r = document.getElementById('methodRow');
+  if (r) { r.style.display = ''; if (r.scrollIntoView) r.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+}
+function pickNewFinish() {
+  const r = document.getElementById('finishRow');
+  if (r) { r.style.display = ''; if (r.scrollIntoView) r.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
 }
 function applyUsualToggle(field, val) {
   const g = document.querySelector('[data-field="' + field + '"]');
@@ -2036,6 +2057,7 @@ async function searchForEdit() {
 }
 function loadForEdit(rec) {
   editMode = true; editRecordId = rec.id; editRecord = rec;
+  if (typeof showMethodRows === 'function') showMethodRows();   // 編集時は選択トグルを表示
   // 個体番号は既存の値を表示。編集時は番号の行を出して手直しできるようにする（仮-番号の修正など）
   const _ser = document.getElementById('indSerial'); if (_ser && rec.serial_number != null) _ser.value = rec.serial_number;
   const _lab = document.getElementById('indLabelId'); if (_lab && rec.label_id) _lab.value = rec.label_id;
@@ -2825,6 +2847,7 @@ function resetForm() {
   // いつもの候補パネルを閉じる
   const _up = document.getElementById('usualPanel'); if (_up) _up.style.display = 'none';
   ['usualAreas','usualMethods','usualFinish'].forEach(id => { const b = document.getElementById(id); if (b) b.innerHTML = ''; });
+  showMethodRows();   // 捕獲方法・止めさし方法の選択トグルを既定表示に戻す
   const _hah = document.getElementById('hunterAreaHint'); if (_hah) _hah.style.display = 'none';
   document.getElementById('captureArea').value = '';
   document.getElementById('captureOldTown').value = '';
