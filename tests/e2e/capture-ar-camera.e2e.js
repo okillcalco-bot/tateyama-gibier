@@ -19,9 +19,19 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, permissions: ['camera'] });
   const p = await ctx.newPage();
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
+  const uploads = []; let patchedImageUrl = null;
+  await p.route('**/storage/v1/object/capture-photos/**', route => {
+    uploads.push(decodeURIComponent(route.request().url()));
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{"Key":"ok"}' });
+  });
   await p.route('**/rest/v1/**', route => {
-    const url = decodeURIComponent(route.request().url());
+    const req = route.request();
+    const url = decodeURIComponent(req.url());
     const j = x => route.fulfill({ contentType: 'application/json', body: JSON.stringify(x) });
+    if (url.includes('/individuals') && req.method() === 'PATCH') {
+      try { const b = JSON.parse(req.postData() || '{}'); if (b.image_url) patchedImageUrl = b.image_url; } catch (e) {}
+      return j([]);
+    }
     if (url.includes('/area_master')) return j([{ city: '館山市', district: '豊房', oaza: '神余' }]);
     return j([]);
   });
@@ -69,12 +79,15 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   ck('撮影でJPEG画像を生成', cap.urlOk);
   ck('左下に看板が焼き込まれている', cap.boardDrawn);
 
-  // 実際の arCapture がエラーなく動く（保存はshare/downloadにフォールバック）
+  // 実際の arCapture がエラーなく動く → サーバー(capture-photos)へアップロード＋image_url紐づけ
   let dl = null;
   p.on('download', d => { dl = d.suggestedFilename(); });
   await p.evaluate(() => arCapture());
-  await p.waitForTimeout(600);
+  await p.waitForTimeout(800);
   ck('arCapture 実行でエラーなし', true);
+  ck('撮影画像をサーバー(capture-photos)へ保存', uploads.length > 0, JSON.stringify(uploads));
+  ck('看板写真を個体のimage_urlに紐づけ', typeof patchedImageUrl === 'string' && patchedImageUrl.includes('capture-photos'), String(patchedImageUrl));
+  ck('サーバー保存成功時は端末ダウンロードしない', dl === null, String(dl));
 
   // 閉じる → ストリーム停止・非表示
   await p.evaluate(() => arClose());
