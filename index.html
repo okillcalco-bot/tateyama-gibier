@@ -1131,7 +1131,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <input class="form-input" id="hunter-search" placeholder="氏名・地区・罠設置場所で検索" style="max-width:300px;margin-bottom:10px;" oninput="loadHunters()" />
       <div style="overflow-x:auto;">
         <table>
-          <thead><tr><th>氏名</th><th>地区</th><th>罠設置場所</th><th>電話番号</th><th>振込口座</th><th>捕獲実績</th><th>メモ</th><th>操作</th></tr></thead>
+          <thead><tr><th>氏名</th><th>ふりがな</th><th>地区</th><th>罠設置場所</th><th>電話番号</th><th>振込口座</th><th>捕獲実績</th><th>メモ</th><th>操作</th></tr></thead>
           <tbody id="hunters-body"></tbody>
         </table>
       </div>
@@ -1538,6 +1538,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div class="form-group"><label>氏名 *</label><input class="form-input" id="hun-f-name" /></div>
+        <div class="form-group"><label>ふりがな（かな入力の予測に使用）</label><input class="form-input" id="hun-f-furigana" placeholder="例: かとうしげる" /></div>
         <div class="form-group"><label>地区</label><select class="form-input" id="hun-f-city"><option value="">選択...</option><option>館山市</option><option>南房総市</option><option>その他</option></select></div>
         <div class="form-group" style="grid-column:1/-1"><label>住所</label><input class="form-input" id="hun-f-address" /></div>
         <div class="form-group"><label>電話番号</label><input class="form-input" id="hun-f-phone" /></div>
@@ -5816,7 +5817,7 @@ let hunterEditId = null;
 
 async function loadHunters() {
   const body = document.getElementById('hunters-body');
-  body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
+  body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
   try {
     huntersData = await sb('GET', 'hunters', null, '?select=*&deleted_at=is.null&order=name.asc');
     // 捕獲実績（個体台帳の捕獲者名で集計）
@@ -5826,13 +5827,14 @@ async function loadHunters() {
       inds.forEach(i => { if (i.hunter_name) countMap[i.hunter_name] = (countMap[i.hunter_name] || 0) + 1; });
     } catch (e) {}
     const q = (document.getElementById('hunter-search').value || '').trim();
-    const list = q ? huntersData.filter(h => (h.name || '').includes(q) || (h.trap_area || '').includes(q) || (h.city || '').includes(q)) : huntersData;
+    const list = q ? huntersData.filter(h => (h.name || '').includes(q) || (h.furigana || '').includes(q) || (h.trap_area || '').includes(q) || (h.city || '').includes(q)) : huntersData;
     const tateyama = huntersData.filter(h => h.city === '館山市').length;
     const minami = huntersData.filter(h => h.city === '南房総市').length;
     document.getElementById('hunters-stats').textContent = `登録 ${huntersData.length}名（館山市 ${tateyama} / 南房総市 ${minami} / その他 ${huntersData.length - tateyama - minami}）`;
-    if (!list.length) { body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text3);">登録がありません。「＋新規登録」から捕獲者を登録してください。</td></tr>'; return; }
+    if (!list.length) { body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text3);">登録がありません。「＋新規登録」から捕獲者を登録してください。</td></tr>'; return; }
     body.innerHTML = list.map(h => `<tr>
       <td style="font-weight:600;">${esc2(h.name)}</td>
+      <td style="font-size:12px;color:${h.furigana ? 'var(--text2)' : 'var(--red)'};">${esc2(h.furigana || '未設定')}</td>
       <td>${esc2(h.city || '-')}</td>
       <td>${esc2(h.trap_area || '-')}</td>
       <td style="white-space:nowrap;">${esc2(h.phone || '-')}</td>
@@ -5842,11 +5844,11 @@ async function loadHunters() {
       <td style="white-space:nowrap;"><button class="btn btn-sm" onclick="hunterEdit('${h.id}')">編集</button></td>
     </tr>`).join('');
   } catch (err) {
-    body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red);">${esc2(sbSafeMsg(err))}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--red);">${esc2(sbSafeMsg(err))}</td></tr>`;
   }
 }
 
-const HUNTER_FIELDS = ['name', 'city', 'address', 'phone', 'trap_area', 'bank_name', 'bank_branch', 'account_type', 'account_number', 'account_holder', 'memo'];
+const HUNTER_FIELDS = ['name', 'furigana', 'city', 'address', 'phone', 'trap_area', 'bank_name', 'bank_branch', 'account_type', 'account_number', 'account_holder', 'memo'];
 
 function hunterOpenNew() {
   if (!requireAdmin('捕獲者の新規登録')) return;
