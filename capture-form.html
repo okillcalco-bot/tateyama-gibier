@@ -585,12 +585,12 @@ textarea { min-height: 80px; resize: vertical; }
   <div class="section">
     <div class="section-head">捕獲情報</div>
     <div class="section-body">
-      <div class="form-row" style="display:flex;gap:18px;align-items:flex-start;">
-        <div style="flex:1;min-width:0;">
+      <div class="form-row" style="display:flex;flex-wrap:wrap;gap:12px 28px;align-items:flex-start;">
+        <div style="flex:1 1 150px;min-width:0;">
           <label class="form-label">捕獲日<span class="req-badge">必須</span></label>
           <input type="date" class="input" id="captureDate">
         </div>
-        <div style="flex:1;min-width:0;">
+        <div style="flex:1 1 150px;min-width:0;">
           <label class="form-label">目視時刻<span class="req-badge">必須</span></label>
           <div class="time-wrap">
             <input type="time" class="input" id="captureTime" oninput="updateMishitRef()">
@@ -759,8 +759,8 @@ textarea { min-height: 80px; resize: vertical; }
         <label class="form-label">引取・出張の担当（職員）<span class="req-badge">必須</span></label>
         <input type="text" class="input" id="intakeStaff" placeholder="例: 沖 / 今泉" list="hunterList" autocomplete="off">
       </div>
-      <div class="form-row" style="display:flex;gap:18px;align-items:flex-start;">
-        <div style="flex:1;min-width:0;">
+      <div class="form-row" style="display:flex;flex-wrap:wrap;gap:12px 28px;align-items:flex-start;">
+        <div style="flex:1 1 150px;min-width:0;">
           <label class="form-label">放血開始<span class="req-badge">必須</span></label>
           <div class="time-wrap">
             <input type="time" class="input time-track" id="bleedTime" oninput="checkBleedingToIntakeTime()">
@@ -769,7 +769,7 @@ textarea { min-height: 80px; resize: vertical; }
           <div id="mishitRef" style="display:none;font-size:14px;color:var(--gold-light);font-weight:700;margin-top:5px;"></div>
           <div id="hunterBleedHint" style="display:none;color:var(--gold-light);font-size:11px;font-weight:600;margin-top:4px;">⏱ 放血から1時間以内を目安に搬入してください</div>
         </div>
-        <div style="flex:1;min-width:0;">
+        <div style="flex:1 1 150px;min-width:0;">
           <label class="form-label">搬送開始<span class="req-badge">必須</span></label>
           <div class="time-wrap">
             <input type="time" class="input" id="transportStart">
@@ -777,8 +777,8 @@ textarea { min-height: 80px; resize: vertical; }
           </div>
         </div>
       </div>
-      <div class="form-row" style="display:flex;gap:10px;margin-top:16px;">
-        <div style="flex:1;">
+      <div class="form-row" style="display:flex;flex-wrap:wrap;gap:12px 28px;margin-top:16px;align-items:flex-start;">
+        <div style="flex:1 1 150px;min-width:0;">
           <label class="form-label">受入時刻<span class="req-badge">必須</span></label>
           <div class="time-wrap">
             <input type="time" class="input time-track" id="receiveTime" oninput="checkBleedingToIntakeTime()">
@@ -786,7 +786,7 @@ textarea { min-height: 80px; resize: vertical; }
             <button type="button" class="now-btn" onclick="setNow('receiveTime')">今</button>
           </div>
         </div>
-        <div style="flex:1;">
+        <div style="flex:1 1 150px;min-width:0;">
           <label class="form-label">処理時刻<span style="opacity:.7;font-size:11px;">（受入＋10分）</span></label>
           <div class="time-wrap">
             <input type="time" class="input" id="processTime">
