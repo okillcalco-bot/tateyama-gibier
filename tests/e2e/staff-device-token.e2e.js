@@ -1,7 +1,4 @@
-// スタッフ認証: 端末には生キーを保存せず、失効可能な端末トークンを使う
-// - 初回はスタッフキーで登録→トークン保存（生キーはlocalStorageに残さない）
-// - 2回目以降は再入力なし（トークン再利用）
-// - 「認証を解除」でトークン失効＋端末から削除
+// スタッフ認証: 端末トークン(dt_)の再利用と失効。現場端末は生スタッフキーを扱わない。
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const http = require('http'); const fs = require('fs'); const path = require('path');
 (async () => {
@@ -24,37 +21,25 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
       let body = {}; try { body = JSON.parse(req.postData() || '{}'); } catch (e) {}
       rpc.push({ fn, body });
       if (fn === 'staff_token_ok') return j(true);
-      if (fn === 'staff_device_register') return j({ token: 'tok-abc', expires_at: '2026-09-14' });
       if (fn === 'staff_device_revoke') return j(true);
-      if (fn === 'staff_key_ok') return j(true);
       return j({});
     }
     return j([]);
   });
   await p.goto('http://localhost:9093/capture-form.html'); await p.waitForTimeout(300);
 
-  // 1) 初回: プロンプトでキー入力 → 端末登録 → トークン保存・生キーは保存しない
-  const first = await p.evaluate(async () => {
-    window.prompt = () => 'THE-STAFF-KEY-1234';
+  // 1) 認証済み端末（dt_トークンあり）は再入力なしで再利用
+  const reuse = await p.evaluate(async () => {
+    localStorage.setItem('tg_device_token', 'dt_reuse');
+    window.__prompted = false; window.prompt = () => { window.__prompted = true; return 'X'; };
     const tok = await staffKeyEnsure();
-    return { tok, deviceToken: localStorage.getItem('tg_device_token'), rawKey: localStorage.getItem('tg_staff_key') };
+    return { tok, prompted: window.__prompted };
   });
-  ck('初回でトークンを取得', first.tok === 'tok-abc', first.tok);
-  ck('端末トークンをlocalStorageに保存', first.deviceToken === 'tok-abc', String(first.deviceToken));
-  ck('生のスタッフキーは保存しない', !first.rawKey, String(first.rawKey));
-  ck('登録RPC(staff_device_register)を呼ぶ', rpc.some(c => c.fn === 'staff_device_register'));
+  ck('端末トークンを再利用', reuse.tok === 'dt_reuse', reuse.tok);
+  ck('再利用時にプロンプトを出さない', reuse.prompted === false, JSON.stringify(reuse));
+  ck('再利用は staff_token_ok で検証', rpc.some(c => c.fn === 'staff_token_ok'));
 
-  // 2) 2回目: プロンプトを呼ばず、トークンを再利用
-  const second = await p.evaluate(async () => {
-    window._prompted = false; window.prompt = () => { window._prompted = true; return 'X'; };
-    const tok = await staffKeyEnsure();
-    return { tok, prompted: window._prompted };
-  });
-  ck('2回目は再入力なし（プロンプト呼ばれない）', second.prompted === false, JSON.stringify(second));
-  ck('2回目もトークンを返す', second.tok === 'tok-abc', second.tok);
-  ck('2回目はstaff_token_okで検証', rpc.some(c => c.fn === 'staff_token_ok'));
-
-  // 3) 認証解除 → 失効RPC＋端末から削除
+  // 2) 認証解除 → 失効RPC＋端末から削除
   const revoked = await p.evaluate(async () => {
     window.alert = () => {};
     await staffDeviceRevoke();
@@ -63,11 +48,22 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   ck('失効RPC(staff_device_revoke)を呼ぶ', rpc.some(c => c.fn === 'staff_device_revoke'));
   ck('解除後は端末トークンが消える', !revoked.deviceToken, String(revoked.deviceToken));
 
-  // 4) 認証解除ボタンは認証中のみ表示
+  // 3) 未認証端末では生スタッフキーを要求しない（認証リンク案内のみ）
+  const noraw = await p.evaluate(async () => {
+    localStorage.removeItem('tg_device_token');
+    window.__promptedRaw = false; window.prompt = () => { window.__promptedRaw = true; return 'RAWKEY'; };
+    window.alert = () => {};
+    const t = await staffKeyEnsure();
+    return { t, prompted: window.__promptedRaw, rawKey: localStorage.getItem('tg_staff_key') };
+  });
+  ck('未認証時に生スタッフキーを要求しない', noraw.prompted === false && !noraw.t, JSON.stringify(noraw));
+  ck('生スタッフキーを保存しない', !noraw.rawKey);
+
+  // 4) 解除ボタンは認証中のみ表示
   const vis = await p.evaluate(() => {
     const el = document.getElementById('deviceRevokeBtn');
     const hiddenNow = el.style.display === 'none';
-    localStorage.setItem('tg_device_token', 'tok-abc'); updateDeviceRevokeVis();
+    localStorage.setItem('tg_device_token', 'dt_reuse'); updateDeviceRevokeVis();
     const shown = el.style.display !== 'none';
     return { hiddenNow, shown };
   });

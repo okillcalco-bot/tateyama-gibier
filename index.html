@@ -1911,8 +1911,8 @@ async function sb(method, table, body, query = '') {
   return t ? JSON.parse(t) : [];
 }
 
-/* スタッフキー（顧客マスタ＝顧客台帳の操作だけに使う。2026-08-12から出荷・BASE取込では不要）。
-   端末ごとに1回入れれば残る。手入力のほか、管理者端末の「共有リンク」（#skey=…）でも設定できる */
+/* スタッフキー（顧客マスタ＝顧客台帳のRLS操作だけに使う。個体の書込は端末トークンへ移行済み）。
+   端末ごとに手入力で1回だけ。生キーをURL(#skey)で配る旧方式は廃止（セキュリティ対応）。 */
 function staffKeyGet() {
   try { return localStorage.getItem('tg_staff_key') || sessionStorage.getItem('tg_staff_key') || ''; }
   catch (e) { return ''; }
@@ -1921,8 +1921,7 @@ async function staffKeyEnsure() {
   let k = staffKeyGet();
   if (k) return k;
   k = prompt('スタッフキーを入力してください（この端末では初回の1回だけ）\n' +
-    '※アプリ起動時の4桁コードとは別の、長いキーです。管理者がお持ちです。\n' +
-    '※管理者の端末から「共有リンク」を送ってもらうと、入力なしで設定できます。');
+    '※アプリ起動時の4桁コードとは別の、長いキーです。管理者がお持ちです。');
   if (!k) return '';
   k = k.trim();
   if (/^\d{4}$/.test(k)) {
@@ -1942,26 +1941,6 @@ async function staffKeyEnsure() {
   toast('スタッフキーを確認しました。この端末では次回から入力不要です');
   return k;
 }
-/* 共有リンク（#skey=…）でスタッフキーを受け取る。ハッシュはサーバーへ送られない。
-   照合してから保存し、URLからは即座に消す */
-(function () {
-  const m = (location.hash || '').match(/[#&]skey=([^&]+)/);
-  if (!m) return;
-  const k = decodeURIComponent(m[1]);
-  history.replaceState(null, '', location.pathname + location.search);
-  fetch(`${SB_URL}/rest/v1/rpc/staff_key_ok`, {
-    method: 'POST',
-    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ p_staff_key: k })
-  }).then(r => r.json()).then(ok => {
-    if (ok === true) {
-      try { localStorage.setItem('tg_staff_key', k); } catch (e) { try { sessionStorage.setItem('tg_staff_key', k); } catch (e2) {} }
-      setTimeout(() => toast('共有リンクからスタッフキーを設定しました。この端末では入力不要です'), 800);
-    } else {
-      setTimeout(() => toast('共有リンクのスタッフキーが正しくありません（変更された可能性があります）', 'error'), 800);
-    }
-  }).catch(() => {});
-})();
 
 /* ===== State ===== */
 let invData = [];
@@ -7304,13 +7283,17 @@ async function staffTokenEnsure() {
     try { if (await baseRpc('staff_token_ok', { p_token: tok })) return tok; } catch (e) {}
     try { localStorage.removeItem('tg_device_token'); sessionStorage.removeItem('tg_device_token'); } catch (e) {}
   }
-  // 既にRLS用の生キーが入っていれば、それでトークンを発行（追加入力なし）
+  // 管理端末は自分で招待を発行→即交換して端末トークンを得る（生キーは招待発行のみに使用）。
   let k = staffKeyGet();
-  if (!k) { k = (prompt('スタッフキーを入力してください（この端末を認証します。以後再入力不要）') || '').trim(); if (!k) return ''; }
-  let res;
-  try { res = await baseRpc('staff_device_register', { p_staff_key: k, p_label: (navigator.userAgent || '').slice(0, 60) }); }
+  if (!k) { k = await staffKeyEnsure(); if (!k) return ''; }
+  let inv;
+  try { inv = await baseRpc('staff_create_enrollment_token', { p_staff_key: k, p_label: 'admin:' + (navigator.userAgent || '').slice(0, 40) }); }
   catch (e) { alert('認証エラー: ' + (e.message || e)); return ''; }
-  if (!res || !res.token) { alert('スタッフキーが違います'); return ''; }
+  if (!inv || !inv.enroll_token) { alert('スタッフキーが違います'); return ''; }
+  let res;
+  try { res = await baseRpc('staff_enroll_device', { p_enroll_token: inv.enroll_token, p_label: 'admin' }); }
+  catch (e) { alert('端末認証に失敗: ' + (e.message || e)); return ''; }
+  if (!res || !res.token) { alert('端末認証に失敗しました'); return ''; }
   try { localStorage.setItem('tg_device_token', res.token); } catch (e) {}
   updateDeviceRevokeVis();
   return res.token;
@@ -7329,18 +7312,21 @@ function updateDeviceRevokeVis() {
 }
 window.addEventListener('DOMContentLoaded', updateDeviceRevokeVis);
 
-// 管理者用: 現場端末をキー入力なしで認証するための共有リンクをコピー。
-// 各センター端末でこのリンクを一度開くだけで端末トークンが設定される（生キーはURLから即消去）。
+// 管理者用: 現場端末を認証する「使い捨て招待リンク」を発行してコピー。
+// 生スタッフキーはURLに乗せない。招待は10分・1回限り。1端末につき1回発行する。
 async function copyDeviceSetupLink() {
-  let key = staffKeyGet();                 // 業務OSのRLS用に既に入っている生キー
+  let key = staffKeyGet();                 // 業務OSのRLS用に既に入っている生キー（招待発行=管理者操作）
   if (!key) { key = await staffKeyEnsure(); }
   if (!key) { toast('スタッフキーが未確認のため中止しました', 'error'); return; }
-  const base = location.origin;
-  const capLink = base + '/capture-form.html#skey=' + encodeURIComponent(key);
-  const recLink = base + '/record-list.html#skey=' + encodeURIComponent(key);
-  const text = '【現場端末の認証リンク（各端末で一度だけ開く）】\n捕獲票入力: ' + capLink + '\n搬入一覧: ' + recLink;
-  try { await navigator.clipboard.writeText(text); toast('認証リンクをコピーしました。各端末で一度開けば以後は入力不要です'); }
-  catch (e) { prompt('この内容を各端末へ送ってください（各端末で一度開く）:', text); }
+  let res;
+  try { res = await baseRpc('staff_create_enrollment_token', { p_staff_key: key, p_label: '現場端末' }); }
+  catch (e) { toast('招待の発行に失敗: ' + (e.message || e), 'error'); return; }
+  if (!res || !res.enroll_token) { toast('招待の発行に失敗しました', 'error'); return; }
+  const link = location.origin + '/capture-form.html#enroll=' + encodeURIComponent(res.enroll_token);
+  const text = '【端末認証リンク（10分・1回限り／1端末につき発行）】\n' + link +
+    '\n※対象端末でこのリンクを一度開くと、捕獲票入力・搬入一覧の両方が認証されます。';
+  try { await navigator.clipboard.writeText(text); toast('認証リンクを発行しコピーしました（10分・1回限り）'); }
+  catch (e) { prompt('この認証リンクを対象端末で一度だけ開いてください（10分・1回限り）:', text); }
 }
 
 // スタッフ認証つきの個体書込RPC（P0-2: anon直接更新の廃止に向けて）

@@ -24,7 +24,6 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
       if (fn === 'public_capture_submit') return j({ id: 'new1', label_id: '仮-ABC123', serial_number: null, submission_token: 'st_tok1' });
       if (fn === 'staff_capture_intake') return j({ id: 'new2', label_id: body.p_payload && body.p_payload.label_id, serial_number: 950, submission_token: 'st_tok2' });
       if (fn === 'staff_token_ok') return j(true);
-      if (fn === 'staff_device_register') return j({ token: 'dt_x', expires_at: '2026-09-14' });
       return j({});
     }
     if (url.includes('/individuals') && (m === 'POST' || m === 'PATCH')) { directWrites.push(m + ' ' + url); return j([]); }

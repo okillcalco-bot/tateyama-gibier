@@ -23,8 +23,7 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
     const j = x => route.fulfill({ contentType: 'application/json', body: JSON.stringify(x) });
     // 個体書込はRPC経由（P0-2）。精肉完了は staff_individual_update_by_label で来る
     if (url.includes('/rpc/staff_key_ok')) return j(true);
-    if (url.includes('/rpc/staff_token_ok')) return j(false);           // 端末未登録→登録へ
-    if (url.includes('/rpc/staff_device_register')) return j({ token: 'tok-1', expires_at: '2026-09-14' });
+    if (url.includes('/rpc/staff_token_ok')) return j(true);            // 端末は認証済み(dt_)
     if (url.includes('/rpc/staff_individual_update_by_label')) {
       const a = req.postDataJSON() || {};
       rest.patches.push({ url: '/individuals(rpc)', body: a.p_patch, label: a.p_label });
@@ -36,7 +35,7 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
     return j([]);
   });
   await p.goto('http://localhost:9075/index.html'); await p.waitForTimeout(500);
-  await p.evaluate(() => { try { localStorage.setItem('tg_staff_key', 'test-key'); } catch (e) {} });
+  await p.evaluate(() => { try { localStorage.setItem('tg_device_token', 'dt_test'); } catch (e) {} });
 
   // 精肉メイン画面の前提globalを用意（pmRenderParts等が参照）
   const setup = async (parts) => p.evaluate((parts) => {

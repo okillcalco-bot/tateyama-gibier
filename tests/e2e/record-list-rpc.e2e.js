@@ -23,7 +23,6 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
       rpc.push({ fn, body });
       if (fn === 'staff_key_ok') return j(true);
       if (fn === 'staff_token_ok') return j(true);          // 端末トークン有効
-      if (fn === 'staff_device_register') return j({ token: 'tok-1', expires_at: '2026-09-14' });
       return j({ id: 'x', label_id: (body.p_payload && body.p_payload.label_id) || 'L' });
     }
     if (url.includes('/individuals') && (m === 'POST' || m === 'PATCH')) { directWrites.push(m); return j([]); }

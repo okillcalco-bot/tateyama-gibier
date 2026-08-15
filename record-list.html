@@ -308,15 +308,9 @@ async function staffKeyEnsure() {
     try { if (await sbRpc('staff_token_ok', { p_token: tok })) return tok; } catch (e) {}
     staffKeyClear();
   }
-  const k = (prompt('スタッフキーを入力してください（この端末を認証します。以後再入力不要）') || '').trim();
-  if (!k) return '';
-  let res;
-  try { res = await sbRpc('staff_device_register', { p_staff_key: k, p_label: (navigator.userAgent || '').slice(0, 60) }); }
-  catch (e) { alert(String(e.message || e).includes('スタッフキー') ? 'スタッフキーが違います' : ('認証エラー: ' + e.message)); return ''; }
-  if (!res || !res.token) { alert('スタッフキーが違います'); return ''; }
-  try { localStorage.setItem(TG_TOKEN_KEY, res.token); } catch (e) { try { sessionStorage.setItem(TG_TOKEN_KEY, res.token); } catch (_e) {} }
-  updateDeviceRevokeVis();
-  return res.token;
+  // 現場端末に生スタッフキーは入力させない。管理者の「端末認証リンク」で認証する。
+  alert('この端末はまだ認証されていません。\n管理者から届いた「端末認証リンク」を一度開いて認証してください。');
+  return '';
 }
 async function staffDeviceRevoke() {
   const tok = staffKeyGet();
@@ -331,16 +325,16 @@ function updateDeviceRevokeVis() {
 }
 window.addEventListener('DOMContentLoaded', updateDeviceRevokeVis);
 
-// 共有リンク(#skey=…)でこの端末を一度だけ認証（管理者が開くだけ・キー入力不要・生キーは保存しない）
+// 端末認証リンク(#enroll=<使い捨て招待>)でこの端末を一度だけ認証（生キーはURLに乗せない・10分1回限り）
 async function setupDeviceFromHash() {
   let h = ''; try { h = location.hash || ''; } catch (e) {}
-  const m = h.match(/[#&]skey=([^&]+)/);
+  const m = h.match(/[#&]enroll=([^&]+)/);
   if (!m) return;
-  let key = ''; try { key = decodeURIComponent(m[1]).trim(); } catch (e) { key = (m[1] || '').trim(); }
+  let token = ''; try { token = decodeURIComponent(m[1]).trim(); } catch (e) { token = (m[1] || '').trim(); }
   try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { try { location.hash = ''; } catch (_e) {} }
-  if (!key) return;
+  if (!token) return;
   try {
-    const res = await sbRpc('staff_device_register', { p_staff_key: key, p_label: (navigator.userAgent || '').slice(0, 60) });
+    const res = await sbRpc('staff_enroll_device', { p_enroll_token: token, p_label: (navigator.userAgent || '').slice(0, 60) });
     if (res && res.token) {
       try { localStorage.setItem(TG_TOKEN_KEY, res.token); } catch (e) { try { sessionStorage.setItem(TG_TOKEN_KEY, res.token); } catch (_e) {} }
       updateDeviceRevokeVis();

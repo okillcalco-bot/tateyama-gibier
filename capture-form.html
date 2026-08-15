@@ -1025,17 +1025,11 @@ async function staffKeyEnsure() {
   let tok = staffKeyGet();
   if (tok) {
     try { if (await sbRpc('staff_token_ok', { p_token: tok })) return tok; } catch (e) {}
-    staffKeyClear();   // 失効/期限切れ → 破棄して再認証
+    staffKeyClear();   // 失効/期限切れ → 破棄
   }
-  const k = (prompt('スタッフキーを入力してください（この端末を認証します。以後この端末では再入力不要）') || '').trim();
-  if (!k) return '';
-  let res;
-  try { res = await sbRpc('staff_device_register', { p_staff_key: k, p_label: (navigator.userAgent || '').slice(0, 60) }); }
-  catch (e) { alert(String(e.message || e).includes('スタッフキー') ? 'スタッフキーが違います' : ('認証エラー: ' + e.message)); return ''; }
-  if (!res || !res.token) { alert('スタッフキーが違います'); return ''; }
-  try { localStorage.setItem(TG_TOKEN_KEY, res.token); } catch (e) { try { sessionStorage.setItem(TG_TOKEN_KEY, res.token); } catch (_e) {} }
-  updateDeviceRevokeVis();
-  return res.token;
+  // 現場端末に生スタッフキーは入力させない。管理者の「端末認証リンク」で認証する。
+  alert('この端末はまだ認証されていません。\n管理者から届いた「端末認証リンク」を一度開いて認証してください。');
+  return '';
 }
 // 「この端末の認証を解除」（共有端末・紛失時に）
 async function staffDeviceRevoke() {
@@ -1052,18 +1046,17 @@ function updateDeviceRevokeVis() {
 }
 window.addEventListener('DOMContentLoaded', updateDeviceRevokeVis);
 
-// 共有リンク(#skey=…)でこの端末を一度だけ認証する。
-// 管理者がセンターの各端末でリンクを開くだけ＝現場スタッフはキー入力不要。
-// 生キーはURLフラグメントのみ（サーバへ送られない）→トークン化して即URLから消す。端末に生キーは残さない。
+// 端末認証リンク(#enroll=<使い捨て招待>)でこの端末を一度だけ認証する。
+// 生スタッフキーはURLに乗せない。招待は10分・1回限りで、交換すると即URLから消す。
 async function setupDeviceFromHash() {
   let h = ''; try { h = location.hash || ''; } catch (e) {}
-  const m = h.match(/[#&]skey=([^&]+)/);
+  const m = h.match(/[#&]enroll=([^&]+)/);
   if (!m) return;
-  let key = ''; try { key = decodeURIComponent(m[1]).trim(); } catch (e) { key = (m[1] || '').trim(); }
+  let token = ''; try { token = decodeURIComponent(m[1]).trim(); } catch (e) { token = (m[1] || '').trim(); }
   try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { try { location.hash = ''; } catch (_e) {} }
-  if (!key) return;
+  if (!token) return;
   try {
-    const res = await sbRpc('staff_device_register', { p_staff_key: key, p_label: (navigator.userAgent || '').slice(0, 60) });
+    const res = await sbRpc('staff_enroll_device', { p_enroll_token: token, p_label: (navigator.userAgent || '').slice(0, 60) });
     if (res && res.token) {
       try { localStorage.setItem(TG_TOKEN_KEY, res.token); } catch (e) { try { sessionStorage.setItem(TG_TOKEN_KEY, res.token); } catch (_e) {} }
       updateDeviceRevokeVis();
