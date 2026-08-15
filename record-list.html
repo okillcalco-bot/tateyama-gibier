@@ -558,13 +558,15 @@ function closeDeleteModal() {
 }
 
 async function confirmDelete() {
+  const ids = [...pendingDeleteIds];
   closeDeleteModal();
+  if (!ids.length) return;
   try {
-    for (const id of pendingDeleteIds) {
+    for (const id of ids) {
       // 物理削除は禁止（市役所提出データの改ざん耐性のため）。論理削除（deleted_at）に統一。
       await sb('PATCH', 'individuals', { deleted_at: new Date().toISOString() }, '?id=eq.' + id);
     }
-    showToast(pendingDeleteIds.length + 'ä»¶ãåé¤ãã¾ãã');
+    showToast(ids.length + 'ä»¶ãåé¤ãã¾ãã');
     pendingDeleteIds = [];
     await loadData();
   } catch(e) {
