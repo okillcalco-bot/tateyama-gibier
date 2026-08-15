@@ -61,6 +61,17 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   ck('候補選択で氏名入力', picked.name === '加藤茂', picked.name);
   ck('選択で候補を閉じる', picked.boxHidden);
 
+  // 4b) 止め刺し者も同じふりがな予測
+  const fin = await p.evaluate(() => {
+    const inp = document.getElementById('finisherName'); inp.value = 'おき'; onFinisherInput();
+    const box = document.getElementById('finisherSuggest');
+    const items = [...box.querySelectorAll('.hsg-item')].map(x => x.dataset.name);
+    return { shown: box.style.display !== 'none', items };
+  });
+  ck('止め刺し者もふりがな予測（おき→沖浩志）', fin.shown && fin.items.includes('沖浩志'), JSON.stringify(fin));
+  await p.evaluate(() => { pickFinisherSuggest('沖浩志'); });
+  ck('止め刺し者候補選択で入力', await p.evaluate(() => document.getElementById('finisherName').value) === '沖浩志');
+
   // 5) いつもの捕獲場所を入れると地区UIが畳まれ「入力済み」バナー
   const done = await p.evaluate(() => {
     applyHunterArea({ city: '館山市', area: '神余' });
