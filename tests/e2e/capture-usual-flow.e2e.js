@@ -88,6 +88,24 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   });
   ck('チップタップで捕獲方法を切替(箱罠)', tapped.method === '箱罠' && tapped.activeChip === '箱罠', JSON.stringify(tapped));
 
+  // 4b) いつものが使えるとき、後ろの選択トグル（捕獲方法・止めさし方法）は畳まれる
+  const collapsed = await p.evaluate(() => ({
+    method: document.getElementById('methodRow').style.display === 'none',
+    finish: document.getElementById('finishRow').style.display === 'none',
+  }));
+  ck('いつもの時: 捕獲方法トグルは畳む', collapsed.method, JSON.stringify(collapsed));
+  ck('いつもの時: 止めさし方法トグルは畳む', collapsed.finish, JSON.stringify(collapsed));
+  // 「別の方法を選ぶ」で開く
+  const opened = await p.evaluate(() => {
+    pickNewMethod(); pickNewFinish();
+    return {
+      method: document.getElementById('methodRow').style.display !== 'none',
+      finish: document.getElementById('finishRow').style.display !== 'none',
+    };
+  });
+  ck('別の方法: 捕獲方法トグルが開く', opened.method, JSON.stringify(opened));
+  ck('別の方法: 止めさし方法トグルが開く', opened.finish, JSON.stringify(opened));
+
   // 5) 搬入一覧の当日通し番号（到着=created_at順、種別関係なし）
   await p.evaluate(() => document.querySelector('[data-tab="list"]').click());
   await p.waitForTimeout(400);
