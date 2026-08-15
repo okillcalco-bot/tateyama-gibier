@@ -3068,19 +3068,42 @@ async function arCapture() {
   const stamp = ((_boardRec && _boardRec.label_id) || 'photo').replace(/[^\w-]/g, '_');
   const dateStr = (_boardRec && _boardRec.capture_date) || '';
   const fname = stamp + (dateStr ? '_' + dateStr : '') + '.jpg';
+  arMsg('サーバーに保存中…');
   cv.toBlob(async function (blob) {
     if (!blob) { arMsg('画像の生成に失敗しました'); return; }
-    const file = new File([blob], fname, { type: 'image/jpeg' });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file] }); arMsg('保存/共有しました'); return; }
-      catch (e) { if (e && e.name === 'AbortError') { arMsg(''); return; } }
+    try {
+      await arUploadPhoto(blob);
+      arMsg('✅ サーバーに保存しました（市役所提出用に個体へ紐づけ）');
+    } catch (e) {
+      // 通信失敗時はデータを失わないよう端末にも保存
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = fname;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+      arMsg('⚠️ サーバー保存に失敗。端末に保存しました（通信確認後にもう一度撮影してください）');
     }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = fname;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
-    arMsg('写真を保存しました（端末のダウンロード/写真を確認）');
   }, 'image/jpeg', 0.9);
+}
+// 撮影画像をサーバー(capture-photosバケット)へ保存し、登録済み個体なら image_url に紐づける
+async function arUploadPhoto(blob) {
+  const r = _boardRec || {};
+  const mode = _arMode === 'whiteboard' ? 'wb' : 'board';
+  const safe = s => String(s == null ? '' : s).replace(/[^A-Za-z0-9_-]/g, '_');
+  const base = r.label_id ? safe(r.label_id)
+    : ('pickup_' + safe(r.capture_date || '') + '_' + safe(r.hunter_name || 'unknown'));
+  const path = base + '/ar-' + mode + '-' + Date.now() + '.jpg';
+  const res = await fetch(`${SB_URL}/storage/v1/object/${SV_BUCKET}/${path}`, {
+    method: 'POST',
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'image/jpeg', 'x-upsert': 'true' },
+    body: blob,
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const url = `${SB_URL}/storage/v1/object/public/${SV_BUCKET}/${path}`;
+  // 登録済み個体で看板写真なら、市役所提出用の主画像として image_url に保存
+  if (r.label_id && mode === 'board') {
+    await sb('PATCH', 'individuals', { image_url: url }, '?label_id=eq.' + encodeURIComponent(r.label_id));
+  }
+  return url;
 }
 // 看板をcanvasの左下に描く（プレビュー #arBoard と同じ内容）
 function arDrawBoard(ctx, W, H, d) {
