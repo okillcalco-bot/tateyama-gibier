@@ -8,6 +8,7 @@
 | `invoice_confirm.test.sql` | 2/3 確認画面テスト（矛盾拒否・手動確定・商品alias・金額検算・実績反映/取消・監査・認可）／38件 |
 | `invoice_confirm_hardening.test.sql` | 2/3 ハードニング（状態ゲート・親行ロック・検索・alias残存・担当者必須・認可網羅）／41件 |
 | `phase4_usual_prices.test.sql` | 3/3（いつもの自動生成の取消除外/pin保持/saved_items不変・価格比較・portal_enabled・認可）／22件 |
+| `phase4_portal_e2e.test.sql` | 3/3 顧客ポータル実連携（order.html が呼ぶ portal_* を login→usual→last→rebuild→place_order→favorite で通し検証。3社分の試験データ・在庫を begin/rollback で用意）／25件 |
 | `invoice_rollback.test.sql` | ロールバックSQLの完全性テスト（全オブジェクト削除→残存0件→復元） |
 | `concurrent-import.test.mjs` | 同時投入の冪等テスト（`Promise.all`・任意・要スタッフキー） |
 | `concurrent-finalize.test.mjs` | finalizeと編集の同時実行テスト（親行ロックの直列化・A/B/C・任意・要スタッフキー） |
@@ -19,6 +20,7 @@
 - 2/3 `invoice_confirm.test.sql`: **38/38 PASS**
 - 2/3 `invoice_confirm_hardening.test.sql`: **41/41 PASS**
 - 3/3 `phase4_usual_prices.test.sql`: **22/22 PASS**
+- 3/3 `phase4_portal_e2e.test.sql`: **25/25 PASS**（2026-08-16 本番DBで実測・残骸0件。いつもの表示/取消除外/再集計冪等/お気に入り不変/is_hidden非表示/顧客間分離/過去価格不使用・現在価格サーバー再解決/在庫切れ・販売停止の理由つき拒否/portal_enabledゲート/二重注文防止/不正トークン拒否）
 - E2E `invoice-import.e2e.js`: **24/24 PASS**／`portal-config.e2e.js`: **14/14 PASS**（Playwright 390×844）
 
 ## フェーズ4(3/3)（phase4_usual_prices.test.sql・2026-08-13 実測 22/22 PASS）
