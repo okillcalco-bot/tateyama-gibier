@@ -1,9 +1,16 @@
 -- rollback of 20260815_recovery_ratelimit_fix.sql
--- ★★ FORWARD-ONLY / 通常運用では使用しないこと ★★
--- このファイルは「回復コード試行制限が無い脆弱な状態」へ戻す。セキュリティ上、通常手順として
--- 適用してはならない。不具合時は巻き戻しではなく forward-fix（新しい追加マイグレーション）で対応する。
--- 参考用として直前定義を残すのみ。実行するのは、直後に上位版(20260816_capture_rpcs_v2_fixes.sql)を
--- 再適用して安全状態に戻す前提の緊急復旧に限る。
+-- ★★ FORWARD-ONLY / 通常運用では使用しないこと（Codex 4巡目 P1-3 対応でガード追加） ★★
+-- このファイルは「回復コード試行制限が無い脆弱な状態」へ戻す参考定義であり、そのままでは実行できない。
+-- セキュリティ上、通常手順として適用してはならない。不具合時は巻き戻しではなく
+-- forward-fix（新しい追加マイグレーション）で対応する。
+-- どうしても緊急復旧で使う場合は、下の RAISE ガードを一時的に外し、実行直後に必ず上位版
+-- (20260815_recovery_ratelimit_fix.sql 以降のハードニング済み定義)を再適用して安全状態へ戻すこと。
+
+-- 誤実行防止ガード。脆弱定義を復元する前に、この RAISE を一時的にコメントアウトすること。
+do $$
+begin
+  raise exception 'この rollback は試行制限の無い脆弱な staff_key_ok/admin_rotate_staff_key を復元します。実行するには冒頭の RAISE を一時的に外し、直後にハードニング済み定義を必ず再適用してください。';
+end $$;
 
 create or replace function staff_key_ok(p_staff_key text)
 returns boolean

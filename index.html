@@ -5682,12 +5682,18 @@ async function indSave() {
     if (!key) { toast('スタッフキーが未確認のため保存を中止しました', 'error'); btn.disabled = false; btn.textContent = '保存'; return; }
     if (indEditId) {
       const labelChanged = label_id && label_id !== indEditId;
-      if (labelChanged && !confirm(`個体管理番号を変更します。\n\n　${indEditId}　→　${label_id}\n\nこの個体に紐づく在庫・加工の記録も新しい番号に付け替わります。よろしいですか？`)) {
-        btn.disabled = false; btn.textContent = '保存'; return;
+      let relabelReason = null;
+      if (labelChanged) {
+        if (!confirm(`個体管理番号を変更します。\n\n　${indEditId}　→　${label_id}\n\nこの個体に紐づく在庫・加工の記録も新しい番号に付け替わります。よろしいですか？`)) {
+          btn.disabled = false; btn.textContent = '保存'; return;
+        }
+        // 番号変更（改番）は理由必須（監査に残る）。属性のみの編集では理由を尋ねない。
+        relabelReason = askReason('個体番号の変更');
+        if (!relabelReason) { toast('番号変更の理由が未入力のため中止しました', 'error'); btn.disabled = false; btn.textContent = '保存'; return; }
       }
       // 編集＋番号変更を単一トランザクションで（統合RPC）。番号は削除済み含め重複不可。
       const patch = Object.assign({}, payload); delete patch.label_id;
-      await baseRpc('staff_individual_edit', { p_staff_key: key, p_id: indEditUuid, p_patch: patch, p_new_label: labelChanged ? label_id : null, p_reason: '個体情報編集' });
+      await baseRpc('staff_individual_edit', { p_staff_key: key, p_id: indEditUuid, p_patch: patch, p_new_label: labelChanged ? label_id : null, p_reason: relabelReason });
       toast('保存しました');
     } else if (indRestoredLabel === label_id) {
       // 削除済みだった個体を復元して上書き（復元→更新を単一のスタッフ操作として）

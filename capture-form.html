@@ -2509,9 +2509,23 @@ async function svMakeSheets(rec, uploaded) {
     const ph = svBuildPhotoSheet(r, urls);
     setTimeout(() => svOpenPrint(`写真票_${stamp}_${who}`, ph.html, ph.css), 1200);
   }
-  // 出力した日時を記録（この日から SV_KEEP_DAYS 後に写真を消す）
+  // 出力した日時を記録（この日から SV_KEEP_DAYS 後に写真を消す）。
+  // 登録直後は提出者トークン、後日のスタッフ操作は端末トークンで更新。失敗は握り潰さず警告。
   if (r.label_id) {
-    try { await sbRpc('public_capture_update_survey', { p_label_id: r.label_id, p_patch: { survey_downloaded_at: new Date().toISOString() } }); } catch (e) {}
+    const patch = { survey_downloaded_at: new Date().toISOString() };
+    try {
+      if (window._submissionToken) {
+        await sbRpc('public_capture_update_survey', { p_submission_token: window._submissionToken, p_patch: patch, p_request_id: newRequestId() });
+      } else if (r.id) {
+        const key = await staffKeyEnsure();
+        if (!key) throw new Error('端末が未認証です（認証リンクで認証してください）');
+        await sbRpc('staff_individual_update', { p_staff_key: key, p_id: r.id, p_patch: patch });
+      } else {
+        throw new Error('対象個体を特定できません');
+      }
+    } catch (e) {
+      alert('提出日時の記録に失敗しました（写真の自動削除の基準日が入りません）:\n' + (e.message || e));
+    }
   }
 }
 
@@ -2765,7 +2779,13 @@ async function handleSubmit() {
         const patch = pickKeys(record, STAFF_INTAKE_KEYS); delete patch.label_id;
         const newLabel = (record.label_id || '').trim();
         const relabel = (newLabel && editRecord && newLabel !== editRecord.label_id) ? newLabel : null;
-        await sbRpc('staff_individual_edit', { p_staff_key: key, p_id: editRecordId, p_patch: patch, p_new_label: relabel, p_reason: '捕獲票入力の編集' });
+        // 改番（個体番号が実際に変わる）場合のみ理由を必須にする。属性のみの編集では尋ねない。
+        let relabelReason = null;
+        if (relabel) {
+          relabelReason = (prompt(`個体番号を ${editRecord.label_id} → ${relabel} に変更します。\n理由を入力してください（監査記録に残ります）\n例: 誤記の訂正・重複・仮番号の確定`) || '').trim();
+          if (!relabelReason) { alert('番号変更の理由が未入力のため保存を中止しました'); btn.disabled = false; btn.textContent = '搬入登録'; return; }
+        }
+        await sbRpc('staff_individual_edit', { p_staff_key: key, p_id: editRecordId, p_patch: patch, p_new_label: relabel, p_reason: relabelReason });
         saved = Object.assign({}, record, { id: editRecordId });
       } else if (window.hunterMode) {
         // 一般捕獲者の登録: 公開RPC。仮番号・搬入待ちはサーバが付与。正式情報は送らない。
@@ -2776,9 +2796,17 @@ async function handleSubmit() {
         // センター受入（スタッフ）: 端末トークン必須。正式番号採番・空枠充当・受入情報。
         const key = await staffKeyEnsure();
         if (!key) { alert('スタッフキーが未確認のため保存を中止しました'); btn.disabled = false; btn.textContent = '搬入登録'; return; }
-        const res = await sbRpc('staff_capture_intake', { p_staff_key: key, p_payload: pickKeys(record, STAFF_INTAKE_KEYS), p_request_id: reqId });
-        saved = Object.assign({}, record, res || {});
-        window._submissionToken = res && res.submission_token;
+        // request_id を送信前に端末へ固定（レスポンス喪失時も同一IDで再送→個体1件）
+        const intakeReq = intakeReqId();
+        try {
+          const res = await sbRpc('staff_capture_intake', { p_staff_key: key, p_payload: pickKeys(record, STAFF_INTAKE_KEYS), p_request_id: intakeReq });
+          clearIntakeReqId();                        // 成功: 固定IDを消去
+          saved = Object.assign({}, record, res || {});
+          window._submissionToken = res && res.submission_token;
+        } catch (e2) {
+          if (!isRetryable(e2)) clearIntakeReqId();  // 4xx/409は内容起因: 次回は新規IDで
+          throw e2;                                  // それ以外(回線/5xx)は固定IDを保持したまま通知
+        }
       }
     } catch(e) {
       // 一般捕獲者のオフライン一時障害のみ端末キューへ（冪等に再送）。編集・受入・4xxはその場で通知。
@@ -2841,6 +2869,16 @@ function newRequestId() {
   try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
   return 'req-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 }
+// センター受入(staff_capture_intake)の request_id を送信前に端末へ固定する。
+// DB成功→レスポンス喪失（回線瞬断・5xx）でも、同じ端末で再送すれば同一IDで冪等化され個体は1件。
+// 成功で消去。4xx/409（内容起因）は消去して次回は新規IDでやり直す（自動再送しない）。
+function intakeReqId() {
+  let id = null;
+  try { id = localStorage.getItem('tgc_intake_reqid'); } catch (e) {}
+  if (!id) { id = newRequestId(); try { localStorage.setItem('tgc_intake_reqid', id); } catch (e) {} }
+  return id;
+}
+function clearIntakeReqId() { try { localStorage.removeItem('tgc_intake_reqid'); } catch (e) {} }
 function loadQueue() {
   let raw = [];
   try { raw = JSON.parse(localStorage.getItem('tgc_queue') || '[]'); } catch (e) { raw = []; }

@@ -584,10 +584,21 @@ async function saveField(el) {
   const val = (el.value !== undefined && el.value !== null) ? el.value : ((el.textContent || '').trim() || null);
   // 個体番号は統合RPCで変更（FKカスケード＋在庫コード同期＋削除済み含む重複禁止）
   if (field === 'label_id') {
+    const newLabel = (val || '').trim();
+    const cur = allData.find(r => String(r.id) === String(id));
+    const oldLabel = (cur && cur.label_id) ? String(cur.label_id).trim() : '';
+    // 実際に番号が変わる場合のみ改番として扱い、理由を必須にする
+    if (newLabel === oldLabel) { return; }
+    const reason = (prompt(`個体番号を ${oldLabel || '(空)'} → ${newLabel} に変更します。\n理由を入力してください（監査記録に残ります）\n例: 誤記の訂正・重複・仮番号の確定`) || '').trim();
+    if (!reason) {
+      showToast('番号変更の理由が未入力のため中止しました', true);
+      if (cur) el.value = cur.label_id;  // 入力欄を元に戻す
+      return;
+    }
     try {
       const key = await staffKeyEnsure();
       if (!key) { showToast('スタッフキーが未確認のため中止しました', true); return; }
-      await sbRpc('staff_individual_edit', { p_staff_key: key, p_id: id, p_patch: {}, p_new_label: (val || '').trim(), p_reason: '搬入一覧での番号変更' });
+      await sbRpc('staff_individual_edit', { p_staff_key: key, p_id: id, p_patch: {}, p_new_label: newLabel, p_reason: reason });
       showToast('保存しました');
     } catch (e) { showToast('保存エラー: ' + e.message, true); }
   } else {
