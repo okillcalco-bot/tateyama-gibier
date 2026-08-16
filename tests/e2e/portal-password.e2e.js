@@ -170,7 +170,24 @@ function resolveChromePath() {
     await ctx.close();
   }
 
-  // ───────── order-admin.html: 発行した平文の消去（P1-5） ─────────
+  // D) URLトークン(#t=)は自動ログインに使わない・セッションに保存しない（リンク認証廃止）
+  {
+    const { ctx, page } = await newOrderPage(() =>
+      [{ status: 'invalid', token: null, must_change: null }]);
+    await page.goto(BASE + '/order.html#t=SOME_LINK_TOKEN_mock');
+    await page.waitForTimeout(400);
+    const d = await page.evaluate(() => ({
+      onLogin: !document.getElementById('scr-login').classList.contains('hidden'),
+      onList: !document.getElementById('scr-list').classList.contains('hidden'),
+      tok: sessionStorage.getItem('tg_ptoken') || '',
+      hash: location.hash
+    }));
+    ck('D1 #t= トークンでは自動ログインしない（ログイン画面）', d.onLogin && !d.onList, JSON.stringify(d));
+    ck('D2 #t= をセッションに保存しない', d.tok === '' && !d.hash.includes('SOME_LINK_TOKEN_mock'), 'tok=' + d.tok + ' hash=' + d.hash);
+    await ctx.close();
+  }
+
+  // ───────── order-admin.html: カード視認性＋発行した平文の消去（P0-2 / P1-5） ─────────
   {
     const ctx = await b.newContext({ viewport: { width: 1200, height: 900 }, acceptDownloads: true });
     const page = await ctx.newPage();
@@ -184,46 +201,120 @@ function resolveChromePath() {
       phone: '0470-00-1234', email: '', address: '館山市テスト1-2-3', building: '', price_rank: 'standard' };
     const ISSUED_PW = '654321';
 
+    // admin_issue_customer_link が呼ばれたら記録（新方式では一切呼ばれてはならない）
+    const linkCalls = [];
     // 後勝ちのため 汎用→customers→rpc の順で登録（rpc を最優先に）
     await page.route('**/rest/v1/**', route => jFill(route, []));
     await page.route('**/rest/v1/customers**', route => jFill(route, [CUST]));
     await page.route('**/rest/v1/rpc/**', async route => {
       const fn = route.request().url().split('/rpc/')[1].split('?')[0];
+      if (fn === 'admin_issue_customer_link') { linkCalls.push(fn); return jFill(route, []); }
       if (fn === 'staff_key_ok') return jFill(route, true);
       if (fn === 'staff_issue_portal_passwords')
         return jFill(route, [{ customer_id: 'cust-1', code: 'C0001', name: 'モック商店', login_id: 'c0001', password: ISSUED_PW }]);
-      if (fn === 'admin_issue_customer_link')
-        return jFill(route, [{ customer_id: 'cust-1', token: 'LINK_TOKEN_mock' }]);
+      if (fn === 'staff_unlock_portal') return jFill(route, true);
+      if (fn === 'admin_portal_credential_status')
+        return jFill(route, [{ customer_id: 'cust-1', code: 'C0001', name: 'モック商店', portal_enabled: true,
+          login_id: 'c0001', pw_state: 'temp_issued', temp_issued_at: new Date(Date.now() - 3600000).toISOString(),
+          last_login_at: null, locked: false, locked_until: null }]);
       return jFill(route, []);
     });
 
     await page.goto(BASE + '/order-admin.html');
     await page.waitForTimeout(300);
 
-    // 顧客を読み込み、CSV発行（平文を含む）→ finally で消去されることを確認
+    // CSV発行（平文を含む）→ finally で消去。案内文にリンク(#t=)が含まれないこと。
     const res = await page.evaluate(async () => {
-      await loadCustomers();
-      renderCustomers();
-      // 発行→CSV書き出し（confirm は自動 accept）
+      await loadCustomers(); renderCustomers();
+      const msg = (typeof buildPortalMsg === 'function') ? buildPortalMsg(allCustomers[0], 'mail') : '';
       await exportPortalCsv();
-      // 名簿オブジェクトから平文が消えていること
-      const anyPw = (window.allCustomers || []).some(c => c.__issuedPw || c.__issuedLink);
-      return { anyPw, ss: JSON.stringify(sessionStorage), ls: JSON.stringify(localStorage) };
+      const anyPw = (allCustomers || []).some(c => c.__issuedPw || c.__issuedLink);
+      return { anyPw, msg, ss: JSON.stringify(sessionStorage), ls: JSON.stringify(localStorage) };
     });
     ck('C1 CSV発行後、名簿メモリから平文を消去（P1-5）', res.anyPw === false);
-    const noPwInStorage = !res.ss.includes(ISSUED_PW) && !res.ls.includes(ISSUED_PW)
-      && !res.ss.includes('LINK_TOKEN_mock') && !res.ls.includes('LINK_TOKEN_mock');
-    ck('C2 平文パスワード/リンクを storage に保存しない', noPwInStorage);
+    ck('C2 平文パスワードを storage に保存しない', !res.ss.includes(ISSUED_PW) && !res.ls.includes(ISSUED_PW));
+    ck('C3 案内文に #t= リンクを含めない（リンク認証廃止）', !res.msg.includes('#t=') && !res.msg.includes('かんたんログイン'));
+    ck('C4 admin_issue_customer_link を一度も呼ばない', linkCalls.length === 0, 'calls=' + linkCalls.length);
 
     // コピー1件→ finally 消去
     const res2 = await page.evaluate(async () => {
       await portalCopyOne('cust-1');
-      return (window.allCustomers || []).some(c => c.__issuedPw || c.__issuedLink);
+      return (allCustomers || []).some(c => c.__issuedPw || c.__issuedLink);
     });
-    ck('C3 案内文コピー後も平文を消去', res2 === false);
+    ck('C5 案内文コピー後も平文を消去', res2 === false);
 
-    ck('C4 JSエラーなし（admin）', errs.length === 0, errs[0]);
-    await page.screenshot({ path: path.join(ARTIFACTS, 'order-admin-portal.png') }).catch(() => {});
+    // ── 注文サイト設定カード（視認性・操作） ──
+    await page.evaluate(() => { openEditCustomer('cust-1'); });
+    await page.waitForSelector('#custModal.show', { timeout: 3000 }).catch(() => {});
+    // カードが表示され、状態バッジが「仮発行済み」
+    const cardVisible = await page.isVisible('.portal-card');
+    const badgeText = (await page.textContent('#cfPwBadge') || '').trim();
+    ck('E1 注文サイト設定カードが表示される', cardVisible);
+    ck('E2 状態バッジが仮発行済み（RPC状態を反映）', badgeText === '仮発行済み', badgeText);
+
+    // トグル: 利用中→停止中→利用中
+    const stateBefore = (await page.textContent('#cfPortalState') || '').trim();
+    await page.click('#cfPortalToggle');
+    const stateAfter = (await page.textContent('#cfPortalState') || '').trim();
+    ck('E3 大トグルで利用中/停止中が切り替わる', stateBefore !== stateAfter && ['利用中', '停止中'].includes(stateAfter), stateBefore + '->' + stateAfter);
+    await page.click('#cfPortalToggle'); // 元に戻す
+
+    // タップ領域44px以上（カード内の操作ボタンのみ。バッジ等の表示要素は対象外）
+    const smallTargets = await page.evaluate(() => {
+      const sels = ['#cfPortalToggle', '.portal-issue-btn', '.pf-copy', '#cfUnlockBtn'];
+      const els = sels.map(s => document.querySelector(s)).filter(Boolean);
+      return els.filter(e => { const r = e.getBoundingClientRect(); return r.height > 0 && r.height < 44; })
+        .map(e => (e.id || e.className) + ':' + Math.round(e.getBoundingClientRect().height));
+    });
+    ck('E4 カード操作のタップ領域が44px以上', smallTargets.length === 0, smallTargets.join(','));
+
+    // 横スクロールが無い（PC）
+    const noHScrollPC = await page.evaluate(() => { const e = document.documentElement; return e.scrollWidth <= e.clientWidth + 1; });
+    ck('E5 PCで横スクロールなし', noHScrollPC);
+    await page.screenshot({ path: path.join(ARTIFACTS, 'admin-card-pc.png') }).catch(() => {});
+
+    // 発行完了モーダル: 6桁・URL・ID・有効期限を表示し、生JSONは出さない
+    page.once('dialog', d => d.accept().catch(() => {}));
+    await page.evaluate(async () => { await custReissuePassword(); });
+    await page.waitForSelector('#pwIssueModal.show', { timeout: 3000 }).catch(() => {});
+    const modal = await page.evaluate(() => ({
+      pw: (document.getElementById('pwiPw').textContent || '').trim(),
+      id: (document.getElementById('pwiId').textContent || '').trim(),
+      url: (document.getElementById('pwiUrl').textContent || '').trim(),
+      exp: (document.getElementById('pwiExp').textContent || '').trim(),
+      bodyText: document.getElementById('pwIssueModal').innerText || ''
+    }));
+    ck('E6 発行完了モーダルに6桁・ID・URL・有効期限を表示', /^[0-9]{6}$/.test(modal.pw) && modal.id === 'c0001' && /order\.html/.test(modal.url) && modal.exp.length > 0, JSON.stringify(modal).slice(0, 120));
+    ck('E7 生JSON/トークンを画面に出さない', !modal.bodyText.includes('{') && !modal.bodyText.includes('customer_id'));
+    await page.screenshot({ path: path.join(ARTIFACTS, 'admin-issue-modal-pc.png') }).catch(() => {});
+
+    // まとめてコピー → 閉じる → 平文残存なし
+    await page.click('button[onclick="pwiCopyAll()"]');
+    await page.click('button[onclick="closePwIssueModal()"]');
+    const afterClose = await page.evaluate(() => ({
+      pw: (document.getElementById('pwiPw').textContent || ''),
+      pwIssue: _pwIssue,
+      anyPw: (allCustomers || []).some(c => c.__issuedPw),
+      ss: JSON.stringify(sessionStorage), ls: JSON.stringify(localStorage)
+    }));
+    ck('E8 モーダルを閉じたら6桁をDOM・メモリから消去（P1-5）',
+      afterClose.pw === '' && !afterClose.pwIssue && afterClose.anyPw === false);
+    ck('E9 コピー/発行後に平文を storage へ残さない', !afterClose.ss.includes('654321') && !afterClose.ls.includes('654321'));
+
+    // 390px（スマホ）: カード表示・横スクロールなし・タップ44px
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => { closeModal('custModal'); openEditCustomer('cust-1'); });
+    await page.waitForTimeout(200);
+    const noHScroll390 = await page.evaluate(() => { const e = document.documentElement; return e.scrollWidth <= e.clientWidth + 1; });
+    ck('E10 390pxで横スクロールなし', noHScroll390);
+    const small390 = await page.evaluate(() => {
+      const els = [document.getElementById('cfPortalToggle'), document.querySelector('.portal-issue-btn'), document.querySelector('.pf-copy')].filter(Boolean);
+      return els.filter(e => { const r = e.getBoundingClientRect(); return r.height > 0 && r.height < 44; }).length;
+    });
+    ck('E11 390pxでもタップ領域44px以上', small390 === 0);
+    await page.screenshot({ path: path.join(ARTIFACTS, 'admin-card-390.png') }).catch(() => {});
+
+    ck('E12 JSエラーなし（admin）', errs.length === 0, errs[0]);
     await ctx.close();
   }
 
