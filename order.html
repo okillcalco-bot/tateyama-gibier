@@ -144,6 +144,25 @@ body.kb .bar{display:none}
     ログイン情報はセンターからお送りした案内をご覧ください。<br>お困りのときはお電話ください。</div>
 </div>
 
+<!-- ══════════ 初回パスワード設定 ══════════ -->
+<div id="scr-changepw" class="hidden">
+  <div style="max-width:390px;margin:0 auto;padding:48px 20px">
+    <h1 style="font-size:20px;color:var(--gold);text-align:center;margin-bottom:4px">パスワードの設定</h1>
+    <div class="sub" style="font-size:12px;color:var(--text2);text-align:center;margin-bottom:24px">
+      センターからお知らせした仮パスワードでログインされました。<br>初回のみ、ご自身のパスワードを設定してください。</div>
+    <div class="field"><label>新しいパスワード（8文字以上）</label>
+      <input id="cp-new" type="password" autocomplete="new-password" autocapitalize="off"></div>
+    <div class="field"><label>もう一度入力してください</label>
+      <input id="cp-confirm" type="password" autocomplete="new-password" autocapitalize="off"></div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);margin:2px 0 6px">
+      <input type="checkbox" id="cp-show" onchange="toggleCpShow()" style="width:auto;height:auto"> パスワードを表示する</label>
+    <button class="btn-main" id="cp-btn" onclick="doCompleteTempPassword()">この内容で設定する</button>
+    <div class="err" id="cp-err"></div>
+    <div class="note" style="text-align:center;margin-top:10px">
+      設定後は、このパスワードでログインしてご注文いただけます。</div>
+  </div>
+</div>
+
 <!-- ══════════ 画面1: 選ぶ ══════════ -->
 <div id="scr-list" class="hidden">
   <div class="hdr"><b id="h-name"></b><button onclick="doLogout()">ログアウト</button></div>
@@ -253,13 +272,21 @@ const api = (() => {
     return t ? JSON.parse(t) : null;
   }
   const tok = () => { try { return sessionStorage.getItem('tg_ptoken') || ''; } catch (e) { return ''; } };
+  const setTok = (t) => { try { sessionStorage.setItem('tg_ptoken', t); } catch (e) {} };
   return {
     token: tok,
+    setToken: setTok,
+    // ログインは行だけ返す。トークンの永続化は呼び出し側が判断する。
+    // 仮パスワード（must_change=true）のときはトークンを sessionStorage に保存しない
+    //（初回変更専用の短命トークンであり、商品/注文などのデータRPCには使えない）。
     async login(id, pw) {
       const rows = await rpc('portal_login_v2', { p_login: id, p_password: pw, p_user_agent: navigator.userAgent });
-      if (!rows || !rows.length) return null;
-      try { sessionStorage.setItem('tg_ptoken', rows[0].token); } catch (e) {}
-      return rows[0];
+      return (rows && rows.length) ? rows[0] : null;
+    },
+    // 初回パスワード設定。変更専用トークンと新パスワードのみを送る（旧pw・IDは送らない＝総当り経路を残さない）。
+    async completeTempPassword(changeToken, newPw) {
+      const rows = await rpc('portal_complete_temp_password', { p_temp_token: changeToken, p_new: newPw });
+      return (rows && rows.length) ? rows[0] : null;
     },
     async logout() { try { await rpc('portal_logout', { p_token: tok() }); } catch (e) {} },
     me: () => rpc('portal_me', { p_token: tok() }),
@@ -283,6 +310,7 @@ let currentSpecies = '';
 let qtyState = {};           // product_id → 選択中のkg
 let orderRequestId = null;   // 確認画面へ進んだ時点で発行（再送しても二重注文しない）
 let placing = false;         // 確定ボタンの連打ガード
+let pendingChangeToken = null; // 初回パスワード設定用の短命トークン。メモリのみ・永続化しない（P1-5）
 
 // カートは sessionStorage に置く（戻る・再読込で消えない）
 function cartGet() { try { return JSON.parse(sessionStorage.getItem('tg_cart') || '[]'); } catch (e) { return []; } }
@@ -306,13 +334,14 @@ function sessionExpired(e) {
 function forceRelogin() {
   try { sessionStorage.removeItem('tg_ptoken'); } catch (e) {}
   customer = null;
+  pendingChangeToken = null;
   showScreen('login');
   $('lg-err').textContent = 'しばらく操作がなかったため、もう一度ログインしてください';
 }
 
 /* ══════════ 画面の切替（戻る対応） ══════════ */
 function showScreen(name) {
-  ['login', 'list', 'confirm', 'done'].forEach(s => $('scr-' + s).classList.toggle('hidden', s !== name));
+  ['login', 'changepw', 'list', 'confirm', 'done'].forEach(s => $('scr-' + s).classList.toggle('hidden', s !== name));
   window.scrollTo(0, 0);
   if (history.state?.scr !== name) history.pushState({ scr: name }, '', '#' + name);
 }
@@ -325,7 +354,7 @@ window.addEventListener('popstate', e => {
   else showScreenNoPush('list');
 });
 function showScreenNoPush(name) {
-  ['login', 'list', 'confirm', 'done'].forEach(s => $('scr-' + s).classList.toggle('hidden', s !== name));
+  ['login', 'changepw', 'list', 'confirm', 'done'].forEach(s => $('scr-' + s).classList.toggle('hidden', s !== name));
   window.scrollTo(0, 0);
 }
 
@@ -337,6 +366,9 @@ if (window.visualViewport) {
 }
 
 /* ══════════ ログイン ══════════ */
+// 失敗理由は区別しない（不存在/pw違い/停止/無効/ロック/失効/曖昧すべて同一応答＝列挙防止・P1-2）。
+const LOGIN_INVALID_MSG = 'ログインできませんでした。IDとパスワードをご確認のうえ、しばらく待ってからもう一度お試しください。ご不明なときはセンターへお電話ください。';
+
 async function doLogin() {
   const id = $('lg-id').value.trim(), pw = $('lg-pw').value;
   const err = $('lg-err');
@@ -345,22 +377,85 @@ async function doLogin() {
   const btn = $('lg-btn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
   try {
-    const c = await api.login(id, pw);
-    if (!c) { err.textContent = 'IDまたはパスワードが正しくありません'; }
-    else { customer = c; await enterList(); }
+    const row = await api.login(id, pw);
+    if (!row || row.status !== 'ok' || !row.token) {
+      err.textContent = LOGIN_INVALID_MSG;
+    } else if (row.must_change === true) {
+      // 仮パスワード。変更専用トークンはメモリのみに保持し sessionStorage には保存しない（P1-5）。
+      // この時点で顧客情報(PII)は返らない（P1-1）。パスワード設定後に portal_me で取得する。
+      pendingChangeToken = row.token;
+      $('lg-pw').value = '';           // 入力欄の平文を残さない
+      showScreen('changepw');
+      setTimeout(() => $('cp-new').focus(), 50);
+    } else {
+      // 通常ログイン。ここで初めてトークンを永続化。
+      api.setToken(row.token);
+      customer = row;
+      $('lg-pw').value = '';
+      await enterList();
+    }
   } catch (e) {
-    err.textContent = /利用開始前/.test(e.message)
-      ? 'このお客様はまだ注文ページの利用開始前です。センターへお問い合わせください'
-      : (e.status ? e.message : '通信できませんでした。電波の良い場所でもう一度お試しください');
+    err.textContent = e.status ? LOGIN_INVALID_MSG
+      : '通信できませんでした。電波の良い場所でもう一度お試しください';
   }
   btn.disabled = false; btn.textContent = 'ログイン';
 }
 $('lg-pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 
+/* ══════════ 初回パスワード設定 ══════════ */
+function toggleCpShow() {
+  const t = $('cp-show').checked ? 'text' : 'password';
+  $('cp-new').type = t; $('cp-confirm').type = t;
+}
+async function doCompleteTempPassword() {
+  const err = $('cp-err'); err.textContent = '';
+  const np = $('cp-new').value, cf = $('cp-confirm').value;
+  if (np.length < 8) { err.textContent = 'パスワードは8文字以上にしてください'; return; }
+  if (np.length > 64) { err.textContent = 'パスワードが長すぎます（64文字まで）'; return; }
+  if (np !== cf) { err.textContent = '確認用のパスワードが一致しません'; return; }
+  if (!pendingChangeToken) { err.textContent = 'お手数ですが、もう一度ログインからやり直してください'; showScreen('login'); return; }
+  const btn = $('cp-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 設定中…';
+  try {
+    const res = await api.completeTempPassword(pendingChangeToken, np);
+    if (res && res.status === 'ok' && res.token) {
+      // 成功。新しい通常トークンを永続化し、変更トークン・入力平文を破棄。
+      api.setToken(res.token);
+      pendingChangeToken = null;
+      $('cp-new').value = ''; $('cp-confirm').value = '';
+      $('cp-show').checked = false; $('cp-new').type = 'password'; $('cp-confirm').type = 'password';
+      // PII をここで取得（ログイン応答では返していない＝P1-1）
+      try {
+        const me = await api.me();
+        customer = (me && me.length) ? me[0] : { name: '', honorific: '様' };
+      } catch (e2) { customer = { name: '', honorific: '様' }; }
+      toast('パスワードを設定しました');
+      await enterList();
+    } else if (res && res.status === 'weak') {
+      err.textContent = 'パスワードが短すぎます（8文字以上）';
+    } else if (res && res.status === 'too_common') {
+      err.textContent = '推測されやすいパスワードです。別のものにしてください';
+    } else if (res && res.status === 'same_as_temp') {
+      err.textContent = '仮パスワードとは違うものを設定してください';
+    } else {
+      // invalid（期限切れ/使用済み/停止など）。トークンを破棄して再ログインへ。
+      pendingChangeToken = null;
+      err.textContent = '設定用の有効期限が切れました。お手数ですが、もう一度ログインからやり直してください';
+      setTimeout(() => showScreen('login'), 1500);
+    }
+  } catch (e) {
+    err.textContent = e.status ? 'エラーが発生しました。もう一度お試しください'
+      : '通信できませんでした。電波の良い場所でもう一度お試しください';
+  }
+  btn.disabled = false; btn.textContent = 'この内容で設定する';
+}
+$('cp-confirm').addEventListener('keydown', e => { if (e.key === 'Enter') doCompleteTempPassword(); });
+
 async function doLogout() {
   await api.logout();
   try { sessionStorage.removeItem('tg_ptoken'); sessionStorage.removeItem('tg_cart'); } catch (e) {}
   customer = null;
+  pendingChangeToken = null;
   location.hash = '';
   showScreen('login');
 }
@@ -615,16 +710,12 @@ async function placeOrder() {
 function resetToList() { enterList(); }
 
 /* ══════════ 起動 ══════════
-   センターが発行した「かんたんログインリンク」（#t=トークン）で開かれた場合は、
-   そのトークンを通常のログインセッションと同じ扱いで使う。
-   URLのハッシュは screen 切替にも使うため、boot() が上書きする前に先に読み取っておく。 */
-const linkToken = (() => {
-  const m = (location.hash || '').match(/[#&]t=([^&]+)/);
-  return m ? decodeURIComponent(m[1]) : '';
-})();
+   ログインは「ログインID＋パスワード」に一本化した。URLトークン（#t=）による自動ログインは廃止。
+   URLに残った #t= はセッションに保存せず無視する（URLトークンでの認証迂回を残さないため）。 */
 (async function boot() {
-  if (linkToken) {
-    try { sessionStorage.setItem('tg_ptoken', linkToken); } catch (e) {}
+  // 万一 #t= 付きURLで開かれても、トークンとして扱わず取り除く（保存しない）。
+  if (/[#&]t=/.test(location.hash || '')) {
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
   }
   history.replaceState({ scr: 'login' }, '', '#');
   if (api.token()) {
@@ -633,7 +724,6 @@ const linkToken = (() => {
       if (me && me.length) { customer = me[0]; await enterList(); return; }
     } catch (e) {}
     try { sessionStorage.removeItem('tg_ptoken'); } catch (e) {}
-    if (linkToken) $('lg-err').textContent = 'リンクの有効期限が切れました。IDとパスワードでログインしてください';
   }
   showScreen('login');
 })();

@@ -153,6 +153,53 @@ header{padding:10px 14px}
 .modal{padding:18px;margin:10px}
 th,td{padding:8px 6px;font-size:.8rem}
 }
+
+/* ══ 注文サイト設定カード（視認性重視: 本文16px・見出し18px・タップ44px+） ══ */
+.portal-card{border:1px solid var(--border2);border-radius:12px;background:var(--surface2);
+  padding:16px;margin:16px 0;display:flex;flex-direction:column;gap:14px}
+.portal-card-hd{font-size:1.15rem;font-weight:700;color:var(--gold)}
+.portal-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;
+  min-height:60px;padding:12px 16px;border:2px solid var(--border2);border-radius:10px;
+  background:var(--surface);cursor:pointer;text-align:left}
+.portal-toggle:hover{border-color:var(--gold2)}
+.portal-toggle.on{border-color:var(--green);background:rgba(61,122,52,.08)}
+.pt-label{display:flex;flex-direction:column;gap:2px;min-width:0}
+.pt-title{font-size:1rem;font-weight:700;color:var(--text)}
+.pt-sub{font-size:.8rem;color:var(--text2);line-height:1.5}
+.pt-state{flex:none;min-width:84px;text-align:center;padding:8px 14px;border-radius:999px;
+  font-size:.95rem;font-weight:700;background:var(--border);color:var(--text2)}
+.portal-toggle.on .pt-state{background:var(--green);color:#fff}
+.portal-field{display:flex;flex-direction:column;gap:6px}
+.portal-field label{font-size:1rem;color:var(--text);font-weight:600}
+.pf-note{font-size:.82rem;color:var(--text2);line-height:1.6}
+.pf-row{display:flex;gap:8px;align-items:stretch}
+.pf-row input{flex:1;min-height:46px;font-size:1rem;padding:8px 12px}
+.pf-copy{min-height:46px;white-space:nowrap}
+.portal-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.portal-status-k{font-size:1rem;color:var(--text);font-weight:600}
+.portal-badge{font-size:.85rem;padding:5px 12px}
+.pb-gray{background:var(--border);color:var(--text2);border:1px solid var(--border2)}
+.pb-gold{background:rgba(141,106,29,.14);color:var(--gold);border:1px solid var(--gold2)}
+.pb-green{background:rgba(61,122,52,.14);color:var(--green);border:1px solid var(--green)}
+.pb-red{background:rgba(185,61,61,.14);color:var(--red);border:1px solid var(--red)}
+.ps-detail{font-size:.85rem;color:var(--text2)}
+.portal-actions{display:flex;gap:10px;flex-wrap:wrap}
+.portal-issue-btn{min-height:48px;font-size:1rem;padding:10px 20px;flex:1;min-width:180px}
+.portal-unlock-btn{min-height:48px;font-size:.95rem;padding:10px 18px}
+/* 発行完了モーダル */
+.pwi-grid{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;align-items:baseline;margin:8px 0 14px}
+.pwi-k{font-size:.9rem;color:var(--text2);white-space:nowrap}
+.pwi-v{font-size:1.05rem;color:var(--text);word-break:break-all}
+.pwi-pw{font-size:1.6rem;font-weight:700;letter-spacing:4px;color:var(--gold);font-variant-numeric:tabular-nums}
+.pwi-note{font-size:.85rem;color:var(--text2);line-height:1.7;background:rgba(141,106,29,.08);
+  border-left:3px solid var(--gold);padding:10px 12px;border-radius:6px;margin-bottom:14px}
+.pwi-actions{display:flex;gap:10px;flex-wrap:wrap}
+.pwi-actions .btn{min-height:46px;flex:1;min-width:130px}
+@media(max-width:430px){
+  .portal-actions{flex-direction:column}
+  .portal-issue-btn,.portal-unlock-btn{width:100%;flex:none}
+  .pwi-actions .btn{flex:none;width:100%}
+}
 </style>
 </head>
 <body>
@@ -651,21 +698,42 @@ th,td{padding:8px 6px;font-size:.8rem}
       <div class="form-group"><label>ご依頼主コード</label><input type="text" id="cfReqCode"></div>
       <div class="form-group"><label>ご依頼主電話</label><input type="text" id="cfReqPhone"></div>
     </div>
-    <div class="form-row">
-      <div class="form-group"><label>ポータルのログインID<span style="color:var(--text2);font-size:.75rem">（お客様が変更可・管理者のみ閲覧。空欄なら店舗名）</span></label><input type="text" id="cfLoginId"></div>
-      <div class="form-group"><label>ポータルパスワード</label>
-        <div style="display:flex;gap:6px;align-items:center;">
-          <input type="text" id="cfPassword" readonly placeholder="暗号化して保管（見られません）" style="flex:1;">
-          <button type="button" class="btn btn-outline btn-sm" onclick="custReissuePassword()">再発行</button>
+    <!-- ══ 注文サイト設定（独立カード・視認性重視） ══ -->
+    <div class="portal-card">
+      <div class="portal-card-hd">🛒 注文サイト設定</div>
+
+      <!-- 行全体を押せる大トグル（緑=利用中／灰=停止中） -->
+      <button type="button" class="portal-toggle" id="cfPortalToggle" onclick="togglePortalEnabled()" aria-pressed="false">
+        <span class="pt-label">
+          <span class="pt-title">注文サイトの利用</span>
+          <span class="pt-sub">試験運用対象として先方に伝えた取引先だけ有効に</span>
+        </span>
+        <span class="pt-state" id="cfPortalState">停止中</span>
+      </button>
+      <input type="checkbox" id="cfPortalEnabled" style="display:none">
+
+      <!-- ログインID + コピー -->
+      <div class="portal-field">
+        <label for="cfLoginId">ログインID <span class="pf-note">（空欄ならお客様番号。お客様が変更可）</span></label>
+        <div class="pf-row">
+          <input type="text" id="cfLoginId" autocapitalize="off" autocomplete="off">
+          <button type="button" class="btn btn-outline pf-copy" onclick="copyLoginId()">コピー</button>
         </div>
       </div>
-    </div>
-    <div class="form-group">
-      <label style="font-weight:400;display:flex;gap:8px;align-items:center;">
-        <input type="checkbox" id="cfPortalEnabled">
-        注文サイト（order.html）の利用を有効にする
-        <span style="color:var(--text2);font-size:.75rem">（試験運用対象として先方に伝えた取引先だけチェック）</span>
-      </label>
+
+      <!-- パスワードの状態バッジ + 詳細 -->
+      <div class="portal-status">
+        <span class="portal-status-k">パスワードの状態</span>
+        <span class="badge portal-badge pb-gray" id="cfPwBadge">未発行</span>
+        <span class="ps-detail" id="cfPwDetail"></span>
+      </div>
+
+      <!-- アクション（48px以上） -->
+      <div class="portal-actions">
+        <button type="button" class="btn btn-gold portal-issue-btn" onclick="custReissuePassword()">仮パスワードを発行</button>
+        <button type="button" class="btn btn-outline portal-unlock-btn" id="cfUnlockBtn" style="display:none" onclick="custUnlockPortal()">ロックを解除</button>
+      </div>
+      <div class="pf-note">仮パスワードは初回ログイン時にお客様がご自身のパスワードへ変更します。管理者は本パスワードを見られません。</div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>有効</label>
@@ -674,6 +742,28 @@ th,td{padding:8px 6px;font-size:.8rem}
       <div class="form-group" style="display:flex;align-items:flex-end;"><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="deleteCustomerFromModal()">🗑 この顧客を削除（管理者）</button></div>
     </div>
     <button class="btn btn-gold" style="width:100%;margin-top:14px" onclick="saveCustomer()">保存</button>
+  </div>
+</div>
+
+<!-- ══ 仮パスワード発行完了モーダル ══ -->
+<div class="modal-overlay" id="pwIssueModal">
+  <div class="modal" style="max-width:460px">
+    <span class="modal-close" onclick="closePwIssueModal()">&times;</span>
+    <h2 id="pwiTitle">仮パスワードを発行しました</h2>
+    <div class="pwi-grid">
+      <div class="pwi-k">ご注文ページ</div><div class="pwi-v" id="pwiUrl"></div>
+      <div class="pwi-k">ログインID</div><div class="pwi-v" id="pwiId"></div>
+      <div class="pwi-k">仮パスワード</div><div class="pwi-v pwi-pw" id="pwiPw"></div>
+      <div class="pwi-k">有効期限</div><div class="pwi-v" id="pwiExp"></div>
+    </div>
+    <div class="pwi-note">この仮パスワードは初回ログイン時にお客様がご自身のパスワードへ変更します。<br>
+      <strong>この画面を閉じると再表示できません</strong>（もう一度必要なときは再発行してください）。</div>
+    <div class="pwi-actions">
+      <button type="button" class="btn btn-gold" onclick="pwiCopyAll()">まとめてコピー</button>
+      <button type="button" class="btn btn-outline" onclick="pwiCopyLine()">LINE用にコピー</button>
+      <button type="button" class="btn btn-outline" onclick="pwiPrint()">印刷</button>
+      <button type="button" class="btn btn-outline" onclick="closePwIssueModal()">閉じる</button>
+    </div>
   </div>
 </div>
 
@@ -767,6 +857,19 @@ async function loadOrders(){
 async function loadCustomers(){
   allCustomers=await sb('GET','customers','','?order=code.asc&limit=2000');
   renderCustomers();
+  refreshPortalStatuses();   // 注文サイトの認証状態（状態バッジ用）。キーが無ければ何もしない
+}
+
+/* 各お客様の注文サイト認証状態を取得して portalStatusById に入れる（状態バッジ・詳細に使う）。
+   スタッフキーが端末に無ければ取得しない（プロンプトは出さない）。RPC未適用時は静かに無視。 */
+let portalStatusById={};
+async function refreshPortalStatuses(){
+  const key=staffKeyGet(); if(!key) return;
+  try{
+    const rows=await sbRpc('admin_portal_credential_status',{p_staff_key:key});
+    const m={}; (rows||[]).forEach(r=>{ m[r.customer_id]=r; });
+    portalStatusById=m;
+  }catch(e){ /* 未適用/権限なしは無視。バッジは portal_enabled から簡易表示 */ }
 }
 
 async function loadProducts(){
@@ -957,7 +1060,11 @@ async function savePriceRow(id){
 
 // ── Modals ──
 function openModal(id){document.getElementById(id).classList.add('show')}
-function closeModal(id){document.getElementById(id).classList.remove('show')}
+function closeModal(id){
+  document.getElementById(id).classList.remove('show');
+  // 顧客編集を閉じるときは、発行済みの平文（仮pw・リンク）をメモリ・DOM・名簿から消す（P1-5）
+  if(id==='custModal' && typeof wipeIssuedSecrets==='function') wipeIssuedSecrets();
+}
 
 // ── Status Cards ──
 function renderStatusCards(){
@@ -1339,6 +1446,17 @@ function renderCustomers(){
   pag.innerHTML=ph;
 }
 
+/* 発行した平文（仮パスワード・ログインリンク）をメモリ・DOM・名簿からまとめて消す（P1-5）。
+   コピー／CSV／印刷でお客様に配布し終えたら必ず呼ぶ。編集モーダルを閉じるときも呼ぶ。
+   平文は localStorage/sessionStorage/URL/console のいずれにも保存していない。 */
+function wipeIssuedSecrets(rerender){
+  (allCustomers||[]).forEach(c=>{ delete c.__issuedPw; delete c.__issuedLink; });
+  // 発行完了モーダルの平文（6桁）をDOM・メモリから消す
+  const pw=document.getElementById('pwiPw'); if(pw) pw.textContent='';
+  _pwIssue=null;
+  if(rerender!==false){ try{ renderCustomers(); }catch(e){} }
+}
+
 /* ══════════ 注文ポータルのご案内（ログイン情報の配布） ══════════
    お客様へ送る案内文と、ログインID・パスワードの名簿をここでまとめて作る。
    ログインIDはお客様番号（C0011 など）。お名前でのログインは廃止（総当たり対策）。
@@ -1380,40 +1498,33 @@ function portalAddressee(c){
 }
 
 /* お客様1件ぶんの案内文を作る。channel は mail / line / card / phone。
-   __issuedLink があれば「開くだけでログインできるリンク」を主にし、
-   ID・パスワードはリンクが使えないときの控えとして併記する。 */
+   案内する情報は「ご注文ページURL・ログインID・数字6桁の仮パスワード」のみ。
+   URLトークン（かんたんログインリンク）は廃止した（パスワード/ロックの迂回を残さないため）。
+   仮パスワードは初回ログイン時にご自身のパスワードへ変更いただく。 */
 function buildPortalMsg(c,channel){
   const to=portalAddressee(c);
   const id=c.portal_login_id||c.code||'';
   const pw=c.__issuedPw||'（未発行）';
-  const link=c.__issuedLink||'';
   const tel=orgInfo.phone?('　TEL '+orgInfo.phone):'';
 
   if(channel==='line'){
-    const L=[to,'いつもありがとうございます。'+orgInfo.name+'です。','',
-      'Webからご注文いただけるページをご用意しました。','在庫を見ながら24時間いつでもご注文いただけます。',''];
-    if(link){
-      L.push('▼ タップするだけでログインできます',link,'','うまく開けない場合は、下のIDとパスワードでログインしてください。');
-    }else{
-      L.push('▼ご注文ページ',ORDER_URL);
-    }
-    L.push('　ログインID：'+id,'　パスワード：'+pw,'',
+    return [to,'いつもありがとうございます。'+orgInfo.name+'です。','',
+      'Webからご注文いただけるページをご用意しました。','在庫を見ながら24時間いつでもご注文いただけます。','',
+      '▼ご注文ページ',ORDER_URL,'　ログインID：'+id,'　仮パスワード：'+pw,
+      '　※はじめのログインで、ご自身のパスワードへの変更をお願いします。','',
       'お電話・FAXでのご注文も、これまでどおり承ります。',
-      orgInfo.name+(tel?('　'+('TEL '+orgInfo.phone)):''));
-    return L.join('\n');
+      orgInfo.name+(tel?('　'+('TEL '+orgInfo.phone)):'')].join('\n');
   }
 
   if(channel==='card'){
-    const L=[to,'','いつも'+orgInfo.name+'をご利用いただき、ありがとうございます。',
-      'ご注文をWebからお受けできるようになりました。','在庫のある部位をご覧いただきながら、24時間いつでもご注文いただけます。',''];
-    if(link) L.push('【かんたんログイン】下のリンクを開くだけでご注文いただけます',link,'');
-    L.push('【ご注文ページ】'+ORDER_URL,'【ログインID】'+id,'【パスワード】'+pw,'',
-      '※このご案内は大切に保管してください。','※お電話・FAXでのご注文もこれまでどおり承ります。','',orgFooter());
-    return L.join('\n');
+    return [to,'','いつも'+orgInfo.name+'をご利用いただき、ありがとうございます。',
+      'ご注文をWebからお受けできるようになりました。','在庫のある部位をご覧いただきながら、24時間いつでもご注文いただけます。','',
+      '【ご注文ページ】'+ORDER_URL,'【ログインID】'+id,'【仮パスワード】'+pw,
+      '　※はじめのログインで、ご自身のパスワードへの変更をお願いします。','',
+      '※このご案内は大切に保管してください。','※お電話・FAXでのご注文もこれまでどおり承ります。','',orgFooter()].join('\n');
   }
 
   if(channel==='phone'){
-    // リンクは電話口では読み上げられないため、従来どおりID・パスワードのみ
     return [
       '【電話で伝えるときの読み上げ】　'+to,
       '',
@@ -1422,31 +1533,24 @@ function buildPortalMsg(c,channel){
       '・ページ： '+ORDER_URL,
       '　（ショートメールでお送りすることもできます）',
       '・ログインID： '+id+'　→ 読み方「'+readDigits(id)+'」',
-      '・パスワード： '+pw+'　→ 読み方「'+readDigits(pw)+'」',
+      '・仮パスワード： '+pw+'　→ 読み方「'+readDigits(pw)+'」',
       '',
-      '「パスワードはログイン後の設定でご自由に変更いただけます。」',
+      '「はじめのログインで、ご自身のパスワードへの変更をお願いします。」',
       '「これまでどおり、お電話でのご注文も承ります。」'
     ].join('\n');
   }
 
   // mail（メール・FAX の正式な文面）
-  const L=[to,'','いつも'+orgInfo.name+'をご利用いただき、誠にありがとうございます。','',
+  return [to,'','いつも'+orgInfo.name+'をご利用いただき、誠にありがとうございます。','',
     'このたび、ご注文をWebからいつでもお受けできるよう「ご注文ページ」をご用意いたしました。',
-    '在庫のある部位をご覧いただきながら、24時間いつでもご注文いただけます。',''];
-  if(link){
-    L.push('■ かんたんログイン','　下のリンクを開くだけで、ログイン操作なしでご注文いただけます。','　'+link,'',
-      '■ ご注文ページ（リンクが開けないとき）','　'+ORDER_URL,'　ログインID：'+id,'　パスワード：'+pw,'');
-  }else{
-    L.push('■ ご注文ページ','　'+ORDER_URL,'','■ ログイン情報','　ログインID：'+id,'　パスワード：'+pw,'');
-  }
-  L.push('■ ご注文の流れ',
-    link?'　1. 上のリンクを開く\n　2. ご希望の部位と数量を選んで注文する'
-        :'　1. 上のページを開く\n　2. ログインIDとパスワードを入れる\n　3. ご希望の部位と数量を選んで注文する',
-    '','パスワードは、ログイン後の「設定」からいつでも変更いただけます。',
+    '在庫のある部位をご覧いただきながら、24時間いつでもご注文いただけます。','',
+    '■ ご注文ページ','　'+ORDER_URL,'','■ ログイン情報','　ログインID：'+id,'　仮パスワード：'+pw,'',
+    '■ ご注文の流れ',
+    '　1. 上のページを開く\n　2. ログインIDと仮パスワードを入れる\n　3. ご自身のパスワードを設定する\n　4. ご希望の部位と数量を選んで注文する',
+    '','はじめのログインで、ご自身のパスワードへの変更をお願いします（以後はそのパスワードでログインいただけます）。',
     'お電話・FAXでのご注文も、これまでどおり承っております。','',
     'ご不明な点がございましたら、お気軽にお問い合わせください。','今後ともよろしくお願いいたします。','',
-    '────────────────',orgFooter(),'────────────────');
-  return L.join('\n');
+    '────────────────',orgFooter(),'────────────────'].join('\n');
 }
 
 /* 送る相手を決める */
@@ -1557,7 +1661,7 @@ async function portalIssuePasswords(targets){
   return (rows||[]).length>0;
 }
 
-/* パスワードと「かんたんログインリンク」をまとめて発行する。
+/* 仮パスワード（数字6桁）をまとめて発行する。URLトークンのリンクは廃止。
    注文サイト利用がまだ無効な相手がいれば、有効にしてよいか確認してから進める
    （試験運用は施主確認済みの取引先に限る、の合意を画面側でも守るため）。 */
 async function portalIssueCredentials(targets){
@@ -1576,20 +1680,16 @@ async function portalIssueCredentials(targets){
       }catch(e){ alert('注文サイト利用の有効化に失敗しました: '+e.message); return false; }
     }
   }
-  let pwRows,linkRows;
+  // 発行するのは数字6桁の仮パスワードのみ（URLトークンのリンクは廃止）。
+  let pwRows;
   try{
     pwRows=await sbRpc('staff_issue_portal_passwords',{p_staff_key:key,p_customer_ids:targets.map(c=>c.id)});
-    linkRows=await sbRpc('admin_issue_customer_link',{p_staff_key:key,p_customer_ids:targets.map(c=>c.id),p_days:90});
   }catch(e){
     staffKeyClear();
     alert('発行できませんでした：'+e.message); return false;
   }
   const pwById={}; (pwRows||[]).forEach(r=>pwById[r.customer_id]=r.password);
-  const linkById={}; (linkRows||[]).forEach(r=>linkById[r.customer_id]=r);
-  targets.forEach(c=>{
-    if(pwById[c.id]) c.__issuedPw=pwById[c.id];
-    if(linkById[c.id]) c.__issuedLink=ORDER_URL+'#t='+linkById[c.id].token;
-  });
+  targets.forEach(c=>{ if(pwById[c.id]) c.__issuedPw=pwById[c.id]; });
   return (pwRows||[]).length>0;
 }
 
@@ -1614,16 +1714,19 @@ function renderPortalPreview(){
 async function portalCopyOne(id){
   const c=allCustomers.find(x=>x.id===id); if(!c) return;
   const ch=document.getElementById('portalChannel')?.value||'mail';
-  if(!c.__issuedPw||!c.__issuedLink){
-    if(!confirm(portalAddressee(c)+' の新しいパスワードとログインリンクを発行して案内文を作ります。\n（いまのパスワード・リンクは使えなくなります）\n\n続けますか？')) return;
+  if(!c.__issuedPw){
+    if(!confirm(portalAddressee(c)+' の新しい仮パスワードを発行して案内文を作ります。\n（いまのパスワードは使えなくなります）\n\n続けますか？')) return;
     if(!await portalIssueCredentials([c])) return;
-    renderCustomers();
   }
-  const text=buildPortalMsg(c,ch);
-  try{ await navigator.clipboard.writeText(text); alert(portalAddressee(c)+' あての案内文をコピーしました。\nメールやLINEに貼り付けてください。'); }
-  catch(e){
-    const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select();
-    document.execCommand('copy'); ta.remove(); alert('案内文をコピーしました');
+  try{
+    const text=buildPortalMsg(c,ch);
+    try{ await navigator.clipboard.writeText(text); alert(portalAddressee(c)+' あての案内文をコピーしました。\nメールやLINEに貼り付けてください。'); }
+    catch(e){
+      const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove(); alert('案内文をコピーしました');
+    }
+  } finally {
+    wipeIssuedSecrets();   // 配布後に平文をメモリ・DOM・名簿から消す（P1-5）
   }
 }
 
@@ -1632,55 +1735,68 @@ async function exportPortalCsv(){
   const t=portalTargets();
   if(!t.length){alert('対象のお客様がいません');return}
   const ch=document.getElementById('portalChannel')?.value||'mail';
-  if(!confirm(t.length+'件ぶんのパスワードとログインリンクを新しく発行して書き出します。\n'+
-    '・いまお使いのパスワード・リンクは使えなくなります\n'+
-    '・パスワード・リンクが入ったファイルです。取り扱いにご注意ください\n'+
+  if(!confirm(t.length+'件ぶんの仮パスワードを新しく発行して書き出します。\n'+
+    '・いまお使いのパスワードは使えなくなります\n'+
+    '・仮パスワードが入ったファイルです。取り扱いにご注意ください\n'+
     '・もう一度見るには再発行が必要です\n\n続けますか？')) return;
   if(!await portalIssueCredentials(t)){alert('発行できませんでした');return}
-  renderCustomers();
-  const cols=['お客様番号','お名前','敬称','カナ','ログインID','パスワード','電話','メール','郵便番号・住所','建物名','ご注文ページ','かんたんログインリンク','案内文'];
-  const rows=t.map(c=>[
-    c.code||'', c.name||'', c.honorific||'様', c.kana||'',
-    c.portal_login_id||c.code||'', c.__issuedPw||'',
-    c.phone||'', c.email||'', c.address||'', c.building||'',
-    ORDER_URL, c.__issuedLink||'（注文サイト利用が無効のため未発行）', buildPortalMsg(c,ch)
-  ].map(csvCell).join(','));
-  const csv='﻿'+cols.join(',')+'\n'+rows.join('\n'); // BOM付き＝Excelで開いても文字化けしない
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
-  a.download='注文ポータル案内_'+t.length+'件_'+today()+'.csv';
-  a.click(); URL.revokeObjectURL(a.href);
+  try{
+    // 注（ドキュメント化した例外）: このCSVは差し込み印刷・郵送ラベル用のため、
+    // 仮パスワードを平文で含む。ファイル自体の取り扱い注意を確認ダイアログで明示済み。
+    // 生成後はメモリ・DOM・名簿から平文を消去する（下の finally）。URLトークンのリンクは廃止。
+    const cols=['お客様番号','お名前','敬称','カナ','ログインID','仮パスワード','電話','メール','郵便番号・住所','建物名','ご注文ページ','案内文'];
+    const rows=t.map(c=>[
+      c.code||'', c.name||'', c.honorific||'様', c.kana||'',
+      c.portal_login_id||c.code||'', c.__issuedPw||'',
+      c.phone||'', c.email||'', c.address||'', c.building||'',
+      ORDER_URL, buildPortalMsg(c,ch)
+    ].map(csvCell).join(','));
+    const csv='﻿'+cols.join(',')+'\n'+rows.join('\n'); // BOM付き＝Excelで開いても文字化けしない
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+    a.download='注文ポータル案内_'+t.length+'件_'+today()+'.csv';
+    a.click(); URL.revokeObjectURL(a.href);
+  } finally {
+    wipeIssuedSecrets();   // 平文はファイルへ書き出し済み。メモリ・DOM・名簿からは消す（P1-5）
+  }
 }
 
 /* 1件1枚で印刷（同梱チラシ・郵送・手渡し用） */
 async function portalPrintSheets(){
   const t=portalTargets();
   if(!t.length){alert('対象のお客様がいません');return}
-  if(!confirm(t.length+'件ぶんのパスワードとログインリンクを新しく発行して、'+t.length+'枚を印刷します。\n'+
-    '・いまお使いのパスワード・リンクは使えなくなります\n'+
+  if(!confirm(t.length+'件ぶんの仮パスワードを新しく発行して、'+t.length+'枚を印刷します。\n'+
+    '・いまお使いのパスワードは使えなくなります\n'+
     '・印刷し損ねた場合は再発行が必要です\n\n続けますか？')) return;
   if(!await portalIssueCredentials(t)){alert('発行できませんでした');return}
-  renderCustomers();
-  const ch=document.getElementById('portalChannel')?.value||'card';
-  const sheets=t.map(c=>
-    '<div class="sheet">'+
-      '<div class="head">'+esc(orgInfo.name)+'　ご注文ポータルのご案内</div>'+
-      '<pre>'+esc(buildPortalMsg(c,ch))+'</pre>'+
-      '<div class="foot">お客様番号 '+esc(c.code||'')+'</div>'+
-    '</div>').join('');
-  const css='@page{size:A4 portrait;margin:20mm;}'+
-    '*{box-sizing:border-box;margin:0;padding:0;}'+
-    'body{font-family:"Yu Gothic","YuGothic","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;color:#000;}'+
-    '.sheet{page-break-after:always;min-height:240mm;}'+
-    '.sheet:last-child{page-break-after:auto;}'+
-    '.head{font-size:13pt;font-weight:700;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:16px;}'+
-    'pre{white-space:pre-wrap;font-family:inherit;font-size:11pt;line-height:2;}'+
-    '.foot{margin-top:24px;font-size:9pt;color:#666;text-align:right;}';
-  const html='<!doctype html><html><head><meta charset="utf-8"><title>注文ポータルのご案内 '+t.length+'件</title>'+
-    '<style>'+css+'</style></head><body>'+sheets+
-    '<scr'+'ipt>window.onload=function(){setTimeout(function(){window.focus();window.print();},400);};</scr'+'ipt></body></html>';
-  const w=window.open('','_blank');
-  if(w){w.document.open();w.document.write(html);w.document.close();}
+  try{
+    const ch=document.getElementById('portalChannel')?.value||'card';
+    const sheets=t.map(c=>
+      '<div class="sheet">'+
+        '<div class="head">'+esc(orgInfo.name)+'　ご注文ポータルのご案内</div>'+
+        '<pre>'+esc(buildPortalMsg(c,ch))+'</pre>'+
+        '<div class="foot">お客様番号 '+esc(c.code||'')+'</div>'+
+      '</div>').join('');
+    const css='@page{size:A4 portrait;margin:20mm;}'+
+      '*{box-sizing:border-box;margin:0;padding:0;}'+
+      'body{font-family:"Yu Gothic","YuGothic","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;color:#000;}'+
+      '.sheet{page-break-after:always;min-height:240mm;}'+
+      '.sheet:last-child{page-break-after:auto;}'+
+      '.head{font-size:13pt;font-weight:700;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:16px;}'+
+      'pre{white-space:pre-wrap;font-family:inherit;font-size:11pt;line-height:2;}'+
+      '.foot{margin-top:24px;font-size:9pt;color:#666;text-align:right;}';
+    // 印刷後はウィンドウの本文（平文）を消してから閉じる（P1-5）。印刷ダイアログを閉じた時点で発火。
+    const js='window.onload=function(){setTimeout(function(){window.focus();'+
+      'window.onafterprint=function(){document.body.innerHTML="";window.close();};'+
+      'window.print();},400);};';
+    const html='<!doctype html><html><head><meta charset="utf-8"><title>注文ポータルのご案内 '+t.length+'件</title>'+
+      '<style>'+css+'</style></head><body>'+sheets+
+      '<scr'+'ipt>'+js+'</scr'+'ipt></body></html>';
+    const w=window.open('','_blank');
+    if(w){w.document.open();w.document.write(html);w.document.close();}
+  } finally {
+    wipeIssuedSecrets();   // 親画面のメモリ・DOM・名簿からは平文を消す（印刷物は別ウィンドウで処理済み）（P1-5）
+  }
 }
 
 /* 顧客コードの採番（業務アプリの顧客台帳と共通の C0001 形式）。
@@ -1699,13 +1815,14 @@ async function custNextCode(){
 async function openAddCustomer(){
   document.getElementById('custModalTitle').textContent='顧客追加';
   document.getElementById('custEditId').value='';
-  ['cfName','cfKana','cfPhone','cfAddress','cfBuilding','cfContact','cfEmail','cfCompany1','cfCompany2','cfReqCode','cfReqPhone','cfPassword','cfDefaultItem','cfLoginId'].forEach(id=>document.getElementById(id).value='');
+  ['cfName','cfKana','cfPhone','cfAddress','cfBuilding','cfContact','cfEmail','cfCompany1','cfCompany2','cfReqCode','cfReqPhone','cfDefaultItem','cfLoginId'].forEach(id=>document.getElementById(id).value='');
   document.querySelectorAll('.cf-carrier').forEach(cb=>cb.checked=false);
   document.getElementById('cfHonorific').value='様';
   document.getElementById('cfTimeZone').value='0000';
   document.getElementById('cfRank').value='standard';
   document.getElementById('cfActive').value='true';
   document.getElementById('cfPortalEnabled').checked=false;
+  renderPortalCard(null);   // 未保存＝未発行・停止中で初期化
   // 業務アプリの顧客台帳と同じ採番規則（C0001…）。最新のDBを見てから採る
   document.getElementById('cfCode').value=await custNextCode();
   openModal('custModal');
@@ -1733,24 +1850,140 @@ function openEditCustomer(id){
   document.getElementById('cfTimeZone').value=c.default_time_zone||'0000';
   document.getElementById('cfReqCode').value=c.requester_code||'';
   document.getElementById('cfReqPhone').value=c.requester_phone||'';
-  document.getElementById('cfPassword').value=c.__issuedPw||'';
   document.getElementById('cfLoginId').value=c.portal_login_id||'';
-  document.getElementById('cfPortalEnabled').checked=c.portal_enabled===true;
   const carriers=Array.isArray(c.default_carriers)?c.default_carriers:[];
   document.querySelectorAll('.cf-carrier').forEach(cb=>{cb.checked=carriers.includes(cb.value)});
+  renderPortalCard(c);   // トグル・状態バッジ・ロック解除ボタンを描画
   openModal('custModal');
 }
 
-/* 1件だけパスワードを出しなおす（電話でお伝えするとき用） */
+/* ══ 注文サイト設定カードの描画・操作 ══ */
+const PW_STATE={
+  unissued:{t:'未発行',cls:'pb-gray'}, temp_issued:{t:'仮発行済み',cls:'pb-gold'},
+  changed:{t:'変更済み',cls:'pb-green'}, set:{t:'設定済み',cls:'pb-green'},
+  temp_expired:{t:'期限切れ',cls:'pb-red'}, locked:{t:'ロック中',cls:'pb-red'}
+};
+function fmtDT(s){ if(!s) return ''; const d=new Date(s); if(isNaN(d)) return '';
+  return d.getFullYear()+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0')+
+    ' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+function renderPortalToggle(){
+  const on=document.getElementById('cfPortalEnabled').checked;
+  const btn=document.getElementById('cfPortalToggle'); const st=document.getElementById('cfPortalState');
+  btn.classList.toggle('on',on); btn.setAttribute('aria-pressed',on?'true':'false');
+  st.textContent=on?'利用中':'停止中';
+}
+function togglePortalEnabled(){
+  const cb=document.getElementById('cfPortalEnabled'); cb.checked=!cb.checked; renderPortalToggle();
+}
+function renderPortalCard(c){
+  document.getElementById('cfPortalEnabled').checked = !!(c&&c.portal_enabled===true);
+  renderPortalToggle();
+  const st = c ? portalStatusById[c.id] : null;
+  // 状態バッジ: RPCの状態があれば優先。無ければ portal_enabled から簡易表示。
+  let info;
+  if(st) info = PW_STATE[st.pw_state] || {t:'—',cls:'pb-gray'};
+  else info = {t:'未発行',cls:'pb-gray'};
+  const badge=document.getElementById('cfPwBadge');
+  badge.textContent=info.t; badge.className='badge portal-badge '+info.cls;
+  const parts=[];
+  if(st){
+    if(st.temp_issued_at) parts.push('発行 '+fmtDT(st.temp_issued_at));
+    if(st.last_login_at) parts.push('最終ログイン '+fmtDT(st.last_login_at));
+    if(st.locked && st.locked_until) parts.push('解除予定 '+fmtDT(st.locked_until));
+  }
+  document.getElementById('cfPwDetail').textContent=parts.join('　・　');
+  document.getElementById('cfUnlockBtn').style.display=(st&&st.locked)?'':'none';
+}
+async function copyLoginId(){
+  const v=document.getElementById('cfLoginId').value||document.getElementById('cfCode').value||'';
+  if(!v){alert('ログインIDがありません');return}
+  try{ await navigator.clipboard.writeText(v); }catch(e){
+    const ta=document.createElement('textarea');ta.value=v;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();
+  }
+  alert('ログインIDをコピーしました');
+}
+
+/* 1件だけ仮パスワードを発行しなおす（発行完了モーダルで表示。alertで6桁は出さない） */
 async function custReissuePassword(){
   const id=document.getElementById('custEditId').value;
   if(!id){alert('先に保存してから発行してください');return}
   const c=allCustomers.find(x=>x.id===id); if(!c) return;
-  if(!confirm(portalAddressee(c)+' のパスワードを新しく発行します。\nいまのパスワードは使えなくなります。\n\n続けますか？')) return;
+  if(!confirm(portalAddressee(c)+' の仮パスワードを新しく発行します。\nいまのパスワードは使えなくなります。\n\n続けますか？')) return;
   if(!await portalIssuePasswords([c])) return;
-  document.getElementById('cfPassword').value=c.__issuedPw||'';
+  openPwIssueModal(c);              // 6桁はモーダルにのみ表示（生JSON・alertでは出さない）
+  await refreshPortalStatuses();
+  renderPortalCard(c);
   renderCustomers();
-  alert('新しいパスワード：'+c.__issuedPw+'\n\nこの画面を閉じると見られなくなります。お客様にお伝えください。');
+}
+
+/* スタッフ用: ログインロックの解除 */
+async function custUnlockPortal(){
+  const id=document.getElementById('custEditId').value;
+  const c=allCustomers.find(x=>x.id===id); if(!c) return;
+  if(!confirm(portalAddressee(c)+' のログインロックを解除します。よろしいですか？')) return;
+  const key=await staffKeyEnsure(); if(!key) return;
+  try{ await sbRpc('staff_unlock_portal',{p_staff_key:key,p_customer_id:id}); }
+  catch(e){ staffKeyClear(); alert('解除できませんでした：'+e.message); return; }
+  await refreshPortalStatuses();
+  renderPortalCard(c);
+  alert('ロックを解除しました');
+}
+
+/* ══ 発行完了モーダル（6桁はここだけに表示。閉じたらDOM・メモリから消す） ══ */
+let _pwIssue=null;
+function openPwIssueModal(c){
+  const exp=new Date(Date.now()+7*864e5);
+  _pwIssue={ code:c.code||'', name:c.name||'', honorific:c.honorific||'様',
+    loginId:c.portal_login_id||c.code||'', pw:c.__issuedPw||'', url:ORDER_URL,
+    exp: exp.getFullYear()+'年'+(exp.getMonth()+1)+'月'+exp.getDate()+'日まで（初回ログインの期限）' };
+  document.getElementById('pwiTitle').textContent=portalAddressee(c)+' の仮パスワードを発行しました';
+  document.getElementById('pwiUrl').textContent=_pwIssue.url;
+  document.getElementById('pwiId').textContent=_pwIssue.loginId;
+  document.getElementById('pwiPw').textContent=_pwIssue.pw;
+  document.getElementById('pwiExp').textContent=_pwIssue.exp;
+  openModal('pwIssueModal');
+}
+function closePwIssueModal(){
+  document.getElementById('pwIssueModal').classList.remove('show');
+  ['pwiUrl','pwiId','pwiPw','pwiExp'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='';});
+  _pwIssue=null;
+  wipeIssuedSecrets();   // 名簿・DOMの平文も消す（P1-5）
+}
+function pwiText(kind){
+  if(!_pwIssue) return '';
+  const p=_pwIssue;
+  if(kind==='line'){
+    return [p.name+p.honorific,'','▼ご注文ページ',p.url,'　ログインID：'+p.loginId,'　仮パスワード：'+p.pw,
+      '　※はじめのログインで、ご自身のパスワードへの変更をお願いします。'].join('\n');
+  }
+  return [p.name+p.honorific+' 注文サイトのご案内','',
+    'ご注文ページ：'+p.url,'ログインID：'+p.loginId,'仮パスワード：'+p.pw,'有効期限：'+p.exp,'',
+    '※はじめのログインで、ご自身のパスワードへの変更をお願いします。'].join('\n');
+}
+async function pwiCopy(text){
+  if(!text){alert('コピーする内容がありません');return}
+  try{ await navigator.clipboard.writeText(text); }catch(e){
+    const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();
+  }
+  alert('コピーしました。メールやLINEに貼り付けてください。');
+}
+function pwiCopyAll(){ pwiCopy(pwiText('all')); }
+function pwiCopyLine(){ pwiCopy(pwiText('line')); }
+function pwiPrint(){
+  if(!_pwIssue) return;
+  const p=_pwIssue;
+  const body='<div class="sheet"><div class="head">'+esc(orgInfo.name)+'　ご注文サイトのご案内</div>'+
+    '<pre>'+esc(pwiText('all'))+'</pre><div class="foot">お客様番号 '+esc(p.code)+'</div></div>';
+  const css='@page{size:A4 portrait;margin:20mm;}*{box-sizing:border-box;margin:0;padding:0;}'+
+    'body{font-family:"Yu Gothic","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;color:#000;}'+
+    '.head{font-size:13pt;font-weight:700;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:16px;}'+
+    'pre{white-space:pre-wrap;font-family:inherit;font-size:12pt;line-height:2.1;}'+
+    '.foot{margin-top:24px;font-size:9pt;color:#666;text-align:right;}';
+  const js='window.onload=function(){setTimeout(function(){window.focus();'+
+    'window.onafterprint=function(){document.body.innerHTML="";window.close();};window.print();},400);};';
+  const html='<!doctype html><html><head><meta charset="utf-8"><title>ご注文サイトのご案内</title>'+
+    '<style>'+css+'</style></head><body>'+body+'<scr'+'ipt>'+js+'</scr'+'ipt></body></html>';
+  const w=window.open('','_blank'); if(w){w.document.open();w.document.write(html);w.document.close();}
 }
 
 async function saveCustomer(){
