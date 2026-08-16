@@ -46,10 +46,20 @@ async function rpc(fn: string, args: Record<string, unknown>): Promise<Response>
   });
 }
 
+// クライアントIPの解決。x-forwarded-for の「先頭値」はクライアントが自由に付けられる（偽装可能）ため
+// 信頼しない。プラットフォームが上書きする信頼ヘッダ(cf-connecting-ip)を最優先し、無ければ
+// x-forwarded-for の「末尾値」（最も内側＝信頼できるプロキシが付与した値）を使う。
+// レート制限は「偽装できないIP」に紐付けないと迂回されるため、この順序が重要。
 function clientIp(req: Request): string {
+  const cf = req.headers.get("cf-connecting-ip");
+  if (cf && cf.trim()) return cf.trim();
   const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0].trim();
-  return req.headers.get("x-real-ip") || "unknown";
+  if (xff) {
+    const parts = xff.split(",").map((x) => x.trim()).filter(Boolean);
+    if (parts.length) return parts[parts.length - 1];   // 末尾＝信頼プロキシが付与した実IP
+  }
+  const xr = req.headers.get("x-real-ip");
+  return (xr && xr.trim()) || "unknown";
 }
 
 Deno.serve(async (req: Request) => {
