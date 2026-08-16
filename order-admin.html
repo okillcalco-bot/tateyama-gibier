@@ -752,6 +752,64 @@ th,td{padding:8px 6px;font-size:.8rem}
 </div>
 
 <!-- Add/Edit Customer Modal -->
+<style>
+/* 注文サイト設定カード */
+.portal-card{border:2px solid var(--gold2);border-radius:12px;padding:16px;margin:16px 0;background:rgba(141,106,29,.05)}
+.portal-card-h{font-size:18px;font-weight:800;color:var(--gold);margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.portal-switch{width:100%;display:flex;align-items:center;gap:12px;min-height:56px;padding:10px 14px;border-radius:10px;border:2px solid var(--border2);background:var(--surface);cursor:pointer;text-align:left}
+.portal-switch .ps-label{flex:1;font-weight:700;color:var(--text);font-size:16px}
+.portal-switch .ps-state{font-weight:800;font-size:15px;padding:4px 12px;border-radius:20px}
+.portal-switch .ps-knob{width:52px;height:30px;border-radius:16px;background:var(--border2);position:relative;flex:0 0 auto;transition:background .15s}
+.portal-switch .ps-knob::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .15s}
+.portal-switch.on{border-color:var(--green)}
+.portal-switch.on .ps-state{background:rgba(106,158,90,.18);color:var(--green)}
+.portal-switch.on .ps-knob{background:var(--green)}
+.portal-switch.on .ps-knob::after{left:25px}
+.portal-switch.off .ps-state{background:rgba(120,120,120,.18);color:var(--text2)}
+.portal-field{margin-top:14px}
+.portal-field>label{display:block;font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px}
+.portal-inline{display:flex;gap:8px;align-items:stretch;flex-wrap:wrap}
+.portal-input{flex:1;min-width:160px;min-height:48px;font-size:16px;padding:0 12px;border:1px solid var(--border2);border-radius:8px;background:var(--surface);color:var(--text)}
+.portal-copy,.portal-reissue,.portal-unlock{min-height:48px;font-size:16px;font-weight:700;border-radius:8px;padding:0 16px;cursor:pointer}
+.portal-copy{background:var(--surface);color:var(--text2);border:1px solid var(--border2)}
+.portal-reissue{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#fff;border:none;flex:1;min-width:220px}
+.portal-unlock{background:rgba(200,80,80,.12);color:var(--red);border:1px solid var(--red)}
+.portal-hint{font-size:13px;color:var(--text2);margin-top:6px;line-height:1.7}
+.portal-pwstate{font-size:16px;font-weight:700;padding:10px 12px;border-radius:8px;background:var(--surface);border:1px solid var(--border)}
+.portal-pwmeta{font-size:13px;color:var(--text2);margin-top:6px;line-height:1.9}
+.portal-err{font-size:14px;color:var(--red);margin-top:8px;line-height:1.7}
+.portal-err details{margin-top:4px;color:var(--text2)}
+.pw-badge{display:inline-block;padding:3px 12px;border-radius:20px;font-size:14px;font-weight:800}
+.pw-badge.b-unissued{background:rgba(120,120,120,.18);color:var(--text2)}
+.pw-badge.b-temp{background:rgba(216,160,58,.22);color:#7a5300}
+.pw-badge.b-changed{background:rgba(106,158,90,.18);color:var(--green)}
+.pw-badge.b-expired{background:rgba(200,80,80,.14);color:var(--red)}
+.pw-badge.b-locked{background:rgba(200,80,80,.22);color:var(--red)}
+/* 発行完了画面 */
+.pw-issue-line{margin:12px 0}
+.pw-issue-line .l{font-size:14px;color:var(--text2)}
+.pw-issue-line .v{font-size:20px;font-weight:800;color:var(--text);word-break:break-all}
+.pw-issue-pw{font-size:34px;letter-spacing:8px;font-weight:800;color:var(--gold);text-align:center;padding:14px;border:2px dashed var(--gold2);border-radius:10px;margin:6px 0;font-variant-numeric:tabular-nums}
+.pw-issue-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.pw-issue-actions .btn{min-height:48px;font-size:16px;flex:1;min-width:150px}
+@media(max-width:640px){ #custModal .form-row{grid-template-columns:1fr} }
+</style>
+
+<!-- 仮パスワード発行完了（1回だけ表示・閉じたら再表示不可） -->
+<div class="modal-overlay" id="pwIssueModal">
+  <div class="modal" style="max-width:520px">
+    <h2 style="font-size:20px;color:var(--gold);margin:0 0 6px">仮パスワードを発行しました</h2>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">この内容は画面を閉じると再表示できません。お客様にお伝えください。</div>
+    <div id="pwIssueBody"></div>
+    <div class="pw-issue-actions">
+      <button class="btn btn-gold" id="pwIssueCopyBtn" onclick="pwIssueCopyAll()">案内をまとめてコピー</button>
+      <button class="btn btn-outline" id="pwIssueLineBtn" onclick="pwIssueCopyLine()">LINE用にコピー</button>
+      <button class="btn btn-outline" onclick="pwIssuePrint()">印刷する</button>
+      <button class="btn btn-outline" onclick="closePwIssue()">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="custModal">
   <div class="modal">
     <span class="modal-close" onclick="closeModal('custModal')">&times;</span>
@@ -794,13 +852,32 @@ th,td{padding:8px 6px;font-size:.8rem}
       <div class="form-group"><label>ご依頼主コード</label><input type="text" id="cfReqCode"></div>
       <div class="form-group"><label>ご依頼主電話</label><input type="text" id="cfReqPhone"></div>
     </div>
-    <div class="form-row">
-      <div class="form-group"><label>ポータルのログインID<span style="color:var(--text2);font-size:.75rem">（お客様が変更可・管理者のみ閲覧。空欄なら店舗名）</span></label><input type="text" id="cfLoginId"></div>
-      <div class="form-group"><label>ポータルパスワード</label>
-        <div style="display:flex;gap:6px;align-items:center;">
-          <input type="text" id="cfPassword" readonly placeholder="暗号化して保管（見られません）" style="flex:1;">
-          <button type="button" class="btn btn-outline btn-sm" onclick="custReissuePassword()">再発行</button>
+    <!-- 注文サイト設定（独立カード） -->
+    <div class="portal-card">
+      <div class="portal-card-h">🛒 注文サイト設定</div>
+      <button type="button" class="portal-switch off" id="cfPortalSwitch" onclick="cfTogglePortal()">
+        <span class="ps-label">注文サイトを利用する</span>
+        <span class="ps-state" id="cfPortalState">—</span>
+        <span class="ps-knob"></span>
+      </button>
+      <div class="portal-field">
+        <label>ログインID</label>
+        <div class="portal-inline">
+          <input type="text" id="cfLoginId" class="portal-input">
+          <button type="button" class="portal-copy" id="cfCopyBtn" onclick="cfCopyLoginId()">コピー</button>
         </div>
+        <div class="portal-hint">お客様が変更可・管理者のみ閲覧。空欄ならお客様番号。</div>
+      </div>
+      <div class="portal-field">
+        <label>パスワード</label>
+        <div class="portal-pwstate" id="cfPwState">—</div>
+        <div class="portal-pwmeta" id="cfPwMeta"></div>
+        <div class="portal-hint">本パスワードは暗号化して保管し、管理者にも表示・復元できません（見られません）。</div>
+        <div class="portal-inline" style="margin-top:10px">
+          <button type="button" class="portal-reissue" onclick="cfReissue()">新しい仮パスワードを発行</button>
+          <button type="button" class="portal-unlock" id="cfUnlockBtn" style="display:none" onclick="cfUnlock()">ロック解除</button>
+        </div>
+        <div class="portal-err" id="cfPortalErr" style="display:none"></div>
       </div>
     </div>
     <div class="form-row">
@@ -1792,12 +1869,19 @@ async function custNextCode(){
 async function openAddCustomer(){
   document.getElementById('custModalTitle').textContent='顧客追加';
   document.getElementById('custEditId').value='';
-  ['cfName','cfKana','cfPhone','cfAddress','cfBuilding','cfContact','cfEmail','cfCompany1','cfCompany2','cfReqCode','cfReqPhone','cfPassword','cfDefaultItem','cfLoginId'].forEach(id=>document.getElementById(id).value='');
+  ['cfName','cfKana','cfPhone','cfAddress','cfBuilding','cfContact','cfEmail','cfCompany1','cfCompany2','cfReqCode','cfReqPhone','cfDefaultItem','cfLoginId'].forEach(id=>document.getElementById(id).value='');
   document.querySelectorAll('.cf-carrier').forEach(cb=>cb.checked=false);
   document.getElementById('cfHonorific').value='様';
   document.getElementById('cfTimeZone').value='0000';
   document.getElementById('cfRank').value='standard';
   document.getElementById('cfActive').value='true';
+  // 注文サイトカードを新規状態へ（保存前は発行/切替不可）
+  cfClearPortalErr();
+  document.getElementById('cfPortalSwitch').className='portal-switch off';
+  document.getElementById('cfPortalState').textContent='停止中';
+  document.getElementById('cfPwState').innerHTML='<span class="pw-badge b-unissued">保存前</span>';
+  document.getElementById('cfPwMeta').textContent='先に「変更を保存」してください。';
+  document.getElementById('cfUnlockBtn').style.display='none';
   // 業務アプリの顧客台帳と同じ採番規則（C0001…）。最新のDBを見てから採る
   document.getElementById('cfCode').value=await custNextCode();
   openModal('custModal');
@@ -1825,23 +1909,129 @@ function openEditCustomer(id){
   document.getElementById('cfTimeZone').value=c.default_time_zone||'0000';
   document.getElementById('cfReqCode').value=c.requester_code||'';
   document.getElementById('cfReqPhone').value=c.requester_phone||'';
-  document.getElementById('cfPassword').value=c.__issuedPw||'';
   document.getElementById('cfLoginId').value=c.portal_login_id||'';
+  cfLoadPortalState(c);
   const carriers=Array.isArray(c.default_carriers)?c.default_carriers:[];
   document.querySelectorAll('.cf-carrier').forEach(cb=>{cb.checked=carriers.includes(cb.value)});
   openModal('custModal');
 }
 
-/* 1件だけパスワードを出しなおす（電話でお伝えするとき用） */
-async function custReissuePassword(){
+/* ══════════ 注文サイト設定カード（顧客編集） ══════════ */
+const ORDER_SITE_URL='https://tateyama-gibier.vercel.app/order.html#';
+let _portalStatusMap=null;   // customer_id -> 認証状態
+let _pwIssue=null;           // 発行完了画面の一時状態（閉じたら消す。localStorageへは保存しない）
+
+function cfFlashBtn(id,txt){ const b=document.getElementById(id); if(!b) return; const o=b.textContent; b.textContent=txt; setTimeout(()=>{b.textContent=o;},1400); }
+function cfPortalErr(_label,detail){
+  const el=document.getElementById('cfPortalErr'); if(!el) return;
+  el.style.display='block';
+  el.innerHTML='パスワードを発行できませんでした。データは変更されていません。管理者へ連絡してください。'+
+    (detail?'<details><summary>技術詳細</summary><span style="word-break:break-all">'+esc(String(detail).slice(0,300))+'</span></details>':'');
+}
+function cfClearPortalErr(){ const el=document.getElementById('cfPortalErr'); if(el){ el.style.display='none'; el.innerHTML=''; } }
+function fmtDt(s){ if(!s) return ''; try{ const d=new Date(s); return d.getFullYear()+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }catch(e){ return ''; } }
+
+async function portalStatusMap(force){
+  if(_portalStatusMap && !force) return _portalStatusMap;
+  const rows=await invRpc('admin_portal_credential_status')||[];
+  const m={}; rows.forEach(r=>m[r.customer_id]=r); _portalStatusMap=m; return m;
+}
+
+async function cfLoadPortalState(c){
+  cfClearPortalErr();
+  const on=c.portal_enabled===true;
+  const sw=document.getElementById('cfPortalSwitch');
+  if(sw) sw.className='portal-switch '+(on?'on':'off');
+  const stEl=document.getElementById('cfPortalState'); if(stEl) stEl.textContent=on?'利用中':'停止中';
+  const st=document.getElementById('cfPwState'), meta=document.getElementById('cfPwMeta'), unlock=document.getElementById('cfUnlockBtn');
+  if(st) st.innerHTML='読み込み中…'; if(meta) meta.textContent=''; if(unlock) unlock.style.display='none';
+  try{
+    const map=await portalStatusMap(true);
+    const s=map[c.id];
+    const L={unissued:['未発行','b-unissued'],temp_issued:['仮パスワード発行済み','b-temp'],changed:['お客様による変更済み','b-changed'],temp_expired:['仮パスワード期限切れ','b-expired'],locked:['ロック中','b-locked'],set:['設定済み','b-changed']};
+    const lab=(s&&L[s.pw_state])||L.unissued;
+    if(st) st.innerHTML='<span class="pw-badge '+lab[1]+'">'+lab[0]+'</span>';
+    const lines=[];
+    if(s&&s.temp_issued_at) lines.push('仮パスワード発行: '+fmtDt(s.temp_issued_at));
+    if(s&&s.last_login_at) lines.push('最終ログイン: '+fmtDt(s.last_login_at));
+    if(s&&s.locked&&s.locked_until) lines.push('ロック解除予定: '+fmtDt(s.locked_until));
+    if(meta) meta.innerHTML=lines.map(esc).join('<br>');
+    if(unlock&&s&&s.locked) unlock.style.display='';
+  }catch(e){ if(st) st.textContent='状態を読み込めませんでした'; }
+}
+
+async function cfTogglePortal(){
+  cfClearPortalErr();
   const id=document.getElementById('custEditId').value;
-  if(!id){alert('先に保存してから発行してください');return}
+  if(!id){ alert('先に「変更を保存」してから切り替えてください'); return; }
   const c=allCustomers.find(x=>x.id===id); if(!c) return;
-  if(!confirm(portalAddressee(c)+' のパスワードを新しく発行します。\nいまのパスワードは使えなくなります。\n\n続けますか？')) return;
-  if(!await portalIssuePasswords([c])) return;
-  document.getElementById('cfPassword').value=c.__issuedPw||'';
-  renderCustomers();
-  alert('新しいパスワード：'+c.__issuedPw+'\n\nこの画面を閉じると見られなくなります。お客様にお伝えください。');
+  const by=invRequireBy(); if(!by) return;
+  const enable=!(c.portal_enabled===true);
+  if(!confirm(enable?'注文サイトの利用を有効にします。よろしいですか？':'注文サイトの利用を停止します（お客様はログインできなくなります）。よろしいですか？')) return;
+  try{ await invRpc('admin_set_portal_enabled',{p_customer_id:id,p_enabled:enable,p_by:by}); c.portal_enabled=enable; await cfLoadPortalState(c); }
+  catch(e){ cfPortalErr('切替に失敗',e.message); }
+}
+
+async function cfCopyLoginId(){
+  const v=document.getElementById('cfLoginId').value||'';
+  try{ await navigator.clipboard.writeText(v); cfFlashBtn('cfCopyBtn','コピー済み'); }
+  catch(e){ cfFlashBtn('cfCopyBtn','コピー不可'); }
+}
+
+async function cfReissue(){
+  cfClearPortalErr();
+  const id=document.getElementById('custEditId').value;
+  if(!id){ alert('先に「変更を保存」してから発行してください'); return; }
+  const c=allCustomers.find(x=>x.id===id); if(!c) return;
+  if(!confirm(portalAddressee(c)+' に新しい仮パスワード（数字6桁）を発行します。\n現在のパスワードは使えなくなります。続けますか？')) return;
+  let rows;
+  try{ rows=await invRpc('staff_issue_portal_passwords',{p_customer_ids:[id]}); }
+  catch(e){ cfPortalErr('発行に失敗',e.message); return; }
+  const row=(rows&&rows[0])||null;
+  if(!row||!row.password){ cfPortalErr('発行できませんでした'); return; }
+  openPwIssue(c.name||portalAddressee(c), row.login_id||c.portal_login_id||c.code||'', row.password);
+  await cfLoadPortalState(c);
+}
+
+async function cfUnlock(){
+  cfClearPortalErr();
+  const id=document.getElementById('custEditId').value; if(!id) return;
+  const c=allCustomers.find(x=>x.id===id); if(!c) return;
+  if(!confirm('この顧客のログインロックを解除します。よろしいですか？')) return;
+  try{ await invRpc('staff_unlock_portal',{p_customer_id:id}); await cfLoadPortalState(c); }
+  catch(e){ cfPortalErr('解除に失敗',e.message); }
+}
+
+/* 発行完了画面（1回だけ表示。閉じたらJS状態とDOMから消去。localStorageへは保存しない） */
+function openPwIssue(name,loginId,pw){
+  const exp=new Date(Date.now()+7*864e5);
+  const expStr=exp.getFullYear()+'/'+String(exp.getMonth()+1).padStart(2,'0')+'/'+String(exp.getDate()).padStart(2,'0');
+  _pwIssue={name:name||'',loginId:loginId||'',pw:pw||'',expStr:expStr};
+  document.getElementById('pwIssueBody').innerHTML=
+    '<div class="pw-issue-line"><div class="l">注文サイト</div><div class="v">'+esc(ORDER_SITE_URL)+'</div></div>'+
+    '<div class="pw-issue-line"><div class="l">ログインID</div><div class="v">'+esc(loginId)+'</div></div>'+
+    '<div class="pw-issue-line"><div class="l">初回パスワード（数字6桁）</div><div class="pw-issue-pw">'+esc(pw)+'</div></div>'+
+    '<div class="pw-issue-line"><div class="l">有効期限</div><div class="v">'+esc(expStr)+' まで</div></div>'+
+    '<div class="portal-hint">初回ログイン時に、ご自身のパスワードへ変更してください。</div>';
+  openModal('pwIssueModal');
+}
+function pwIssueText(){
+  if(!_pwIssue) return '';
+  const s=_pwIssue;
+  return s.name+' 様\n\n館山ジビエセンター 注文サイトのご案内です。\n\n注文サイト：\n'+ORDER_SITE_URL+'\n\nログインID：\n'+s.loginId+'\n\n初回パスワード：\n'+s.pw+'\n\n有効期限：\n'+s.expStr+' まで\n\n初回ログイン時に、ご自身のパスワードへ変更してください。';
+}
+async function pwIssueCopyAll(){ if(!_pwIssue) return; try{ await navigator.clipboard.writeText(pwIssueText()); cfFlashBtn('pwIssueCopyBtn','コピー済み'); }catch(e){ cfFlashBtn('pwIssueCopyBtn','コピー不可'); } }
+async function pwIssueCopyLine(){ if(!_pwIssue) return; try{ await navigator.clipboard.writeText(pwIssueText()); cfFlashBtn('pwIssueLineBtn','コピー済み'); }catch(e){ cfFlashBtn('pwIssueLineBtn','コピー不可'); } }
+function pwIssuePrint(){
+  if(!_pwIssue) return;
+  const w=window.open('','_blank'); if(!w) return;
+  w.document.write('<meta charset="utf-8"><title>注文サイトのご案内</title><pre style="font-size:16px;white-space:pre-wrap;font-family:sans-serif;padding:24px;line-height:1.9">'+esc(pwIssueText())+'</pre>');
+  w.document.close(); w.focus(); w.print();
+}
+function closePwIssue(){
+  _pwIssue=null;
+  const b=document.getElementById('pwIssueBody'); if(b) b.innerHTML='';   // DOMから6桁を消去
+  closeModal('pwIssueModal');
 }
 
 async function saveCustomer(){
