@@ -795,8 +795,8 @@ th,td{padding:8px 6px;font-size:.8rem}
 @media(max-width:640px){ #custModal .form-row{grid-template-columns:1fr} }
 </style>
 
-<!-- 仮パスワード発行完了（1回だけ表示・閉じたら再表示不可） -->
-<div class="modal-overlay" id="pwIssueModal">
+<!-- 仮パスワード発行完了（1回だけ表示・閉じたら再表示不可）。顧客編集モーダルより前面に出す -->
+<div class="modal-overlay" id="pwIssueModal" style="z-index:1100">
   <div class="modal" style="max-width:520px">
     <h2 style="font-size:20px;color:var(--gold);margin:0 0 6px">仮パスワードを発行しました</h2>
     <div style="font-size:13px;color:var(--text2);margin-bottom:12px">この内容は画面を閉じると再表示できません。お客様にお伝えください。</div>
