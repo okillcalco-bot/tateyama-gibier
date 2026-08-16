@@ -957,7 +957,11 @@ async function savePriceRow(id){
 
 // ── Modals ──
 function openModal(id){document.getElementById(id).classList.add('show')}
-function closeModal(id){document.getElementById(id).classList.remove('show')}
+function closeModal(id){
+  document.getElementById(id).classList.remove('show');
+  // 顧客編集を閉じるときは、発行済みの平文（仮pw・リンク）をメモリ・DOM・名簿から消す（P1-5）
+  if(id==='custModal' && typeof wipeIssuedSecrets==='function') wipeIssuedSecrets();
+}
 
 // ── Status Cards ──
 function renderStatusCards(){
@@ -1339,6 +1343,15 @@ function renderCustomers(){
   pag.innerHTML=ph;
 }
 
+/* 発行した平文（仮パスワード・ログインリンク）をメモリ・DOM・名簿からまとめて消す（P1-5）。
+   コピー／CSV／印刷でお客様に配布し終えたら必ず呼ぶ。編集モーダルを閉じるときも呼ぶ。
+   平文は localStorage/sessionStorage/URL/console のいずれにも保存していない。 */
+function wipeIssuedSecrets(rerender){
+  (allCustomers||[]).forEach(c=>{ delete c.__issuedPw; delete c.__issuedLink; });
+  const pf=document.getElementById('cfPassword'); if(pf) pf.value='';
+  if(rerender!==false){ try{ renderCustomers(); }catch(e){} }
+}
+
 /* ══════════ 注文ポータルのご案内（ログイン情報の配布） ══════════
    お客様へ送る案内文と、ログインID・パスワードの名簿をここでまとめて作る。
    ログインIDはお客様番号（C0011 など）。お名前でのログインは廃止（総当たり対策）。
@@ -1617,13 +1630,16 @@ async function portalCopyOne(id){
   if(!c.__issuedPw||!c.__issuedLink){
     if(!confirm(portalAddressee(c)+' の新しいパスワードとログインリンクを発行して案内文を作ります。\n（いまのパスワード・リンクは使えなくなります）\n\n続けますか？')) return;
     if(!await portalIssueCredentials([c])) return;
-    renderCustomers();
   }
-  const text=buildPortalMsg(c,ch);
-  try{ await navigator.clipboard.writeText(text); alert(portalAddressee(c)+' あての案内文をコピーしました。\nメールやLINEに貼り付けてください。'); }
-  catch(e){
-    const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select();
-    document.execCommand('copy'); ta.remove(); alert('案内文をコピーしました');
+  try{
+    const text=buildPortalMsg(c,ch);
+    try{ await navigator.clipboard.writeText(text); alert(portalAddressee(c)+' あての案内文をコピーしました。\nメールやLINEに貼り付けてください。'); }
+    catch(e){
+      const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove(); alert('案内文をコピーしました');
+    }
+  } finally {
+    wipeIssuedSecrets();   // 配布後に平文をメモリ・DOM・名簿から消す（P1-5）
   }
 }
 
@@ -1637,19 +1653,25 @@ async function exportPortalCsv(){
     '・パスワード・リンクが入ったファイルです。取り扱いにご注意ください\n'+
     '・もう一度見るには再発行が必要です\n\n続けますか？')) return;
   if(!await portalIssueCredentials(t)){alert('発行できませんでした');return}
-  renderCustomers();
-  const cols=['お客様番号','お名前','敬称','カナ','ログインID','パスワード','電話','メール','郵便番号・住所','建物名','ご注文ページ','かんたんログインリンク','案内文'];
-  const rows=t.map(c=>[
-    c.code||'', c.name||'', c.honorific||'様', c.kana||'',
-    c.portal_login_id||c.code||'', c.__issuedPw||'',
-    c.phone||'', c.email||'', c.address||'', c.building||'',
-    ORDER_URL, c.__issuedLink||'（注文サイト利用が無効のため未発行）', buildPortalMsg(c,ch)
-  ].map(csvCell).join(','));
-  const csv='﻿'+cols.join(',')+'\n'+rows.join('\n'); // BOM付き＝Excelで開いても文字化けしない
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
-  a.download='注文ポータル案内_'+t.length+'件_'+today()+'.csv';
-  a.click(); URL.revokeObjectURL(a.href);
+  try{
+    // 注（ドキュメント化した例外）: このCSVは差し込み印刷・郵送ラベル用のため、
+    // 仮パスワードとログインリンクを平文で含む。ファイル自体の取り扱い注意を確認ダイアログで明示済み。
+    // 生成後はメモリ・DOM・名簿から平文を消去する（下の finally）。
+    const cols=['お客様番号','お名前','敬称','カナ','ログインID','パスワード','電話','メール','郵便番号・住所','建物名','ご注文ページ','かんたんログインリンク','案内文'];
+    const rows=t.map(c=>[
+      c.code||'', c.name||'', c.honorific||'様', c.kana||'',
+      c.portal_login_id||c.code||'', c.__issuedPw||'',
+      c.phone||'', c.email||'', c.address||'', c.building||'',
+      ORDER_URL, c.__issuedLink||'（注文サイト利用が無効のため未発行）', buildPortalMsg(c,ch)
+    ].map(csvCell).join(','));
+    const csv='﻿'+cols.join(',')+'\n'+rows.join('\n'); // BOM付き＝Excelで開いても文字化けしない
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+    a.download='注文ポータル案内_'+t.length+'件_'+today()+'.csv';
+    a.click(); URL.revokeObjectURL(a.href);
+  } finally {
+    wipeIssuedSecrets();   // 平文はファイルへ書き出し済み。メモリ・DOM・名簿からは消す（P1-5）
+  }
 }
 
 /* 1件1枚で印刷（同梱チラシ・郵送・手渡し用） */
@@ -1660,27 +1682,34 @@ async function portalPrintSheets(){
     '・いまお使いのパスワード・リンクは使えなくなります\n'+
     '・印刷し損ねた場合は再発行が必要です\n\n続けますか？')) return;
   if(!await portalIssueCredentials(t)){alert('発行できませんでした');return}
-  renderCustomers();
-  const ch=document.getElementById('portalChannel')?.value||'card';
-  const sheets=t.map(c=>
-    '<div class="sheet">'+
-      '<div class="head">'+esc(orgInfo.name)+'　ご注文ポータルのご案内</div>'+
-      '<pre>'+esc(buildPortalMsg(c,ch))+'</pre>'+
-      '<div class="foot">お客様番号 '+esc(c.code||'')+'</div>'+
-    '</div>').join('');
-  const css='@page{size:A4 portrait;margin:20mm;}'+
-    '*{box-sizing:border-box;margin:0;padding:0;}'+
-    'body{font-family:"Yu Gothic","YuGothic","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;color:#000;}'+
-    '.sheet{page-break-after:always;min-height:240mm;}'+
-    '.sheet:last-child{page-break-after:auto;}'+
-    '.head{font-size:13pt;font-weight:700;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:16px;}'+
-    'pre{white-space:pre-wrap;font-family:inherit;font-size:11pt;line-height:2;}'+
-    '.foot{margin-top:24px;font-size:9pt;color:#666;text-align:right;}';
-  const html='<!doctype html><html><head><meta charset="utf-8"><title>注文ポータルのご案内 '+t.length+'件</title>'+
-    '<style>'+css+'</style></head><body>'+sheets+
-    '<scr'+'ipt>window.onload=function(){setTimeout(function(){window.focus();window.print();},400);};</scr'+'ipt></body></html>';
-  const w=window.open('','_blank');
-  if(w){w.document.open();w.document.write(html);w.document.close();}
+  try{
+    const ch=document.getElementById('portalChannel')?.value||'card';
+    const sheets=t.map(c=>
+      '<div class="sheet">'+
+        '<div class="head">'+esc(orgInfo.name)+'　ご注文ポータルのご案内</div>'+
+        '<pre>'+esc(buildPortalMsg(c,ch))+'</pre>'+
+        '<div class="foot">お客様番号 '+esc(c.code||'')+'</div>'+
+      '</div>').join('');
+    const css='@page{size:A4 portrait;margin:20mm;}'+
+      '*{box-sizing:border-box;margin:0;padding:0;}'+
+      'body{font-family:"Yu Gothic","YuGothic","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;color:#000;}'+
+      '.sheet{page-break-after:always;min-height:240mm;}'+
+      '.sheet:last-child{page-break-after:auto;}'+
+      '.head{font-size:13pt;font-weight:700;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:16px;}'+
+      'pre{white-space:pre-wrap;font-family:inherit;font-size:11pt;line-height:2;}'+
+      '.foot{margin-top:24px;font-size:9pt;color:#666;text-align:right;}';
+    // 印刷後はウィンドウの本文（平文）を消してから閉じる（P1-5）。印刷ダイアログを閉じた時点で発火。
+    const js='window.onload=function(){setTimeout(function(){window.focus();'+
+      'window.onafterprint=function(){document.body.innerHTML="";window.close();};'+
+      'window.print();},400);};';
+    const html='<!doctype html><html><head><meta charset="utf-8"><title>注文ポータルのご案内 '+t.length+'件</title>'+
+      '<style>'+css+'</style></head><body>'+sheets+
+      '<scr'+'ipt>'+js+'</scr'+'ipt></body></html>';
+    const w=window.open('','_blank');
+    if(w){w.document.open();w.document.write(html);w.document.close();}
+  } finally {
+    wipeIssuedSecrets();   // 親画面のメモリ・DOM・名簿からは平文を消す（印刷物は別ウィンドウで処理済み）（P1-5）
+  }
 }
 
 /* 顧客コードの採番（業務アプリの顧客台帳と共通の C0001 形式）。
