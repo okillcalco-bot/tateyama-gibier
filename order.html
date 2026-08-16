@@ -144,6 +144,27 @@ body.kb .bar{display:none}
     ログイン情報はセンターからお送りした案内をご覧ください。<br>お困りのときはお電話ください。</div>
 </div>
 
+<!-- ══════════ 初回パスワード変更（仮パスワードでログイン後・これだけ表示） ══════════ -->
+<div id="scr-changepw" class="hidden">
+  <div style="max-width:390px;margin:0 auto;padding:44px 20px">
+    <h1 style="font-size:19px;color:var(--gold);text-align:center;margin-bottom:4px">パスワードの設定</h1>
+    <div class="sub" style="font-size:12.5px;color:var(--text2);text-align:center;margin-bottom:22px;line-height:1.7">
+      初回ログインです。ご自身のパスワードを決めてください。<br>8文字以上（数字だけでも大丈夫です）。</div>
+    <div class="field"><label>新しいパスワード</label>
+      <div style="display:flex;gap:8px;align-items:stretch">
+        <input id="cp-new" type="password" autocomplete="new-password" autocapitalize="off" style="flex:1">
+        <button type="button" id="cp-show" onclick="togglePwShow()"
+          style="min-width:64px;min-height:48px;border:1px solid var(--border);border-radius:8px;color:var(--text2);background:var(--surface2);font-size:14px">表示</button>
+      </div></div>
+    <div class="field"><label>確認（もう一度）</label>
+      <input id="cp-confirm" type="password" autocomplete="new-password" autocapitalize="off" style="width:100%;height:48px;padding:0 14px"></div>
+    <button class="btn-main" id="cp-btn" onclick="doChangePassword()">このパスワードにする</button>
+    <div class="err" id="cp-err"></div>
+    <div class="note" style="text-align:center;margin-top:10px">設定すると、そのまま商品一覧へ進みます。</div>
+    <button class="backlink" style="width:100%;justify-content:center;margin-top:6px" onclick="cancelChangePw()">最初からやり直す</button>
+  </div>
+</div>
+
 <!-- ══════════ 画面1: 選ぶ ══════════ -->
 <div id="scr-list" class="hidden">
   <div class="hdr"><b id="h-name"></b><button onclick="doLogout()">ログアウト</button></div>
@@ -257,9 +278,12 @@ const api = (() => {
     token: tok,
     async login(id, pw) {
       const rows = await rpc('portal_login_v2', { p_login: id, p_password: pw, p_user_agent: navigator.userAgent });
-      if (!rows || !rows.length) return null;
-      try { sessionStorage.setItem('tg_ptoken', rows[0].token); } catch (e) {}
-      return rows[0];
+      return (rows && rows[0]) || { status: 'invalid' };
+    },
+    setToken(t) { try { if (t) sessionStorage.setItem('tg_ptoken', t); } catch (e) {} },
+    async changePassword(login, oldpw, newpw) {
+      const rows = await rpc('portal_change_password', { p_login: login, p_old: oldpw, p_new: newpw });
+      return (rows && rows[0]) || { status: 'invalid' };
     },
     async logout() { try { await rpc('portal_logout', { p_token: tok() }); } catch (e) {} },
     me: () => rpc('portal_me', { p_token: tok() }),
@@ -283,6 +307,55 @@ let currentSpecies = '';
 let qtyState = {};           // product_id → 選択中のkg
 let orderRequestId = null;   // 確認画面へ進んだ時点で発行（再送しても二重注文しない）
 let placing = false;         // 確定ボタンの連打ガード
+let pendingChange = null;    // 仮pw変更中の {login, temp}（メモリのみ・永続化しない）
+let changing = false;        // 変更ボタンの連打ガード
+
+function fmtTime(iso) { try { const d = new Date(iso); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); } catch (e) { return ''; } }
+function showChangePw() {
+  $('cp-new').value = ''; $('cp-confirm').value = ''; $('cp-err').textContent = '';
+  $('cp-new').type = 'password'; $('cp-confirm').type = 'password'; $('cp-show').textContent = '表示';
+  showScreen('changepw');
+}
+function togglePwShow() {
+  const inp = $('cp-new'), b = $('cp-show'), show = inp.type === 'password';
+  inp.type = show ? 'text' : 'password'; $('cp-confirm').type = inp.type; b.textContent = show ? '隠す' : '表示';
+}
+async function doChangePassword() {
+  if (changing || !pendingChange) return;
+  const np = $('cp-new').value, cf = $('cp-confirm').value, err = $('cp-err');
+  err.textContent = '';
+  if (np.length < 8) { err.textContent = 'パスワードは8文字以上にしてください'; return; }
+  if (np.length > 64) { err.textContent = 'パスワードは64文字以内にしてください'; return; }
+  if (np !== cf) { err.textContent = '確認用パスワードが一致しません'; return; }
+  changing = true;
+  const btn = $('cp-btn'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const r = await api.changePassword(pendingChange.login, pendingChange.temp, np);
+    if (r.status === 'ok') {
+      api.setToken(r.token);
+      pendingChange = null;                       // メモリから仮pwを消去
+      $('cp-new').value = ''; $('cp-confirm').value = '';
+      const me = await api.me();
+      customer = (me && me[0]) || { name: '', honorific: '様' };
+      await enterList();
+    } else {
+      err.textContent = {
+        weak: 'パスワードは8〜64文字にしてください',
+        same_as_temp: '初回パスワードとは違うものにしてください',
+        too_common: 'かんたんすぎるパスワードです。別のものにしてください',
+        locked: 'ログインを一時的に停止しています。しばらくしてからお試しください'
+      }[r.status] || 'パスワードを変更できませんでした。もう一度お試しください';
+    }
+  } catch (e) {
+    err.textContent = '通信できませんでした。もう一度お試しください';
+  }
+  changing = false; btn.disabled = false; btn.textContent = 'このパスワードにする';
+}
+function cancelChangePw() {   // 最初からやり直す（仮pwをメモリから消し、ログインへ）
+  pendingChange = null;
+  try { sessionStorage.removeItem('tg_ptoken'); } catch (e) {}
+  showScreen('login');
+}
 
 // カートは sessionStorage に置く（戻る・再読込で消えない）
 function cartGet() { try { return JSON.parse(sessionStorage.getItem('tg_cart') || '[]'); } catch (e) { return []; } }
@@ -311,13 +384,15 @@ function forceRelogin() {
 }
 
 /* ══════════ 画面の切替（戻る対応） ══════════ */
+const SCREENS = ['login', 'changepw', 'list', 'confirm', 'done'];
 function showScreen(name) {
-  ['login', 'list', 'confirm', 'done'].forEach(s => $('scr-' + s).classList.toggle('hidden', s !== name));
+  SCREENS.forEach(s => $('scr-' + s).classList.toggle('hidden', s !== name));
   window.scrollTo(0, 0);
   if (history.state?.scr !== name) history.pushState({ scr: name }, '', '#' + name);
 }
 window.addEventListener('popstate', e => {
   const scr = e.state?.scr;
+  if (pendingChange && !customer) { showScreenNoPush('changepw'); return; }  // 仮pw変更中は離脱させない
   if (!customer) { showScreenNoPush('login'); return; }
   // カートは sessionStorage にあるので、戻っても消えない
   if (scr === 'confirm' && cartGet().length) showScreenNoPush('confirm');
@@ -325,7 +400,7 @@ window.addEventListener('popstate', e => {
   else showScreenNoPush('list');
 });
 function showScreenNoPush(name) {
-  ['login', 'list', 'confirm', 'done'].forEach(s => $('scr-' + s).classList.toggle('hidden', s !== name));
+  SCREENS.forEach(s => $('scr-' + s).classList.toggle('hidden', s !== name));
   window.scrollTo(0, 0);
 }
 
@@ -345,13 +420,25 @@ async function doLogin() {
   const btn = $('lg-btn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
   try {
-    const c = await api.login(id, pw);
-    if (!c) { err.textContent = 'IDまたはパスワードが正しくありません'; }
-    else { customer = c; await enterList(); }
+    const r = await api.login(id, pw);
+    if (r.status === 'locked') {
+      err.textContent = 'ログインを一時的に停止しています。' +
+        (r.locked_until ? ('解除予定 ' + fmtTime(r.locked_until) + ' 以降にお試しください') : 'しばらくしてからお試しください');
+    } else if (r.status !== 'ok') {
+      err.textContent = 'IDまたはパスワードが正しくありません';
+    } else if (r.must_change) {
+      // 仮パスワード: 商品画面へ進ませず、まずパスワード変更のみ。
+      // トークンは保存しない（制限セッションは永続化しない）。login＋仮pwはメモリだけに保持。
+      pendingChange = { login: id, temp: pw };
+      customer = null;
+      $('lg-pw').value = '';
+      showChangePw();
+    } else {
+      api.setToken(r.token); customer = r; await enterList();
+    }
   } catch (e) {
-    err.textContent = /利用開始前/.test(e.message)
-      ? 'このお客様はまだ注文ページの利用開始前です。センターへお問い合わせください'
-      : (e.status ? e.message : '通信できませんでした。電波の良い場所でもう一度お試しください');
+    err.textContent = e.status ? 'ログインできませんでした。時間をおいてお試しください'
+      : '通信できませんでした。電波の良い場所でもう一度お試しください';
   }
   btn.disabled = false; btn.textContent = 'ログイン';
 }
@@ -361,6 +448,7 @@ async function doLogout() {
   await api.logout();
   try { sessionStorage.removeItem('tg_ptoken'); sessionStorage.removeItem('tg_cart'); } catch (e) {}
   customer = null;
+  pendingChange = null;
   location.hash = '';
   showScreen('login');
 }
