@@ -437,6 +437,7 @@ textarea { min-height: 80px; resize: vertical; }
   <div style="display:flex;align-items:center;gap:8px;">
     <span class="offline-badge" id="offlineBadge">オフライン</span>
     <span class="offline-badge" id="pendingBadge" style="background:var(--gold2);cursor:pointer;" onclick="showPendingModal()" title="タップで未送信データを確認"></span>
+    <span class="offline-badge" id="photoPendingBadge" style="background:#7a5a12;display:none;" title="写真のみ未送信。通信復旧後に自動送信します"></span>
     <span id="deviceRevokeBtn" onclick="staffDeviceRevoke()" style="display:none;font-size:12px;color:var(--text2);cursor:pointer;border:1px solid var(--border);border-radius:8px;padding:5px 8px;white-space:nowrap;" title="この端末のスタッフ認証を解除（共有端末・紛失時）">🔓認証解除</span>
     <div class="header-badge">今日の搬入: <strong id="todayCount">-</strong>頭</div>
   </div>
@@ -1389,6 +1390,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupTimeInputs();
   loadTodayCount();
   syncPending();
+  updatePhotoBadge();
+  if (navigator.onLine) flushPhotoQueue();
   // 捕獲者の電話番号（調査票で使う）を控えておく
   try { window._huntersCache = await sb('GET', 'hunters', null, '?select=name,phone&deleted_at=is.null&limit=500'); } catch (e) { window._huntersCache = []; }
   // 提出から一定期間たった写真を自動削除（保存容量を増やさないため）
@@ -3000,6 +3003,7 @@ function deletePending(i) {
 window.addEventListener('online', () => {
   document.getElementById('offlineBadge').classList.remove('show');
   syncPending();
+  flushPhotoQueue();
 });
 window.addEventListener('offline', () => {
   document.getElementById('offlineBadge').classList.add('show');
@@ -3505,44 +3509,142 @@ async function arCapture() {
   const stamp = ((_boardRec && _boardRec.label_id) || 'photo').replace(/[^\w-]/g, '_');
   const dateStr = (_boardRec && _boardRec.capture_date) || '';
   const fname = stamp + (dateStr ? '_' + dateStr : '') + '.jpg';
-  arMsg('サーバーに保存中…');
+  arMsg('📤 写真を保存中…');
   cv.toBlob(async function (blob) {
     if (!blob) { arMsg('画像の生成に失敗しました'); return; }
     try {
       await arUploadPhoto(blob);
-      arMsg('✅ サーバーに保存しました（市役所提出用に個体へ紐づけ）');
+      arMsg('✅ 看板写真を保存しました');
+      updatePhotoBadge();
     } catch (e) {
-      // 通信失敗時はデータを失わないよう端末にも保存
+      if (e && e.queued) {   // 通信不良: IndexedDBへ退避済み（捕獲票本文は保存済み・写真のみ未送信）
+        arMsg('📥 写真のみ未送信です。通信が戻ると自動で送ります（捕獲票は保存済み）');
+        updatePhotoBadge();
+        return;
+      }
+      // 恒久エラー（未認証など）: データを失わないよう端末にも保存して知らせる
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = fname;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
-      arMsg('⚠️ サーバー保存に失敗。端末に保存しました（通信確認後にもう一度撮影してください）');
+      arMsg('⚠️ 保存に失敗: ' + String(e.message || e).slice(0, 60) + '（端末に保存しました）');
     }
   }, 'image/jpeg', 0.9);
 }
-// 撮影画像をサーバー(capture-photosバケット)へ保存し、登録済み個体なら image_url に紐づける
+/* ═══════════ 写真の署名アップロード/表示（private capture-photos + grant方式） ═══════════
+   バケットは非公開。クライアントは公開URLを作らず、サーバRPCで発行した grant を使って
+   Storage APIの署名URL（createSignedUploadUrl / createSignedUrl 相当）でのみ入出力する。
+   認証: 登録直後は提出トークン(window._submissionToken)、それ以外は端末トークン。 */
+async function photoCredential() {
+  if (window._submissionToken) return window._submissionToken;
+  return await staffKeyEnsure();
+}
+// 対象個体のUUID（_boardRec.id 優先、無ければ label_id から解決）
+async function photoResolveIndividualId(r) {
+  if (r && r.id) return r.id;
+  if (r && r.label_id) {
+    const rows = await sb('GET', 'individuals', null, '?label_id=eq.' + encodeURIComponent(r.label_id) + '&select=id&limit=1');
+    if (rows && rows[0]) return rows[0].id;
+  }
+  return null;
+}
+// grant → 署名アップロードURL → PUT → 確定。冪等キー reqId。成功で {photo_id, path}。
+async function photoUploadViaGrant(cred, individualId, kind, blob, mime, reqId) {
+  const g = await sbRpc('photo_request_upload', {
+    p_credential: cred, p_individual_id: individualId, p_photo_kind: kind,
+    p_client_request_id: reqId, p_mime: mime, p_size_bytes: blob.size });
+  const path = g.object_path;
+  if (!g.already_confirmed) {
+    try {
+      const signRes = await fetch(`${SB_URL}/storage/v1/object/upload/sign/${SV_BUCKET}/${path}`, {
+        method: 'POST', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' }, body: '{}' });
+      if (!signRes.ok) { const e = new Error('署名URLの作成に失敗しました'); e.status = signRes.status; throw e; }
+      const signed = await signRes.json();   // { url: "/object/upload/sign/<bucket>/<path>?token=..." }
+      const putRes = await fetch(`${SB_URL}/storage/v1${signed.url}`, {
+        method: 'PUT', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': mime }, body: blob });
+      if (!putRes.ok) { const e = new Error('写真のアップロードに失敗しました'); e.status = putRes.status; throw e; }
+    } catch (e) {
+      // sign/PUT 失敗。既にアップロード済み（再送時など）なら確定で拾えるので確認を試す。
+      try { const c = await sbRpc('photo_confirm_upload', { p_credential: cred, p_client_request_id: reqId }); return { photo_id: c && c.photo_id, path }; }
+      catch (_) { throw e; }
+    }
+  }
+  const c = await sbRpc('photo_confirm_upload', { p_credential: cred, p_client_request_id: reqId });
+  return { photo_id: c && c.photo_id, path };
+}
+// 表示・印刷用の短命署名URL（60秒）
+async function photoSignedUrl(cred, photoId) {
+  const r = await sbRpc('photo_request_read', { p_credential: cred, p_photo_id: photoId });
+  const s = await fetch(`${SB_URL}/storage/v1/object/sign/${SV_BUCKET}/${r.object_path}`, {
+    method: 'POST', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ expiresIn: 60 }) });
+  if (!s.ok) { const e = new Error('写真の表示に失敗しました'); e.status = s.status; throw e; }
+  const j = await s.json();   // { signedURL: "/object/sign/<bucket>/<path>?token=..." }
+  return `${SB_URL}/storage/v1${j.signedURL}`;
+}
+
+/* ── オフライン写真キュー（IndexedDB。blobを保持し、通信復旧後に1回だけ再送） ── */
+const PHOTO_DB = 'tgc_photos', PHOTO_STORE = 'queue';
+function _idbOpen() {
+  return new Promise((resolve, reject) => {
+    let req; try { req = indexedDB.open(PHOTO_DB, 1); } catch (e) { reject(e); return; }
+    req.onupgradeneeded = () => { const db = req.result; if (!db.objectStoreNames.contains(PHOTO_STORE)) db.createObjectStore(PHOTO_STORE, { keyPath: 'reqId' }); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+function _idbReq(mode, make) {
+  return _idbOpen().then(db => new Promise((res, rej) => {
+    const tx = db.transaction(PHOTO_STORE, mode); const r = make(tx.objectStore(PHOTO_STORE));
+    tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+  }));
+}
+async function photoQueueAdd(item) { try { await _idbReq('readwrite', s => s.put(item)); } catch (e) {} updatePhotoBadge(); }
+async function photoQueueAll() { try { return (await _idbReq('readonly', s => s.getAll())) || []; } catch (e) { return []; } }
+async function photoQueueDel(reqId) { try { await _idbReq('readwrite', s => s.delete(reqId)); } catch (e) {} updatePhotoBadge(); }
+
+// 撮影blobを保存。成功=confirm済み。通信不良=IndexedDBへ退避し {queued:true} 付きで throw。
+async function savePhoto(individualId, kind, blob, mime, reqId) {
+  const cred = await photoCredential();
+  if (!cred) { const e = new Error('端末が未認証です（認証リンクで端末を認証してください）'); e.status = 401; throw e; }
+  try {
+    return await photoUploadViaGrant(cred, individualId, kind, blob, mime || 'image/jpeg', reqId);
+  } catch (e) {
+    if (isRetryable(e)) {
+      await photoQueueAdd({ reqId, individualId, kind, mime: mime || 'image/jpeg', blob, queued_at: new Date().toISOString(), retry_count: 0 });
+      const q = new Error('写真のみ未送信（通信復旧後に自動で送ります）'); q.queued = true; throw q;
+    }
+    throw e;
+  }
+}
+// 通信復旧時に写真キューを1回だけ再送（同一reqIdでサーバ側は冪等）
+let _photoFlushing = false;
+async function flushPhotoQueue() {
+  if (_photoFlushing) return; _photoFlushing = true;
+  try {
+    const items = await photoQueueAll();
+    if (!items.length) return;
+    const cred = await photoCredential();
+    if (!cred) return;   // 未認証なら次の機会に
+    for (const it of items) {
+      try { await photoUploadViaGrant(cred, it.individualId, it.kind, it.blob, it.mime, it.reqId); await photoQueueDel(it.reqId); }
+      catch (e) { if (!isRetryable(e)) { it.blocked = true; it.retry_count = (it.retry_count || 0) + 1; it.last_error = String(e.message || e); await photoQueueAdd(it); } }
+    }
+  } finally { _photoFlushing = false; }
+}
+function updatePhotoBadge() {
+  photoQueueAll().then(a => {
+    const b = document.getElementById('photoPendingBadge'); if (!b) return;
+    if (a.length > 0) { b.style.display = ''; b.textContent = '写真のみ未送信: ' + a.length + '件'; } else { b.style.display = 'none'; }
+  }).catch(() => {});
+}
+
+// 看板撮影画像を private capture-photos へ grant署名方式で保存（登録済み個体のみ）。
 async function arUploadPhoto(blob) {
   const r = _boardRec || {};
-  const mode = _arMode === 'whiteboard' ? 'wb' : 'board';
-  const safe = s => String(s == null ? '' : s).replace(/[^A-Za-z0-9_-]/g, '_');
-  const base = r.label_id ? safe(r.label_id)
-    : ('pickup_' + safe(r.capture_date || '') + '_' + safe(r.hunter_name || 'unknown'));
-  const path = base + '/ar-' + mode + '-' + Date.now() + '.jpg';
-  const res = await fetch(`${SB_URL}/storage/v1/object/${SV_BUCKET}/${path}`, {
-    method: 'POST',
-    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'image/jpeg', 'x-upsert': 'true' },
-    body: blob,
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const url = `${SB_URL}/storage/v1/object/public/${SV_BUCKET}/${path}`;
-  // 登録済み個体で看板写真なら、市役所提出用の主画像として image_url に保存。
-  // 任意URLは渡さず object_path のみ。提出者トークン（登録直後）か端末トークン（撮り直し）で認証。
-  if (r.label_id && mode === 'board') {
-    const cred = window._submissionToken || await staffKeyEnsure();
-    if (cred) await sbRpc('public_attach_capture_photo', { p_credential: cred, p_label_id: r.label_id, p_object_path: path, p_request_id: newRequestId() });
-  }
-  return url;
+  if (_arMode !== 'board') throw new Error('引き取り写真は個体未確定のため自動保存の対象外です');
+  const iid = await photoResolveIndividualId(r);
+  if (!iid) throw new Error('対象個体が特定できません（登録後に撮影してください）');
+  return await savePhoto(iid, 'signboard', blob, 'image/jpeg', newRequestId());
 }
 // 看板をcanvasの左下に描く（プレビュー #arBoard と同じ内容）
 function arDrawBoard(ctx, W, H, d) {
