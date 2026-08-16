@@ -7,7 +7,7 @@
 ## ブランチ / 差分
 
 - 新ブランチ: **`claude/tateyama-gibier-portal-password-fix-v2`**（旧 `claude/tateyama-gibier-portal-password-fix` は保存・改変なし）
-- ベース: 最新 `origin/main`（P0-4）。**origin/main に対し 0 behind / 6 ahead**（最新head: `9ed8307`）。
+- ベース: 最新 `origin/main`（P0-4）。**origin/main に対し 0 behind**（ahead はブランチ先端。最新head SHA は再提出報告本文に記載）。
 - 変更ファイル（main 差分＝ポータルパスワード関連のみ。invoice/capture/photo/50音/sw.js/manifest.json には触れていない）:
   - `migrations/20260816_portal_password_reissue_fix.sql`（M1: 発行の42702修正）
   - `migrations/20260816_portal_temp_password_lifecycle.sql`（M2: 仮pw方式・login・complete・ロック・管理RPC）
