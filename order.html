@@ -191,11 +191,12 @@ body.kb .bar{display:none}
   <div class="tabs" id="sp-tabs"></div>
   <div id="all-rows"></div>
 
-  <details class="oos" id="oos-box"><summary id="oos-sum">在庫切れの商品</summary>
+  <details class="oos" id="oos-box"><summary id="oos-sum">在庫切れ・お取り寄せの商品</summary>
+    <div class="note" style="padding-top:0">いまは在庫がありませんが、「取寄」でご希望として承れます。入荷次第センターからご連絡します。</div>
     <div id="oos-rows"></div>
   </details>
 
-  <div class="note">ジビエは現物パック単位のため、ご希望量を下回らない範囲で重量が前後します。請求額は実際に確保した重量で確定します。</div>
+  <div class="note">ジビエは現物パック単位のため、ご注文は「ご希望」として承ります。実際の重量・金額は、センターで在庫を確保したうえで確定し、あらためてご連絡します。在庫切れの品は「取寄」でお取り寄せの希望として承れます。</div>
 
   <div class="bar">
     <div class="sum" id="bar-sum">0点<b>概算 ¥0</b></div>
@@ -207,7 +208,7 @@ body.kb .bar{display:none}
 <div id="scr-confirm" class="hidden">
   <div class="hdr" style="margin:0 -14px"><b>ご注文の確認</b><button onclick="showScreen('list')">← 戻る</button></div>
   <div id="c-lines"></div>
-  <div class="ctotal"><span>概算合計 <small>（実重量で確定します）</small></span><span id="c-total"></span></div>
+  <div class="ctotal"><span>概算合計 <small>（在庫確保後に確定します）</small></span><span id="c-total"></span></div>
   <div class="fgrp"><label>納品希望日（必須）</label><input type="date" id="c-date"></div>
   <div class="fgrp"><label>時間帯</label>
     <select id="c-time">
@@ -219,28 +220,27 @@ body.kb .bar{display:none}
     <div style="font-size:13px;color:var(--text2);line-height:1.7" id="c-addr"></div>
     <div style="font-size:11px;color:var(--text3);margin-top:4px">変更が必要なときは備考にお書きください</div></div>
   <div class="fgrp"><label>備考（500文字まで）</label><textarea id="c-memo" maxlength="500"></textarea></div>
-  <!-- 実重量精算への同意（確定ボタンの直前に必ず表示。数値基準はDB・運用と同じ 20%／50%） -->
+  <!-- ご注文は「希望」として承り、在庫確保・確定はセンターが行う（自動確保はしない） -->
   <div class="notice" id="c-consent">
-    商品は現物パック単位でご用意するため、<strong>ご希望量を下回らない範囲で重量が増える場合があります
-    （通常はご希望量の2割以内）</strong>。<br>
-    <strong>請求額は確保した実重量で確定します。</strong>確定した重量・金額は次の画面に表示されます。<br>
-    ご希望量を2割以上超える場合は、発送前にセンターから確認のご連絡をいたします。
-    （5割を超えるご用意になる場合は、この場でお受けせず数量の調整をご案内します）
+    ご注文は<strong>「ご希望」として承ります</strong>。商品は現物パック単位のため、
+    実際の重量・金額は<strong>センターで在庫を確保したうえで確定</strong>し、あらためてご連絡します。<br>
+    在庫切れの品（お取り寄せ）は、<strong>入荷次第</strong>のご用意となる場合があります。<br>
+    下の金額は<strong>ご希望量 × 単価の概算</strong>です。
   </div>
   <div class="bar">
     <div class="sum" id="c-bar-sum"></div>
-    <button class="go" id="c-go" onclick="placeOrder()">同意して注文を確定する</button>
+    <button class="go" id="c-go" onclick="placeOrder()">この内容で注文する</button>
   </div>
 </div>
 
 <!-- ══════════ 画面3: 完了 ══════════ -->
 <div id="scr-done" class="hidden">
-  <h2>ご注文ありがとうございます</h2>
+  <h2>ご注文を承りました</h2>
   <div class="code" id="d-code"></div>
   <div class="notice" style="border-left-color:var(--green)">
-    在庫のパックを確保しました。<strong>下の重量・金額が確定の内容です。</strong></div>
+    ご希望として承りました。<strong>数量・金額は、センターで在庫を確保したうえで確定</strong>し、あらためてご連絡します（下記は概算です）。</div>
   <div id="d-lines"></div>
-  <div class="dtotal"><span>ご請求額（税抜）</span><span id="d-total"></span></div>
+  <div class="dtotal"><span>概算金額（税抜）</span><span id="d-total"></span></div>
   <div class="note" id="d-delivery"></div>
   <button class="btn-main" onclick="resetToList()">続けて注文する</button>
   <button class="backlink" style="width:100%;justify-content:center" onclick="doLogout()">ログアウト</button>
@@ -478,27 +478,31 @@ async function enterList() {
 }
 
 function productRow(p, usualKg) {
-  const out = p.mark === '×' || !p.is_orderable;
+  const noPrice = p.unit_price == null;
+  const outOfStock = p.mark === '×';
+  // 在庫の有無は問わない。在庫切れ（×）でも「お取り寄せ（希望）」として注文できる。
+  // 注文できないのは、商品として販売停止（!is_orderable）か価格未設定のときだけ。
+  const canOrder = p.is_orderable && !noPrice;
   const q = qtyState[p.product_id] ?? (usualKg || p.min_order_kg);
   const inCart = cartGet().some(c => c.product_id === p.product_id);
   const markCls = p.mark === '◎' ? 'o' : p.mark === '△' ? 't' : 'x';
-  const noPrice = p.unit_price == null;
-  return `<div class="row${out ? ' out' : ''}" data-pid="${p.product_id}">
+  const addLabel = inCart ? '追加済' : (outOfStock ? '取寄' : '追加');
+  return `<div class="row${!canOrder ? ' out' : ''}" data-pid="${p.product_id}">
     <div class="rtop" ${p.description ? `onclick="toggleDesc('${p.product_id}')" style="cursor:pointer"` : ''}>
-      <div class="rname">${esc(p.display_name)}${p.grade_label ? ' <span style="font-size:11px;color:var(--text3)">' + esc(p.grade_label) + '</span>' : ''}${p.description ? ' <span style="color:var(--text3);font-size:11px">ⓘ</span>' : ''}</div>
+      <div class="rname">${esc(p.display_name)}${p.grade_label ? ' <span style="font-size:11px;color:var(--text3)">' + esc(p.grade_label) + '</span>' : ''}${(outOfStock && canOrder) ? ' <span style="font-size:10px;color:var(--amber)">お取り寄せ</span>' : ''}${p.description ? ' <span style="color:var(--text3);font-size:11px">ⓘ</span>' : ''}</div>
       <span class="mark ${markCls}">${p.mark}</span>
       <span class="price">${noPrice ? '価格はお問い合わせください' : yen(p.unit_price) + '/kg'}</span>
     </div>
     ${p.description ? `<div class="rdesc hidden" id="desc-${p.product_id}">${esc(p.description)}</div>` : ''}
     <div class="rbot">
-      <span class="rusual">${usualKg ? 'いつも' + kg1(usualKg) + 'kg' : ''}</span>
+      <span class="rusual">${(outOfStock && canOrder) ? '在庫確認中・入荷次第お届け' : (usualKg ? 'いつも' + kg1(usualKg) + 'kg' : '')}</span>
       <div class="qty">
-        <button onclick="qtyStep('${p.product_id}',-1)" ${out ? 'disabled' : ''} aria-label="減らす">−</button>
+        <button onclick="qtyStep('${p.product_id}',-1)" ${!canOrder ? 'disabled' : ''} aria-label="減らす">−</button>
         <span id="qty-${p.product_id}">${kg1(q)}</span>
-        <button onclick="qtyStep('${p.product_id}',1)" ${out ? 'disabled' : ''} aria-label="増やす">＋</button>
+        <button onclick="qtyStep('${p.product_id}',1)" ${!canOrder ? 'disabled' : ''} aria-label="増やす">＋</button>
       </div>
       <button class="add${inCart ? ' inCart' : ''}" onclick="addToCart('${p.product_id}')"
-        ${out || noPrice ? 'disabled' : ''}>${inCart ? '追加済' : '追加'}</button>
+        ${!canOrder ? 'disabled' : ''}>${addLabel}</button>
       <button class="fav${p.is_favorite ? ' on' : ''}" onclick="toggleFav('${p.product_id}')"
         aria-label="お気に入り">${p.is_favorite ? '★' : '☆'}</button>
     </div>
@@ -539,7 +543,7 @@ function renderAll() {
 
   const oos = catalog.filter(p => p.mark === '×');
   $('oos-box').classList.toggle('hidden', !oos.length);
-  $('oos-sum').textContent = `在庫切れの商品（${oos.length}件）`;
+  $('oos-sum').textContent = `在庫切れ・お取り寄せの商品（${oos.length}件）`;
   $('oos-rows').innerHTML = oos.map(p => productRow(p, null)).join('');
 
   renderBar();
@@ -669,25 +673,22 @@ async function placeOrder() {
   if (!$('c-date').value) { toast('納品希望日を選んでください', 'error'); return; }
   placing = true;                      // 連打ガード②（ボタンも無効化）
   const btn = $('c-go');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 在庫を確保しています…';
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 注文を送信しています…';
   try {
     const res = await api.placeOrder(
       cart.map(c => ({ product_id: c.product_id, kg: c.kg })),
       $('c-date').value, $('c-time').value, $('c-memo').value.trim() || null,
       orderRequestId);                 // 再送しても同じIDなので二重注文にならない
-    // 完了画面: 実引当重量と確定金額
+    // 完了画面: ご希望量と概算金額（在庫確保・確定はセンターで行う）
     $('d-code').textContent = 'ご注文番号 ' + (res.order_code || '');
     $('d-lines').innerHTML = (res.items || []).map(i => `
       <div class="dline">
-        <div class="l">${esc(i.name)}<small>ご希望 ${kg1(i.requested_kg)}kg → 確保 <strong>${kg1(i.allocated_kg)}kg</strong> × ${yen(i.unit_price)}/kg</small></div>
+        <div class="l">${esc(i.name)}<small>ご希望 ${kg1(i.requested_kg)}kg × ${yen(i.unit_price)}/kg（概算）</small></div>
         <span>${yen(i.amount)}</span>
       </div>`).join('');
     $('d-total').textContent = yen(res.total_amount);
-    const overs = (res.items || []).filter(i => i.needs_review);
     $('d-delivery').innerHTML = esc('納品希望日: ' + $('c-date').value +
-      '（内容の確認後、センターからご連絡することがあります）') +
-      (overs.length ? '<div class="warn" style="margin-top:8px">⚠️ ' +
-        esc(overs.map(i => i.name).join('、') + ' はご希望量を2割以上超えるご用意になりました。発送前にセンターから確認のご連絡をいたします。') + '</div>' : '');
+      '（在庫の確保後、確定の重量・金額をセンターからご連絡します）');
     cartSet([]); qtyState = {}; orderRequestId = null;
     $('c-memo').value = ''; $('c-date').value = '';
     showScreen('done');
