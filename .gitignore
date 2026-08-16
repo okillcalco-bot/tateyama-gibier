@@ -1,0 +1,4 @@
+
+# 請求書のローカル取込（実ファイルはコミットしない。サンプルのみ同梱）
+import/invoices/*
+!import/invoices/_samples/

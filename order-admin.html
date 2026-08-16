@@ -153,6 +153,81 @@ header{padding:10px 14px}
 .modal{padding:18px;margin:10px}
 th,td{padding:8px 6px;font-size:.8rem}
 }
+
+/* ── 請求書取込 確認画面 ── */
+.inv-status-badges{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.inv-sb{padding:8px 14px;border-radius:20px;font-size:.82rem;border:1px solid var(--border);color:var(--text2);background:var(--surface);min-height:40px;display:inline-flex;align-items:center;gap:5px}
+.inv-sb.active{border-color:var(--gold);color:var(--gold);background:rgba(200,164,90,.08);font-weight:700}
+.inv-sb .n{font-weight:700}
+.inv-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px}
+.inv-card .row1{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.inv-card .fn{font-weight:700;font-size:.95rem;word-break:break-all}
+.inv-card .meta{font-size:.78rem;color:var(--text2);margin-top:4px}
+.inv-badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;white-space:nowrap;border:1px solid}
+.b-未処理,.b-抽出済{background:rgba(150,150,150,.12);color:#777;border-color:#aaa}
+.b-顧客未照合,.b-商品未照合,.b-要確認{background:rgba(240,192,64,.18);color:#8a6d10;border-color:#c9a52c}
+.b-確認済{background:rgba(90,140,216,.15);color:#2f66b5;border-color:#2f66b5}
+.b-取込済{background:rgba(106,158,90,.15);color:#3d7a34;border-color:#3d7a34}
+.b-除外{background:rgba(200,80,80,.12);color:#b93d3d;border-color:#b93d3d}
+
+.inv-detail{display:none;position:fixed;inset:0;background:var(--bg);z-index:1100;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:96px}
+.inv-detail.show{display:block}
+.inv-detail-top{position:sticky;top:0;background:var(--surface);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:5}
+.inv-detail-top .t{font-weight:700;color:var(--gold);font-size:.95rem;word-break:break-all}
+.inv-detail-body{max-width:900px;margin:0 auto;padding:14px}
+.inv-doc{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:14px;overflow:hidden}
+.inv-doc-head{padding:12px 14px;background:var(--surface2);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:52px}
+.inv-doc-head .h-main{font-weight:700;font-size:.92rem}
+.inv-doc-head .h-sub{font-size:.76rem;color:var(--text2);margin-top:2px}
+.inv-doc-body{padding:14px;border-top:1px solid var(--border)}
+.inv-doc-body.collapsed{display:none}
+.inv-sec{margin-bottom:14px}
+.inv-sec h4{font-size:.8rem;color:var(--text2);margin-bottom:7px;font-weight:700}
+.inv-warn{background:rgba(240,192,64,.14);border:1px solid #c9a52c;color:#8a6d10;border-radius:var(--radius);padding:9px 12px;font-size:.82rem;margin-bottom:10px;line-height:1.6}
+.inv-conflict{background:rgba(200,80,80,.1);border:1px solid var(--red);color:#b93d3d;border-radius:var(--radius);padding:9px 12px;font-size:.82rem;margin-bottom:10px;line-height:1.6;font-weight:600}
+.inv-cust-now{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.9rem;margin-bottom:8px}
+.inv-pill{font-size:11px;font-weight:700;padding:2px 9px;border-radius:11px;border:1px solid}
+.pill-確定{background:rgba(106,158,90,.15);color:#3d7a34;border-color:#3d7a34}
+.pill-候補あり{background:rgba(240,192,64,.18);color:#8a6d10;border-color:#c9a52c}
+.pill-未照合{background:rgba(150,150,150,.12);color:#777;border-color:#aaa}
+.pill-対象外{background:rgba(200,80,80,.1);color:#b93d3d;border-color:#b93d3d}
+.pill-保留{background:rgba(240,192,64,.18);color:#8a6d10;border-color:#c9a52c}
+.inv-btn-row{display:flex;flex-wrap:wrap;gap:7px}
+.inv-btn{padding:9px 13px;border-radius:var(--radius);font-size:.82rem;font-weight:600;border:1px solid var(--border2);color:var(--text2);background:var(--surface);min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:4px}
+.inv-btn:hover{border-color:var(--gold2);color:var(--text)}
+.inv-btn.on-確定{background:rgba(106,158,90,.15);color:#3d7a34;border-color:#3d7a34}
+.inv-btn.on-対象外{background:rgba(200,80,80,.12);color:#b93d3d;border-color:#b93d3d}
+.inv-btn.primary{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#fff;border:none}
+.inv-line{border:1px solid var(--border);border-radius:var(--radius);padding:11px;margin-bottom:9px}
+.inv-line .l-name{font-weight:700;font-size:.9rem;word-break:break-all}
+.inv-line .l-attrs{font-size:.78rem;color:var(--text2);margin:4px 0;display:flex;flex-wrap:wrap;gap:8px}
+.inv-line .l-src{font-size:.72rem;color:var(--text3);margin-bottom:6px}
+.inv-line select{width:100%;margin-bottom:7px;min-height:44px}
+.inv-amt{font-size:.86rem;line-height:1.9}
+.inv-amt .diff-bad{color:var(--red);font-weight:700}
+.inv-amt .diff-ok{color:var(--green);font-weight:700}
+.inv-detail-bottom{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--border2);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:6;box-shadow:0 -2px 8px rgba(0,0,0,.06)}
+.inv-detail-bottom .status-line{font-size:.8rem;color:var(--text2);line-height:1.4}
+.inv-detail-bottom .status-line .warn{color:#8a6d10;font-weight:700}
+.inv-detail-bottom .status-line .ok{color:var(--green);font-weight:700}
+.inv-detail-actions{display:flex;gap:8px;flex-shrink:0}
+.inv-audit{font-size:.74rem;color:var(--text3);line-height:1.7;margin-top:4px}
+.invpick{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1200;align-items:flex-start;justify-content:center;padding:40px 14px}
+.invpick.show{display:flex}
+.invpick-box{background:var(--surface);border-radius:12px;width:100%;max-width:520px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden}
+.invpick-box .ph{padding:14px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center}
+.invpick-box .ph input{flex:1}
+.invpick-results{overflow-y:auto;padding:6px}
+.invpick-row{padding:12px;border-bottom:1px solid var(--border);cursor:pointer;min-height:48px}
+.invpick-row:hover{background:var(--surface2)}
+.invpick-row .c{font-weight:700}
+.invpick-row .s{font-size:.78rem;color:var(--text2)}
+@media(max-width:768px){
+.inv-detail-body{padding:10px}
+.inv-detail-bottom{flex-direction:column;align-items:stretch}
+.inv-detail-actions{justify-content:stretch}
+.inv-detail-actions .btn{flex:1}
+}
 </style>
 </head>
 <body>
@@ -181,6 +256,8 @@ th,td{padding:8px 6px;font-size:.8rem}
   <div class="tab" data-tab="shipping" onclick="switchTab('shipping')">&#x1f69a; 発送管理</div>
   <div class="tab" data-tab="documents" onclick="switchTab('documents')">&#x1f4c4; 書類発行</div>
   <div class="tab" data-tab="invoice" onclick="switchTab('invoice')">&#x1f9fe; 請求書作成</div>
+  <div class="tab" data-tab="invoiceimport" onclick="switchTab('invoiceimport')">&#x1f4e5; 請求書取込</div>
+  <div class="tab" data-tab="portalcfg" onclick="switchTab('portalcfg')">&#x1f6d2; ポータル設定</div>
   <div class="tab" data-tab="customers" onclick="switchTab('customers')">&#x1f464; 顧客管理</div>
   <div class="tab" data-tab="pricing" onclick="switchTab('pricing')">&#x1f3f7;&#xfe0f; 価格マスタ</div>
   <div class="tab" data-tab="pproducts" onclick="switchTab('pproducts')">&#x1f6d2; ポータル商品</div>
@@ -471,6 +548,73 @@ th,td{padding:8px 6px;font-size:.8rem}
         <tbody id="ppBody"></tbody>
       </table>
     </div>
+  </div>
+
+  <!-- Tab: ポータル設定（利用可否・いつもの商品・顧客別価格の比較） -->
+  <div class="tab-content" id="tab-portalcfg">
+    <div style="font-size:12.5px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:12px;line-height:1.8;">
+      お客様の注文サイト（ポータル）の<strong>利用可否</strong>を確認・切り替えます。
+      各顧客の「価格・いつもの」で、<strong>顧客別価格の比較</strong>（適用価格と standard の差）と、
+      購入実績から自動生成した<strong>いつもの商品</strong>を確認できます。いつもの商品は購入実績（取消済みを除く）から集計され、
+      お客様が手動で保存した「お気に入り／マイリスト」は変更しません。
+    </div>
+    <div class="inv-status-badges" id="pcFilter"></div>
+    <div class="filter-bar">
+      <input class="search-input" type="text" placeholder="店名・コードで絞り込み..." id="pcSearch" oninput="renderPortalEnabled()">
+      <button class="btn btn-outline btn-sm" onclick="loadPortalEnabled()">↻ 再読込</button>
+      <button class="btn btn-outline btn-sm" onclick="recomputeAllUsual()">🧮 いつもの商品を全再集計</button>
+    </div>
+    <div class="table-wrap">
+      <table class="customer-table">
+        <thead><tr><th>コード</th><th>店名</th><th>ランク</th><th>ログイン</th><th>注文</th><th>いつもの</th><th>ポータル利用</th><th>操作</th></tr></thead>
+        <tbody id="pcBody"><tr><td colspan="8" class="loading">読み込み中…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 顧客の価格比較・いつもの Modal -->
+  <div class="modal-overlay" id="pcDetailModal">
+    <div class="modal modal-wide">
+      <span class="modal-close" onclick="closeModal('pcDetailModal')">&times;</span>
+      <h2 id="pcDetailTitle">顧客の価格・いつもの</h2>
+      <div id="pcDetailBody"></div>
+    </div>
+  </div>
+
+  <!-- Tab: 請求書取込（外部請求書を購入実績へ取り込む前の確認） -->
+  <div class="tab-content" id="tab-invoiceimport">
+    <div style="font-size:12.5px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:12px;line-height:1.8;">
+      取り込んだ請求書を確認して、<strong>顧客</strong>と<strong>商品</strong>を対応づけ、<strong>金額を検算</strong>してから購入実績へ反映します。
+      OCR・抽出結果はそのままでは実績になりません。<strong>スタッフが最終確認したものだけ</strong>反映されます。取込・反映はスタッフキーが必要です。
+      <br><span style="color:var(--text3);font-size:11.5px;">※ 担当者名はスタッフキー利用者による自己申告の操作名です。Supabase Auth 移行までは認証済み本人を証明するものではありません（移行後は本人IDに結びつけます）。</span>
+    </div>
+    <div class="inv-status-badges" id="invStatusFilter"></div>
+    <div class="filter-bar">
+      <button class="btn btn-outline btn-sm" onclick="loadInvoiceImports()">↻ 再読込</button>
+      <button class="btn btn-outline btn-sm" onclick="runInvoiceMatching()">🔎 名寄せを実行（顧客・商品の候補付け）</button>
+    </div>
+    <div id="invImportList"><div class="loading">読み込み中…</div></div>
+  </div>
+</div>
+
+<!-- 請求書取込 詳細（全画面） -->
+<div class="inv-detail" id="invDetail">
+  <div class="inv-detail-top">
+    <div class="t" id="invDetailTitle">請求書</div>
+    <button class="btn btn-outline btn-sm" onclick="closeInvoiceDetail()">✕ 閉じる</button>
+  </div>
+  <div class="inv-detail-body" id="invDetailBody"></div>
+  <div class="inv-detail-bottom" id="invDetailBottom"></div>
+</div>
+
+<!-- 顧客ピッカー -->
+<div class="invpick" id="invCustPick">
+  <div class="invpick-box">
+    <div class="ph">
+      <input type="text" id="invCustQ" placeholder="店名・コード・カナ・電話で検索" oninput="invCustSearch()" autocomplete="off">
+      <button class="btn btn-outline btn-sm" onclick="hideCustPick()">閉じる</button>
+    </div>
+    <div class="invpick-results" id="invCustResults"><div class="empty">検索してください</div></div>
   </div>
 </div>
 
@@ -783,6 +927,8 @@ function switchTab(tab){
   if(tab==='pricing') renderPricing();
   if(tab==='pproducts') loadPortalProducts();
   if(tab==='invoice') openInvoiceTab();
+  if(tab==='invoiceimport') openInvoiceImportTab();
+  if(tab==='portalcfg') openPortalCfgTab();
   if(tab==='customers' && !custAdminUnlocked) ensureCustAdmin();
 }
 
@@ -2847,6 +2993,393 @@ function pad(n){return String(n).padStart(2,'0')}
 function today(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
 function tomorrow(){const d=new Date();d.setDate(d.getDate()+1);return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
 function fmtDate(d){return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
+
+/* ══════════ 請求書取込（フェーズ4 2/3 確認画面） ══════════
+   ステージング表はanon直読み不可。すべて admin_invoice_* RPC（スタッフキー必須）経由。
+   OCR/抽出結果はそのまま実績にせず、顧客・商品・金額を人が確認してから反映する。 */
+const INV_FILTERS=['すべて','未処理','顧客未照合','商品未照合','要確認','確認済','取込済','除外'];
+let invImports=[], invFilter='すべて', invProducts=[], invCurrent=null, invPickDocId=null;
+
+function invOperator(){
+  let n=''; try{ n=localStorage.getItem('tg_operator')||''; }catch(e){}
+  if(!n){ n=(prompt('あなたのお名前を入力してください（確認・反映の記録に残します）')||'').trim();
+    if(n){ try{ localStorage.setItem('tg_operator',n); }catch(e){} } }
+  return n;
+}
+async function invRpc(fn,args){
+  const key=await staffKeyEnsure(); if(!key) throw new Error('スタッフキーが必要です');
+  return sbRpc(fn, Object.assign({p_staff_key:key}, args||{}));
+}
+async function openInvoiceImportTab(){
+  const key=await staffKeyEnsure(); if(!key){ document.getElementById('invImportList').innerHTML='<div class="empty">スタッフキーの入力が必要です</div>'; return; }
+  try{ invProducts=await invRpc('admin_invoice_products')||[]; }catch(e){ invProducts=[]; }
+  await loadInvoiceImports();
+}
+async function loadInvoiceImports(){
+  try{
+    invImports=await invRpc('admin_invoice_list',{p_status:null})||[];
+    renderInvoiceImports();
+  }catch(e){
+    if(String(e.message).includes('スタッフキー')) staffKeyClear();
+    document.getElementById('invImportList').innerHTML='<div class="empty">読み込めませんでした：'+esc(e.message)+'</div>';
+  }
+}
+function setInvFilter(s){ invFilter=s; renderInvoiceImports(); }
+function renderInvoiceImports(){
+  const counts={}; INV_FILTERS.forEach(s=>counts[s]=0);
+  counts['すべて']=invImports.length;
+  invImports.forEach(i=>{ if(counts[i.status]!=null) counts[i.status]++; });
+  document.getElementById('invStatusFilter').innerHTML=INV_FILTERS.map(s=>
+    `<button class="inv-sb ${s===invFilter?'active':''}" onclick="setInvFilter('${s}')">${s}<span class="n">${counts[s]||0}</span></button>`).join('');
+  const rows=invFilter==='すべて'?invImports:invImports.filter(i=>i.status===invFilter);
+  const el=document.getElementById('invImportList');
+  if(!rows.length){ el.innerHTML='<div class="empty">該当する取込はありません</div>'; return; }
+  el.innerHTML=rows.map(i=>{
+    const warn=[];
+    if((i.unmatched_customers||0)>0) warn.push(`顧客未確定 ${i.unmatched_customers}`);
+    if((i.unmatched_products||0)>0) warn.push(`商品未対応 ${i.unmatched_products}`);
+    return `<div class="inv-card"><div class="row1">
+      <div style="min-width:0"><div class="fn">${esc(i.file_name)}</div>
+        <div class="meta">${esc(i.source||'')}・請求書 ${i.documents||0}枚・明細 ${i.lines||0}行${warn.length?'　⚠ '+esc(warn.join(' / ')):''}</div></div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <span class="inv-badge b-${esc(i.status)}">${esc(i.status)}</span>
+        <button class="btn btn-gold btn-sm" onclick="openInvoiceDetail('${i.id}')">開く</button></div>
+      </div>${i.error_message?'<div class="inv-warn" style="margin-top:8px">'+esc(i.error_message)+'</div>':''}</div>`;
+  }).join('');
+}
+async function runInvoiceMatching(){
+  try{
+    const r=await invRpc('admin_invoice_run_matching',{p_import_id:null});
+    alert(`名寄せ完了：自動確定 ${r.auto||0} / 候補 ${r.candidates||0} / 未照合 ${r.unmatched||0}`
+      +(r.conflicts?` / 矛盾 ${r.conflicts}`:'')+(r.products_prefilled?` / 商品前埋め ${r.products_prefilled}`:''));
+    await loadInvoiceImports();
+  }catch(e){ alert('名寄せに失敗しました：'+e.message); }
+}
+
+async function openInvoiceDetail(id){
+  try{
+    invCurrent=await invRpc('admin_invoice_detail',{p_import_id:id});
+    if(!invProducts.length){ try{ invProducts=await invRpc('admin_invoice_products')||[]; }catch(e){} }
+    renderInvoiceDetail();
+    document.getElementById('invDetail').classList.add('show');
+    document.getElementById('invDetailBody').scrollTop=0;
+  }catch(e){ alert('詳細を開けませんでした：'+e.message); }
+}
+function closeInvoiceDetail(){ document.getElementById('invDetail').classList.remove('show'); invCurrent=null; loadInvoiceImports(); }
+
+function invProdLabel(p){ return `${p.species||''} ${p.display_name||''}${p.grade_label?'（'+p.grade_label+'）':''}`.trim(); }
+function invMoney(n){ return n==null?'—':'¥'+Number(n).toLocaleString(); }
+
+function renderInvoiceDetail(){
+  const d=invCurrent; if(!d) return;
+  const imp=d.import;
+  document.getElementById('invDetailTitle').textContent=imp.file_name+'（'+imp.status+'）';
+  const readonly=(imp.status==='取込済'||imp.status==='除外');
+  let unconfCust=0, unconfProd=0, amtIssues=0;
+  const docsHtml=(d.documents||[]).map((doc,di)=>{
+    const cust=doc.customer;
+    const cs=doc.match_status;
+    if(cs!=='確定'&&cs!=='対象外') unconfCust++;
+    // 明細
+    const linesHtml=(doc.lines||[]).map(l=>{
+      const ls=l.match_status;
+      if(cs==='確定'&&ls!=='確定'&&ls!=='対象外') unconfProd++;
+      const sel=`<select id="invprod-${l.id}" ${readonly?'disabled':''}>`
+        +'<option value="">-- ポータル商品を選ぶ --</option>'
+        +invProducts.map(p=>`<option value="${p.id}" ${l.product_id===p.id?'selected':''}>${esc(invProdLabel(p))}</option>`).join('')
+        +'</select>';
+      const attrs=[l.raw_species,l.raw_part,l.raw_grade].filter(Boolean).map(esc).join(' / ');
+      const nums=[l.weight_kg!=null?l.weight_kg+'kg':null, l.unit_price!=null?invMoney(l.unit_price)+'/kg':null, l.amount!=null?invMoney(l.amount):null].filter(Boolean).join('　');
+      return `<div class="inv-line">
+        <div class="l-name">${esc(l.raw_item_name)} <span class="inv-pill pill-${esc(ls)}">${esc(ls)}</span></div>
+        <div class="l-attrs">${attrs?'<span>'+attrs+'</span>':''}<span>${nums||''}</span></div>
+        ${l.source_ref?'<div class="l-src">抽出元: '+esc(l.source_ref)+(l.confidence!=null?'（確度 '+Math.round(l.confidence*100)+'%）':'')+'</div>':''}
+        ${l.product?'<div style="font-size:.8rem;color:var(--green);margin-bottom:5px">→ '+esc(invProdLabel(l.product))+'</div>':''}
+        ${readonly?'':sel+`<div class="inv-btn-row">
+          <button class="inv-btn ${ls==='確定'?'on-確定':''}" onclick="invMapProduct('${l.id}','対応づけ')">この商品で確定</button>
+          <button class="inv-btn" onclick="invMapProduct('${l.id}','別商品')">別商品として保留</button>
+          <button class="inv-btn ${ls==='対象外'?'on-対象外':''}" onclick="invMapProduct('${l.id}','対象外')">注文サイト対象外</button>
+        </div>`}
+      </div>`;
+    }).join('');
+    // 金額検算
+    const diff=doc.amount_diff;
+    let amtHtml='';
+    if(doc.total_amount!=null){
+      const bad=diff!=null&&Math.abs(Number(diff))>0.009;
+      if(bad&&!doc.amount_diff_reason) amtIssues++;
+      amtHtml=`<div class="inv-sec"><h4>金額検算</h4><div class="inv-amt">
+        明細合計: ${invMoney(doc.lines_amount_sum)}<br>請求書合計: ${invMoney(doc.total_amount)}<br>
+        差額: <span class="${bad?'diff-bad':'diff-ok'}">${invMoney(diff)}</span>${bad?' ⚠ 税・送料・値引きなどの理由が必要です':''}</div>
+        ${bad&&!readonly?`<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select id="invkind-${doc.id}" style="min-height:44px"><option value="">種別</option>
+            ${['税','送料','値引き','その他'].map(k=>`<option ${doc.amount_diff_kind===k?'selected':''}>${k}</option>`).join('')}</select>
+          <input type="text" id="invreason-${doc.id}" placeholder="差額の理由" value="${escAttr(doc.amount_diff_reason||'')}" style="flex:1;min-width:120px;min-height:44px">
+          <button class="inv-btn" onclick="invSetAmountReason('${doc.id}')">理由を保存</button></div>`
+        :(doc.amount_diff_reason?'<div style="font-size:.8rem;color:var(--text2);margin-top:6px">理由: '+esc(doc.amount_diff_kind||'')+' '+esc(doc.amount_diff_reason)+'</div>':'')}
+      </div>`;
+    }
+    // 顧客セクション
+    const custNow=cust
+      ? `<span class="inv-pill pill-${esc(cs)}">${esc(cs)}</span> <strong>${esc(cust.code||'')} ${esc(cust.name||'')}</strong>`
+      : `<span class="inv-pill pill-${esc(cs)}">${esc(cs)}</span> <span style="color:var(--text3)">（顧客なし）</span>`;
+    const conflictHtml=doc.match_conflict?`<div class="inv-conflict">⚠ ${esc(doc.conflict_detail||'照合情報が矛盾しています。人が確認してください')}</div>`:'';
+    const custBtns=readonly?'':`<div class="inv-btn-row" style="margin-top:8px">
+      <button class="inv-btn ${cs==='確定'?'on-確定':''}" onclick="showCustPick('${doc.id}')">顧客を選んで確定</button>
+      <button class="inv-btn ${cs==='対象外'?'on-対象外':''}" onclick="invSetCustomer('${doc.id}','対象外',null)">対象外</button>
+      ${cs==='確定'||cs==='対象外'?`<button class="inv-btn" onclick="invSetCustomer('${doc.id}','未照合',null)">確定を取消</button>`:''}
+      <button class="inv-btn" onclick="invRematch()">再照合</button></div>`;
+    const dates=[doc.invoice_date?'請求日 '+doc.invoice_date:null, doc.delivery_date?'納品日 '+doc.delivery_date:null].filter(Boolean).join('　');
+    return `<div class="inv-doc"><div class="inv-doc-head" onclick="toggleInvDoc(${di})">
+        <div><div class="h-main">${esc(doc.invoice_number||'（伝票番号なし）')} <span class="inv-pill pill-${esc(cs)}">${esc(cs)}</span></div>
+          <div class="h-sub">P${doc.page_from||'?'}${doc.page_to&&doc.page_to!==doc.page_from?'-'+doc.page_to:''}　${esc(dates)}　抽出顧客: ${esc(doc.raw_customer_name||'—')}</div></div>
+        <div style="color:var(--text3);font-size:1.1rem" id="invchev-${di}">▾</div></div>
+      <div class="inv-doc-body ${di>0?'collapsed':''}" id="invdocbody-${di}">
+        <div class="inv-sec"><h4>顧客の確認</h4>${conflictHtml}
+          <div class="inv-cust-now">${custNow}${doc.match_method?'<span style="font-size:.74rem;color:var(--text3)">('+esc(doc.match_method)+(doc.match_confidence!=null?' '+Math.round(doc.match_confidence*100)+'%':'')+')</span>':''}</div>
+          <div style="font-size:.78rem;color:var(--text2)">抽出: ${esc(doc.raw_customer_name||'—')}${doc.raw_phone?'　☎ '+esc(doc.raw_phone):''}${doc.raw_postal?'　〒'+esc(doc.raw_postal):''}</div>
+          ${custBtns}</div>
+        ${amtHtml}
+        <div class="inv-sec"><h4>明細の商品対応づけ（${(doc.lines||[]).length}行）</h4>${linesHtml||'<div class="empty">明細なし</div>'}</div>
+      </div></div>`;
+  }).join('');
+
+  // 監査
+  const auditHtml=(d.audit&&d.audit.length)?`<div class="inv-sec"><h4>操作の記録</h4><div class="inv-audit">${
+    d.audit.slice(0,12).map(a=>`${new Date(a.created_at).toLocaleString('ja-JP')}　${esc(a.actor||'—')}　${esc(a.detail||a.action)}`).join('<br>')}</div></div>`:'';
+  document.getElementById('invDetailBody').innerHTML=docsHtml+auditHtml;
+
+  // 下部固定バー（未確認件数・反映/取消）
+  const ready=unconfCust===0&&unconfProd===0&&amtIssues===0;
+  let status;
+  if(imp.status==='取込済') status=`<span class="ok">✓ 実績反映済み</span>${imp.finalized_by?'（'+esc(imp.finalized_by)+'）':''}`;
+  else if(imp.status==='除外') status='<span class="warn">除外中</span>';
+  else{
+    const parts=[];
+    if(unconfCust) parts.push(`顧客未確定 ${unconfCust}`);
+    if(unconfProd) parts.push(`商品未対応 ${unconfProd}`);
+    if(amtIssues) parts.push(`金額差異の理由 ${amtIssues}`);
+    status=parts.length?`<span class="warn">要対応: ${parts.join(' / ')}</span>`:'<span class="ok">✓ すべて確認済み。反映できます</span>';
+  }
+  let actions='';
+  if(imp.status==='取込済'){
+    actions=`<button class="btn btn-danger" onclick="invCancel('${imp.id}')">実績を取消</button>`;
+  }else if(imp.status==='除外'){
+    actions=`<button class="btn btn-outline" onclick="invExclude('${imp.id}',false)">除外を解除</button>`;
+  }else{
+    actions=`<button class="btn btn-outline btn-sm" onclick="invExclude('${imp.id}',true)">取込を除外</button>
+      <button class="btn btn-gold" ${ready?'':'disabled style="opacity:.5"'} onclick="invFinalize('${imp.id}')">購入実績へ反映</button>`;
+  }
+  document.getElementById('invDetailBottom').innerHTML=`<div class="status-line">${status}</div><div class="inv-detail-actions">${actions}</div>`;
+}
+function toggleInvDoc(di){
+  const b=document.getElementById('invdocbody-'+di), c=document.getElementById('invchev-'+di);
+  if(!b) return; b.classList.toggle('collapsed'); if(c) c.textContent=b.classList.contains('collapsed')?'▸':'▾';
+}
+async function invReload(){ if(invCurrent){ const id=invCurrent.import.id; try{ invCurrent=await invRpc('admin_invoice_detail',{p_import_id:id}); renderInvoiceDetail(); }catch(e){} } }
+
+function invRequireBy(){ const by=invOperator(); if(!by){ alert('担当者名を入力してください（操作の記録に残します）'); } return by; }
+async function invSetCustomer(docId,decision,custId){
+  const by=invRequireBy(); if(!by) return;
+  try{ await invRpc('admin_invoice_set_customer',{p_document_id:docId,p_decision:decision,p_customer_id:custId,p_by:by}); await invReload(); }
+  catch(e){ alert('顧客の更新に失敗：'+e.message); }
+}
+async function invRematch(){
+  if(!invCurrent) return;
+  try{ await invRpc('admin_invoice_run_matching',{p_import_id:invCurrent.import.id}); await invReload(); }
+  catch(e){ alert('再照合に失敗：'+e.message); }
+}
+async function invMapProduct(lineId,decision){
+  const by=invRequireBy(); if(!by) return;
+  let pid=null;
+  if(decision==='対応づけ'){ pid=document.getElementById('invprod-'+lineId)?.value||''; if(!pid){ alert('対応づける商品を選んでください'); return; } }
+  try{ await invRpc('admin_invoice_map_product',{p_line_id:lineId,p_decision:decision,p_product_id:pid||null,p_by:by}); await invReload(); }
+  catch(e){ alert('商品の対応づけに失敗：'+e.message); }
+}
+async function invSetAmountReason(docId){
+  const by=invRequireBy(); if(!by) return;
+  const kind=document.getElementById('invkind-'+docId)?.value||'';
+  const reason=(document.getElementById('invreason-'+docId)?.value||'').trim();
+  if(!reason){ alert('差額の理由を入力してください'); return; }
+  try{ await invRpc('admin_invoice_set_amount_reason',{p_document_id:docId,p_reason:reason,p_kind:kind||null,p_by:by}); await invReload(); }
+  catch(e){ alert('理由の保存に失敗：'+e.message); }
+}
+async function invFinalize(id){
+  const by=invRequireBy(); if(!by) return;
+  if(!confirm('この請求書の内容を購入実績へ反映します。\n確定済みの顧客・商品だけが反映され、以後は「取消」しない限り変更できません。\nよろしいですか？')) return;
+  try{
+    const r=await invRpc('admin_invoice_finalize',{p_import_id:id,p_by:by});
+    if(r.already) alert('この取込は既に反映済みです（実績は増えていません）。');
+    else alert(`購入実績へ反映しました：明細 ${r.facts||0}行（請求書 ${r.documents||0}枚）`);
+    await invReload();
+  }catch(e){ alert('反映できませんでした：'+e.message); }
+}
+async function invCancel(id){
+  const by=invRequireBy(); if(!by) return;
+  const reason=(prompt('実績を取り消します。理由を入力してください（例: 請求書の差し替え）')||'').trim();
+  if(!reason) return;
+  try{
+    const r=await invRpc('admin_invoice_cancel',{p_import_id:id,p_reason:reason,p_by:by});
+    alert(`取り消しました：${r.canceled_facts||0}行（記録は残ります）。必要ならもう一度反映できます。`);
+    await invReload();
+  }catch(e){ alert('取消できませんでした：'+e.message); }
+}
+async function invExclude(id,ex){
+  const by=invRequireBy(); if(!by) return;
+  if(ex&&!confirm('この取込を除外します（一覧の「除外」へ移動）。よろしいですか？')) return;
+  try{ await invRpc('admin_invoice_exclude_import',{p_import_id:id,p_exclude:ex,p_by:by}); await invReload(); }
+  catch(e){ alert('操作に失敗：'+e.message); }
+}
+
+// 顧客ピッカー
+let invCustTimer=null;
+function showCustPick(docId){
+  invPickDocId=docId;
+  document.getElementById('invCustQ').value='';
+  document.getElementById('invCustResults').innerHTML='<div class="empty">検索してください</div>';
+  document.getElementById('invCustPick').classList.add('show');
+  setTimeout(()=>document.getElementById('invCustQ').focus(),50);
+}
+function hideCustPick(){ document.getElementById('invCustPick').classList.remove('show'); invPickDocId=null; }
+function invCustSearch(){
+  clearTimeout(invCustTimer);
+  const q=document.getElementById('invCustQ').value.trim();
+  if(q.length<1){ document.getElementById('invCustResults').innerHTML='<div class="empty">検索してください</div>'; return; }
+  invCustTimer=setTimeout(async()=>{
+    try{
+      const rows=await invRpc('admin_invoice_customer_search',{p_q:q,p_limit:25})||[];
+      const el=document.getElementById('invCustResults');
+      if(!rows.length){ el.innerHTML='<div class="empty">見つかりません</div>'; return; }
+      el.innerHTML=rows.map(c=>`<div class="invpick-row" onclick="pickCustomer('${c.id}')">
+        <div class="c">${esc(c.name||'')}</div>
+        <div class="s">${esc(c.code||'')}${c.phone_tail?'　☎…'+esc(c.phone_tail):''}</div></div>`).join('');
+    }catch(e){ document.getElementById('invCustResults').innerHTML='<div class="empty">'+esc(e.message)+'</div>'; }
+  },250);
+}
+async function pickCustomer(custId){
+  const docId=invPickDocId; hideCustPick();
+  if(docId) await invSetCustomer(docId,'確定',custId);
+}
+
+/* ══════════ ポータル設定（フェーズ4 3/3: 利用可否・いつもの・価格比較） ══════════ */
+const PC_FILTERS=[['all','すべて'],['enabled','利用可'],['disabled','停止中']];
+let pcRows=[], pcFilter='all';
+async function openPortalCfgTab(){
+  const key=await staffKeyEnsure(); if(!key){ document.getElementById('pcBody').innerHTML='<tr><td colspan="8" class="empty">スタッフキーの入力が必要です</td></tr>'; return; }
+  await loadPortalEnabled();
+}
+async function loadPortalEnabled(){
+  try{
+    pcRows=await invRpc('admin_list_portal_enabled',{p_filter:pcFilter})||[];
+    renderPortalEnabled();
+  }catch(e){
+    if(String(e.message).includes('スタッフキー')) staffKeyClear();
+    document.getElementById('pcBody').innerHTML='<tr><td colspan="8" class="empty">読み込めませんでした：'+esc(e.message)+'</td></tr>';
+  }
+}
+function setPcFilter(f){ pcFilter=f; loadPortalEnabled(); }
+function renderPortalEnabled(){
+  const counts={all:pcRows.length}; // enabled/disabledはサーバ絞り込みのため概数
+  document.getElementById('pcFilter').innerHTML=PC_FILTERS.map(([k,l])=>
+    `<button class="inv-sb ${k===pcFilter?'active':''}" onclick="setPcFilter('${k}')">${l}</button>`).join('');
+  const q=(document.getElementById('pcSearch')?.value||'').trim();
+  const rows=q?pcRows.filter(r=>(r.code||'').includes(q)||(r.name||'').includes(q)):pcRows;
+  const el=document.getElementById('pcBody');
+  if(!rows.length){ el.innerHTML='<tr><td colspan="8" class="empty">該当する顧客はいません</td></tr>'; return; }
+  el.innerHTML=rows.map(r=>{
+    const on=r.portal_enabled===true;
+    return `<tr>
+      <td>${esc(r.code||'')}</td><td>${esc(r.name||'')}</td>
+      <td>${esc(rankLabel(r.price_rank))}</td>
+      <td>${r.has_login?'あり':'—'}</td>
+      <td>${r.order_count||0}</td><td>${r.usual_items||0}</td>
+      <td><span class="inv-badge ${on?'b-取込済':'b-除外'}">${on?'利用可':'停止中'}</span></td>
+      <td><div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-sm ${on?'btn-danger':'btn-green'}" onclick="togglePortal('${r.id}',${on?'false':'true'})">${on?'停止する':'利用可にする'}</button>
+        <button class="btn btn-outline btn-sm" onclick="openPortalCustDetail('${r.id}','${escAttr(r.code||'')}','${escAttr(r.name||'')}')">価格・いつもの</button>
+      </div></td></tr>`;
+  }).join('');
+}
+async function togglePortal(id,enable){
+  const by=invRequireBy(); if(!by) return;
+  if(!confirm(enable?'このお客様のポータル利用を有効にします。よろしいですか？':'このお客様のポータル利用を停止します（ログインできなくなります）。よろしいですか？')) return;
+  try{ await invRpc('admin_set_portal_enabled',{p_customer_id:id,p_enabled:enable,p_by:by}); await loadPortalEnabled(); }
+  catch(e){ alert('切り替えに失敗：'+e.message); }
+}
+async function recomputeAllUsual(){
+  const by=invRequireBy(); if(!by) return;
+  if(!confirm('全顧客の「いつもの商品」を購入実績（取消済みを除く）から再集計します。\nお客様の手動お気に入りは変更しません。よろしいですか？')) return;
+  try{
+    const r=await invRpc('admin_recompute_usual_items',{p_customer_id:null,p_by:by});
+    alert(`再集計しました：対象 ${r.customers||0} 顧客・${r.items||0} 品目`);
+    await loadPortalEnabled();
+  }catch(e){ alert('再集計に失敗：'+e.message); }
+}
+function pcMoney(n){ return n==null?'—':'¥'+Number(n).toLocaleString(); }
+async function openPortalCustDetail(id,code,name){
+  document.getElementById('pcDetailTitle').textContent=`${code} ${name} の価格・いつもの`;
+  const body=document.getElementById('pcDetailBody');
+  body.innerHTML='<div class="loading">読み込み中…</div>';
+  openModal('pcDetailModal');
+  try{
+    const [cmp,usual]=await Promise.all([
+      invRpc('admin_customer_price_comparison',{p_customer_id:id}),
+      invRpc('admin_customer_usual_items',{p_customer_id:id}),
+    ]);
+    body.innerHTML=renderPriceComparison(cmp)+renderUsualBlock(id,usual);
+  }catch(e){ body.innerHTML='<div class="empty">読み込めませんでした：'+esc(e.message)+'</div>'; }
+}
+function renderPriceComparison(cmp){
+  const rows=(cmp||[]).map(r=>{
+    const diff=r.diff_vs_standard;
+    const diffTxt=diff==null?'—':(diff===0?'±0':(diff>0?'+':'')+Number(diff).toLocaleString());
+    const diffCls=diff==null||diff===0?'':(Math.abs(diff)>0?'style="color:var(--red);font-weight:700"':'');
+    const src={customer_override:'個別',price_rank:'ランク',standard:'標準'}[r.price_source]||(r.resolved_price==null?'価格なし':'');
+    return `<tr>
+      <td>${esc(r.species||'')} ${esc(r.display_name||'')}${r.grade_label?'（'+esc(r.grade_label)+'）':''}</td>
+      <td style="text-align:right">${pcMoney(r.resolved_price)}</td>
+      <td>${esc(src)}</td>
+      <td style="text-align:right">${pcMoney(r.standard_price)}</td>
+      <td style="text-align:right">${pcMoney(r.rank_price)}</td>
+      <td style="text-align:right">${r.has_override?pcMoney(r.override_price):'—'}</td>
+      <td style="text-align:right" ${diffCls}>${diffTxt}</td>
+      <td>${r.orderable?'○':'×'}</td></tr>`;
+  }).join('');
+  return `<div class="doc-section"><h3>顧客別 価格比較（適用価格と標準の差）</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>商品</th><th>適用価格</th><th>出所</th><th>標準</th><th>ランク</th><th>個別</th><th>標準との差</th><th>注文可</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="8" class="empty">商品がありません</td></tr>'}</tbody></table></div>
+    <div style="font-size:11.5px;color:var(--text3);margin-top:6px">出所: 個別＝顧客個別価格 / ランク＝価格ランク / 標準＝standard。価格は resolve_unit_price に一元化。</div>
+  </div>`;
+}
+function renderUsualBlock(id,usual){
+  const rows=(usual||[]).map(u=>`<tr>
+    <td>${u.is_pinned?'📌':''}${u.is_hidden?'🚫':''} ${esc(u.species||'')} ${esc(u.display_name||'')}${u.grade_label?'（'+esc(u.grade_label)+'）':''}</td>
+    <td style="text-align:right">${u.purchase_count||0}</td>
+    <td style="text-align:right">${u.total_kg!=null?Number(u.total_kg).toLocaleString()+'kg':'—'}</td>
+    <td style="text-align:right">${u.avg_order_kg!=null?Number(u.avg_order_kg).toLocaleString()+'kg':'—'}</td>
+    <td>${u.last_purchased_on||'—'}</td>
+    <td>${u.avg_interval_days!=null?Math.round(u.avg_interval_days)+'日':'—'}</td>
+    <td>${esc(u.reason||'')}</td></tr>`).join('');
+  return `<div class="doc-section" style="margin-top:20px"><h3>いつもの商品（購入実績から自動生成・取消済みを除く）</h3>
+    <div style="margin-bottom:8px"><button class="btn btn-outline btn-sm" onclick="recomputeCustUsual('${id}')">🧮 この顧客のいつものを再集計</button></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>商品</th><th>回数</th><th>合計</th><th>平均/回</th><th>最終購入</th><th>平均間隔</th><th>根拠</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="7" class="empty">まだ購入実績がありません</td></tr>'}</tbody></table></div>
+    <div style="font-size:11.5px;color:var(--text3);margin-top:6px">📌=固定表示 / 🚫=非表示（人手の上書き。再集計でも保持）。お客様の手動お気に入りとは別です。</div>
+  </div>`;
+}
+async function recomputeCustUsual(id){
+  const by=invRequireBy(); if(!by) return;
+  try{
+    const r=await invRpc('admin_recompute_usual_items',{p_customer_id:id,p_by:by});
+    const usual=await invRpc('admin_customer_usual_items',{p_customer_id:id});
+    // いつものブロックだけ差し替え
+    const block=document.querySelectorAll('#pcDetailBody .doc-section');
+    if(block[1]) block[1].outerHTML=renderUsualBlock(id,usual);
+    else await openPortalCustDetail(id,'','');
+  }catch(e){ alert('再集計に失敗：'+e.message); }
+}
 
 init();
 ordStartNotifyLoop();
