@@ -1,22 +1,58 @@
-# 注文サイト パスワード再設計（v2）— Codex 再レビュー依頼
+# 注文サイト パスワード再設計（v3）— Codex 再レビュー依頼
 
-前回レビューで指摘された **P0-1 / P0-2 / P0-3 / P0-4 / P1-1〜P1-6** に対応する再設計です。
+前回レビューで指摘された **P0-1 / P0-2 / P0-3 / P0-4 / P1-1〜P1-6** に加え、v2再レビューでの
+残ブロッカー **（P0-1 リンク認証の廃止 / P0-2 顧客編集の視認性）** と **適用順（M4を最後）** に対応しました。
 本番DBへは未適用、main へは未マージ、実顧客への発行・実注文は未実施です（下記「制約の遵守」）。
 
 ## ブランチ / 差分
 
 - 新ブランチ: **`claude/tateyama-gibier-portal-password-fix-v2`**（旧 `claude/tateyama-gibier-portal-password-fix` は保存・改変なし）
-- ベース: 最新 `origin/main`（P0-4）。**origin/main に対し 0 behind / 3 ahead**。
+- ベース: 最新 `origin/main`（P0-4）。**origin/main に対し 0 behind / 6 ahead**（最新head: `9ed8307`）。
 - 変更ファイル（main 差分＝ポータルパスワード関連のみ。invoice/capture/photo/50音/sw.js/manifest.json には触れていない）:
   - `migrations/20260816_portal_password_reissue_fix.sql`（M1: 発行の42702修正）
   - `migrations/20260816_portal_temp_password_lifecycle.sql`（M2: 仮pw方式・login・complete・ロック・管理RPC）
   - `migrations/20260816_portal_session_require_password_set.sql`（M3: セッションゲート）
-  - `migrations/20260816_portal_revoke_legacy_auth.sql`（M4: 旧認証RPCのEXECUTE剥奪）
-  - `order.html`（初回変更画面・変更専用トークン）
-  - `order-admin.html`（発行平文の消去）
+  - `migrations/20260816_portal_revoke_legacy_auth.sql`（M4: 旧認証RPC＋リンク認証RPCのEXECUTE剥奪。**最後に適用**）
+  - `order.html`（初回変更画面・変更専用トークン・#t=リンク自動ログイン廃止）
+  - `order-admin.html`（発行平文の消去・リンク配布廃止・注文サイト設定カード＋発行完了モーダル）
   - `tests/db/portal_temp_password_lifecycle.test.sql`
   - `tests/db/portal_password_reissue.test.sql`
   - `tests/e2e/portal-password.e2e.js`
+  - `docs/codex-review-portal-password.md`
+
+## v3 追加対応（v2再レビューの残ブロッカー）
+
+### P0-1（再）: 「かんたんログインリンク」の廃止 — 仮pw方式へ一本化
+新方式では発行で `must_change=true`・全セッション失効となり、URLトークンのリンクではログインできない
+（`portal_session_customer` が `must_change=true` を拒否）。さらに `must_change=false` の顧客へ長期リンクを残すと
+パスワード/ロックをURLトークンで迂回できてしまう。よってリンク発行・配布・自動ログインを全廃した。
+- order-admin: `portalIssueCredentials` から `admin_issue_customer_link` 呼出しと `__issuedLink` を削除。
+  案内文・CSV・印刷から「かんたんログインリンク」を除去。案内は **URL・ログインID・数字6桁の仮パスワードのみ**。
+- order.html: `#t=` トークンの自動ログインを廃止。URLに `#t=` が残ってもセッションに保存せず除去。
+- M4: `admin_issue_customer_link(text,uuid[],integer)` を **PUBLIC/anon/authenticated から REVOKE**（service_role/postgres は保持）。
+- E2E: 案内文に `#t=` を含めない・`admin_issue_customer_link` を一度も呼ばない・order.html が `#t=` を保存しない
+  ・仮pw→初回変更→通常ログインのみ成功、を検証（C3/C4/D1/D2/A1-A9）。
+
+#### 既存リンク（admin-issued-link セッション）の調査結果 — **削除せず判断を仰ぎます**
+本番 `portal_sessions` を読み取り（変更なし）:
+- `user_agent='admin-issued-link'` の総数 **1件**、うち有効 **1件**（対象顧客 **1件**）。
+- 対象は **`C-TEST01`**（テスト用顧客・`portal_enabled=true`）。作成 2026-08-11、失効予定 **2026-12-09**。
+- 通常セッション（非リンク）は 1件。
+- 影響: このリンクを開くと（M3適用前は）パスワード無しでC-TEST01としてログインできる。M3適用後は
+  `must_change` 状態次第。テスト顧客のため実害は小さいが、URLトークン迂回を完全に断つには失効が望ましい。
+- **提案**: 承認いただければ `delete from portal_sessions where user_agent='admin-issued-link';`（1件）で失効。
+  実顧客が含まれないことは確認済み。勝手には削除していません。
+
+### P0-2（再）: 顧客編集の視認性 — 最新mainへ必要UIのみ小さく再実装
+独立した「注文サイト設定」カードを追加（旧ブランチの大規模差分は移植せず）。
+- 行全体を押せる大トグル（緑「利用中」／灰「停止中」、min-height 60px）
+- ログインID＋コピー、状態バッジ（未発行/仮発行済み/変更済み/期限切れ/ロック中）、
+  発行日時・最終ログイン・解除予定（`admin_portal_credential_status` から取得）
+- 48px以上の「仮パスワードを発行」、スタッフ用「ロックを解除」（`staff_unlock_portal`）
+- 発行完了モーダル: URL／ログインID／数字6桁／有効期限＋まとめてコピー／LINE用コピー／印刷／閉じる。
+  **閉じたら6桁をDOM・メモリから消去**（`_pwIssue`/`pwiPw` クリア＋`wipeIssuedSecrets`）。生JSON・alertで6桁を出さない。
+- 視認性: 本文16px以上・見出し18px・タップ44px以上・PC最大2列/390px1列・横スクロールなし・「保存」ボタンは最下部固定。
+- スクリーンショット（モック認証情報のみ・実データなし）: `admin-card-pc.png` / `admin-issue-modal-pc.png` / `admin-card-390.png` / `order-changepw.png`。
 
 ## 設計の要点（指摘への対応）
 
@@ -107,11 +143,16 @@ NULL（多層防御, #50）、ACL 200-206。**末尾でFAILがあれば例外**�
 ### DBテスト `tests/db/portal_password_reissue.test.sql`（5件・全PASS）
 6桁数字・42702なし・must_change=true/7日失効・既存セッション失効・不存在で全体拒否・不正キーで例外。
 
-### E2E `tests/e2e/portal-password.e2e.js`（16件・全PASS）
+### E2E `tests/e2e/portal-password.e2e.js`（31件・全PASS）
 - order.html A1-A10: 仮pw→変更画面、変更前PII非表示、変更トークン非永続、8文字/不一致の弾き、
   変更成功で一覧遷移＋PII取得、本トークン保存・平文残存なし、JSエラーなし。
 - B1-B2: 失敗は汎用メッセージ・具体的理由を含めない。
-- order-admin C1-C4: CSV発行/コピー後に名簿・storage から平文消去、JSエラーなし。
+- D1-D2: `#t=` トークンで自動ログインしない・セッションに保存しない（リンク認証廃止）。
+- order-admin C1-C5: CSV発行/コピー後に名簿・storage から平文消去、案内文に `#t=` を含めない、
+  `admin_issue_customer_link` を一度も呼ばない。
+- order-admin E1-E12（P0-2視認性）: 注文サイト設定カード表示、状態バッジ、大トグルの利用中/停止中切替、
+  タップ44px以上、PC/390px 横スクロールなし、発行完了モーダル（6桁・ID・URL・有効期限・生JSON無し）、
+  閉じたら6桁をDOM・メモリ・storageから消去。スクショはモック認証情報のみ。
 
 ### 回帰
 - 既存E2E（例 `seika-search.e2e.js`）緑（exit 0）。変更は order.html / order-admin.html と
@@ -130,7 +171,7 @@ NULL（多層防御, #50）、ACL 200-206。**末尾でFAILがあれば例外**�
 | staff_unlock_portal(text,uuid) | （未作成） | 実行可（管理RPC。内部でstaff_key検証） |
 | admin_portal_credential_status(text) | （未作成） | 実行可（管理RPC。内部でstaff_key検証） |
 | staff_issue_portal_passwords(text,uuid[]) | 実行可 | 実行可（内部でstaff_key検証） |
-| admin_issue_customer_link(text,uuid[],int) | 実行可 | 実行可（内部でstaff_key検証） |
+| admin_issue_customer_link(text,uuid[],int) | 実行可 | **不可**（リンク認証廃止＝PUBLIC/anon/authからREVOKE） |
 | portal_me / portal_catalog / portal_my_orders / portal_place_order / portal_last_order / portal_rebuild_cart / portal_stock_marks / portal_toggle_favorite / portal_usual_items | 実行可 | 実行可（維持。トークン制・M3で must_change=false 必須） |
 | portal_session_customer / portal_session_touch | 内部のみ（不可） | 内部のみ（維持） |
 
@@ -142,21 +183,25 @@ M4適用後の実測はレビュー承認後の適用時に取得（begin/rollba
 - **実顧客への発行・実注文なし**（テストは固定モック値・ダミー顧客のみ）。
 - capture/photo/50音/invoice-phase4 のファイル、`sw.js`/`manifest.json` は未変更。
 
-## 承認後の適用手順（案・15ステップ）
-1. `20260816_portal_password_reissue_fix.sql`
-2. `20260816_portal_temp_password_lifecycle.sql`
-3. `20260816_portal_session_require_password_set.sql`
-4. `20260816_portal_revoke_legacy_auth.sql`
-5. 適用後ACL実測（旧2関数 anon/auth 不可・新RPC anon可）
-6. `tests/db/portal_temp_password_lifecycle.test.sql` を本番で begin/rollback 実行 → 全PASS
-7. `tests/db/portal_password_reissue.test.sql` 同上
-8. order.html / order-admin.html をデプロイ（Vercel）
-9. E2E をCIで実行 → 16件PASS
-10. ダミー顧客1件で仮pw発行→初回変更→通常ログインの手動スモーク
-11. ロック（5回失敗）→ `staff_unlock_portal` 復帰の手動確認
-12. `admin_portal_credential_status` で名簿状態の表示確認
-13. 旧 order-portal.html の到達不可（案内しない）を再確認
-14. 施主確認済みの取引先に限定して段階的に発行開始
-15. 監視: `security_events` / ログイン失敗率の確認
+## 承認後の適用手順（M4は最後＝クライアント配信後）
+**重要**: 旧RPCのREVOKE（M4）は、旧RPCを使うクライアントが残っている間に先行させるとログイン不能になる。
+必ず **クライアント配信後・新方式の動作確認後に M4** を適用する。
+
+1. 本番事前確認（`list_migrations` / 対象テーブル・ACLの現状取得）
+2. **M1** `20260816_portal_password_reissue_fix.sql`
+3. **M2** `20260816_portal_temp_password_lifecycle.sql`（lifecycle・新RPC）
+4. **M3** `20260816_portal_session_require_password_set.sql`（セッションゲート）
+5. DBスモーク: `tests/db/portal_temp_password_lifecycle.test.sql` と `..._reissue.test.sql` を本番で begin/rollback → 全PASS
+6. `order.html` / `order-admin.html` をデプロイ（Vercel）
+7. 新方式の確認: ダミー顧客1件で **仮pw→初回変更→通常ログイン** の成功、ロック（5回失敗）→`staff_unlock_portal`復帰、
+   `admin_portal_credential_status` の名簿状態表示
+8. **M4** `20260816_portal_revoke_legacy_auth.sql`（旧認証RPC＋`admin_issue_customer_link` のREVOKE）
+9. 適用後ACL実測（`portal_login`/`portal_change_password`/`admin_issue_customer_link` が anon/auth 不可、
+   `portal_login_v2`/`portal_complete_temp_password` が anon 可）
+10. テスト注文→管理画面で確認→取消→在庫復帰の一連を確認
+11. PC／390px の本番スクリーンショット取得。旧 order-portal.html の非案内を再確認
+12. 既存 `admin-issued-link` セッション（1件・C-TEST01）の失効可否を判断し、承認のうえ削除
+13. 施主確認済みの取引先に限定して段階的に発行開始
+14. 監視: `security_events` / ログイン失敗率の確認
 
 （gateway移行後: 信頼IPでの顧客＋IP二重制限を追加＝M2のTODO）
