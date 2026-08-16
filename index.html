@@ -1911,6 +1911,29 @@ async function sb(method, table, body, query = '') {
   return t ? JSON.parse(t) : [];
 }
 
+// P0-1: スタッフキー/回復コード/招待発行の検証は認証境界(Edge Function auth-gate)経由。
+// PostgREST の staff_key_ok / admin_rotate_staff_key / staff_create_enrollment_token は
+// anon から直接呼べないよう剥奪され、auth-gate が service_role で実行する。IP/端末/時間窓で
+// 原子的にレート制限され、超過時は 429（ブルートフォース抑止）。生のservice keyは端末へ出ない。
+async function authGate(action, args) {
+  let res;
+  try {
+    res = await fetch(`${SB_URL}/functions/v1/auth-gate`, {
+      method: 'POST',
+      headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({ action }, args || {}))
+    });
+  } catch (e) { throw new Error('認証サーバーに接続できませんでした'); }
+  if (res.status === 429) {
+    const j = await res.json().catch(() => ({}));
+    const e = new Error('認証の試行回数が上限に達しました。しばらく待って再度お試しください');
+    e.rate_limited = true; e.retry_after = j && j.retry_after; throw e;
+  }
+  if (!res.ok) throw new Error('認証サーバーでエラーが発生しました');
+  const j = await res.json().catch(() => ({}));
+  return j.result;
+}
+
 /* スタッフキー（顧客マスタ＝顧客台帳のRLS操作だけに使う。個体の書込は端末トークンへ移行済み）。
    端末ごとに手入力で1回だけ。生キーをURL(#skey)で配る旧方式は廃止（セキュリティ対応）。 */
 function staffKeyGet() {
@@ -1929,13 +1952,8 @@ async function staffKeyEnsure() {
     return '';
   }
   try {
-    const res = await fetch(`${SB_URL}/rest/v1/rpc/staff_key_ok`, {
-      method: 'POST',
-      headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p_staff_key: k })
-    });
-    if (!res.ok || (await res.json()) !== true) { toast('スタッフキーが違います', 'error'); return ''; }
-  } catch (e) { toast('スタッフキーを確認できませんでした', 'error'); return ''; }
+    if ((await authGate('staff_key_ok', { staff_key: k })) !== true) { toast('スタッフキーが違います', 'error'); return ''; }
+  } catch (e) { toast(e.rate_limited ? e.message : 'スタッフキーを確認できませんでした', 'error'); return ''; }
   // localStorageが使えない端末（プライベートモード等）でも、少なくとも開いている間は再入力不要にする
   try { localStorage.setItem('tg_staff_key', k); } catch (e) { try { sessionStorage.setItem('tg_staff_key', k); } catch (e2) {} }
   toast('スタッフキーを確認しました。この端末では次回から入力不要です');
@@ -7298,8 +7316,8 @@ async function staffTokenEnsure() {
   let k = staffKeyGet();
   if (!k) { k = await staffKeyEnsure(); if (!k) return ''; }
   let inv;
-  try { inv = await baseRpc('staff_create_enrollment_token', { p_staff_key: k, p_label: 'admin:' + (navigator.userAgent || '').slice(0, 40) }); }
-  catch (e) { alert('認証エラー: ' + (e.message || e)); return ''; }
+  try { inv = await authGate('create_enrollment', { staff_key: k, label: 'admin:' + (navigator.userAgent || '').slice(0, 40) }); }
+  catch (e) { alert(e.rate_limited ? e.message : ('認証エラー: ' + (e.message || e))); return ''; }
   if (!inv || !inv.enroll_token) { alert('スタッフキーが違います'); return ''; }
   let res;
   try { res = await baseRpc('staff_enroll_device', { p_enroll_token: inv.enroll_token, p_label: 'admin' }); }
@@ -7330,8 +7348,8 @@ async function copyDeviceSetupLink() {
   if (!key) { key = await staffKeyEnsure(); }
   if (!key) { toast('スタッフキーが未確認のため中止しました', 'error'); return; }
   let res;
-  try { res = await baseRpc('staff_create_enrollment_token', { p_staff_key: key, p_label: '現場端末' }); }
-  catch (e) { toast('招待の発行に失敗: ' + (e.message || e), 'error'); return; }
+  try { res = await authGate('create_enrollment', { staff_key: key, label: '現場端末' }); }
+  catch (e) { toast(e.rate_limited ? e.message : ('招待の発行に失敗: ' + (e.message || e)), 'error'); return; }
   if (!res || !res.enroll_token) { toast('招待の発行に失敗しました', 'error'); return; }
   const link = location.origin + '/capture-form.html#enroll=' + encodeURIComponent(res.enroll_token);
   const text = '【端末認証リンク（10分・1回限り／1端末につき発行）】\n' + link +

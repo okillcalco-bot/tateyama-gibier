@@ -679,13 +679,26 @@ function renderMyList(){
 /* ── おすすめ ──
    編集はセンターの人だけ。スタッフキーをDB側で照合してから開ける
    （合言葉をこのページに書かないため） */
+// P0-1: スタッフキー検証は認証境界(Edge Function auth-gate)経由。staff_key_okのanon直接呼び出しを剥奪しレート制限。
+async function authGate(action,args){
+  let res;
+  try{
+    res=await fetch(`${SB_URL}/functions/v1/auth-gate`,{method:'POST',
+      headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Content-Type':'application/json'},
+      body:JSON.stringify(Object.assign({action},args||{}))});
+  }catch(e){ throw new Error('認証サーバーに接続できませんでした'); }
+  if(res.status===429){ const j=await res.json().catch(()=>({})); const e=new Error('認証の試行回数が上限に達しました。しばらく待って再度お試しください'); e.rate_limited=true; e.retry_after=j&&j.retry_after; throw e; }
+  if(!res.ok) throw new Error('認証サーバーでエラーが発生しました');
+  const j=await res.json().catch(()=>({}));
+  return j.result;
+}
 async function unlockRecoAdmin(){
   const k=prompt('スタッフキーを入力してください（センターの担当者用）');
   if(!k) return;
   try{
-    if(await sbRpc('staff_key_ok',{p_staff_key:k})){ isAdminSession=true; renderRecommendations(); }
+    if((await authGate('staff_key_ok',{staff_key:k}))===true){ isAdminSession=true; renderRecommendations(); }
     else alert('スタッフキーが違います');
-  }catch(e){ alert('確認できませんでした'); }
+  }catch(e){ alert(e.rate_limited?e.message:'確認できませんでした'); }
 }
 
 async function loadRecommendations(){

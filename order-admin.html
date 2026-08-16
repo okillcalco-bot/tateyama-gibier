@@ -709,6 +709,20 @@ async function sb(method,table,body,query=''){
   const t=await res.text();
   return t?JSON.parse(t):[];
 }
+// P0-1: スタッフキー/回復コードの検証は認証境界(Edge Function auth-gate)経由。
+// staff_key_ok / admin_rotate_staff_key は anon 直接呼び出しを剥奪し、IP/時間窓でレート制限。
+async function authGate(action,args){
+  let res;
+  try{
+    res=await fetch(`${SB_URL}/functions/v1/auth-gate`,{method:'POST',
+      headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`,'Content-Type':'application/json'},
+      body:JSON.stringify(Object.assign({action},args||{}))});
+  }catch(e){ throw new Error('認証サーバーに接続できませんでした'); }
+  if(res.status===429){ const j=await res.json().catch(()=>({})); const e=new Error('認証の試行回数が上限に達しました。しばらく待って再度お試しください'); e.rate_limited=true; e.retry_after=j&&j.retry_after; throw e; }
+  if(!res.ok) throw new Error('認証サーバーでエラーが発生しました');
+  const j=await res.json().catch(()=>({}));
+  return j.result;
+}
 
 /* DB側の関数を呼ぶ。パスワードの発行・照合はここを通す。
    パスワードは customer_secrets に暗号化して保管してあり、一覧では読めない。 */
@@ -1471,14 +1485,11 @@ function staffKeyClear(){ try{ localStorage.removeItem('tg_staff_key'); sessionS
   if(!m) return;
   const k=decodeURIComponent(m[1]);
   history.replaceState(null,'',location.pathname+location.search);
-  fetch(`${SB_URL}/rest/v1/rpc/staff_key_ok`,{method:'POST',
-    headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`,'Content-Type':'application/json'},
-    body:JSON.stringify({p_staff_key:k})
-  }).then(r=>r.json()).then(ok=>{
+  authGate('staff_key_ok',{staff_key:k}).then(ok=>{
     if(ok===true){ try{localStorage.setItem('tg_staff_key',k);}catch(e){ try{sessionStorage.setItem('tg_staff_key',k);}catch(e2){} }
       alert('共有リンクからスタッフキーを設定しました。この端末では入力不要です。'); }
     else alert('共有リンクのスタッフキーが正しくありません（変更された可能性があります）。');
-  }).catch(()=>{});
+  }).catch(err=>{ if(err&&err.rate_limited) alert(err.message); });
 })();
 /* キーの変更（＝旧キーの失効）は「管理者用回復コード」が必要。
    通常のスタッフキーを知っているだけでは変更できない（誰かが全端末を締め出すのを防ぐ）。
@@ -1499,7 +1510,7 @@ async function staffKeyRotateSubmit(){
   if(nw!==nw2){msg.textContent='新しいキーが一致しません';return;}   // 確認入力必須（再表示はしない）
   const btn=document.getElementById('rkBtn'); btn.disabled=true;
   try{
-    const ok=await sbRpc('admin_rotate_staff_key',{p_recovery_code:code,p_new_key:nw});
+    const ok=await authGate('rotate_key',{recovery_code:code,new_key:nw});
     if(!ok){ msg.textContent='回復コードが違います'; btn.disabled=false; return; }
     closeModal('rotateModal');
     staffKeyClear();   // この端末も再認証させる
@@ -1536,8 +1547,8 @@ async function staffKeyEnsure(){
   if(!k) return '';
   k=k.trim();
   try{
-    if(!await sbRpc('staff_key_ok',{p_staff_key:k})){ alert('スタッフキーが違います'); return ''; }
-  }catch(e){ alert('確認できませんでした：'+e.message); return ''; }
+    if((await authGate('staff_key_ok',{staff_key:k}))!==true){ alert('スタッフキーが違います'); return ''; }
+  }catch(e){ alert(e.rate_limited?e.message:('確認できませんでした：'+e.message)); return ''; }
   try{ localStorage.setItem('tg_staff_key',k); }catch(e){ try{ sessionStorage.setItem('tg_staff_key',k); }catch(_e){} }
   return k;
 }
