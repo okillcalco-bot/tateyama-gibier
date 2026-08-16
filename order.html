@@ -710,16 +710,12 @@ async function placeOrder() {
 function resetToList() { enterList(); }
 
 /* ══════════ 起動 ══════════
-   センターが発行した「かんたんログインリンク」（#t=トークン）で開かれた場合は、
-   そのトークンを通常のログインセッションと同じ扱いで使う。
-   URLのハッシュは screen 切替にも使うため、boot() が上書きする前に先に読み取っておく。 */
-const linkToken = (() => {
-  const m = (location.hash || '').match(/[#&]t=([^&]+)/);
-  return m ? decodeURIComponent(m[1]) : '';
-})();
+   ログインは「ログインID＋パスワード」に一本化した。URLトークン（#t=）による自動ログインは廃止。
+   URLに残った #t= はセッションに保存せず無視する（URLトークンでの認証迂回を残さないため）。 */
 (async function boot() {
-  if (linkToken) {
-    try { sessionStorage.setItem('tg_ptoken', linkToken); } catch (e) {}
+  // 万一 #t= 付きURLで開かれても、トークンとして扱わず取り除く（保存しない）。
+  if (/[#&]t=/.test(location.hash || '')) {
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
   }
   history.replaceState({ scr: 'login' }, '', '#');
   if (api.token()) {
@@ -728,7 +724,6 @@ const linkToken = (() => {
       if (me && me.length) { customer = me[0]; await enterList(); return; }
     } catch (e) {}
     try { sessionStorage.removeItem('tg_ptoken'); } catch (e) {}
-    if (linkToken) $('lg-err').textContent = 'リンクの有効期限が切れました。IDとパスワードでログインしてください';
   }
   showScreen('login');
 })();

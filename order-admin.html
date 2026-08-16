@@ -1393,40 +1393,33 @@ function portalAddressee(c){
 }
 
 /* お客様1件ぶんの案内文を作る。channel は mail / line / card / phone。
-   __issuedLink があれば「開くだけでログインできるリンク」を主にし、
-   ID・パスワードはリンクが使えないときの控えとして併記する。 */
+   案内する情報は「ご注文ページURL・ログインID・数字6桁の仮パスワード」のみ。
+   URLトークン（かんたんログインリンク）は廃止した（パスワード/ロックの迂回を残さないため）。
+   仮パスワードは初回ログイン時にご自身のパスワードへ変更いただく。 */
 function buildPortalMsg(c,channel){
   const to=portalAddressee(c);
   const id=c.portal_login_id||c.code||'';
   const pw=c.__issuedPw||'（未発行）';
-  const link=c.__issuedLink||'';
   const tel=orgInfo.phone?('　TEL '+orgInfo.phone):'';
 
   if(channel==='line'){
-    const L=[to,'いつもありがとうございます。'+orgInfo.name+'です。','',
-      'Webからご注文いただけるページをご用意しました。','在庫を見ながら24時間いつでもご注文いただけます。',''];
-    if(link){
-      L.push('▼ タップするだけでログインできます',link,'','うまく開けない場合は、下のIDとパスワードでログインしてください。');
-    }else{
-      L.push('▼ご注文ページ',ORDER_URL);
-    }
-    L.push('　ログインID：'+id,'　パスワード：'+pw,'',
+    return [to,'いつもありがとうございます。'+orgInfo.name+'です。','',
+      'Webからご注文いただけるページをご用意しました。','在庫を見ながら24時間いつでもご注文いただけます。','',
+      '▼ご注文ページ',ORDER_URL,'　ログインID：'+id,'　仮パスワード：'+pw,
+      '　※はじめのログインで、ご自身のパスワードへの変更をお願いします。','',
       'お電話・FAXでのご注文も、これまでどおり承ります。',
-      orgInfo.name+(tel?('　'+('TEL '+orgInfo.phone)):''));
-    return L.join('\n');
+      orgInfo.name+(tel?('　'+('TEL '+orgInfo.phone)):'')].join('\n');
   }
 
   if(channel==='card'){
-    const L=[to,'','いつも'+orgInfo.name+'をご利用いただき、ありがとうございます。',
-      'ご注文をWebからお受けできるようになりました。','在庫のある部位をご覧いただきながら、24時間いつでもご注文いただけます。',''];
-    if(link) L.push('【かんたんログイン】下のリンクを開くだけでご注文いただけます',link,'');
-    L.push('【ご注文ページ】'+ORDER_URL,'【ログインID】'+id,'【パスワード】'+pw,'',
-      '※このご案内は大切に保管してください。','※お電話・FAXでのご注文もこれまでどおり承ります。','',orgFooter());
-    return L.join('\n');
+    return [to,'','いつも'+orgInfo.name+'をご利用いただき、ありがとうございます。',
+      'ご注文をWebからお受けできるようになりました。','在庫のある部位をご覧いただきながら、24時間いつでもご注文いただけます。','',
+      '【ご注文ページ】'+ORDER_URL,'【ログインID】'+id,'【仮パスワード】'+pw,
+      '　※はじめのログインで、ご自身のパスワードへの変更をお願いします。','',
+      '※このご案内は大切に保管してください。','※お電話・FAXでのご注文もこれまでどおり承ります。','',orgFooter()].join('\n');
   }
 
   if(channel==='phone'){
-    // リンクは電話口では読み上げられないため、従来どおりID・パスワードのみ
     return [
       '【電話で伝えるときの読み上げ】　'+to,
       '',
@@ -1435,31 +1428,24 @@ function buildPortalMsg(c,channel){
       '・ページ： '+ORDER_URL,
       '　（ショートメールでお送りすることもできます）',
       '・ログインID： '+id+'　→ 読み方「'+readDigits(id)+'」',
-      '・パスワード： '+pw+'　→ 読み方「'+readDigits(pw)+'」',
+      '・仮パスワード： '+pw+'　→ 読み方「'+readDigits(pw)+'」',
       '',
-      '「パスワードはログイン後の設定でご自由に変更いただけます。」',
+      '「はじめのログインで、ご自身のパスワードへの変更をお願いします。」',
       '「これまでどおり、お電話でのご注文も承ります。」'
     ].join('\n');
   }
 
   // mail（メール・FAX の正式な文面）
-  const L=[to,'','いつも'+orgInfo.name+'をご利用いただき、誠にありがとうございます。','',
+  return [to,'','いつも'+orgInfo.name+'をご利用いただき、誠にありがとうございます。','',
     'このたび、ご注文をWebからいつでもお受けできるよう「ご注文ページ」をご用意いたしました。',
-    '在庫のある部位をご覧いただきながら、24時間いつでもご注文いただけます。',''];
-  if(link){
-    L.push('■ かんたんログイン','　下のリンクを開くだけで、ログイン操作なしでご注文いただけます。','　'+link,'',
-      '■ ご注文ページ（リンクが開けないとき）','　'+ORDER_URL,'　ログインID：'+id,'　パスワード：'+pw,'');
-  }else{
-    L.push('■ ご注文ページ','　'+ORDER_URL,'','■ ログイン情報','　ログインID：'+id,'　パスワード：'+pw,'');
-  }
-  L.push('■ ご注文の流れ',
-    link?'　1. 上のリンクを開く\n　2. ご希望の部位と数量を選んで注文する'
-        :'　1. 上のページを開く\n　2. ログインIDとパスワードを入れる\n　3. ご希望の部位と数量を選んで注文する',
-    '','パスワードは、ログイン後の「設定」からいつでも変更いただけます。',
+    '在庫のある部位をご覧いただきながら、24時間いつでもご注文いただけます。','',
+    '■ ご注文ページ','　'+ORDER_URL,'','■ ログイン情報','　ログインID：'+id,'　仮パスワード：'+pw,'',
+    '■ ご注文の流れ',
+    '　1. 上のページを開く\n　2. ログインIDと仮パスワードを入れる\n　3. ご自身のパスワードを設定する\n　4. ご希望の部位と数量を選んで注文する',
+    '','はじめのログインで、ご自身のパスワードへの変更をお願いします（以後はそのパスワードでログインいただけます）。',
     'お電話・FAXでのご注文も、これまでどおり承っております。','',
     'ご不明な点がございましたら、お気軽にお問い合わせください。','今後ともよろしくお願いいたします。','',
-    '────────────────',orgFooter(),'────────────────');
-  return L.join('\n');
+    '────────────────',orgFooter(),'────────────────'].join('\n');
 }
 
 /* 送る相手を決める */
@@ -1570,7 +1556,7 @@ async function portalIssuePasswords(targets){
   return (rows||[]).length>0;
 }
 
-/* パスワードと「かんたんログインリンク」をまとめて発行する。
+/* 仮パスワード（数字6桁）をまとめて発行する。URLトークンのリンクは廃止。
    注文サイト利用がまだ無効な相手がいれば、有効にしてよいか確認してから進める
    （試験運用は施主確認済みの取引先に限る、の合意を画面側でも守るため）。 */
 async function portalIssueCredentials(targets){
@@ -1589,20 +1575,16 @@ async function portalIssueCredentials(targets){
       }catch(e){ alert('注文サイト利用の有効化に失敗しました: '+e.message); return false; }
     }
   }
-  let pwRows,linkRows;
+  // 発行するのは数字6桁の仮パスワードのみ（URLトークンのリンクは廃止）。
+  let pwRows;
   try{
     pwRows=await sbRpc('staff_issue_portal_passwords',{p_staff_key:key,p_customer_ids:targets.map(c=>c.id)});
-    linkRows=await sbRpc('admin_issue_customer_link',{p_staff_key:key,p_customer_ids:targets.map(c=>c.id),p_days:90});
   }catch(e){
     staffKeyClear();
     alert('発行できませんでした：'+e.message); return false;
   }
   const pwById={}; (pwRows||[]).forEach(r=>pwById[r.customer_id]=r.password);
-  const linkById={}; (linkRows||[]).forEach(r=>linkById[r.customer_id]=r);
-  targets.forEach(c=>{
-    if(pwById[c.id]) c.__issuedPw=pwById[c.id];
-    if(linkById[c.id]) c.__issuedLink=ORDER_URL+'#t='+linkById[c.id].token;
-  });
+  targets.forEach(c=>{ if(pwById[c.id]) c.__issuedPw=pwById[c.id]; });
   return (pwRows||[]).length>0;
 }
 
@@ -1627,8 +1609,8 @@ function renderPortalPreview(){
 async function portalCopyOne(id){
   const c=allCustomers.find(x=>x.id===id); if(!c) return;
   const ch=document.getElementById('portalChannel')?.value||'mail';
-  if(!c.__issuedPw||!c.__issuedLink){
-    if(!confirm(portalAddressee(c)+' の新しいパスワードとログインリンクを発行して案内文を作ります。\n（いまのパスワード・リンクは使えなくなります）\n\n続けますか？')) return;
+  if(!c.__issuedPw){
+    if(!confirm(portalAddressee(c)+' の新しい仮パスワードを発行して案内文を作ります。\n（いまのパスワードは使えなくなります）\n\n続けますか？')) return;
     if(!await portalIssueCredentials([c])) return;
   }
   try{
@@ -1648,21 +1630,21 @@ async function exportPortalCsv(){
   const t=portalTargets();
   if(!t.length){alert('対象のお客様がいません');return}
   const ch=document.getElementById('portalChannel')?.value||'mail';
-  if(!confirm(t.length+'件ぶんのパスワードとログインリンクを新しく発行して書き出します。\n'+
-    '・いまお使いのパスワード・リンクは使えなくなります\n'+
-    '・パスワード・リンクが入ったファイルです。取り扱いにご注意ください\n'+
+  if(!confirm(t.length+'件ぶんの仮パスワードを新しく発行して書き出します。\n'+
+    '・いまお使いのパスワードは使えなくなります\n'+
+    '・仮パスワードが入ったファイルです。取り扱いにご注意ください\n'+
     '・もう一度見るには再発行が必要です\n\n続けますか？')) return;
   if(!await portalIssueCredentials(t)){alert('発行できませんでした');return}
   try{
     // 注（ドキュメント化した例外）: このCSVは差し込み印刷・郵送ラベル用のため、
-    // 仮パスワードとログインリンクを平文で含む。ファイル自体の取り扱い注意を確認ダイアログで明示済み。
-    // 生成後はメモリ・DOM・名簿から平文を消去する（下の finally）。
-    const cols=['お客様番号','お名前','敬称','カナ','ログインID','パスワード','電話','メール','郵便番号・住所','建物名','ご注文ページ','かんたんログインリンク','案内文'];
+    // 仮パスワードを平文で含む。ファイル自体の取り扱い注意を確認ダイアログで明示済み。
+    // 生成後はメモリ・DOM・名簿から平文を消去する（下の finally）。URLトークンのリンクは廃止。
+    const cols=['お客様番号','お名前','敬称','カナ','ログインID','仮パスワード','電話','メール','郵便番号・住所','建物名','ご注文ページ','案内文'];
     const rows=t.map(c=>[
       c.code||'', c.name||'', c.honorific||'様', c.kana||'',
       c.portal_login_id||c.code||'', c.__issuedPw||'',
       c.phone||'', c.email||'', c.address||'', c.building||'',
-      ORDER_URL, c.__issuedLink||'（注文サイト利用が無効のため未発行）', buildPortalMsg(c,ch)
+      ORDER_URL, buildPortalMsg(c,ch)
     ].map(csvCell).join(','));
     const csv='﻿'+cols.join(',')+'\n'+rows.join('\n'); // BOM付き＝Excelで開いても文字化けしない
     const a=document.createElement('a');
@@ -1678,8 +1660,8 @@ async function exportPortalCsv(){
 async function portalPrintSheets(){
   const t=portalTargets();
   if(!t.length){alert('対象のお客様がいません');return}
-  if(!confirm(t.length+'件ぶんのパスワードとログインリンクを新しく発行して、'+t.length+'枚を印刷します。\n'+
-    '・いまお使いのパスワード・リンクは使えなくなります\n'+
+  if(!confirm(t.length+'件ぶんの仮パスワードを新しく発行して、'+t.length+'枚を印刷します。\n'+
+    '・いまお使いのパスワードは使えなくなります\n'+
     '・印刷し損ねた場合は再発行が必要です\n\n続けますか？')) return;
   if(!await portalIssueCredentials(t)){alert('発行できませんでした');return}
   try{
