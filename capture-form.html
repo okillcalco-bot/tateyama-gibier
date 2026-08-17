@@ -422,6 +422,27 @@ textarea { min-height: 80px; resize: vertical; }
 .hsg-item:active { background: rgba(201,161,59,.22); }
 .hsg-furi { color: var(--text2, #888); font-size: 0.85rem; font-weight: 400; margin-left: 8px; }
 
+/* ── ひらがな50音 タップパッド（各人を選ぶ欄で使用。フォーカスで表示） ── */
+/* z-index は候補(60)より下＝候補が上に重なって見える。パッドは画面下に固定。 */
+#kana50 { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 55;
+  background: #23271c; color: #fff; box-shadow: 0 -6px 20px rgba(0,0,0,.35);
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); max-height: 62vh; overflow-y: auto;
+  -webkit-overflow-scrolling: touch; }
+#kana50.show { display: block; }
+#kana50 .k50-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+#kana50 .k50-title { font-size: 0.95rem; font-weight: 700; color: #c9a13b; }
+#kana50 .k50-x { background: #444; color: #fff; border: none; border-radius: 8px; padding: 8px 14px; font-size: 0.95rem; font-weight: 700; cursor: pointer; }
+#kana50 .k50-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+#kana50 .k50-tools { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 6px; }
+#kana50 button.k50-key, #kana50 button.k50-tool {
+  min-height: 46px; border: none; border-radius: 10px; font-size: 1.35rem; font-weight: 700;
+  background: #f4efe2; color: #1c1f16; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+#kana50 button.k50-key:active, #kana50 button.k50-tool:active { background: #c9a13b; }
+#kana50 button.k50-key.k50-empty { visibility: hidden; }
+#kana50 button.k50-tool { font-size: 1.15rem; background: #d9d2c2; }
+#kana50 button.k50-tool.k50-back { background: #b5451b; color: #fff; }
+#kana50 button.k50-tool.k50-mod { background: #e7dfcb; }
+
 /* Animations */
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .section { animation: fadeIn 0.3s ease; }
@@ -967,6 +988,23 @@ textarea { min-height: 80px; resize: vertical; }
   <div id="boardScaleTip"></div>
 </div>
 
+<!-- ひらがな50音 タップパッド（各人を選ぶ欄にフォーカスすると表示。JSでキーを生成） -->
+<div id="kana50" aria-hidden="true">
+  <div class="k50-head">
+    <span class="k50-title">ひらがなで選ぶ（タップ）</span>
+    <button type="button" class="k50-x" data-k="close">閉じる ✕</button>
+  </div>
+  <div class="k50-grid" id="k50Grid"></div>
+  <div class="k50-tools">
+    <button type="button" class="k50-tool k50-mod" data-k="゛">゛</button>
+    <button type="button" class="k50-tool k50-mod" data-k="゜">゜</button>
+    <button type="button" class="k50-tool k50-mod" data-k="small">小</button>
+    <button type="button" class="k50-tool" data-k="ー">ー</button>
+    <button type="button" class="k50-tool" data-k="space">空白</button>
+    <button type="button" class="k50-tool k50-back" data-k="back">← 消す</button>
+  </div>
+</div>
+
 <!-- 看板つきカメラ（AR風）: カメラ映像の左下に看板を重ねて撮影→端末保存 -->
 <div id="arCam">
   <video id="arVideo" autoplay playsinline muted></video>
@@ -1420,7 +1458,10 @@ function renderNameSuggest(inputId, boxId, pickFnName) {
 function positionNameSuggest(inp, box) {
   const r = inp.getBoundingClientRect();
   const gap = 2, margin = 8;
-  const below = window.innerHeight - r.bottom - margin;
+  // 50音パッドが開いているときは、その上端までを下方向の余白とする（候補がパッドの裏に隠れないように）
+  const kpad = document.getElementById('kana50');
+  const floor = (kpad && kpad.classList.contains('show')) ? kpad.getBoundingClientRect().top : window.innerHeight;
+  const below = floor - r.bottom - margin;
   const above = r.top - margin;
   box.style.position = 'fixed';
   box.style.marginTop = '0';
@@ -1468,10 +1509,106 @@ function pickFinisherSuggest(name) {
   });
   // 入力欄外をタップしたら閉じる
   document.addEventListener('pointerdown', function (e) {
+    // 50音パッドのタップは「欄外」とみなさない（候補を消さない）
+    const kp = document.getElementById('kana50');
+    if (kp && kp.contains(e.target)) return;
     boxes.forEach(function (bid) {
       const box = document.getElementById(bid); if (!box) return;
       const inputId = bid.replace('Suggest', 'Name');
       if (!box.contains(e.target) && e.target.id !== inputId) box.style.display = 'none';
+    });
+  });
+})();
+
+/* ── ひらがな50音 タップパッド ──
+   各人を選ぶ欄（捕獲者・搬入者・止め刺し者・搬入担当）にフォーカスすると画面下に表示、
+   欄から外れると隠れる。タップした文字を欄に挿入し、既存の予測候補を更新する。
+   タッチ端末ではソフトキーボードを出さず（inputmode=none）この50音で入力する。PCの物理キーボードは従来通り。 */
+(function setupKana50() {
+  const FIELDS = ['hunterName', 'carrierName', 'finisherName', 'intakeStaff'];
+  const ROWS = [
+    ['あ','い','う','え','お'], ['か','き','く','け','こ'], ['さ','し','す','せ','そ'],
+    ['た','ち','つ','て','と'], ['な','に','ぬ','ね','の'], ['は','ひ','ふ','へ','ほ'],
+    ['ま','み','む','め','も'], ['や','','ゆ','','よ'], ['ら','り','る','れ','ろ'],
+    ['わ','を','ん','','']
+  ];
+  const DAKU = { か:'が',き:'ぎ',く:'ぐ',け:'げ',こ:'ご',さ:'ざ',し:'じ',す:'ず',せ:'ぜ',そ:'ぞ',
+    た:'だ',ち:'ぢ',つ:'づ',て:'で',と:'ど',は:'ば',ひ:'び',ふ:'ぶ',へ:'べ',ほ:'ぼ',う:'ゔ' };
+  const HANDAKU = { は:'ぱ',ひ:'ぴ',ふ:'ぷ',へ:'ぺ',ほ:'ぽ' };
+  const SMALL = { あ:'ぁ',い:'ぃ',う:'ぅ',え:'ぇ',お:'ぉ',つ:'っ',や:'ゃ',ゆ:'ゅ',よ:'ょ',わ:'ゎ' };
+  const pad = document.getElementById('kana50');
+  const grid = document.getElementById('k50Grid');
+  if (!pad || !grid) return;
+  const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  let target = null;
+
+  // キーを生成
+  grid.innerHTML = ROWS.map(function (row) {
+    return row.map(function (ch) {
+      return ch
+        ? '<button type="button" class="k50-key" data-k="' + ch + '">' + ch + '</button>'
+        : '<button type="button" class="k50-key k50-empty" tabindex="-1" aria-hidden="true"></button>';
+    }).join('');
+  }).join('');
+
+  function show() { pad.classList.add('show'); pad.setAttribute('aria-hidden', 'false'); }
+  function hide() { pad.classList.remove('show'); pad.setAttribute('aria-hidden', 'true'); target = null; }
+  window.kana50Hide = hide;
+
+  function fireInput(el) { el.dispatchEvent(new Event('input', { bubbles: true })); }
+  function insert(ch) {
+    const el = target; if (!el) return;
+    const s = (el.selectionStart != null) ? el.selectionStart : el.value.length;
+    const e = (el.selectionEnd != null) ? el.selectionEnd : el.value.length;
+    el.value = el.value.slice(0, s) + ch + el.value.slice(e);
+    const p = s + ch.length;
+    try { el.setSelectionRange(p, p); } catch (err) {}
+    fireInput(el);
+  }
+  function applyMod(map) {
+    const el = target; if (!el) return;
+    const s = (el.selectionStart != null) ? el.selectionStart : el.value.length;
+    if (s < 1) return;
+    const prev = el.value.charAt(s - 1);
+    const rep = map[prev]; if (!rep) return;
+    el.value = el.value.slice(0, s - 1) + rep + el.value.slice(s);
+    try { el.setSelectionRange(s, s); } catch (err) {}
+    fireInput(el);
+  }
+  function backspace() {
+    const el = target; if (!el) return;
+    const s = (el.selectionStart != null) ? el.selectionStart : el.value.length;
+    const e = (el.selectionEnd != null) ? el.selectionEnd : el.value.length;
+    if (s === e) { if (s < 1) return; el.value = el.value.slice(0, s - 1) + el.value.slice(e); var p = s - 1; }
+    else { el.value = el.value.slice(0, s) + el.value.slice(e); var p = s; }
+    try { el.setSelectionRange(p, p); } catch (err) {}
+    fireInput(el);
+  }
+
+  // パッド操作は pointerdown+preventDefault で欄のフォーカスを保つ（blur/候補閉じを防ぐ）
+  pad.addEventListener('pointerdown', function (ev) {
+    const btn = ev.target.closest('[data-k]'); if (!btn) return;
+    ev.preventDefault();
+    const k = btn.dataset.k;
+    if (k === 'close') return hide();
+    if (k === 'back') return backspace();
+    if (k === 'space') return insert('　');
+    if (k === '゛') return applyMod(DAKU);
+    if (k === '゜') return applyMod(HANDAKU);
+    if (k === 'small') return applyMod(SMALL);
+    insert(k);
+  });
+
+  FIELDS.forEach(function (id) {
+    const el = document.getElementById(id); if (!el) return;
+    if (isTouch) el.setAttribute('inputmode', 'none');   // ソフトキーボードを出さず50音を使う
+    el.addEventListener('focus', function () { if (!isTouch) return; target = el; show(); });
+    el.addEventListener('blur', function () {
+      setTimeout(function () {
+        const a = document.activeElement;
+        if (a && (FIELDS.indexOf(a.id) >= 0 || pad.contains(a))) return;   // 別の欄/パッド内なら維持
+        hide();
+      }, 80);
     });
   });
 })();
@@ -3282,35 +3419,83 @@ async function arFlip() {
     const v = document.getElementById('arVideo'); v.srcObject = _arStream; await v.play().catch(function () {});
   } catch (e) { arMsg('カメラ切替に失敗しました'); }
 }
+// dataURL(JPEG) → Blob（同期変換：撮影のタップ操作の中で共有シートを開くため、非同期の toBlob は使わない）
+function dataUrlToBlob(dataUrl) {
+  const comma = dataUrl.indexOf(',');
+  const head = dataUrl.slice(0, comma);
+  const mime = (head.match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
+  const bin = atob(dataUrl.slice(comma + 1));
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+// 端末（iPad/iPhoneのカメラロール等）へすぐ保存。共有シートの「画像を保存」で写真アプリへ。使えない端末はダウンロード。
+// 重要: iOSでは navigator.share は撮影タップのジェスチャ内で呼ぶ必要があるため、呼び出し前に await を挟まない。
+async function arSaveToDevice(blob, fname) {
+  try {
+    const file = new File([blob], fname, { type: 'image/jpeg' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: fname });
+      return 'shared';
+    }
+  } catch (e) {
+    if (e && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return 'canceled';
+    // それ以外は下のダウンロードにフォールバック
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = fname;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+  return 'downloaded';
+}
 async function arCapture() {
   const v = document.getElementById('arVideo');
-  const w = v.videoWidth, h = v.videoHeight;
-  if (!w || !h) { arMsg('カメラの準備中です。少し待って撮影してください'); return; }
+  const vw = v.videoWidth, vh = v.videoHeight;
+  if (!vw || !vh) { arMsg('カメラの準備中です。少し待って撮影してください'); return; }
+  // 保存画像を「画面に見えているまま」にする＝ object-fit:cover のトリミングと看板の座標を画面(CSS px)に合わせる。
+  const cw = v.clientWidth || window.innerWidth;
+  const ch = v.clientHeight || window.innerHeight;
+  const dpr = Math.min(3, window.devicePixelRatio || 1);   // 端末解像度で鮮明に。3倍で頭打ち（ファイル肥大防止）
+  const outW = Math.round(cw * dpr), outH = Math.round(ch * dpr);
   const cv = document.getElementById('arCanvas');
-  cv.width = w; cv.height = h;
+  cv.width = outW; cv.height = outH;
   const ctx = cv.getContext('2d');
-  if (_arFacing === 'user') { ctx.save(); ctx.translate(w, 0); ctx.scale(-1, 1); ctx.drawImage(v, 0, 0, w, h); ctx.restore(); }
-  else ctx.drawImage(v, 0, 0, w, h);
-  if (_arMode === 'whiteboard') arDrawWhiteboard(ctx, w, h, arWhiteboardData(_boardRec));
-  else arDrawBoard(ctx, w, h, arBoardData(_boardRec));
+  // cover トリミング: 画面に映っている映像の可視領域だけを切り出す（プレビューと一致）
+  const coverScale = Math.max(cw / vw, ch / vh);
+  const sW = cw / coverScale, sH = ch / coverScale;
+  const sx = (vw - sW) / 2, sy = (vh - sH) / 2;
+  ctx.drawImage(v, sx, sy, sW, sH, 0, 0, outW, outH);
+  // 看板/ホワイトボードは画面と同じ CSS px 座標で描く（× dpr）。→ プレビューと保存の大きさが一致。
+  ctx.save();
+  ctx.scale(dpr, dpr);
+  if (_arMode === 'whiteboard') arDrawWhiteboard(ctx, cw, ch, arWhiteboardData(_boardRec));
+  else arDrawBoard(ctx, cw, ch, arBoardData(_boardRec));
+  ctx.restore();
+
   const stamp = ((_boardRec && _boardRec.label_id) || 'photo').replace(/[^\w-]/g, '_');
   const dateStr = (_boardRec && _boardRec.capture_date) || '';
   const fname = stamp + (dateStr ? '_' + dateStr : '') + '.jpg';
-  arMsg('サーバーに保存中…');
-  cv.toBlob(async function (blob) {
-    if (!blob) { arMsg('画像の生成に失敗しました'); return; }
-    try {
-      await arUploadPhoto(blob);
-      arMsg('✅ サーバーに保存しました（市役所提出用に個体へ紐づけ）');
-    } catch (e) {
-      // 通信失敗時はデータを失わないよう端末にも保存
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = fname;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
-      arMsg('⚠️ サーバー保存に失敗。端末に保存しました（通信確認後にもう一度撮影してください）');
-    }
-  }, 'image/jpeg', 0.9);
+
+  // 同期でJPEGを作る（toBlobは非同期＝ジェスチャが切れて共有シートが開けないため使わない）
+  const dataUrl = cv.toDataURL('image/jpeg', 0.92);
+  const blob = dataUrlToBlob(dataUrl);
+
+  // 1) まず端末へ保存（撮影タップのジェスチャ内で共有シートを開く）
+  arMsg('端末に保存中…（共有メニューが出たら「画像を保存」を選んでください）');
+  let saved = 'downloaded';
+  try { saved = await arSaveToDevice(blob, fname); } catch (e) {}
+
+  // 2) サーバーにも保存（市役所提出用に個体へ紐づけ）。端末には保存済みなので失敗しても致命ではない。
+  let serverOk = false;
+  try { await arUploadPhoto(blob); serverOk = true; } catch (e) {}
+
+  if (saved === 'canceled') {
+    arMsg(serverOk ? '端末保存はキャンセルしました（サーバーには保存済み）' : '端末保存をキャンセルしました');
+  } else if (saved === 'shared') {
+    arMsg(serverOk ? '✅ 端末に保存しました（市役所提出用にサーバーへも保存）' : '✅ 端末に保存しました');
+  } else {
+    arMsg(serverOk ? '✅ 端末にダウンロード保存しました（サーバーへも保存）' : '✅ 端末にダウンロード保存しました');
+  }
 }
 // 撮影画像をサーバー(capture-photosバケット)へ保存し、登録済み個体なら image_url に紐づける
 async function arUploadPhoto(blob) {
@@ -3333,23 +3518,27 @@ async function arUploadPhoto(blob) {
   }
   return url;
 }
-// 看板をcanvasの左下に描く（プレビュー #arBoard と同じ内容）
+// 看板をcanvasの左下に描く（プレビュー #arBoard と“見た目そのまま”一致させる。座標系は画面と同じCSS px）
+// CSS: #arBoard { left:12px; bottom:108px; max-width:74%; padding:10px 14px; border-radius:12px; line-height:1.35;
+//       .ar-code font clamp(20px,6vw,34px)/800  .ar-line clamp(13px,3.6vw,19px)/600(値は800) }
 function arDrawBoard(ctx, W, H, d) {
-  const scale = Math.max(1, W / 900);
-  const pad = 18 * scale, gap = 8 * scale;
-  const codeF = Math.round(34 * scale), lineF = Math.round(20 * scale);
+  const clampPx = function (mn, vw, mx) { return Math.max(mn, Math.min(mx, W * vw / 100)); };
+  const codeF = clampPx(20, 6, 34), lineF = clampPx(13, 3.6, 19);
+  const padX = 14, padY = 10, rr = 12, lh = 1.35;
+  const lead = function (f) { return f * (lh - 1) / 2; };   // line-height の上下リーディング半分
   ctx.textBaseline = 'top';
-  const lines = d.lines.map(function (x) { return x[0] + '  ' + x[1]; });
-  const codeH = d.code ? codeF + gap : 0;
-  const boxH = pad * 2 + codeH + (lines.length ? lines.length * (lineF + gap) - gap : 0);
+  // 幅の測定
   ctx.font = '800 ' + codeF + "px 'Noto Sans JP', sans-serif";
   let maxW = d.code ? ctx.measureText(d.code).width : 0;
-  ctx.font = '700 ' + lineF + "px 'Noto Sans JP', sans-serif";
-  lines.forEach(function (t) { maxW = Math.max(maxW, ctx.measureText(t).width); });
-  const boxW = Math.min(W - 24 * scale, maxW + pad * 2);
-  const x = 12 * scale;
-  const y = Math.max(12 * scale, H - boxH - 108 * scale);
-  const rr = 12 * scale;
+  d.lines.forEach(function (kv) {
+    ctx.font = '600 ' + lineF + "px 'Noto Sans JP', sans-serif";
+    maxW = Math.max(maxW, ctx.measureText(kv[0] + '  ' + kv[1]).width);
+  });
+  const boxW = Math.min(W * 0.74, maxW + padX * 2);
+  const codeH = d.code ? codeF * lh : 0;
+  const boxH = padY * 2 + codeH + d.lines.length * (lineF * lh);
+  const x = 12;
+  const y = Math.max(12, H - 108 - boxH);
   ctx.fillStyle = 'rgba(0,0,0,0.62)';
   ctx.beginPath();
   ctx.moveTo(x + rr, y);
@@ -3358,38 +3547,43 @@ function arDrawBoard(ctx, W, H, d) {
   ctx.arcTo(x, y + boxH, x, y, rr);
   ctx.arcTo(x, y, x + boxW, y, rr);
   ctx.closePath(); ctx.fill();
-  let cy = y + pad;
-  if (d.code) { ctx.fillStyle = '#fff'; ctx.font = '800 ' + codeF + "px 'Noto Sans JP', sans-serif"; ctx.fillText(d.code, x + pad, cy); cy += codeF + gap; }
+  let cy = y + padY;
+  if (d.code) {
+    ctx.fillStyle = '#fff'; ctx.font = '800 ' + codeF + "px 'Noto Sans JP', sans-serif";
+    ctx.fillText(d.code, x + padX, cy + lead(codeF)); cy += codeH;
+  }
   d.lines.forEach(function (kv) {
-    ctx.fillStyle = '#fff'; ctx.font = '700 ' + lineF + "px 'Noto Sans JP', sans-serif";
+    ctx.fillStyle = '#fff'; ctx.font = '800 ' + lineF + "px 'Noto Sans JP', sans-serif";
     const klabel = kv[0] + '  ';
-    ctx.fillText(klabel, x + pad, cy);
+    ctx.fillText(klabel, x + padX, cy + lead(lineF));
     const kw = ctx.measureText(klabel).width;
     ctx.fillStyle = '#ffe08a'; ctx.font = '800 ' + lineF + "px 'Noto Sans JP', sans-serif";
-    ctx.fillText(kv[1], x + pad + kw, cy);
-    cy += lineF + gap;
+    ctx.fillText(kv[1], x + padX + kw, cy + lead(lineF));
+    cy += lineF * lh;
   });
 }
-// 引き取り用ホワイトボードをcanvasの右上に描く（プレビュー #arWhiteboard と同じ内容）
+// 引き取り用ホワイトボードをcanvasの右上に描く（プレビュー #arWhiteboard と“見た目そのまま”一致。座標系は画面と同じCSS px）
+// CSS: #arWhiteboard { right:12px; top:52px; max-width:60%; padding:10px 13px; border:3px; radius:12px; line-height:1.5;
+//       .wb-title clamp(13px,3.8vw,18px)/900  .wb-line clamp(12px,3.2vw,16px)/700 }
 function arDrawWhiteboard(ctx, W, H, d) {
-  const scale = Math.max(1, W / 900);
-  const pad = 18 * scale, gap = 10 * scale;
-  const titleF = Math.round(26 * scale), lineF = Math.round(21 * scale);
+  const clampPx = function (mn, vw, mx) { return Math.max(mn, Math.min(mx, W * vw / 100)); };
+  const titleF = clampPx(13, 3.8, 18), lineF = clampPx(12, 3.2, 16);
+  const padX = 13, padY = 10, rr = 12, lh = 1.5;
+  const lead = function (f) { return f * (lh - 1) / 2; };
   ctx.textBaseline = 'top';
   ctx.font = '900 ' + titleF + "px 'Noto Sans JP', sans-serif";
   let maxW = ctx.measureText(d.title).width;
   const texts = d.lines.map(function (kv) { return kv[0] + '：' + kv[1]; });
   ctx.font = '800 ' + lineF + "px 'Noto Sans JP', sans-serif";
   texts.forEach(function (t) { maxW = Math.max(maxW, ctx.measureText(t).width); });
-  const boxW = Math.min(W * 0.62, maxW + pad * 2);
-  const titleH = titleF + gap;
-  const boxH = pad * 2 + titleH + d.lines.length * (lineF + gap) - gap + 4 * scale;
-  const x = W - boxW - 12 * scale;
-  const y = 52 * scale;
-  const rr = 12 * scale;
+  const boxW = Math.min(W * 0.60, maxW + padX * 2);
+  const titleH = titleF * lh + 5 + 3;   // margin-bottom:5 + padding-bottom:3（下線分）
+  const boxH = padY * 2 + titleH + d.lines.length * (lineF * lh);
+  const x = W - boxW - 12;
+  const y = 52;
   // 枠（白ボード）
   ctx.fillStyle = '#ffffff';
-  ctx.strokeStyle = '#d7dce2'; ctx.lineWidth = 3 * scale;
+  ctx.strokeStyle = '#d7dce2'; ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.moveTo(x + rr, y);
   ctx.arcTo(x + boxW, y, x + boxW, y + boxH, rr);
@@ -3397,21 +3591,21 @@ function arDrawWhiteboard(ctx, W, H, d) {
   ctx.arcTo(x, y + boxH, x, y, rr);
   ctx.arcTo(x, y, x + boxW, y, rr);
   ctx.closePath(); ctx.fill(); ctx.stroke();
-  let cy = y + pad;
+  let cy = y + padY;
   // タイトル
   ctx.fillStyle = '#b5451b'; ctx.font = '900 ' + titleF + "px 'Noto Sans JP', sans-serif";
-  ctx.fillText(d.title, x + pad, cy); cy += titleH;
+  ctx.fillText(d.title, x + padX, cy + lead(titleF)); cy += titleH;
   // 罫線
-  ctx.strokeStyle = '#eee'; ctx.lineWidth = 2 * scale;
-  ctx.beginPath(); ctx.moveTo(x + pad, cy - gap / 2); ctx.lineTo(x + boxW - pad, cy - gap / 2); ctx.stroke();
+  ctx.strokeStyle = '#eee'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x + padX, cy - 4); ctx.lineTo(x + boxW - padX, cy - 4); ctx.stroke();
   d.lines.forEach(function (kv) {
     const klabel = kv[0] + '：';
     ctx.fillStyle = '#14181f'; ctx.font = '800 ' + lineF + "px 'Noto Sans JP', sans-serif";
-    ctx.fillText(klabel, x + pad, cy);
+    ctx.fillText(klabel, x + padX, cy + lead(lineF));
     const kw = ctx.measureText(klabel).width;
     ctx.fillStyle = '#0b56b0'; ctx.font = '800 ' + lineF + "px 'Noto Sans JP', sans-serif";
-    ctx.fillText(String(kv[1]), x + pad + kw, cy);
-    cy += lineF + gap;
+    ctx.fillText(String(kv[1]), x + padX + kw, cy + lead(lineF));
+    cy += lineF * lh;
   });
 }
 
