@@ -231,6 +231,7 @@ th,td{padding:8px 6px;font-size:.8rem}
   <div class="tab" data-tab="customers" onclick="switchTab('customers')">&#x1f464; 顧客管理</div>
   <div class="tab" data-tab="pricing" onclick="switchTab('pricing')">&#x1f3f7;&#xfe0f; 価格マスタ</div>
   <div class="tab" data-tab="pproducts" onclick="switchTab('pproducts')">&#x1f6d2; ポータル商品</div>
+  <div class="tab" data-tab="reserve" onclick="switchTab('reserve')">&#x23f3; 予約・掲示板</div>
 </div>
 
 <div class="main">
@@ -517,6 +518,76 @@ th,td{padding:8px 6px;font-size:.8rem}
           <th>スタンダード</th><th>ローカル</th><th>スタートメンバー</th><th>公開</th><th>注文</th><th>操作</th></tr></thead>
         <tbody id="ppBody"></tbody>
       </table>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-reserve">
+    <!-- 予約（入荷待ち） -->
+    <div style="font-size:12.5px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:12px;line-height:1.8;">
+      在庫なし商品を注文されたお客様の<strong>入荷待ちリスト</strong>です。商品ごとに<strong>予約した順（時系列）</strong>で並びます。入荷したら上から順にご連絡ください。ステータスを「連絡済」「完了」にすると待ち人数から外れます。
+    </div>
+    <div class="filter-bar">
+      <select id="rsvStatus" onchange="loadReservations()">
+        <option value="待ち">待ち（未対応）</option>
+        <option value="連絡済">連絡済</option>
+        <option value="完了">完了</option>
+        <option value="キャンセル">キャンセル</option>
+        <option value="">すべて</option>
+      </select>
+      <button class="btn btn-outline btn-sm" onclick="loadReservations()">↻ 再読込</button>
+    </div>
+    <div class="table-wrap">
+      <table class="customer-table">
+        <thead><tr><th>商品</th><th>順番</th><th>お客様</th><th>希望量</th><th>予約日時</th><th>状態</th><th>操作</th></tr></thead>
+        <tbody id="rsvBody"></tbody>
+      </table>
+    </div>
+
+    <!-- 掲示板（おすすめ） -->
+    <div style="font-size:12.5px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin:22px 0 12px;line-height:1.8;">
+      注文ページの一番上に出る<strong>おすすめ掲示板</strong>です。売れ筋・売りたい商品を、ひとことコメント付きで載せられます。商品を選ぶと、お客様は「予約する／商品を見る」ですぐ移動できます。並び順の数字が小さいほど上に出ます。
+    </div>
+    <div class="filter-bar">
+      <button class="btn btn-gold btn-sm" onclick="bullOpenEdit('')">+ 掲示を追加</button>
+      <button class="btn btn-outline btn-sm" onclick="loadBulletins()">↻ 再読込</button>
+    </div>
+    <div class="table-wrap">
+      <table class="customer-table">
+        <thead><tr><th>並び</th><th>バッジ</th><th>見出し</th><th>本文</th><th>商品</th><th>表示</th><th>操作</th></tr></thead>
+        <tbody id="bullBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 掲示 編集モーダル -->
+<div class="modal-overlay" id="bullModal">
+  <div class="modal">
+    <span class="modal-close" onclick="closeModal('bullModal')">&times;</span>
+    <h2 id="bullModalTitle">掲示の追加</h2>
+    <input type="hidden" id="bullfId">
+    <div class="form-group"><label>おすすめ商品（任意）</label>
+      <select id="bullfProduct"><option value="">— 商品リンクなし（お知らせのみ）—</option></select>
+      <div style="font-size:11px;color:var(--text3);margin-top:3px">選ぶと、お客様は「予約する／商品を見る」で該当商品へ移動できます。</div>
+    </div>
+    <div class="form-group"><label>バッジ（任意）</label>
+      <input type="text" id="bullfBadge" placeholder="例: 売れ筋 / おすすめ / 今だけ" maxlength="10"></div>
+    <div class="form-group"><label>見出し（未入力なら商品名）</label>
+      <input type="text" id="bullfTitle" placeholder="例: 今週のおすすめ" maxlength="60"></div>
+    <div class="form-group"><label>本文（ひとこと）</label>
+      <textarea id="bullfBody" rows="3" placeholder="例: 脂ののった今が旬です。数量限定。" maxlength="300"></textarea></div>
+    <div class="form-row">
+      <div class="form-group" style="flex:0 0 120px"><label>並び順</label>
+        <input type="number" id="bullfSort" value="100" step="1"></div>
+      <div class="form-group"><label style="display:flex;align-items:center;gap:8px;margin-top:26px">
+        <input type="checkbox" id="bullfActive" checked> 注文ページに表示する</label></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:14px;justify-content:space-between">
+      <button class="btn btn-danger btn-sm" id="bullDelBtn" onclick="bullDelete()" style="visibility:hidden">削除</button>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline btn-sm" onclick="closeModal('bullModal')">キャンセル</button>
+        <button class="btn btn-gold btn-sm" onclick="bullSave()">保存</button>
+      </div>
     </div>
   </div>
 </div>
@@ -885,6 +956,7 @@ function switchTab(tab){
   if(tab==='documents'){ populateDocCustomerDropdown(); loadDocOrders(); }
   if(tab==='pricing') renderPricing();
   if(tab==='pproducts') loadPortalProducts();
+  if(tab==='reserve'){ loadReservations(); loadBulletins(); }
   if(tab==='invoice') openInvoiceTab();
   if(tab==='customers' && !custAdminUnlocked) ensureCustAdmin();
 }
@@ -1013,6 +1085,137 @@ async function ppSave(){
   }catch(e){
     if(String(e.message).includes('スタッフキー')) staffKeyClear();
     alert('保存に失敗しました: '+e.message);
+  }
+}
+
+/* ══════════ 予約（入荷待ち）・掲示板 ══════════ */
+let rsvRows=[], bullRows=[];
+
+async function loadReservations(){
+  if(!staffKeyGet()) await staffKeyEnsure();
+  const k=staffKeyGet(); if(!k) return;
+  const status=document.getElementById('rsvStatus')?.value ?? '待ち';
+  try{
+    rsvRows=await sbRpc('admin_list_reservations',{p_staff_key:k,p_status:status||null})||[];
+    renderReservations();
+  }catch(e){
+    if(String(e.message).includes('スタッフキー')) staffKeyClear();
+    alert('予約一覧の読込みに失敗しました: '+e.message);
+  }
+}
+function renderReservations(){
+  const body=document.getElementById('rsvBody'); if(!body) return;
+  if(!rsvRows.length){ body.innerHTML='<tr><td colspan="7" style="color:var(--text3);padding:16px">該当する予約はありません</td></tr>'; return; }
+  body.innerHTML=rsvRows.map(r=>{
+    const dt=new Date(r.created_at);
+    const dstr=isNaN(dt)?'':((dt.getMonth()+1)+'/'+dt.getDate()+' '+String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0'));
+    const waiting = r.status==='待ち' ? (r.queue_position+' / '+r.waiting_count+'人') : '—';
+    return `<tr>
+      <td style="font-weight:700">${esc(r.product_name)}<div style="font-size:11px;color:var(--text2);font-weight:400">${esc(r.species||'')}</div></td>
+      <td style="text-align:center">${waiting}</td>
+      <td>${esc(r.customer_name||'')}<div style="font-size:11px;color:var(--text3)">${esc(r.customer_code||'')}</div></td>
+      <td>${Number(r.requested_kg)}kg</td>
+      <td style="font-size:12px;color:var(--text2)">${dstr}</td>
+      <td>${esc(r.status)}</td>
+      <td style="white-space:nowrap">
+        ${r.status!=='連絡済'?`<button class="btn btn-outline btn-sm" onclick="rsvSetStatus('${r.id}','連絡済')">連絡済</button> `:''}
+        ${r.status!=='完了'?`<button class="btn btn-outline btn-sm" onclick="rsvSetStatus('${r.id}','完了')">完了</button> `:''}
+        ${r.status!=='待ち'?`<button class="btn btn-outline btn-sm" onclick="rsvSetStatus('${r.id}','待ち')">待ちに戻す</button>`:''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+async function rsvSetStatus(id,status){
+  const key=await staffKeyEnsure(); if(!key) return;
+  try{
+    await sbRpc('admin_set_reservation_status',{p_staff_key:key,p_id:id,p_status:status});
+    await loadReservations();
+  }catch(e){
+    if(String(e.message).includes('スタッフキー')) staffKeyClear();
+    alert('変更に失敗しました: '+e.message);
+  }
+}
+
+async function loadBulletins(){
+  if(!staffKeyGet()) await staffKeyEnsure();
+  const k=staffKeyGet(); if(!k) return;
+  try{
+    bullRows=await sbRpc('admin_list_bulletins',{p_staff_key:k})||[];
+    if(!ppProducts.length){ try{ await loadPortalProducts(); }catch(e){} }
+    renderBulletins();
+  }catch(e){
+    if(String(e.message).includes('スタッフキー')) staffKeyClear();
+    alert('掲示板の読込みに失敗しました: '+e.message);
+  }
+}
+function renderBulletins(){
+  const body=document.getElementById('bullBody'); if(!body) return;
+  if(!bullRows.length){ body.innerHTML='<tr><td colspan="7" style="color:var(--text3);padding:16px">掲示はまだありません。「+ 掲示を追加」で作成できます。</td></tr>'; return; }
+  body.innerHTML=bullRows.map(b=>`<tr style="${b.is_active?'':'opacity:.45;'}">
+    <td>${b.sort_order}</td>
+    <td>${b.badge?('<span style="background:var(--gold);color:#0d0f0a;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:700">'+esc(b.badge)+'</span>'):'—'}</td>
+    <td style="font-weight:700">${esc(b.title||'')}</td>
+    <td style="font-size:12px;color:var(--text2);max-width:220px">${esc((b.body||'').slice(0,60))}</td>
+    <td style="font-size:12px">${esc(b.product_name||'—')}</td>
+    <td>${b.is_active?'<span style="color:var(--green,#6a9e5a)">表示</span>':'<span style="color:var(--text3)">非表示</span>'}</td>
+    <td><button class="btn btn-outline btn-sm" onclick="bullOpenEdit('${b.id}')">編集</button></td>
+  </tr>`).join('');
+}
+function bullFillProductDropdown(sel){
+  const dd=document.getElementById('bullfProduct'); if(!dd) return;
+  const opts=['<option value="">— 商品リンクなし（お知らせのみ）—</option>'];
+  ppProducts.forEach(p=>opts.push(`<option value="${p.id}">${esc(p.display_name)}（${esc(p.species)}）</option>`));
+  dd.innerHTML=opts.join('');
+  dd.value=sel||'';
+}
+function bullOpenEdit(id){
+  const b=bullRows.find(x=>x.id===id);
+  document.getElementById('bullModalTitle').textContent=b?'掲示の編集':'掲示の追加';
+  document.getElementById('bullfId').value=b?b.id:'';
+  bullFillProductDropdown(b?b.product_id:'');
+  document.getElementById('bullfBadge').value=b?(b.badge||''):'';
+  document.getElementById('bullfTitle').value=b?(b.title||''):'';
+  document.getElementById('bullfBody').value=b?(b.body||''):'';
+  document.getElementById('bullfSort').value=b?b.sort_order:100;
+  document.getElementById('bullfActive').checked=b?!!b.is_active:true;
+  document.getElementById('bullDelBtn').style.visibility=b?'visible':'hidden';
+  openModal('bullModal');
+}
+async function bullSave(){
+  const title=document.getElementById('bullfTitle').value.trim();
+  const body=document.getElementById('bullfBody').value.trim();
+  const product=document.getElementById('bullfProduct').value;
+  if(!product && !title && !body){ alert('商品・見出し・本文のいずれかを入れてください'); return; }
+  const key=await staffKeyEnsure(); if(!key) return;
+  const payload={
+    product_id:product||null,
+    badge:document.getElementById('bullfBadge').value.trim(),
+    title:title, body:body,
+    sort_order:+document.getElementById('bullfSort').value||100,
+    is_active:document.getElementById('bullfActive').checked
+  };
+  const id=document.getElementById('bullfId').value;
+  if(id) payload.id=id;
+  try{
+    await sbRpc('admin_upsert_bulletin',{p_staff_key:key,p:payload});
+    closeModal('bullModal');
+    await loadBulletins();
+  }catch(e){
+    if(String(e.message).includes('スタッフキー')) staffKeyClear();
+    alert('保存に失敗しました: '+e.message);
+  }
+}
+async function bullDelete(){
+  const id=document.getElementById('bullfId').value; if(!id) return;
+  if(!confirm('この掲示を削除しますか？')) return;
+  const key=await staffKeyEnsure(); if(!key) return;
+  try{
+    await sbRpc('admin_delete_bulletin',{p_staff_key:key,p_id:id});
+    closeModal('bullModal');
+    await loadBulletins();
+  }catch(e){
+    if(String(e.message).includes('スタッフキー')) staffKeyClear();
+    alert('削除に失敗しました: '+e.message);
   }
 }
 
@@ -1482,8 +1685,8 @@ async function loadOrgInfo(){
 function orgFooter(){
   const lines=[orgInfo.name];
   if(orgInfo.address) lines.push(orgInfo.address);
-  if(orgInfo.phone) lines.push('TEL '+orgInfo.phone);
-  if(orgInfo.email) lines.push(orgInfo.email);
+  if(orgInfo.phone) lines.push('TEL:'+orgInfo.phone);
+  if(orgInfo.email) lines.push('mail:'+orgInfo.email);
   return lines.join('\n');
 }
 
@@ -1509,19 +1712,21 @@ function buildPortalMsg(c,channel){
 
   if(channel==='line'){
     return [to,'いつもありがとうございます。'+orgInfo.name+'です。','',
-      'Webからご注文いただけるページをご用意しました。','在庫を見ながら24時間いつでもご注文いただけます。','',
+      'Webからご注文いただけるページをご用意しました。','在庫を見ながら24時間いつでもご注文いただけます。',
+      '在庫のない商品は予約もできます。','',
       '▼ご注文ページ',ORDER_URL,'　ログインID：'+id,'　仮パスワード：'+pw,
       '　※はじめのログインで、ご自身のパスワードへの変更をお願いします。','',
-      'お電話・FAXでのご注文も、これまでどおり承ります。',
+      'お電話・SNSでのご注文も、これまでどおり承ります。',
       orgInfo.name+(tel?('　'+('TEL '+orgInfo.phone)):'')].join('\n');
   }
 
   if(channel==='card'){
     return [to,'','いつも'+orgInfo.name+'をご利用いただき、ありがとうございます。',
-      'ご注文をWebからお受けできるようになりました。','在庫のある部位をご覧いただきながら、24時間いつでもご注文いただけます。','',
+      'ご注文をWebからお受けできるようになりました。','在庫のある部位をご覧いただきながら、24時間いつでもご注文いただけます。',
+      '在庫の無い商品は予約もできます。','',
       '【ご注文ページ】'+ORDER_URL,'【ログインID】'+id,'【仮パスワード】'+pw,
       '　※はじめのログインで、ご自身のパスワードへの変更をお願いします。','',
-      '※このご案内は大切に保管してください。','※お電話・FAXでのご注文もこれまでどおり承ります。','',orgFooter()].join('\n');
+      '※このご案内は大切に保管してください。','※お電話・SNSでのご注文もこれまでどおり承ります。','',orgFooter()].join('\n');
   }
 
   if(channel==='phone'){
@@ -1540,17 +1745,19 @@ function buildPortalMsg(c,channel){
     ].join('\n');
   }
 
-  // mail（メール・FAX の正式な文面）
-  return [to,'','いつも'+orgInfo.name+'をご利用いただき、誠にありがとうございます。','',
-    'このたび、ご注文をWebからいつでもお受けできるよう「ご注文ページ」をご用意いたしました。',
-    '在庫のある部位をご覧いただきながら、24時間いつでもご注文いただけます。','',
+  // mail（メール・SNS の正式な文面）
+  return [to,'','いつも'+orgInfo.name+'をご利用いただき、誠にありがとうございます。',
+    'このたび、ご注文をWebからいつでもお受けできるよう「ご注文ページ」をご用意いたしました。','',
+    '在庫のある部位をご覧いただきながら、24時間いつでもご注文いただけます。',
+    '在庫の無い商品に関しては予約もできますのでご利用ください。','',
     '■ ご注文ページ','　'+ORDER_URL,'','■ ログイン情報','　ログインID：'+id,'　仮パスワード：'+pw,'',
     '■ ご注文の流れ',
     '　1. 上のページを開く\n　2. ログインIDと仮パスワードを入れる\n　3. ご自身のパスワードを設定する\n　4. ご希望の部位と数量を選んで注文する',
-    '','はじめのログインで、ご自身のパスワードへの変更をお願いします（以後はそのパスワードでログインいただけます）。',
-    'お電話・FAXでのご注文も、これまでどおり承っております。','',
-    'ご不明な点がございましたら、お気軽にお問い合わせください。','今後ともよろしくお願いいたします。','',
-    '────────────────',orgFooter(),'────────────────'].join('\n');
+    '','はじめのログインで、ご自身のパスワードへの変更をお願いします（以後はそのパスワードでログインいただけます）。','',
+    'お電話・SNSでのご注文も、これまでどおり承っております。','',
+    'ご不明な点がございましたら、お気軽にお問い合わせください。','',
+    '今後ともよろしくお願いいたします。','',
+    '────────────────','',orgFooter(),'','────────────────'].join('\n');
 }
 
 /* 送る相手を決める */

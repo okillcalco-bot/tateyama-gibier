@@ -125,6 +125,32 @@ body.kb .bar{display:none}
 .toast{background:#20241a;border:1px solid var(--border2);border-left:3px solid var(--gold);
  border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:8px;line-height:1.6}
 .toast.err{border-left-color:var(--red)}
+
+/* ── 在庫あり / 予約 の切替タブ ── */
+.modetabs{display:flex;gap:8px;padding:10px 14px 4px}
+.modetabs button{flex:1;min-height:46px;background:var(--surface2);border:1px solid var(--border);
+ border-radius:10px;color:var(--text3);font-size:14px;font-weight:700}
+.modetabs button.on{color:#0d0f0a;background:linear-gradient(135deg,var(--gold2),var(--gold));border-color:var(--gold)}
+.modetabs .rb{display:inline-block;min-width:18px;padding:0 5px;margin-left:5px;font-size:11px;
+ background:rgba(0,0,0,.18);border-radius:9px;vertical-align:1px}
+/* ── 予約（待ち人数） ── */
+.waitn{font-size:12px;color:var(--amber);font-weight:700}
+.waitn .me{color:var(--gold);margin-left:8px}
+.rsvbtn{min-width:84px;height:44px;padding:0 10px;background:linear-gradient(135deg,#b5732a,#d89a3a);
+ color:#0d0f0a;font-weight:700;font-size:12px;border-radius:8px}
+.rsvbtn.done{background:var(--surface2);color:var(--amber);border:1px solid var(--amber)}
+.rsvbtn:disabled{opacity:.5}
+.rcancel{width:44px;height:44px;color:var(--text3);font-size:12px}
+/* ── おすすめ掲示板 ── */
+#bulletins{padding:6px 0 2px}
+.bull{margin:8px 14px;padding:12px;background:linear-gradient(135deg,rgba(200,164,90,.10),rgba(200,164,90,.03));
+ border:1px solid var(--gold2);border-radius:10px}
+.bull .bt{font-size:14px;font-weight:700;color:var(--gold);margin-bottom:3px}
+.bull .bb{font-size:12.5px;color:var(--text2);line-height:1.6;white-space:pre-wrap}
+.bull .badge{display:inline-block;font-size:10px;font-weight:700;color:#0d0f0a;background:var(--gold);
+ border-radius:4px;padding:1px 6px;margin-right:6px;vertical-align:1px}
+.bull .bgo{margin-top:9px;min-height:42px;padding:0 16px;background:rgba(200,164,90,.12);
+ border:1px solid var(--gold2);border-radius:8px;color:var(--gold);font-weight:700;font-size:12.5px}
 </style>
 </head>
 <body>
@@ -167,38 +193,59 @@ body.kb .bar{display:none}
 <div id="scr-list" class="hidden">
   <div class="hdr"><b id="h-name"></b><button onclick="doLogout()">ログアウト</button></div>
 
-  <div id="sec-usual" class="hidden">
-    <div class="sec">⭐ いつもの商品 <small>これまでのご注文から</small></div>
-    <div id="usual-rows"></div>
+  <!-- おすすめ掲示板（センターが選んだ売れ筋・おすすめ） -->
+  <div id="bulletins" class="hidden"></div>
+
+  <!-- 在庫あり / 予約（在庫なし）の切替 -->
+  <div class="modetabs">
+    <button id="mtab-stock" class="on" onclick="switchMode('stock')">在庫あり</button>
+    <button id="mtab-reserve" onclick="switchMode('reserve')">予約（在庫なし）<span class="rb hidden" id="mtab-resv-badge"></span></button>
   </div>
 
-  <div id="sec-last" class="hidden">
-    <div class="sec">🔁 前回の注文</div>
-    <div class="last">
-      <div class="d" id="last-date"></div>
-      <div class="i" id="last-items"></div>
-      <button onclick="reorderLast()" id="last-btn">同じ内容をカートに入れる</button>
-      <div id="last-warn"></div>
+  <!-- ══════════ 在庫あり ══════════ -->
+  <div id="mode-stock">
+    <div id="sec-usual" class="hidden">
+      <div class="sec">⭐ いつもの商品 <small>これまでのご注文から</small></div>
+      <div id="usual-rows"></div>
     </div>
+
+    <div id="sec-last" class="hidden">
+      <div class="sec">🔁 前回の注文</div>
+      <div class="last">
+        <div class="d" id="last-date"></div>
+        <div class="i" id="last-items"></div>
+        <button onclick="reorderLast()" id="last-btn">同じ内容をカートに入れる</button>
+        <div id="last-warn"></div>
+      </div>
+    </div>
+
+    <div id="sec-fav" class="hidden">
+      <div class="sec">★ お気に入り <small>☆を押して登録したもの</small></div>
+      <div id="fav-rows"></div>
+    </div>
+
+    <div class="sec">🐗 全商品（在庫あり）</div>
+    <div class="tabs" id="sp-tabs"></div>
+    <div id="all-rows"></div>
+
+    <div class="note">ジビエは現物パック単位のため、ご注文は「ご希望」として承ります。実際の重量・金額は、センターで在庫を確保したうえで確定し、あらためてご連絡します。在庫のない品は上の「予約（在庫なし）」からご予約いただけます。</div>
   </div>
 
-  <div id="sec-fav" class="hidden">
-    <div class="sec">★ お気に入り <small>☆を押して登録したもの</small></div>
-    <div id="fav-rows"></div>
+  <!-- ══════════ 予約（在庫なし） ══════════ -->
+  <div id="mode-reserve" class="hidden">
+    <div class="sec">⏳ 予約（在庫なし） <small>入荷しだい順番にご連絡</small></div>
+    <div class="note" style="padding-top:0">いま在庫のない部位です。「予約する」で<strong>入荷待ちリスト</strong>に入ります（先に予約した方から順番にご連絡）。何人待ちかも表示されます。</div>
+
+    <div id="sec-myresv" class="hidden">
+      <div class="sec">🧾 予約中 <small>あなたのお待ち</small></div>
+      <div id="myresv-rows"></div>
+    </div>
+
+    <div class="tabs" id="rsp-tabs"></div>
+    <div id="reserve-rows"></div>
   </div>
 
-  <div class="sec">🐗 全商品</div>
-  <div class="tabs" id="sp-tabs"></div>
-  <div id="all-rows"></div>
-
-  <details class="oos" id="oos-box"><summary id="oos-sum">在庫切れ・お取り寄せの商品</summary>
-    <div class="note" style="padding-top:0">いまは在庫がありませんが、「取寄」でご希望として承れます。入荷次第センターからご連絡します。</div>
-    <div id="oos-rows"></div>
-  </details>
-
-  <div class="note">ジビエは現物パック単位のため、ご注文は「ご希望」として承ります。実際の重量・金額は、センターで在庫を確保したうえで確定し、あらためてご連絡します。在庫切れの品は「取寄」でお取り寄せの希望として承れます。</div>
-
-  <div class="bar">
+  <div class="bar" id="stock-bar">
     <div class="sum" id="bar-sum">0点<b>概算 ¥0</b></div>
     <button class="go" id="bar-go" onclick="goConfirm()" disabled>確認へ</button>
   </div>
@@ -297,7 +344,14 @@ const api = (() => {
     toggleFavorite: (pid) => rpc('portal_toggle_favorite', { p_token: tok(), p_product_id: pid }),
     placeOrder: (items, date, time, memo, reqId) => rpc('portal_place_order', {
       p_token: tok(), p_items: items, p_delivery_date: date,
-      p_time_zone: time, p_memo: memo, p_request_id: reqId })
+      p_time_zone: time, p_memo: memo, p_request_id: reqId }),
+    // 予約（在庫なし商品）と掲示板
+    reservationMarks: () => rpc('portal_reservation_marks', { p_token: tok() }),
+    myReservations: () => rpc('portal_my_reservations', { p_token: tok() }),
+    placeReservation: (items, memo, reqId) => rpc('portal_place_reservation', {
+      p_token: tok(), p_items: items, p_memo: memo, p_request_id: reqId }),
+    cancelReservation: (rid) => rpc('portal_cancel_reservation', { p_token: tok(), p_reservation_id: rid }),
+    bulletins: () => rpc('portal_bulletins', {})
   };
 })();
 
@@ -307,6 +361,12 @@ let catalog = [];            // portal_catalog の結果
 let usualItems = [];         // portal_usual_items の結果
 let lastOrder = null;        // 前回の注文
 let currentSpecies = '';
+let reserveMarks = {};       // product_id → {waiting_count,my_reserved,my_position,my_kg}
+let myResv = [];             // 自分の予約（待ち）一覧
+let bulletins = [];          // おすすめ掲示板
+let listMode = 'stock';      // 'stock'（在庫あり） / 'reserve'（予約）
+let reserveCurrentSpecies = '';
+let reserving = false;       // 予約ボタンの連打ガード
 let qtyState = {};           // product_id → 選択中のkg
 let orderRequestId = null;   // 確認画面へ進んだ時点で発行（再送しても二重注文しない）
 let placing = false;         // 確定ボタンの連打ガード
@@ -465,13 +525,17 @@ async function enterList() {
   showScreen('list');
   $('h-name').textContent = (customer.name || '') + ' ' + (customer.honorific || '様');
   try {
-    const [cat, usual, last] = await Promise.all([api.catalog(), api.usual(), api.lastOrder()]);
+    const [cat, usual, last, rmarks, myr, bull] = await Promise.all([
+      api.catalog(), api.usual(), api.lastOrder(),
+      api.reservationMarks(), api.myReservations(), api.bulletins()]);
     catalog = cat || []; usualItems = usual || []; lastOrder = last;
+    reserveMarks = {}; (rmarks || []).forEach(m => { reserveMarks[m.product_id] = m; });
+    myResv = myr || []; bulletins = bull || [];
   } catch (e) {
     if (sessionExpired(e)) { forceRelogin(); return; }
     toast('読み込みに失敗しました。再読み込みしてください', 'error'); return;
   }
-  const speciesList = [...new Set(catalog.map(p => p.species))];
+  const speciesList = [...new Set(catalog.filter(p => p.mark !== '×').map(p => p.species))];
   if (!currentSpecies || !speciesList.includes(currentSpecies)) currentSpecies = speciesList[0] || '';
   $('last-warn').innerHTML = '';   // 一覧の読み直しでだけ警告を消す
   renderAll();
@@ -511,6 +575,23 @@ function productRow(p, usualKg) {
 function toggleDesc(pid) { const el = $('desc-' + pid); if (el) el.classList.toggle('hidden'); }
 
 function renderAll() {
+  renderBulletins();
+  // モードタブのバッジ（自分の予約件数）
+  const rb = $('mtab-resv-badge');
+  if (myResv.length) { rb.textContent = myResv.length + '件'; rb.classList.remove('hidden'); }
+  else rb.classList.add('hidden');
+  // モードの表示切替
+  $('mode-stock').classList.toggle('hidden', listMode !== 'stock');
+  $('mode-reserve').classList.toggle('hidden', listMode !== 'reserve');
+  $('stock-bar').classList.toggle('hidden', listMode !== 'stock');
+  $('mtab-stock').classList.toggle('on', listMode === 'stock');
+  $('mtab-reserve').classList.toggle('on', listMode === 'reserve');
+
+  if (listMode === 'stock') renderStockMode(); else renderReserveMode();
+  renderBar();
+}
+
+function renderStockMode() {
   // いつもの商品（自動抽出。★のお気に入りとは別）
   const uRows = usualItems.filter(u => u.mark !== '×');
   $('sec-usual').classList.toggle('hidden', !uRows.length);
@@ -527,30 +608,164 @@ function renderAll() {
     $('sec-last').classList.add('hidden');
   }
 
-  // お気に入り（本人が☆を付けたもの。自動更新では消えない）
-  const favRows = catalog.filter(p => p.is_favorite);
+  // お気に入り（本人が☆を付けたもの。自動更新では消えない・在庫ありのみ）
+  const favRows = catalog.filter(p => p.is_favorite && p.mark !== '×');
   $('sec-fav').classList.toggle('hidden', !favRows.length);
-  $('fav-rows').innerHTML = favRows.filter(p => p.mark !== '×').map(p => productRow(p, usualKgOf(p.product_id))).join('');
+  $('fav-rows').innerHTML = favRows.map(p => productRow(p, usualKgOf(p.product_id))).join('');
 
-  // 全商品（種の切替つき・在庫切れは折りたたみへ）
-  const speciesList = [...new Set(catalog.map(p => p.species))];
+  // 全商品（在庫あり・種の切替つき）
+  const speciesList = [...new Set(catalog.filter(p => p.mark !== '×').map(p => p.species))];
   $('sp-tabs').innerHTML = speciesList.map(sp =>
     `<button class="${sp === currentSpecies ? 'on' : ''}" onclick="switchSpecies('${esc(sp)}')">${esc(sp)}</button>`).join('');
   const inStock = catalog.filter(p => p.species === currentSpecies && p.mark !== '×');
   $('all-rows').innerHTML = inStock.length
     ? inStock.map(p => productRow(p, usualKgOf(p.product_id))).join('')
-    : '<div class="empty">この種類は現在ご用意がありません</div>';
-
-  const oos = catalog.filter(p => p.mark === '×');
-  $('oos-box').classList.toggle('hidden', !oos.length);
-  $('oos-sum').textContent = `在庫切れ・お取り寄せの商品（${oos.length}件）`;
-  $('oos-rows').innerHTML = oos.map(p => productRow(p, null)).join('');
-
-  renderBar();
+    : '<div class="empty">この種類は在庫あり商品がありません。上の「予約（在庫なし）」からご予約いただけます</div>';
 }
+
+function renderReserveMode() {
+  // 自分の予約（待ち）
+  $('sec-myresv').classList.toggle('hidden', !myResv.length);
+  $('myresv-rows').innerHTML = myResv.map(r => `
+    <div class="row">
+      <div class="rtop"><div class="rname">${esc(r.name)}</div>
+        <span class="waitn">${kg1(r.requested_kg)}kg</span></div>
+      <div class="rbot">
+        <span class="waitn">${r.waiting_count}人中 ${r.my_position}番目</span>
+        <span style="flex:1"></span>
+        <button class="rcancel" onclick="cancelReserve('${r.reservation_id}')">取消</button>
+      </div>
+    </div>`).join('');
+
+  // 在庫なし商品（予約可・種の切替つき）
+  const oos = catalog.filter(p => p.mark === '×');
+  const speciesList = [...new Set(oos.map(p => p.species))];
+  if (!reserveCurrentSpecies || !speciesList.includes(reserveCurrentSpecies)) reserveCurrentSpecies = speciesList[0] || '';
+  $('rsp-tabs').innerHTML = speciesList.map(sp =>
+    `<button class="${sp === reserveCurrentSpecies ? 'on' : ''}" onclick="switchReserveSpecies('${esc(sp)}')">${esc(sp)}</button>`).join('');
+  const rows = oos.filter(p => p.species === reserveCurrentSpecies);
+  $('reserve-rows').innerHTML = rows.length
+    ? rows.map(p => reserveRow(p)).join('')
+    : '<div class="empty">いまは在庫なしの商品はありません（すべて在庫あり）</div>';
+}
+
+function reserveRow(p) {
+  const noPrice = p.unit_price == null;
+  const canReserve = p.is_orderable && !noPrice;
+  const m = reserveMarks[p.product_id] || { waiting_count: 0, my_reserved: false };
+  const mine = !!m.my_reserved;
+  const myR = myResv.find(r => r.product_id === p.product_id);
+  const q = qtyState[p.product_id] ?? (mine && m.my_kg ? Number(m.my_kg) : p.min_order_kg);
+  const waitTxt = m.waiting_count > 0 ? `現在 ${m.waiting_count}人待ち` : 'まだご予約はありません';
+  return `<div class="row${!canReserve ? ' out' : ''}" data-pid="${p.product_id}">
+    <div class="rtop" ${p.description ? `onclick="toggleDesc('${p.product_id}')" style="cursor:pointer"` : ''}>
+      <div class="rname">${esc(p.display_name)}${p.grade_label ? ' <span style="font-size:11px;color:var(--text3)">' + esc(p.grade_label) + '</span>' : ''}${p.description ? ' <span style="color:var(--text3);font-size:11px">ⓘ</span>' : ''}</div>
+      <span class="mark x">×</span>
+      <span class="price">${noPrice ? '価格はお問い合わせください' : yen(p.unit_price) + '/kg'}</span>
+    </div>
+    ${p.description ? `<div class="rdesc hidden" id="desc-${p.product_id}">${esc(p.description)}</div>` : ''}
+    <div class="rbot"><span class="waitn">${waitTxt}${mine && m.my_position ? `<span class="me">あなたは${m.my_position}番目</span>` : ''}</span></div>
+    <div class="rbot" style="margin-top:6px">
+      <div class="qty">
+        <button onclick="qtyStep('${p.product_id}',-1)" ${!canReserve ? 'disabled' : ''} aria-label="減らす">−</button>
+        <span id="qty-${p.product_id}">${kg1(q)}</span>
+        <button onclick="qtyStep('${p.product_id}',1)" ${!canReserve ? 'disabled' : ''} aria-label="増やす">＋</button>
+      </div>
+      <span style="flex:1"></span>
+      ${mine
+        ? `<button class="rsvbtn done" onclick="cancelReserve('${myR ? myR.reservation_id : ''}')">予約済み ✓ 取消</button>`
+        : `<button class="rsvbtn" onclick="reserveProduct('${p.product_id}')" ${!canReserve ? 'disabled' : ''}>予約する</button>`}
+    </div>
+  </div>`;
+}
+
 function catFind(pid) { return catalog.find(p => p.product_id === pid); }
 function usualKgOf(pid) { const u = usualItems.find(x => x.product_id === pid); return u ? u.usual_qty_kg : null; }
 function switchSpecies(sp) { currentSpecies = sp; renderAll(); }
+function switchReserveSpecies(sp) { reserveCurrentSpecies = sp; renderAll(); }
+function switchMode(mode) { listMode = mode; renderAll(); window.scrollTo(0, 0); }
+
+/* ══════════ おすすめ掲示板 ══════════ */
+function renderBulletins() {
+  const box = $('bulletins');
+  if (!bulletins.length) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+  box.classList.remove('hidden');
+  box.innerHTML = bulletins.map(b => {
+    const p = b.product_id ? catFind(b.product_id) : null;
+    const title = b.title || (p ? p.display_name : 'お知らせ');
+    let sub = '', btn = '';
+    if (p) {
+      const oos = p.mark === '×';
+      sub = `<div class="bb" style="margin-top:4px;color:var(--gold)">${esc(p.display_name)}　${p.unit_price != null ? yen(p.unit_price) + '/kg' : ''}　${oos ? '（在庫なし・予約可）' : '（在庫あり）'}</div>`;
+      btn = `<button class="bgo" onclick="gotoBulletinProduct('${p.product_id}','${oos ? 'reserve' : 'stock'}')">${oos ? '予約する' : '商品を見る'}</button>`;
+    }
+    return `<div class="bull">
+      <div class="bt">${b.badge ? `<span class="badge">${esc(b.badge)}</span>` : ''}${esc(title)}</div>
+      ${b.body ? `<div class="bb">${esc(b.body)}</div>` : ''}${sub}${btn}
+    </div>`;
+  }).join('');
+}
+function gotoBulletinProduct(pid, mode) {
+  const p = catFind(pid); if (!p) return;
+  listMode = mode;
+  if (mode === 'stock') currentSpecies = p.species; else reserveCurrentSpecies = p.species;
+  renderAll();
+  setTimeout(() => {
+    const el = document.querySelector(`[data-pid="${CSS.escape(pid)}"]`);
+    if (el && el.scrollIntoView) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.transition = 'background .3s'; el.style.background = 'rgba(200,164,90,.14)';
+      setTimeout(() => { el.style.background = ''; }, 1200);
+    }
+  }, 60);
+}
+
+/* ══════════ 予約する / 取り消す ══════════ */
+async function reserveProduct(pid) {
+  if (reserving) return;
+  const p = catFind(pid); if (!p || p.unit_price == null) return;
+  const kg = Number(qtyState[pid] ?? p.min_order_kg);
+  reserving = true;
+  const reqId = 'rsv-' + (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2));
+  try {
+    const res = await api.placeReservation([{ product_id: pid, kg: kg }], null, reqId);
+    const line = (res && res.reserved && res.reserved[0]) || null;
+    if (line) {
+      reserveMarks[pid] = { product_id: pid, waiting_count: line.waiting_count,
+        my_reserved: true, my_position: line.position, my_kg: kg };
+      const ex = myResv.find(r => r.product_id === pid);
+      if (ex) { ex.requested_kg = kg; ex.reservation_id = line.reservation_id;
+                ex.waiting_count = line.waiting_count; ex.my_position = line.position; }
+      else myResv.push({ reservation_id: line.reservation_id, product_id: pid, name: line.name,
+        species: p.species, requested_kg: kg, waiting_count: line.waiting_count, my_position: line.position });
+      toast(`予約しました（${line.waiting_count}人中 ${line.position}番目）`);
+    }
+    renderAll();
+  } catch (e) {
+    if (sessionExpired(e)) { forceRelogin(); }
+    else toast(e.message || '予約できませんでした。もう一度お試しください', 'error');
+  }
+  reserving = false;
+}
+async function cancelReserve(rid) {
+  if (!rid) return;
+  if (!confirm('この予約を取り消しますか？')) return;
+  try {
+    await api.cancelReservation(rid);
+    const r = myResv.find(x => x.reservation_id === rid);
+    myResv = myResv.filter(x => x.reservation_id !== rid);
+    if (r && reserveMarks[r.product_id]) {
+      const m = reserveMarks[r.product_id];
+      m.waiting_count = Math.max(0, (m.waiting_count || 1) - 1);
+      m.my_reserved = false; m.my_position = null; m.my_kg = null;
+    }
+    toast('予約を取り消しました');
+    renderAll();
+  } catch (e) {
+    if (sessionExpired(e)) { forceRelogin(); return; }
+    toast('取り消せませんでした。もう一度お試しください', 'error');
+  }
+}
 
 function qtyStep(pid, dir) {
   const p = catFind(pid); if (!p) return;
