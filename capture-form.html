@@ -427,16 +427,19 @@ textarea { min-height: 80px; resize: vertical; }
 #kana50 { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 55;
   background: #23271c; color: #fff; box-shadow: 0 -6px 20px rgba(0,0,0,.35);
   padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); max-height: 62vh; overflow-y: auto;
-  -webkit-overflow-scrolling: touch; }
+  -webkit-overflow-scrolling: touch; -webkit-user-select: none; user-select: none; }
 #kana50.show { display: block; }
 #kana50 .k50-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 #kana50 .k50-title { font-size: 0.95rem; font-weight: 700; color: #c9a13b; }
 #kana50 .k50-x { background: #444; color: #fff; border: none; border-radius: 8px; padding: 8px 14px; font-size: 0.95rem; font-weight: 700; cursor: pointer; }
-#kana50 .k50-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
-#kana50 .k50-tools { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 6px; }
+#kana50 .k50-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 9px; }
+#kana50 .k50-tools { display: grid; grid-template-columns: repeat(6, 1fr); gap: 9px; margin-top: 9px; }
 #kana50 button.k50-key, #kana50 button.k50-tool {
-  min-height: 46px; border: none; border-radius: 10px; font-size: 1.35rem; font-weight: 700;
-  background: #f4efe2; color: #1c1f16; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  min-height: 48px; border: none; border-radius: 10px; font-size: 1.35rem; font-weight: 700;
+  background: #f4efe2; color: #1c1f16; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation; -webkit-user-select: none; user-select: none; transition: background .05s; }
+/* 押している間だけ色を変える（指を離すまで確定しない＝タップの視覚フィードバック） */
+#kana50 button.k50-press { background: #c9a13b; transform: scale(0.96); }
 #kana50 button.k50-key:active, #kana50 button.k50-tool:active { background: #c9a13b; }
 #kana50 button.k50-key.k50-empty { visibility: hidden; }
 #kana50 button.k50-tool { font-size: 1.15rem; background: #d9d2c2; }
@@ -1592,11 +1595,7 @@ function pickFinisherSuggest(name) {
     fireInput(el);
   }
 
-  // パッド操作は pointerdown+preventDefault で欄のフォーカスを保つ（blur/候補閉じを防ぐ）
-  pad.addEventListener('pointerdown', function (ev) {
-    const btn = ev.target.closest('[data-k]'); if (!btn) return;
-    ev.preventDefault();
-    const k = btn.dataset.k;
+  function doKey(k) {
     if (k === 'close') return hide();
     if (k === 'back') return backspace();
     if (k === 'space') return insert('　');
@@ -1604,6 +1603,38 @@ function pickFinisherSuggest(name) {
     if (k === '゜') return applyMod(HANDAKU);
     if (k === 'small') return applyMod(SMALL);
     insert(k);
+  }
+  // 誤作動対策: 「押した→同じキーで指を離す＝タップ」だけを入力にする。
+  //  ・pointerdown では入力しない（触れた瞬間・スクロール開始・かすりでの誤入力を防ぐ）
+  //  ・指が動いたら（スクロール/ドラッグ）無視。離した位置が押した位置と違うキーなら無視。
+  //  ・preventDefault は欄のフォーカス保持のため維持（blur/候補閉じを防ぐ）。
+  var _kd = null, _kx = 0, _ky = 0, _kmoved = false, _klast = 0;
+  function _kclear() { if (_kd) _kd.classList.remove('k50-press'); _kd = null; _kmoved = false; }
+  pad.addEventListener('pointerdown', function (ev) {
+    const btn = ev.target.closest('[data-k]'); if (!btn) return;
+    ev.preventDefault();
+    _kd = btn; _kx = ev.clientX; _ky = ev.clientY; _kmoved = false;
+    btn.classList.add('k50-press');
+  }, { passive: false });
+  pad.addEventListener('pointermove', function (ev) {
+    if (!_kd || _kmoved) return;
+    if (Math.abs(ev.clientX - _kx) > 10 || Math.abs(ev.clientY - _ky) > 10) {
+      _kmoved = true; _kd.classList.remove('k50-press');
+    }
+  });
+  pad.addEventListener('pointercancel', _kclear);
+  pad.addEventListener('pointerup', function (ev) {
+    const btn = _kd; const moved = _kmoved;
+    if (btn) btn.classList.remove('k50-press');
+    _kd = null; _kmoved = false;
+    if (!btn || moved) return;                       // ドラッグ/スクロールは無視
+    const up = ev.target.closest('[data-k]');
+    if (up !== btn) return;                           // 押した所と違うキーで離した＝無視
+    const now = ev.timeStamp || 0;
+    if (now - _klast < 60) return;                    // 極端な連打（ゴースト）を無視
+    _klast = now;
+    ev.preventDefault();
+    doKey(btn.dataset.k);
   });
 
   FIELDS.forEach(function (id) {
