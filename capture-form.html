@@ -3461,16 +3461,32 @@ function dataUrlToBlob(dataUrl) {
   for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
   return new Blob([arr], { type: mime });
 }
-// 端末（iPad/iPhoneのカメラロール等）へすぐ保存。共有シートの「画像を保存」で写真アプリへ。使えない端末はダウンロード。
-// 重要: iOSでは navigator.share は撮影タップのジェスチャ内で呼ぶ必要があるため、呼び出し前に await を挟まない。
-// シャッターを押したら共有シートを出さず、その場で端末へ保存（<a download>）。
-// 撮影タップのジェスチャ内で同期的に click する。Android/PC は既定の保存先（ダウンロード/写真）へ即保存。
-function arSaveToDevice(blob, fname) {
+// iOS判定（iPhone/iPad）。iPadOS13+ は platform=MacIntel かつ touch>1 で判別。
+const AR_IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent)
+  || (/Mac/.test(navigator.platform || '') && (navigator.maxTouchPoints || 0) > 1);
+// 端末のカメラロール/ギャラリーへ保存。
+//  ・iPhone/iPad: Web からカメラロールへ入れる唯一の方法が共有シート（「写真に保存」）＝Apple仕様。
+//    → navigator.share を撮影タップのジェスチャ内で呼ぶ（呼び出し前に await を挟まない）。
+//  ・Android/PC: <a download> で即ダウンロード（ギャラリー/写真に反映。共有シート不要）。
+async function arSaveToDevice(blob, fname) {
+  if (AR_IS_IOS && navigator.canShare) {
+    try {
+      const file = new File([blob], fname, { type: 'image/jpeg' });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file] });   // 共有シート→「写真に保存」でカメラロールへ
+        return 'shared';
+      }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return 'canceled';
+      // それ以外は下のダウンロードにフォールバック
+    }
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = fname; a.rel = 'noopener';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+  return 'downloaded';
 }
 async function arCapture() {
   const v = document.getElementById('arVideo');
@@ -3504,9 +3520,11 @@ async function arCapture() {
   const dataUrl = cv.toDataURL('image/jpeg', 0.92);
   const blob = dataUrlToBlob(dataUrl);
 
-  // 1) シャッターで即・端末へ保存（共有シートなし）＋「保存しました」を一言表示
-  try { arSaveToDevice(blob, fname); } catch (e) {}
-  arMsg('✅ 保存しました');
+  // 1) 端末のカメラロール/ギャラリーへ保存。iPhone/iPadは共有シートの「写真に保存」を1回タップ、Androidは即保存。
+  if (AR_IS_IOS) arMsg('「写真に保存」を選んでください（カメラロールに入ります）');
+  let how = 'downloaded';
+  try { how = await arSaveToDevice(blob, fname); } catch (e) {}
+  arMsg(how === 'canceled' ? '保存をキャンセルしました' : '✅ 保存しました');
 
   // 2) サーバーにも保存（市役所提出用に個体へ紐づけ）。端末には保存済みなので失敗しても致命ではない。
   try { await arUploadPhoto(blob); } catch (e) {}
