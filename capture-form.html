@@ -922,6 +922,13 @@ textarea { min-height: 80px; resize: vertical; }
 
   <div id="missingBox" style="display:none;border-radius:10px;padding:14px 16px;margin:14px 0;font-size:1rem;line-height:1.8;"></div>
 
+  <!-- まだセンターに無い個体：番号を付けずに搬入待ちで登録（採番はセンター受入時） -->
+  <label id="pendingIntakeRow" style="display:flex;align-items:flex-start;gap:10px;border:1.5px solid var(--gold2);border-radius:10px;padding:12px 14px;margin:14px 0;background:rgba(201,161,59,.08);cursor:pointer;line-height:1.55;">
+    <input type="checkbox" id="pendingIntakeChk" onchange="onPendingIntakeToggle()" style="width:24px;height:24px;flex:0 0 auto;margin-top:2px;">
+    <span style="font-size:1rem;">🕓 <strong>まだセンターに無い（搬入待ちで登録）</strong><br>
+      <span style="font-size:12.5px;color:var(--text2);">番号は付けずに保存し、センターに持ち帰って受入するときに採番します。体重・受入時刻は受入時に入力できます。</span></span>
+  </label>
+
   <button type="button" onclick="toggleEditSearch()" style="background:#6c757d;color:#fff;border:none;border-radius:8px;padding:12px 18px;font-size:15px;cursor:pointer;margin-right:8px;">&#9998; 既存データを修正</button>
   <button class="submit-btn" id="submitBtn" onclick="handleSubmit()">搬入登録</button>
 </div>
@@ -2194,6 +2201,7 @@ async function searchForEdit() {
 }
 function loadForEdit(rec) {
   editMode = true; editRecordId = rec.id; editRecord = rec;
+  const _prow = document.getElementById('pendingIntakeRow'); if (_prow) _prow.style.display = 'none';  // 編集/受入では非表示
   if (typeof showMethodRows === 'function') showMethodRows();   // 編集時は選択トグルを表示
   // 個体番号は既存の値を表示。編集時は番号の行を出して手直しできるようにする（仮-番号の修正など）
   const _ser = document.getElementById('indSerial'); if (_ser && rec.serial_number != null) _ser.value = rec.serial_number;
@@ -2262,6 +2270,14 @@ function cancelEditMode() {
   document.getElementById('submitBtn').textContent = '搬入登録';
   const bar = document.getElementById('editModeBar'); if (bar) bar.style.display = 'none';
   resetForm();
+}
+// 「搬入待ちで登録」トグル: ONのとき登録ボタン文言を変える（採番はセンター受入時）
+function onPendingIntakeToggle() {
+  const on = !!document.getElementById('pendingIntakeChk')?.checked;
+  const btn = document.getElementById('submitBtn');
+  if (btn && !editMode && !window.hunterMode && !window.receiveMode) {
+    btn.textContent = on ? '🕓 搬入待ちで登録' : '搬入登録';
+  }
 }
 /* ═══════════ 市役所の調査票（有害鳥獣捕獲票・写真票） ═══════════ */
 const SV_BUCKET = 'capture-photos';
@@ -2726,14 +2742,17 @@ async function handleSubmit() {
     // Use individual number fields
     const labelId = document.getElementById('indLabelId').value;
     const serial = parseInt(document.getElementById('indSerial').value) || 1;
-    if (!labelId && !window.hunterMode) { alert('個体管理番号が生成されていません。種別と市町村を選択してください。'); btn.disabled=false; btn.textContent='搬入登録'; return; }
+    // 「搬入待ちで登録」＝まだセンターに無い個体。番号を付けず保存し、受入時に採番する。
+    const pending = !editMode && !window.hunterMode && !window.receiveMode
+      && !!document.getElementById('pendingIntakeChk')?.checked;
+    if (!labelId && !window.hunterMode && !pending) { alert('個体管理番号が生成されていません。種別と市町村を選択してください。'); btn.disabled=false; btn.textContent='搬入登録'; return; }
 
     // 通し番号（連番）はイノシシのみ。新規登録時にDBの最大+1を自動採番（この次から連番）。
     // ただし、手入力の番号が「先に用意した空枠」（通し番号だけ登録済みで捕獲日が未入力）と一致すれば、
     // 新規行を作らずその空枠に登録する。
-    let serialForSave = window.hunterMode ? null : serial;
+    let serialForSave = (window.hunterMode || pending) ? null : serial;
     let matchedPlaceholderId = null;
-    if (!editRecordId && state.species === 'イノシシ' && !window.hunterMode) {
+    if (!editRecordId && state.species === 'イノシシ' && !window.hunterMode && !pending) {
       try {
         const placeholders = await sb('GET', 'individuals', null,
           `?species=eq.イノシシ&serial_number=eq.${serial}&capture_date=is.null&deleted_at=is.null&select=id&limit=1`);
@@ -2750,9 +2769,9 @@ async function handleSubmit() {
     }
 
     const record = {
-      label_id: window.hunterMode ? ('仮-' + Date.now().toString(36).toUpperCase()) : labelId,
+      label_id: (window.hunterMode || pending) ? ('仮-' + Date.now().toString(36).toUpperCase()) : labelId,
       serial_number: serialForSave,
-      intake_status: window.hunterMode ? '搬入待ち' : (window.receiveMode ? null : undefined),
+      intake_status: (window.hunterMode || pending) ? '搬入待ち' : (window.receiveMode ? null : undefined),
       species: state.species,
       sex: state.sex,
       weight_total: parseFloat(document.getElementById('weight').value) || null,
@@ -2824,6 +2843,14 @@ async function handleSubmit() {
       const _h = new URLSearchParams(location.search).get('hunter');
       if (_h) { const _el = document.getElementById('hunterName'); if (_el) _el.value = _h; }
       document.getElementById('hunterDoneModal').classList.add('show');
+      return;
+    }
+    // 搬入待ちで登録：番号は付けずに保存済み。看板カメラは出さず（番号が無いため）、確認して次へ。
+    if (pending) {
+      btn.disabled = false; btn.textContent = '搬入登録';
+      loadTodayCount();
+      resetForm();
+      alert('🕓 搬入待ちで登録しました。番号はセンター受入時に付けます。');
       return;
     }
     // 市役所の調査票がONなら、追加項目と写真を保存してPDFを出す
@@ -2970,6 +2997,11 @@ function resetForm() {
   const _isr = document.getElementById('intakeStaffRow'); if (_isr) _isr.style.display = 'none';
   const _is = document.getElementById('intakeStaff'); if (_is) _is.value = '';
   const _pn = document.getElementById('pickupNotice'); if (_pn) _pn.classList.remove('show');
+  // 「搬入待ちで登録」は既定OFFに戻し、通常票では選択肢を表示
+  const _pchk = document.getElementById('pendingIntakeChk'); if (_pchk) _pchk.checked = false;
+  const _prow = document.getElementById('pendingIntakeRow');
+  if (_prow) _prow.style.display = (window.hunterMode || window.receiveMode || editMode) ? 'none' : 'flex';
+  if (typeof onPendingIntakeToggle === 'function') onPendingIntakeToggle();
 
   // Clear inputs
   ['weight','age','hunterName','finisherName','carrierName','bleedTime','receiveTime',
@@ -3723,6 +3755,7 @@ function wtKey(k) {
     hide(document.querySelector('[data-field="intake_method"]')?.closest('.form-row'));
     hide(document.getElementById('intakeStaffRow'));
     hide(document.getElementById('recorder')?.closest('.form-row'));
+    hide(document.getElementById('pendingIntakeRow'));   // 捕獲者モードは常に搬入待ち＝トグル不要
     document.querySelectorAll('button').forEach(b => { if (b.textContent.includes('既存データを修正')) hide(b); });
     const bar = document.createElement('div');
     bar.style.cssText = 'background:rgba(200,164,90,.15);border:1px solid var(--gold2);color:var(--gold);border-radius:8px;padding:10px 14px;margin:10px 12px;font-size:13.5px;line-height:1.7;';
