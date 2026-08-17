@@ -515,6 +515,8 @@ textarea { min-height: 80px; resize: vertical; }
           <div class="usual-chips" id="usualAreas"></div>
         </div>
         <div class="usual-group"><div class="usual-label">いつもの捕獲方法　<button type="button" onclick="pickNewMethod()" style="background:var(--surface2);border:1px solid var(--gold);color:var(--gold-light);border-radius:999px;padding:5px 14px;font-size:0.92rem;font-weight:700;cursor:pointer;">🆕 別の方法を選ぶ</button></div><div class="usual-chips" id="usualMethods"></div></div>
+        <!-- くくり罠のとき、わなにかかった部位をここ（いつもの捕獲方法の直下）で選べるようにする -->
+        <div class="usual-group" id="usualTrapGroup" style="display:none;"><div class="usual-label">わなにかかった部位（くくり罠）</div><div class="usual-chips" id="usualTrapChips"></div></div>
         <div class="usual-group"><div class="usual-label">いつもの止めさし方法　<button type="button" onclick="pickNewFinish()" style="background:var(--surface2);border:1px solid var(--gold);color:var(--gold-light);border-radius:999px;padding:5px 14px;font-size:0.92rem;font-weight:700;cursor:pointer;">🆕 別の方法を選ぶ</button></div><div class="usual-chips" id="usualFinish"></div></div>
       </div>
 
@@ -787,8 +789,8 @@ textarea { min-height: 80px; resize: vertical; }
       <div class="form-row">
         <label class="form-label">搬入方法<span class="req-badge">必須</span></label>
         <div class="toggle-group" data-field="intake_method" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <div class="toggle-btn active" data-val="持込">捕獲者が持込</div>
-          <div class="toggle-btn" data-val="引取">センターが引取</div>
+          <div class="toggle-btn active" data-val="持込">持込</div>
+          <div class="toggle-btn" data-val="引取">引取</div>
         </div>
       </div>
       <div class="form-row" id="intakeStaffRow" style="display:none;">
@@ -1379,7 +1381,12 @@ function setNow(id) {
   // elapsedの再計算が必要な場合
   if (id === 'bleedTime' || id === 'receiveTime') calcElapsed();
   if (id === 'receiveTime') syncProcessTime();
-  if (id === 'captureTime') updateMishitRef();
+  if (id === 'captureTime') {
+    updateMishitRef();
+    // 目視時刻の「今」を押したら持込日も当日に合わせる（当日搬入がほとんどのため）
+    const cd = document.getElementById('captureDate');
+    if (cd) cd.value = today();
+  }
 }
 // 目視時刻を放血開始の近くに参考表示（止めさしのタイミングの目安に）
 function updateMishitRef() {
@@ -2003,6 +2010,8 @@ async function loadUsual() {
   }
   // いつものが使える通常入力時は、後ろの選択トグルを畳む（「別の方法を選ぶ」で開ける）
   applyMethodCollapse(topMethods.length > 0, topFinish.length > 0, locked);
+  // 捕獲方法が「くくり罠」なら、わな部位を「いつもの」直下で選べるようにする（下の重複は畳む）
+  syncUsualTrap();
   // 過去データが無ければ従来の静的マップでヒントだけ出す
   if (!rows.length && hint) {
     const info = hunterUsualArea(name);
@@ -2035,6 +2044,35 @@ function showMethodRows() {
 function pickNewMethod() {
   const r = document.getElementById('methodRow');
   if (r) { r.style.display = ''; if (r.scrollIntoView) r.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  // 下の捕獲方法を自分で開いたので、いつもの直下のわな部位UIは畳んで通常の位置で選ばせる
+  syncUsualTrap();
+}
+// 捕獲方法が「くくり罠」かつ下のトグルが畳まれているとき、わな部位を「いつもの」直下で選ばせる。
+// その間は下の trapPartRow（重複）を隠す（スクロール削減）。
+function syncUsualTrap() {
+  const grp = document.getElementById('usualTrapGroup');
+  const chips = document.getElementById('usualTrapChips');
+  if (!grp || !chips) return;
+  const methodRow = document.getElementById('methodRow');
+  const collapsed = methodRow && methodRow.style.display === 'none'; // いつもの運用中
+  const showHere = collapsed && state.capture_method === 'くくり罠';
+  if (showHere && !chips.dataset.built) {
+    ['右前足', '左前足', '右後脚', '左後脚', '鼻'].forEach(function (p) {
+      const btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'usual-chip'; btn.dataset.val = p; btn.textContent = p;
+      btn.addEventListener('click', function () { applyUsualToggle('trap_part', p); });
+      chips.appendChild(btn);
+    });
+    chips.dataset.built = '1';
+  }
+  grp.style.display = showHere ? '' : 'none';
+  markUsualTrapActive();
+  if (typeof updateMethodRows === 'function') updateMethodRows(); // 下の trapPartRow 表示を同期
+}
+function markUsualTrapActive() {
+  document.querySelectorAll('#usualTrapChips .usual-chip').forEach(function (b) {
+    b.classList.toggle('active', b.dataset.val === state.trap_part);
+  });
 }
 function pickNewFinish() {
   const r = document.getElementById('finishRow');
@@ -2045,6 +2083,9 @@ function applyUsualToggle(field, val) {
   if (g) g.querySelectorAll('.toggle-btn').forEach(function (b) { b.classList.toggle('active', b.dataset.val === val); });
   state[field] = val;
   if (typeof updateMethodRows === 'function') updateMethodRows();
+  // 捕獲方法を変えたら、いつもの直下のわな部位UIを出し入れ。わな部位を選んだら選択状態を反映
+  if (field === 'capture_method') { if (typeof syncUsualTrap === 'function') syncUsualTrap(); }
+  else if (field === 'trap_part') { if (typeof markUsualTrapActive === 'function') markUsualTrapActive(); }
   if (typeof renderMissing === 'function') renderMissing();
 }
 function markUsualActive() {
@@ -3974,7 +4015,10 @@ function capMapLocate(){
 function updateMethodRows(){
   const m = state.capture_method;
   const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
-  show('trapPartRow', m === 'くくり罠');
+  // わな部位を「いつもの」直下（usualTrapGroup）で選ばせている間は、下の重複行を隠す
+  const utg = document.getElementById('usualTrapGroup');
+  const usualTrapVisible = utg && utg.style.display !== 'none';
+  show('trapPartRow', m === 'くくり罠' && !usualTrapVisible);
   show('boxTrapRow', m === '箱罠');
   // 被弾部位は銃使用時のみ
   const hitRow = document.querySelector('[data-field="hit_location"]');
