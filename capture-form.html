@@ -1535,6 +1535,9 @@ function pickFinisherSuggest(name) {
    欄から外れると隠れる。タップした文字を欄に挿入し、既存の予測候補を更新する。
    タッチ端末ではソフトキーボードを出さず（inputmode=none）この50音で入力する。PCの物理キーボードは従来通り。 */
 (function setupKana50() {
+  // 一旦無効化（現場で入力しづらいため）。通常のキーボードで入力する。
+  // ※再有効化するときはこの return を外すだけでよい。
+  return;
   const FIELDS = ['hunterName', 'carrierName', 'finisherName', 'intakeStaff'];
   const ROWS = [
     ['あ','い','う','え','お'], ['か','き','く','け','こ'], ['さ','し','す','せ','そ'],
