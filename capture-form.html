@@ -3431,22 +3431,14 @@ function dataUrlToBlob(dataUrl) {
 }
 // 端末（iPad/iPhoneのカメラロール等）へすぐ保存。共有シートの「画像を保存」で写真アプリへ。使えない端末はダウンロード。
 // 重要: iOSでは navigator.share は撮影タップのジェスチャ内で呼ぶ必要があるため、呼び出し前に await を挟まない。
-async function arSaveToDevice(blob, fname) {
-  try {
-    const file = new File([blob], fname, { type: 'image/jpeg' });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: fname });
-      return 'shared';
-    }
-  } catch (e) {
-    if (e && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return 'canceled';
-    // それ以外は下のダウンロードにフォールバック
-  }
+// シャッターを押したら共有シートを出さず、その場で端末へ保存（<a download>）。
+// 撮影タップのジェスチャ内で同期的に click する。Android/PC は既定の保存先（ダウンロード/写真）へ即保存。
+function arSaveToDevice(blob, fname) {
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = fname;
+  const a = document.createElement('a');
+  a.href = url; a.download = fname; a.rel = 'noopener';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
-  return 'downloaded';
 }
 async function arCapture() {
   const v = document.getElementById('arVideo');
@@ -3476,26 +3468,16 @@ async function arCapture() {
   const dateStr = (_boardRec && _boardRec.capture_date) || '';
   const fname = stamp + (dateStr ? '_' + dateStr : '') + '.jpg';
 
-  // 同期でJPEGを作る（toBlobは非同期＝ジェスチャが切れて共有シートが開けないため使わない）
+  // 同期でJPEGを作る（toBlobは非同期＝ジェスチャが切れて保存が弾かれる場合があるため使わない）
   const dataUrl = cv.toDataURL('image/jpeg', 0.92);
   const blob = dataUrlToBlob(dataUrl);
 
-  // 1) まず端末へ保存（撮影タップのジェスチャ内で共有シートを開く）
-  arMsg('端末に保存中…（共有メニューが出たら「画像を保存」を選んでください）');
-  let saved = 'downloaded';
-  try { saved = await arSaveToDevice(blob, fname); } catch (e) {}
+  // 1) シャッターで即・端末へ保存（共有シートなし）＋「保存しました」を一言表示
+  try { arSaveToDevice(blob, fname); } catch (e) {}
+  arMsg('✅ 保存しました');
 
   // 2) サーバーにも保存（市役所提出用に個体へ紐づけ）。端末には保存済みなので失敗しても致命ではない。
-  let serverOk = false;
-  try { await arUploadPhoto(blob); serverOk = true; } catch (e) {}
-
-  if (saved === 'canceled') {
-    arMsg(serverOk ? '端末保存はキャンセルしました（サーバーには保存済み）' : '端末保存をキャンセルしました');
-  } else if (saved === 'shared') {
-    arMsg(serverOk ? '✅ 端末に保存しました（市役所提出用にサーバーへも保存）' : '✅ 端末に保存しました');
-  } else {
-    arMsg(serverOk ? '✅ 端末にダウンロード保存しました（サーバーへも保存）' : '✅ 端末にダウンロード保存しました');
-  }
+  try { await arUploadPhoto(blob); } catch (e) {}
 }
 // 撮影画像をサーバー(capture-photosバケット)へ保存し、登録済み個体なら image_url に紐づける
 async function arUploadPhoto(blob) {
