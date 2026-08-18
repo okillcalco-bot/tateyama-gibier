@@ -155,6 +155,7 @@ body.kb .bar{display:none}
 @keyframes newpulse{0%,100%{opacity:1}50%{opacity:.5}}
 @media (prefers-reduced-motion:reduce){.bull .badge-new{animation:none}}
 .bull .bt{font-size:14px;font-weight:700;color:var(--gold);margin-bottom:3px}
+.bull .bimg{display:block;width:100%;max-height:240px;object-fit:cover;border-radius:8px;margin:6px 0}
 .bull .bb{font-size:12.5px;color:var(--text2);line-height:1.6;white-space:pre-wrap}
 .bull .badge{display:inline-block;font-size:10px;font-weight:700;color:#fff;background:var(--gold);
  border-radius:4px;padding:1px 6px;margin-right:6px;vertical-align:1px}
@@ -760,9 +761,11 @@ function renderBulletins() {
       sub = `<div class="bb" style="margin-top:4px;color:var(--gold)">${esc(p.display_name)}　${p.unit_price != null ? yen(p.unit_price) + '/kg' : ''}　${oos ? '（在庫なし・予約可）' : '（在庫あり）'}</div>`;
       btn = `<button class="bgo" onclick="gotoBulletinProduct('${p.product_id}','${oos ? 'reserve' : 'stock'}')">${oos ? '予約する' : '商品を見る'}</button>`;
     }
+    const img = (b.image_url && /^(data:image\/|https:\/\/)/.test(b.image_url))
+      ? `<img class="bimg" src="${b.image_url.replace(/"/g, '&quot;')}" alt="" loading="lazy">` : '';
     return `<div class="bull${isNew ? ' isnew' : ''}">
       <div class="bt">${isNew ? '<span class="badge-new">NEW!</span>' : ''}${b.badge ? `<span class="badge">${esc(b.badge)}</span>` : ''}${esc(title)}</div>
-      ${b.body ? `<div class="bb">${esc(b.body)}</div>` : ''}${sub}${btn}
+      ${img}${b.body ? `<div class="bb">${esc(b.body)}</div>` : ''}${sub}${btn}
     </div>`;
   }).join('');
   box.innerHTML = `<div class="bull-head">🆕 おすすめ入荷情報</div>${cards}`;
