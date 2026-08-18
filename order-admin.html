@@ -958,7 +958,8 @@ async function refreshPortalStatuses(){
 }
 
 async function loadProducts(){
-  allProducts=await sb('GET','price_master','','?grade=eq.上&barcode_num=not.is.null&order=species.asc,part_name.asc');
+  // バーコード付き＝各部位の代表行（イノシシは上、シカ・中型獣はランク無し）。手動注文の品目候補に使う
+  allProducts=await sb('GET','price_master','','?barcode_num=not.is.null&order=species.asc,part_name.asc');
   allPriceMaster=await sb('GET','price_master','','?order=species.asc,part_name.asc,grade.asc');
 }
 
