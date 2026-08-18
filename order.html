@@ -160,6 +160,19 @@ body.kb .bar{display:none}
  border-radius:4px;padding:1px 6px;margin-right:6px;vertical-align:1px}
 .bull .bgo{margin-top:9px;min-height:42px;padding:0 16px;background:rgba(200,164,90,.12);
  border:1px solid var(--gold2);border-radius:8px;color:var(--gold);font-weight:700;font-size:12.5px}
+/* ── ご相談・お問い合わせ ── */
+.consult{margin:10px 14px 2px;border:1px solid var(--border2);border-radius:10px;background:var(--surface);overflow:hidden}
+.consult>summary{list-style:none;cursor:pointer;padding:12px 14px;font-size:13.5px;font-weight:700;color:var(--gold);display:flex;align-items:center;min-height:46px}
+.consult>summary::-webkit-details-marker{display:none}
+.consult>summary::after{content:'＋';margin-left:auto;color:var(--text3);font-weight:700}
+.consult[open]>summary::after{content:'－'}
+.consult .cin{padding:0 14px 14px}
+.consult .chint{font-size:11.5px;color:var(--text2);line-height:1.7;margin-bottom:8px}
+.consult textarea{width:100%;min-height:80px;padding:10px 12px}
+.consult .cbtn{margin-top:8px;min-height:46px;padding:0 20px;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#fff;font-weight:700;font-size:13px;border-radius:8px}
+.consult .cbtn:disabled{opacity:.5}
+.consult .cmsg{font-size:12.5px;margin-top:8px;min-height:1.2em;line-height:1.6}
+.consult .cmsg.ok{color:var(--green)}.consult .cmsg.err{color:var(--red)}
 </style>
 </head>
 <body>
@@ -204,6 +217,17 @@ body.kb .bar{display:none}
 
   <!-- おすすめ掲示板（センターが選んだ売れ筋・おすすめ） -->
   <div id="bulletins" class="hidden"></div>
+
+  <!-- ご相談・お問い合わせ（商品注文とは別に送れる自由メモ） -->
+  <details class="consult" id="consultBox">
+    <summary>💬 その他のご相談・お問い合わせ</summary>
+    <div class="cin">
+      <div class="chint">部位のご希望、中型獣（アナグマ等）のご相談、数量・納期のご相談など、お気軽にどうぞ。センターが確認してご連絡します。</div>
+      <textarea id="consult-text" maxlength="1000" placeholder="ご相談内容をご記入ください（1000文字まで）"></textarea>
+      <button class="cbtn" id="consult-btn" onclick="submitInquiry()">送信する</button>
+      <div class="cmsg" id="consult-msg"></div>
+    </div>
+  </details>
 
   <!-- 在庫あり / 予約（在庫なし）の切替 -->
   <div class="modetabs">
@@ -360,7 +384,8 @@ const api = (() => {
     placeReservation: (items, memo, reqId) => rpc('portal_place_reservation', {
       p_token: tok(), p_items: items, p_memo: memo, p_request_id: reqId }),
     cancelReservation: (rid) => rpc('portal_cancel_reservation', { p_token: tok(), p_reservation_id: rid }),
-    bulletins: () => rpc('portal_bulletins', {})
+    bulletins: () => rpc('portal_bulletins', {}),
+    submitInquiry: (body, reqId) => rpc('portal_submit_inquiry', { p_token: tok(), p_body: body, p_request_id: reqId })
   };
 })();
 
@@ -693,6 +718,25 @@ function usualKgOf(pid) { const u = usualItems.find(x => x.product_id === pid); 
 function switchSpecies(sp) { currentSpecies = sp; renderAll(); }
 function switchReserveSpecies(sp) { reserveCurrentSpecies = sp; renderAll(); }
 function switchMode(mode) { listMode = mode; renderAll(); window.scrollTo(0, 0); }
+
+/* ══════════ ご相談・お問い合わせ ══════════ */
+async function submitInquiry() {
+  const ta = $('consult-text'), btn = $('consult-btn'), msg = $('consult-msg');
+  const body = (ta.value || '').trim();
+  msg.className = 'cmsg';
+  if (!body) { msg.className = 'cmsg err'; msg.textContent = 'ご相談内容をご記入ください'; return; }
+  btn.disabled = true; msg.textContent = '送信中…';
+  const reqId = 'inq-' + (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2));
+  try {
+    await api.submitInquiry(body, reqId);
+    ta.value = '';
+    msg.className = 'cmsg ok';
+    msg.textContent = '送信しました。センターが確認してご連絡します。';
+  } catch (e) {
+    msg.className = 'cmsg err';
+    msg.textContent = '送信できませんでした: ' + (e.message || e);
+  } finally { btn.disabled = false; }
+}
 
 /* ══════════ おすすめ掲示板 ══════════ */
 const BULLETIN_NEW_DAYS = 7;   // 掲載から何日以内を「NEW!」とみなすか
