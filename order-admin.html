@@ -231,7 +231,7 @@ th,td{padding:8px 6px;font-size:.8rem}
   <div class="tab" data-tab="customers" onclick="switchTab('customers')">&#x1f464; 顧客管理</div>
   <div class="tab" data-tab="pricing" onclick="switchTab('pricing')">&#x1f3f7;&#xfe0f; 価格マスタ</div>
   <div class="tab" data-tab="pproducts" onclick="switchTab('pproducts')">&#x1f6d2; ポータル商品</div>
-  <div class="tab" data-tab="reserve" onclick="switchTab('reserve')">&#x23f3; 予約・掲示板</div>
+  <div class="tab" data-tab="reserve" onclick="switchTab('reserve')">&#x23f3; 予約・掲示板・相談</div>
 </div>
 
 <div class="main">
@@ -555,6 +555,25 @@ th,td{padding:8px 6px;font-size:.8rem}
       <table class="customer-table">
         <thead><tr><th>並び</th><th>バッジ</th><th>見出し</th><th>本文</th><th>商品</th><th>表示</th><th>操作</th></tr></thead>
         <tbody id="bullBody"></tbody>
+      </table>
+    </div>
+
+    <!-- ご相談・お問い合わせ -->
+    <div style="font-size:12.5px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin:22px 0 12px;line-height:1.8;">
+      お客様が注文ページの<strong>「その他のご相談・お問い合わせ」</strong>から送った内容です。未対応が上に出ます。対応したら「対応済」にしてください。
+    </div>
+    <div class="filter-bar">
+      <select id="inqStatus" onchange="loadInquiries()">
+        <option value="未対応">未対応</option>
+        <option value="対応済">対応済</option>
+        <option value="">すべて</option>
+      </select>
+      <button class="btn btn-outline btn-sm" onclick="loadInquiries()">↻ 再読込</button>
+    </div>
+    <div class="table-wrap">
+      <table class="customer-table">
+        <thead><tr><th>受信</th><th>お客様</th><th>ご相談内容</th><th>状態</th><th>操作</th></tr></thead>
+        <tbody id="inqBody"></tbody>
       </table>
     </div>
   </div>
@@ -951,7 +970,7 @@ function switchTab(tab){
   if(tab==='documents'){ populateDocCustomerDropdown(); loadDocOrders(); }
   if(tab==='pricing') renderPricing();
   if(tab==='pproducts') loadPortalProducts();
-  if(tab==='reserve'){ loadReservations(); loadBulletins(); }
+  if(tab==='reserve'){ loadReservations(); loadBulletins(); loadInquiries(); }
   if(tab==='invoice') openInvoiceTab();
 }
 
@@ -1124,6 +1143,48 @@ async function rsvSetStatus(id,status){
   try{
     await sbRpc('admin_set_reservation_status',{p_staff_key:key,p_id:id,p_status:status});
     await loadReservations();
+  }catch(e){
+    if(String(e.message).includes('スタッフキー')) staffKeyClear();
+    alert('変更に失敗しました: '+e.message);
+  }
+}
+
+let inqRows=[];
+async function loadInquiries(){
+  if(!staffKeyGet()) await staffKeyEnsure();
+  const k=staffKeyGet(); if(!k) return;
+  const status=document.getElementById('inqStatus')?.value ?? '未対応';
+  try{
+    inqRows=await sbRpc('admin_list_inquiries',{p_staff_key:k,p_status:status||null})||[];
+    renderInquiries();
+  }catch(e){
+    if(String(e.message).includes('スタッフキー')) staffKeyClear();
+    alert('ご相談一覧の読込みに失敗しました: '+e.message);
+  }
+}
+function renderInquiries(){
+  const body=document.getElementById('inqBody'); if(!body) return;
+  if(!inqRows.length){ body.innerHTML='<tr><td colspan="5" style="color:var(--text3);padding:16px">該当するご相談はありません</td></tr>'; return; }
+  body.innerHTML=inqRows.map(r=>{
+    const dt=new Date(r.created_at);
+    const dstr=isNaN(dt)?'':((dt.getMonth()+1)+'/'+dt.getDate()+' '+String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0'));
+    return `<tr>
+      <td style="font-size:12px;color:var(--text2);white-space:nowrap">${dstr}</td>
+      <td>${esc(r.customer_name||'')}<div style="font-size:11px;color:var(--text3)">${esc(r.customer_code||'')}</div></td>
+      <td style="white-space:pre-wrap;line-height:1.6;max-width:420px">${esc(r.body||'')}</td>
+      <td>${esc(r.status)}</td>
+      <td style="white-space:nowrap">
+        ${r.status!=='対応済'?`<button class="btn btn-outline btn-sm" onclick="inqSetStatus('${r.id}','対応済')">対応済</button> `:''}
+        ${r.status!=='未対応'?`<button class="btn btn-outline btn-sm" onclick="inqSetStatus('${r.id}','未対応')">未対応に戻す</button>`:''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+async function inqSetStatus(id,status){
+  const key=await staffKeyEnsure(); if(!key) return;
+  try{
+    await sbRpc('admin_set_inquiry_status',{p_staff_key:key,p_id:id,p_status:status});
+    await loadInquiries();
   }catch(e){
     if(String(e.message).includes('スタッフキー')) staffKeyClear();
     alert('変更に失敗しました: '+e.message);
