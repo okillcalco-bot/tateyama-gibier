@@ -888,15 +888,10 @@ async function sbRpc(fn,args){
 let allOrders=[], allCustomers=[], allProducts=[], allPriceMaster=[], currentFilter='all', currentOrderSearch='';
 let moCart=[], moSpecies='', docOrders=[];
 const custPage={page:0,size:50};
-let custAdminUnlocked=false; // 顧客管理タブで一度コードを入れたらセッション中は解錠
 const RANK_LABEL={standard:'スタンダード',local:'ローカル',startmember:'スタートメンバー'};
 function rankLabel(r){return RANK_LABEL[r]||'スタンダード';}
-function isAdminOk(){const c=prompt('管理者コードを入力してください');return c==='2468';}
-function ensureCustAdmin(){
-  if(custAdminUnlocked) return true;
-  if(isAdminOk()){custAdminUnlocked=true;return true;}
-  return false;
-}
+// 管理者コード(旧2468)は廃止。管理画面全体がスタッフキーで保護されており、
+// 別コードはクライアントに直書きで実効性が無く（キャンセルで素通り）、二重入力の手間だけだったため。
 
 // ── Init ──
 async function init(){
@@ -958,7 +953,6 @@ function switchTab(tab){
   if(tab==='pproducts') loadPortalProducts();
   if(tab==='reserve'){ loadReservations(); loadBulletins(); }
   if(tab==='invoice') openInvoiceTab();
-  if(tab==='customers' && !custAdminUnlocked) ensureCustAdmin();
 }
 
 /* ══════════ ポータル商品（お客様の注文サイトに出す商品マスタ） ══════════
@@ -2231,7 +2225,6 @@ async function saveCustomer(){
 
 async function deleteCustomer(id){
   const c=allCustomers.find(x=>x.id===id); if(!c) return;
-  if(!ensureCustAdmin()){alert('管理者コードが違います');return}
   if(!confirm(`顧客「${c.name}」を削除しますか？\nこの操作は元に戻せません。`)) return;
   try{
     await sb('DELETE','customers','',`?id=eq.${id}`);
@@ -2296,7 +2289,7 @@ function parseCSV(text){
 async function importCustomersCSV(input){
   const file=input.files&&input.files[0];input.value='';
   if(!file)return;
-  if(!isAdminOk()){alert('管理者コードが違います');return}
+  if(!confirm(`顧客CSV「${file.name}」を取り込みます。\ncodeが一致する顧客は上書き、無ければ新規追加します。よろしいですか？`))return;
   try{
     const text=await file.text();
     const rows=parseCSV(text);
