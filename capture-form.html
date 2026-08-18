@@ -794,7 +794,7 @@ textarea { min-height: 80px; resize: vertical; }
         </div>
       </div>
       <div class="form-row" id="intakeStaffRow" style="display:none;">
-        <label class="form-label">引取・出張の担当（職員）<span class="req-badge">必須</span></label>
+        <label class="form-label">引き取り者（引取・出張の担当）<span class="req-badge">必須</span></label>
         <input type="text" class="input" id="intakeStaff" placeholder="例: 沖 / 今泉" list="hunterList" autocomplete="off">
       </div>
       <div class="form-row" style="display:flex;flex-wrap:wrap;gap:12px 28px;align-items:flex-start;">
@@ -1764,9 +1764,8 @@ function onToggleChange(field, val) {
     document.getElementById('healthIssueRow').style.display = val === '異常あり' ? 'block' : 'none';
   }
   if (field === 'intake_method') {
-    // 「引取」「出張止め刺し」のときだけ担当者欄を出す
-    const row = document.getElementById('intakeStaffRow');
-    if (row) row.style.display = (val && val !== '持込') ? '' : 'none';
+    // 「引取」「出張止め刺し」または引き取り撮影が必要な地区のとき、引き取り者欄を出す
+    if (typeof refreshIntakeStaffRow === 'function') refreshIntakeStaffRow();
   }
   if (field === 'intake_method' || field === 'capture_city') {
     if (typeof updatePickupNotice === 'function') updatePickupNotice();
@@ -3267,6 +3266,17 @@ function updatePickupNotice(gps) {
   // 引き取り撮影（ホワイトボード）ボタン: 該当地区 または 搬入方法=引取 のとき表示
   const btn = document.getElementById('pickupCaptureBtn');
   if (btn) btn.style.display = (byArea || byGps || state.intake_method === '引取') ? '' : 'none';
+  // 引き取り撮影が要る場面では「引き取り者」欄も出す（持込のままでも）
+  _pickupNeedsWhiteboard = byArea || byGps;
+  refreshIntakeStaffRow();
+}
+// 引き取り者欄の表示制御: 引取/出張、または引き取り撮影が必要な地区のとき表示
+let _pickupNeedsWhiteboard = false;
+function refreshIntakeStaffRow() {
+  const row = document.getElementById('intakeStaffRow');
+  if (!row) return;
+  const need = (state.intake_method && state.intake_method !== '持込') || _pickupNeedsWhiteboard;
+  row.style.display = need ? '' : 'none';
 }
 // 現在地から地区を補助入力し、引き取り撮影の要否を判定
 function _pickupNoteMsg(html) {
@@ -3420,6 +3430,16 @@ function currentFormRec() {
   };
 }
 function startPickupCapture() {
+  // 引き取り者は看板に必須。空なら欄を出して入力を促す。
+  const taker = (document.getElementById('intakeStaff')?.value || document.getElementById('recorder')?.value || '').trim();
+  if (!taker) {
+    _pickupNeedsWhiteboard = true;
+    refreshIntakeStaffRow();
+    alert('引き取り者を入力してください（引き取り記録の看板に載ります）');
+    const el = document.getElementById('intakeStaff');
+    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => el.focus(), 300); }
+    return;
+  }
   _boardRec = currentFormRec();
   _arAfterRegister = false;
   _arMode = 'whiteboard';
