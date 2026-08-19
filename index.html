@@ -1812,6 +1812,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
             <button class="pm-numpad-toggle" id="pmNumpadToggle" onclick="pmToggleNumpad()">🔢 手動入力</button>
             <button class="pm-numpad-toggle" onclick="alert('SJ-15KAWAP-BT接続手順:\n①WindowsのBluetooth設定でSJ-15をペアリング\n②COMポートが自動作成される\n③上の「⚖️ はかり未接続」ボタンを押してそのCOMポートを選択')" style="color:var(--blue);">📶 BT計量器?</button>
           </div>
+          <div id="pmScaleDebug" style="font-size:10.5px;color:var(--text3);margin-top:4px;min-height:14px;font-family:monospace;word-break:break-all;"></div>
           <div class="pm-numpad" id="pmNumpad">
             <div class="pm-numpad-grid">
               <button class="pm-numpad-key" onclick="pmNumKey('7')">7</button>
@@ -4670,11 +4671,18 @@ if ('serial' in navigator) {
 }
 
 function scaleHandleLine(line) {
+  // 受信内容を診断表示（何が来ているか現場で確認できるように）
+  const dbg = document.getElementById('pmScaleDebug');
+  if (dbg && line) dbg.textContent = '受信: ' + line;
   // A&D formats:
-  //   "ST,+00000.20kg"  → kg小数
+  //   "ST,+00000.20kg"  → 安定・kg小数
+  //   "US,+00000.20kg"  → 不安定（載せ途中）
   //   "ST,+00000200 g"  → グラム整数
   //   "ST,+001.234 kg"  → kg スペースあり
-  if (!line.startsWith('ST,')) return;
+  // ST=安定 / US=不安定 のどちらもヘッダーとして受け付ける（自動登録は安定STのみ）
+  const isStable = line.startsWith('ST,') || line.startsWith('QT,');
+  const isUnstable = line.startsWith('US,');
+  if (!isStable && !isUnstable) return;
 
   let weight = null;
   const kgMatch = line.match(/[+\-]([\d]+\.[\d]+)\s*kg/i);
@@ -4692,7 +4700,7 @@ function scaleHandleLine(line) {
 
   if (weight === null || isNaN(weight) || weight < 0.050) return;
 
-  // 重量欄を更新
+  // 重量欄を更新（不安定でもライブ表示。載せている様子が見える）
   document.getElementById('pmWeightDisplay').textContent = weight.toFixed(3);
   // 部位選択済みなら登録ボタンを有効化
   if (pmSelectedPart) {
@@ -4700,8 +4708,8 @@ function scaleHandleLine(line) {
     if (mBtn) mBtn.disabled = false;
   }
 
-  // 計量待機中（登録ボタンを先に押した場合）のみ自動登録
-  if (pmWaitingForScale && pmSelectedPart) {
+  // 計量待機中（登録ボタンを先に押した場合）は「安定」した値だけ自動登録する
+  if (pmWaitingForScale && pmSelectedPart && isStable) {
     pmOnWeightReceived(weight);
   }
 }
@@ -4710,14 +4718,25 @@ function scaleHandleLine(line) {
 // これで本体の「プリント」ボタンを押さなくても、登録ボタンだけで重量を取得できる。
 // 非対応/失敗時は何もしない（本体プリントの従来運用にそのままフォールバック）。
 async function scaleRequestWeight() {
+  const dbg = document.getElementById('pmScaleDebug');
   try {
     if (serialPort && serialPort.writable && !serialPort.writable.locked) {
+      const enc = new TextEncoder();
       const writer = serialPort.writable.getWriter();
-      try { await writer.write(new TextEncoder().encode('S\r\n')); }
-      finally { writer.releaseLock(); }
+      try {
+        // A&D標準コマンドを順に送る。機種により対応コマンドが異なるため両方試す：
+        //   'Q' = 即時出力 / 'S' = 安定後に出力（プリント相当）。終端はCR+LF。
+        await writer.write(enc.encode('Q\r\n'));
+        await writer.write(enc.encode('S\r\n'));
+      } finally { writer.releaseLock(); }
+      if (dbg) dbg.textContent = '送信: Q/S コマンド → はかりの応答待ち…';
       return true;
     }
-  } catch (e) { /* コマンド非対応・書込不可のときは本体プリントで計量してください */ }
+  } catch (e) {
+    if (dbg) dbg.textContent = '送信エラー: ' + (e.message || e);
+  }
+  // 書込不可（RX非対応ケーブル/BT片方向 等）→ 本体プリント運用にフォールバック
+  if (dbg && !(serialPort && serialPort.writable)) dbg.textContent = 'はかりへコマンド送信不可（本体プリントを押してください）';
   return false;
 }
 
@@ -4769,6 +4788,11 @@ function pmStartMeasure() {
 
   setTimeout(() => {
     if (pmWaitingForScale) {
+      pmWaitingForScale = false;
+      const dbg = document.getElementById('pmScaleDebug');
+      if (dbg && !dbg.textContent.startsWith('受信:')) {
+        dbg.textContent = 'はかりから応答なし → 本体の「プリント」を押すか、手動入力してください';
+      }
       document.getElementById('pmMeasureBtn').textContent = '登録';
       document.getElementById('pmMeasureBtn').disabled = false;
       document.getElementById('pmMeasureBtn').onclick = () => {
@@ -4781,7 +4805,7 @@ function pmStartMeasure() {
         document.getElementById('pmMeasureBtn').onclick = pmStartMeasure;
       };
     }
-  }, 5000);
+  }, 7000);
 }
 
 // ── 重量受信後の全自動処理 ──
