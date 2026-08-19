@@ -1808,7 +1808,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <button class="pm-measure-btn" id="pmMeasureBtn" onclick="pmStartMeasure()" disabled>登録</button>
           <button class="pm-measure-btn" id="pmPrintBtn" onclick="pmPrintOnly()" disabled style="margin-top:6px;background:linear-gradient(135deg,#4a7ab8,#5a8cd8);font-size:15px;">🖨 ラベル印刷</button>
           <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;">
-            <div class="pm-weight-hint" style="margin-top:0;">はかりに載せたら本体の「プリント」ボタン → 重量表示</div>
+            <div class="pm-weight-hint" style="margin-top:0;">はかりに載せて「登録」を押すと自動で計量します（反応しないときは本体の「プリント」でもOK）</div>
             <button class="pm-numpad-toggle" id="pmNumpadToggle" onclick="pmToggleNumpad()">🔢 手動入力</button>
             <button class="pm-numpad-toggle" onclick="alert('SJ-15KAWAP-BT接続手順:\n①WindowsのBluetooth設定でSJ-15をペアリング\n②COMポートが自動作成される\n③上の「⚖️ はかり未接続」ボタンを押してそのCOMポートを選択')" style="color:var(--blue);">📶 BT計量器?</button>
           </div>
@@ -4666,6 +4666,21 @@ function scaleHandleLine(line) {
   }
 }
 
+// ── はかりへ「計量要求」コマンドを送る（A&D標準: 'S'=安定計量値を1回出力＝プリント相当）──
+// これで本体の「プリント」ボタンを押さなくても、登録ボタンだけで重量を取得できる。
+// 非対応/失敗時は何もしない（本体プリントの従来運用にそのままフォールバック）。
+async function scaleRequestWeight() {
+  try {
+    if (serialPort && serialPort.writable && !serialPort.writable.locked) {
+      const writer = serialPort.writable.getWriter();
+      try { await writer.write(new TextEncoder().encode('S\r\n')); }
+      finally { writer.releaseLock(); }
+      return true;
+    }
+  } catch (e) { /* コマンド非対応・書込不可のときは本体プリントで計量してください */ }
+  return false;
+}
+
 // ── 印刷データ準備（同期・ユーザー操作コンテキスト内で呼ぶこと）──
 function pmDoPrint(weight_kg) {
   if (!pmSelectedPart || !pmIndividual) return;
@@ -4704,12 +4719,13 @@ function pmStartMeasure() {
     return;
   }
 
-  // 重量がまだない場合はスケール待機
+  // 重量がまだない場合はスケール待機 ＋ はかりへ計量要求（プリント不要で自動取得）
   pmWaitingForScale = true;
   pmScaleBuffer = '';
-  document.getElementById('pmMeasureBtn').textContent = '⏳ 待機中...';
+  document.getElementById('pmMeasureBtn').textContent = '⏳ 計量中...';
   document.getElementById('pmMeasureBtn').disabled = true;
   refocusScaleInput();
+  scaleRequestWeight();   // ← はかりに「安定計量値を出して」を送る（本体プリント押下と同じ結果）
 
   setTimeout(() => {
     if (pmWaitingForScale) {
