@@ -2726,7 +2726,7 @@ const MISSING_CHECKS = [
       ? (document.querySelector('[data-field="hit_location"] .toggle-btn.active')?.dataset.val || '') : 'skip' },
   { label: '放血時刻', get: () => document.getElementById('bleedTime')?.value },
   { label: '搬送開始時刻', get: () => document.getElementById('transportStart')?.value },
-  { label: '施設受入時刻', get: () => document.getElementById('receiveTime')?.value },
+  { label: '施設受入時刻', get: () => window.staffFieldMode ? 'skip' : document.getElementById('receiveTime')?.value },
   { label: '引取・出張の担当', get: () => (state.intake_method && state.intake_method !== '持込')
       ? (document.getElementById('intakeStaff')?.value || '') : 'skip' },
   { label: '記録者名', get: () => document.getElementById('recorder')?.value },
@@ -2819,14 +2819,14 @@ async function handleSubmit() {
     // 「搬入待ちで登録」＝まだセンターに無い個体。番号を付けず保存し、受入時に採番する。
     const pending = !editMode && !window.hunterMode && !window.receiveMode
       && !!document.getElementById('pendingIntakeChk')?.checked;
-    if (!labelId && !window.hunterMode && !pending) { alert('個体管理番号が生成されていません。種別と市町村を選択してください。'); btn.disabled=false; btn.textContent='搬入登録'; return; }
+    if (!labelId && !window.hunterMode && !window.staffFieldMode && !pending) { alert('個体管理番号が生成されていません。種別と市町村を選択してください。'); btn.disabled=false; btn.textContent='搬入登録'; return; }
 
     // 通し番号（連番）はイノシシのみ。新規登録時にDBの最大+1を自動採番（この次から連番）。
     // ただし、手入力の番号が「先に用意した空枠」（通し番号だけ登録済みで捕獲日が未入力）と一致すれば、
     // 新規行を作らずその空枠に登録する。
-    let serialForSave = (window.hunterMode || pending) ? null : serial;
+    let serialForSave = (window.hunterMode || window.staffFieldMode || pending) ? null : serial;
     let matchedPlaceholderId = null;
-    if (!editRecordId && state.species === 'イノシシ' && !window.hunterMode && !pending) {
+    if (!editRecordId && state.species === 'イノシシ' && !window.hunterMode && !window.staffFieldMode && !pending) {
       try {
         const placeholders = await sb('GET', 'individuals', null,
           `?species=eq.イノシシ&serial_number=eq.${serial}&capture_date=is.null&deleted_at=is.null&select=id&limit=1`);
@@ -2843,9 +2843,9 @@ async function handleSubmit() {
     }
 
     const record = {
-      label_id: (window.hunterMode || pending) ? ('仮-' + Date.now().toString(36).toUpperCase()) : labelId,
+      label_id: (window.hunterMode || window.staffFieldMode || pending) ? ('仮-' + Date.now().toString(36).toUpperCase()) : labelId,
       serial_number: serialForSave,
-      intake_status: (window.hunterMode || pending) ? '搬入待ち' : (window.receiveMode ? null : undefined),
+      intake_status: (window.hunterMode || window.staffFieldMode || pending) ? '搬入待ち' : (window.receiveMode ? null : undefined),
       species: state.species,
       sex: state.sex,
       weight_total: parseFloat(document.getElementById('weight').value) || null,
@@ -3892,14 +3892,24 @@ function wtKey(k) {
       sel.value = staffName;
     };
     setRecorder(); setTimeout(setRecorder, 800);
-    // 搬入方法＝引取、担当＝氏名
+    // 搬入方法＝引取、引き取り者＝氏名
     state.intake_method = '引取';
     document.querySelectorAll('[data-field="intake_method"] .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.val === '引取'));
     const isr = document.getElementById('intakeStaffRow'); if (isr) isr.style.display = '';
     const is = document.getElementById('intakeStaff'); if (is && !is.value) is.value = staffName;
+    // センター側で入力する項目は隠す（個体番号・受入/処理時刻・品質・胎児・記録者・搬入待ちトグル）。
+    // ＝現地で「引き取り者」として登録し、番号や受入・検査はセンター受入時に行う（搬入待ち保存）。
+    const hideS = el => { if (el) el.style.display = 'none'; };
+    hideS(document.getElementById('indSerial')?.closest('.form-row'));
+    hideS(document.getElementById('receiveTime')?.closest('.form-row'));   // 受入時刻＋処理時刻（同じ行）を一括で隠す
+    ['has_fetus', 'quality'].forEach(f => hideS(document.querySelector('[data-field="' + f + '"]')?.closest('.form-row')));
+    hideS(document.getElementById('recorder')?.closest('.form-row'));
+    hideS(document.getElementById('pendingIntakeRow'));
+    _pickupNeedsWhiteboard = true; if (typeof refreshIntakeStaffRow === 'function') refreshIntakeStaffRow();
+    const sbtn = document.getElementById('submitBtn'); if (sbtn) sbtn.textContent = '🕓 搬入待ちで登録';
     const bar = document.createElement('div');
     bar.style.cssText = 'background:rgba(21,101,192,.10);border:1px solid var(--blue);color:var(--blue);border-radius:8px;padding:10px 14px;margin:10px 12px;font-size:1rem;line-height:1.7;font-weight:600;';
-    bar.innerHTML = '🚚 <strong>職員フィールド入力モード</strong> — 記録者・引取担当を「' + staffName + '」で用意しました。搬入方法は初期「引取」です（持込に変更も可）。';
+    bar.innerHTML = '🚚 <strong>引き取り者モード</strong> — 引き取り者を「' + staffName + '」で用意しました。現地でわかる項目を入れて「搬入待ちで登録」を押してください。個体番号・受入・検査はセンターで行います。';
     const first = document.querySelector('.section');
     if (first) first.parentNode.insertBefore(bar, first);
   }
