@@ -4710,7 +4710,9 @@ function scaleHandleLine(line) {
 
   // 計量待機中（登録ボタンを先に押した場合）は「安定」した値だけ自動登録する
   if (pmWaitingForScale && pmSelectedPart && isStable) {
-    pmOnWeightReceived(weight);
+    const net = Math.max(0, weight - 0.010); // 手入力・プリント経由と同じくビニール袋10gを差し引く
+    document.getElementById('pmWeightDisplay').textContent = net.toFixed(3);
+    pmOnWeightReceived(net);
   }
 }
 
