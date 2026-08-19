@@ -178,6 +178,14 @@ body.kb .bar{display:none}
 .consult .cbtn:disabled{opacity:.5}
 .consult .cmsg{font-size:12.5px;margin-top:8px;min-height:1.2em;line-height:1.6}
 .consult .cmsg.ok{color:var(--green)}.consult .cmsg.err{color:var(--red)}
+.trace-card{border:1px solid var(--gold2);border-radius:10px;overflow:hidden;background:var(--surface)}
+.trace-card .th{background:linear-gradient(135deg,rgba(200,164,90,.14),rgba(200,164,90,.04));padding:9px 12px;font-weight:800;color:var(--gold);font-size:13.5px;border-bottom:1px solid var(--gold2)}
+.trace-row{display:flex;gap:10px;padding:7px 12px;font-size:13px;border-bottom:1px solid var(--border)}
+.trace-row:last-child{border-bottom:none}
+.trace-row .k{color:var(--text3);min-width:82px;flex-shrink:0}
+.trace-row .v{color:var(--text);font-weight:600}
+.trace-row.rad{background:rgba(106,158,90,.08)}
+.trace-row.rad .v{color:var(--green)}
 </style>
 </head>
 <body>
@@ -231,6 +239,20 @@ body.kb .bar{display:none}
       <textarea id="consult-text" maxlength="1000" placeholder="ご相談内容をご記入ください（1000文字まで）"></textarea>
       <button class="cbtn" id="consult-btn" onclick="submitInquiry()">送信する</button>
       <div class="cmsg" id="consult-msg"></div>
+    </div>
+  </details>
+
+  <!-- 産地・トレーサビリティ（個体番号で捕獲情報を確認。捕獲者名は非表示） -->
+  <details class="consult" id="traceBox">
+    <summary>🔎 産地・トレーサビリティ（個体番号で確認）</summary>
+    <div class="cin">
+      <div class="chint">お手元のパック（ラベル）の<strong>個体管理番号</strong>（例：TGC-08-M160）を入力すると、その個体が<strong>いつ・どこで獲れた、どんな個体か</strong>と<strong>放射能検査結果</strong>を確認できます。</div>
+      <div style="display:flex;gap:8px;align-items:stretch">
+        <input id="trace-input" placeholder="例）TGC-08-M160" autocapitalize="characters" autocomplete="off" spellcheck="false" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();runTrace();}">
+        <button class="cbtn" id="trace-btn" style="margin-top:0;white-space:nowrap;padding:0 18px" onclick="runTrace()">確認</button>
+      </div>
+      <div id="trace-result" style="margin-top:10px"></div>
+      <div class="cmsg" id="trace-msg"></div>
     </div>
   </details>
 
@@ -390,7 +412,8 @@ const api = (() => {
       p_token: tok(), p_items: items, p_memo: memo, p_request_id: reqId }),
     cancelReservation: (rid) => rpc('portal_cancel_reservation', { p_token: tok(), p_reservation_id: rid }),
     bulletins: () => rpc('portal_bulletins', {}),
-    submitInquiry: (body, reqId) => rpc('portal_submit_inquiry', { p_token: tok(), p_body: body, p_request_id: reqId })
+    submitInquiry: (body, reqId) => rpc('portal_submit_inquiry', { p_token: tok(), p_body: body, p_request_id: reqId }),
+    traceIndividual: (label) => rpc('portal_trace_individual', { p_token: tok(), p_label: label })
   };
 })();
 
@@ -741,6 +764,48 @@ async function submitInquiry() {
     msg.className = 'cmsg err';
     msg.textContent = '送信できませんでした: ' + (e.message || e);
   } finally { btn.disabled = false; }
+}
+
+/* ══════════ 産地・トレーサビリティ ══════════ */
+function jdate(s) {
+  if (!s) return '';
+  const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[1]}年${+m[2]}月${+m[3]}日` : String(s);
+}
+async function runTrace() {
+  const inp = $('trace-input'), btn = $('trace-btn'), msg = $('trace-msg'), box = $('trace-result');
+  const q = (inp.value || '').trim();
+  msg.className = 'cmsg'; msg.textContent = ''; box.innerHTML = '';
+  if (!q) { msg.className = 'cmsg err'; msg.textContent = '個体管理番号を入力してください'; return; }
+  btn.disabled = true; msg.textContent = '検索中…';
+  try {
+    const rows = await api.traceIndividual(q);
+    msg.textContent = '';
+    const r = rows && rows[0];
+    if (!r) { msg.className = 'cmsg err'; msg.textContent = '該当する個体が見つかりませんでした。番号をご確認ください（例：TGC-08-M160）。'; return; }
+    box.innerHTML = renderTrace(r);
+  } catch (e) {
+    msg.className = 'cmsg err'; msg.textContent = '確認できませんでした: ' + (e.message || e);
+  } finally { btn.disabled = false; }
+}
+function renderTrace(r) {
+  const rowsHtml = [];
+  const add = (k, v, cls) => { if (v != null && v !== '') rowsHtml.push(`<div class="trace-row${cls ? ' ' + cls : ''}"><span class="k">${k}</span><span class="v">${esc(String(v))}</span></div>`); };
+  const when = [jdate(r.capture_date), r.capture_time ? esc(r.capture_time) : ''].filter(Boolean).join(' ');
+  add('種類', r.species);
+  add('性別', r.sex);
+  add('体重', r.weight_total != null ? r.weight_total + ' kg' : '');
+  add('捕獲日時', when || '—');
+  add('捕獲場所', r.capture_place || '館山市・南房総市');
+  add('捕獲方法', r.capture_method);
+  add('止め刺し', r.finishing_method);
+  add('精肉日', jdate(r.processing_date));
+  if (r.radiation_result) {
+    const rd = r.radiation_test_date ? '（検査日 ' + jdate(r.radiation_test_date) + '）' : '';
+    add('放射能検査', r.radiation_result + rd, 'rad');
+  }
+  return `<div class="trace-card"><div class="th">🏷 ${esc(r.label_id)}（館山産ジビエ）</div>${rowsHtml.join('')}</div>`
+    + `<div class="chint" style="margin-top:8px">※ 捕獲者名は個人情報保護のため表示しておりません。</div>`;
 }
 
 /* ══════════ おすすめ掲示板 ══════════ */
