@@ -3720,6 +3720,35 @@ function pmSaveSession() {
     retail: pmRetail,
     priceMaster: pmPriceMaster
   };
+  pmPersistState();
+}
+
+// ── 一時保管・進行中セッションの永続化（Chromeを閉じても残す） ──
+const PM_STATE_KEY = 'tgc_pm_state_v1';
+function pmPersistState() {
+  try {
+    localStorage.setItem(PM_STATE_KEY, JSON.stringify({
+      held: pmHeldIndividuals,
+      sessions: pmSessions,
+      savedAt: Date.now()
+    }));
+  } catch (e) {}
+}
+function pmLoadState() {
+  pmHeldIndividuals = [];
+  pmSessions = {};
+  try {
+    const raw = localStorage.getItem(PM_STATE_KEY);
+    if (!raw) return;
+    const st = JSON.parse(raw);
+    // 3日以上前の保管は古すぎるので自動破棄（消し忘れ防止）
+    if (st.savedAt && (Date.now() - st.savedAt) > 3 * 24 * 60 * 60 * 1000) {
+      localStorage.removeItem(PM_STATE_KEY);
+      return;
+    }
+    if (Array.isArray(st.held)) pmHeldIndividuals = st.held;
+    if (st.sessions && typeof st.sessions === 'object') pmSessions = st.sessions;
+  } catch (e) {}
 }
 
 // ── セッション切替（ヘッダーの作業者ボタンから） ──
@@ -3821,12 +3850,14 @@ function pmPauseIndividual() {
   pmIndividual = null;
   pmCompletedParts = [];
   pmSelectedPart = null;
+  pmPersistState();
   pmRenderParts();
   pmUpdateSelectedPartDisplay();
   pmRenderHeldBanner();
   pmRenderHeaderOps();
   document.getElementById('pmMain').style.display = 'none';
-  document.getElementById('pmSetup').style.display = '';
+  document.getElementById('pmSetup').style.display = 'block';
+  pmLoadRecentIndividuals();
   toast('一時保管しました。別の個体を選択してください', 'success');
 }
 function pmRenderHeldBanner() {
@@ -3852,21 +3883,29 @@ function pmResumeHeld(index) {
   const h = pmHeldIndividuals.splice(index, 1)[0];
   if (!h) return;
   pmIndividual = h.individual;
-  pmCompletedParts = [...h.completedParts];
-  pmSelectedPart = h.selectedPart;
-  pmBoneIn = h.boneIn;
-  pmGrade = h.grade;
-  pmRetail = h.retail;
+  pmCompletedParts = Array.isArray(h.completedParts) ? [...h.completedParts] : [];
+  pmSelectedPart = h.selectedPart || null;
+  pmBoneIn = h.boneIn || false;
+  pmGrade = h.grade || '並';
+  pmRetail = h.retail || false;
   pmOperatorName = h.operatorName;
-  pmCurrentOperator = pmOperatorName;
-  pmRenderParts();
-  pmUpdateSelectedPartDisplay();
-  pmShowIndividualDetail();
-  pmRenderHeldBanner();
-  pmRenderHeaderOps();
+  pmCurrentOperator = h.operatorName;
+  pmPriceMaster = [];
+  pmPersistState();
+  // メイン画面へ（pmSelectIndividual / pmResumeSession と同じ復元手順）
   document.getElementById('pmSetup').style.display = 'none';
-  document.getElementById('pmMain').style.display = '';
-  toast('再開：' + (h.individual.label_id||h.individual.id||'?'), 'success');
+  document.getElementById('pmMain').style.display = 'flex';
+  document.getElementById('pmCurrentInd').textContent = pmIndividual.label_id + ' (' + (pmIndividual.species||'') + ' ' + (pmIndividual.weight_total||'?') + 'kg)';
+  pmRenderHeaderOps();
+  pmRenderParts();
+  pmRenderCompleted();
+  pmInitRankUI();
+  pmResetWeight();
+  pmRenderOptions();
+  pmUpdateSelectedPartDisplay();
+  pmRenderHeldBanner();
+  refocusScaleInput();
+  toast('再開：' + (pmIndividual.label_id||pmIndividual.id||'?'), 'success');
 }
 function pmSetupSelectOp(op) {
   pmCurrentOperator = op;
@@ -4131,7 +4170,7 @@ function checkBpacStatus() {
 
 // ── 精肉モードを開く ──
 function openProcessingMode() {
-  pmHeldIndividuals = [];
+  pmLoadState(); // 一時保管・進行中セッションを復元（Chrome再起動後も残す）
   const overlay = document.getElementById('pmOverlay');
   overlay.classList.add('active');
   document.getElementById('pmSetup').style.display = 'block';
@@ -4142,6 +4181,7 @@ function openProcessingMode() {
   document.getElementById('pmIndSearch').value = '';
   checkBpacStatus();
   pmRenderSetupOps();
+  pmRenderHeldBanner();
   pmLoadRecentIndividuals();
   scaleTryAutoConnect(); // 前回許可済みのはかりへダイアログなしで自動接続
 }
@@ -4811,6 +4851,7 @@ async function pmOnWeightReceived(weight_kg) {
       grade: pmGrade,
       bone_in: pmBoneIn
     });
+    pmSaveSession(); // 作業途中もChrome再起動に耐えるよう都度保存
 
     // 5.5 ラベル未印刷なら自動で印刷（はかりの「プリント」ボタン経由の登録でも同時に印刷する）
     if (!pmLastLabelPrinted) {
@@ -5116,6 +5157,11 @@ async function pmFinishIndividual() {
       ? `／ ${pmIndividual.meat_rank}・買取¥${(calcBuyback(indW, pmIndividual.meat_rank, yieldNum, !!pmIndividual.stopkill_pickup) || 0).toLocaleString()}`
       : '（肉ランク未選択→個体編集で確定すると買取が出ます）';
     toast(`${pmIndividual.label_id} 精肉完了（${pmCompletedParts.length}部位, 歩留まり${yieldPct}% ${bbMsg}）`);
+    // 完了した個体は進行中セッション・一時保管から取り除く
+    if (pmCurrentOperator) delete pmSessions[pmCurrentOperator];
+    const doneLabel = pmIndividual.label_id;
+    pmHeldIndividuals = pmHeldIndividuals.filter(h => (h.individual && h.individual.label_id) !== doneLabel);
+    pmPersistState();
     closeProcessingMode();
   } catch(e) {
     toast('更新エラー: ' + e.message, 'error');
