@@ -155,7 +155,11 @@ body.kb .bar{display:none}
 @keyframes newpulse{0%,100%{opacity:1}50%{opacity:.5}}
 @media (prefers-reduced-motion:reduce){.bull .badge-new{animation:none}}
 .bull .bt{font-size:14px;font-weight:700;color:var(--gold);margin-bottom:3px}
-.bull .bimg{display:block;width:100%;max-height:240px;object-fit:cover;border-radius:8px;margin:6px 0}
+.bull .bimg{display:block;width:100%;max-height:240px;object-fit:cover;border-radius:8px;margin:6px 0;cursor:zoom-in}
+.bull .bimgcap{font-size:11px;color:var(--text3);margin:-2px 0 4px;text-align:center}
+#lightbox{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;cursor:zoom-out}
+#lightbox img{max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px}
+#lightbox .lbx{position:absolute;top:12px;right:16px;font-size:30px;line-height:1;color:#fff;background:none;border:none;cursor:pointer}
 .bull .bb{font-size:12.5px;color:var(--text2);line-height:1.6;white-space:pre-wrap}
 .bull .badge{display:inline-block;font-size:10px;font-weight:700;color:#fff;background:var(--gold);
  border-radius:4px;padding:1px 6px;margin-right:6px;vertical-align:1px}
@@ -223,7 +227,7 @@ body.kb .bar{display:none}
   <details class="consult" id="consultBox">
     <summary>💬 その他のご相談・お問い合わせ</summary>
     <div class="cin">
-      <div class="chint">部位のご希望、中型獣（アナグマ等）のご相談、数量・納期のご相談など、お気軽にどうぞ。センターが確認してご連絡します。</div>
+      <div class="chint">部位のご希望、中型獣（キョン等）のご相談、数量・納期のご相談など、お気軽にどうぞ。センターが確認してご連絡します。<br>※アナグマは駆除対象外のため取り扱っておりません。</div>
       <textarea id="consult-text" maxlength="1000" placeholder="ご相談内容をご記入ください（1000文字まで）"></textarea>
       <button class="cbtn" id="consult-btn" onclick="submitInquiry()">送信する</button>
       <div class="cmsg" id="consult-msg"></div>
@@ -584,7 +588,7 @@ function productRow(p, usualKg) {
   const canOrder = p.is_orderable && !noPrice;
   const q = qtyState[p.product_id] ?? (usualKg || p.min_order_kg);
   const inCart = cartGet().some(c => c.product_id === p.product_id);
-  const markCls = p.mark === '◎' ? 'o' : p.mark === '△' ? 't' : 'x';
+  const markCls = (p.mark === '◎' || p.mark === '◯') ? 'o' : p.mark === '△' ? 't' : 'x';
   const addLabel = inCart ? '追加済' : (outOfStock ? '取寄' : '追加');
   return `<div class="row${!canOrder ? ' out' : ''}" data-pid="${p.product_id}">
     <div class="rtop" ${p.description ? `onclick="toggleDesc('${p.product_id}')" style="cursor:pointer"` : ''}>
@@ -761,8 +765,9 @@ function renderBulletins() {
       sub = `<div class="bb" style="margin-top:4px;color:var(--gold)">${esc(p.display_name)}　${p.unit_price != null ? yen(p.unit_price) + '/kg' : ''}　${oos ? '（在庫なし・予約可）' : '（在庫あり）'}</div>`;
       btn = `<button class="bgo" onclick="gotoBulletinProduct('${p.product_id}','${oos ? 'reserve' : 'stock'}')">${oos ? '予約する' : '商品を見る'}</button>`;
     }
+    const safeImg = (b.image_url || '').replace(/"/g, '&quot;');
     const img = (b.image_url && /^(data:image\/|https:\/\/)/.test(b.image_url))
-      ? `<img class="bimg" src="${b.image_url.replace(/"/g, '&quot;')}" alt="" loading="lazy">` : '';
+      ? `<img class="bimg" src="${safeImg}" alt="" loading="lazy" onclick="openLightbox('${safeImg}')"><div class="bimgcap">タップで拡大</div>` : '';
     return `<div class="bull${isNew ? ' isnew' : ''}">
       <div class="bt">${isNew ? '<span class="badge-new">NEW!</span>' : ''}${b.badge ? `<span class="badge">${esc(b.badge)}</span>` : ''}${esc(title)}</div>
       ${img}${b.body ? `<div class="bb">${esc(b.body)}</div>` : ''}${sub}${btn}
@@ -770,6 +775,19 @@ function renderBulletins() {
   }).join('');
   box.innerHTML = `<div class="bull-head">🆕 おすすめ入荷情報</div>${cards}`;
 }
+function openLightbox(src) {
+  let lb = $('lightbox');
+  if (!lb) {
+    lb = document.createElement('div');
+    lb.id = 'lightbox';
+    lb.innerHTML = '<button class="lbx" aria-label="閉じる" onclick="closeLightbox()">×</button><img alt="">';
+    lb.addEventListener('click', e => { if (e.target === lb) closeLightbox(); });
+    document.body.appendChild(lb);
+  }
+  lb.querySelector('img').src = src;
+  lb.style.display = 'flex';
+}
+function closeLightbox() { const lb = $('lightbox'); if (lb) lb.style.display = 'none'; }
 function gotoBulletinProduct(pid, mode) {
   const p = catFind(pid); if (!p) return;
   listMode = mode;
