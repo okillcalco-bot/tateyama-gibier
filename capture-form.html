@@ -1341,7 +1341,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       o.value = n; o.textContent = n; sel.appendChild(o);
     });
   }
-  const now = new Date();
+  const now = jstNow();
   document.getElementById('captureDate').value = formatDate(now);
   document.getElementById('captureTime').value = formatTime(now);
   if (typeof updateMishitRef === 'function') updateMishitRef();
@@ -1370,12 +1370,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 function formatDate(d) {
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
+// 端末のタイムゾーン設定に依存せず、常に日本時間(JST=UTC+9)の「今」を返す。
+// これにより、端末がUTC等になっていても持込日が前日(例:19日)にずれない。
+function jstNow() {
+  const now = new Date();
+  return new Date(now.getTime() + (now.getTimezoneOffset() + 540) * 60000);
+}
 function formatTime(d) {
   return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
 }
 function setNow(id) {
   const el = document.getElementById(id);
-  el.value = formatTime(new Date());
+  el.value = formatTime(jstNow());
   // 「今」で入れたものは手入力あつかい（自動計算で上書きしない）
   if (el.dataset) el.dataset.autofill = '';
   // elapsedの再計算が必要な場合
@@ -1429,7 +1435,7 @@ function setupTimeInputs() {
   const prc = document.getElementById('processTime');
   if (prc) prc.addEventListener('input', () => { prc.dataset.autofill = ''; });
 }
-function today() { return formatDate(new Date()); }
+function today() { return formatDate(jstNow()); }
 
 /* ── Tabs ── */
 
@@ -1464,7 +1470,8 @@ function renderNameSuggest(inputId, boxId, pickFnName) {
   const list = window._hunterList || [];
   if (!q) { box.style.display = 'none'; box.innerHTML = ''; return; }
   const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const hits = list.filter(h => h.name.includes(raw) || _toHira(h.furi).includes(q) || _toHira(h.name).includes(q)).slice(0, 12);
+  // 先頭一致のみ（後方に一致文字があるだけの人を拾わない）。氏名の先頭 or ふりがなの先頭で判定
+  const hits = list.filter(h => h.name.startsWith(raw) || _toHira(h.furi).startsWith(q) || _toHira(h.name).startsWith(q)).slice(0, 12);
   if (!hits.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
   box.innerHTML = hits.map(h => `<div class="hsg-item" data-name="${esc(h.name)}" data-pick="${pickFnName}">${esc(h.name)}${h.furi ? `<span class="hsg-furi">${esc(h.furi)}</span>` : ''}</div>`).join('');
   box.style.display = 'block';
@@ -2244,7 +2251,7 @@ function toggleEditSearch() {
   panel.style.display = hidden ? '' : 'none';
   if (hidden) {
     const d = document.getElementById('editSearchDate');
-    if (d && !d.value) d.value = (new Date()).toISOString().slice(0, 10);
+    if (d && !d.value) d.value = today();
   }
 }
 async function searchForEdit() {
@@ -2948,7 +2955,7 @@ async function handleSubmit() {
     // 登録後はカメラを強制しない。搬入一覧に溜めて、看板写真は一覧から後でまとめて撮る。
     loadTodayCount();
     resetForm();
-    alert('✅ 搬入登録しました。\n看板写真は「搬入一覧」で個体を開いて「📷 看板つきで撮影」から撮れます（未撮影は 📷未 が目印）。');
+    alert('✅ 搬入登録しました。\n看板写真は「搬入一覧」の各個体にある「📷 撮影」ボタンから撮れます（撮影済みは 📷済 になります）。');
     const _listTab = document.querySelector('.tab[data-tab="list"]');
     if (_listTab) _listTab.click();
 
@@ -3104,8 +3111,8 @@ function resetForm() {
   document.getElementById('indLabelId').value = '';
   document.getElementById('indLabelId').placeholder = '種別・市町村を選択';
 
-  // Reset date/time to now
-  const now = new Date();
+  // Reset date/time to now（JST基準）
+  const now = jstNow();
   document.getElementById('captureDate').value = formatDate(now);
   document.getElementById('captureTime').value = formatTime(now);
   if (typeof updateMishitRef === 'function') updateMishitRef();
@@ -3187,8 +3194,8 @@ function renderList() {
     const emoji = emojiMap[r.species] || '&#x1F43E;';
     const qClass = r.quality === '良' ? 'q-good' : r.quality === '可' ? 'q-ok' : 'q-bad';
     const photoBadge = r.image_url
-      ? '<span style="color:#6a9e5a;font-weight:700;">📷済</span>'
-      : '<span style="color:#d0703c;font-weight:800;">📷未</span>';
+      ? `<button type="button" onclick="event.stopPropagation();photoCapture('${r.id}')" style="background:none;border:none;color:#6a9e5a;font-weight:700;font-size:13px;cursor:pointer;padding:2px 4px;">📷済</button>`
+      : `<button type="button" onclick="event.stopPropagation();photoCapture('${r.id}')" style="background:#d0703c;border:none;color:#fff;font-weight:800;font-size:13px;cursor:pointer;padding:3px 9px;border-radius:6px;">📷 撮影</button>`;
     return `<div class="card" onclick='showBoard(${JSON.stringify(r).replace(/'/g, "&#39;")})'>
       <div class="day-no">${dayNo[r.id] || '-'}</div>
       <div class="card-emoji">${emoji}</div>
@@ -3202,6 +3209,18 @@ function renderList() {
       </div>
     </div>`;
   }).join('');
+}
+
+// 搬入一覧の「📷 撮影」から、その個体の看板つきカメラを直接ひらく（動線を明確に）。
+// 撮影→保存すると image_url が入り、一覧のバッジが「📷済」に変わる。
+function photoCapture(id) {
+  const r = (todayData || []).find(x => String(x.id) === String(id));
+  if (!r) { alert('個体が見つかりませんでした。一覧を更新してください。'); return; }
+  _boardRec = r;
+  _boardAfterRegister = false;
+  _arMode = 'board';
+  _arAfterRegister = false;
+  arStart();   // カメラ起動（左下に看板を合成）→撮影で個体へ保存
 }
 
 /* 大字（capture_area）から旧町村（地区）を逆引き。分からなければ空 */
@@ -3655,6 +3674,13 @@ async function arUploadPhoto(blob) {
   // 登録済み個体で看板写真なら、市役所提出用の主画像として image_url に保存
   if (r.label_id && mode === 'board') {
     await sb('PATCH', 'individuals', { image_url: url }, '?label_id=eq.' + encodeURIComponent(r.label_id));
+    r.image_url = url;   // 手元の記録も即更新（バッジを📷済へ）
+    // 搬入一覧の該当個体も更新して、撮影済みが一覧に反映されるようにする
+    if (Array.isArray(todayData)) {
+      const t = todayData.find(x => x.label_id === r.label_id);
+      if (t) t.image_url = url;
+      if (typeof renderList === 'function') renderList();
+    }
   }
   return url;
 }
