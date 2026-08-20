@@ -2945,9 +2945,12 @@ async function handleSubmit() {
       }
     }
 
-    // 搬入登録の直後は自動で「看板つきカメラ」を開く（ラベル印刷は捕獲票入力では使わない）
-    startCaptureAfterRegister(saved || record);
+    // 登録後はカメラを強制しない。搬入一覧に溜めて、看板写真は一覧から後でまとめて撮る。
     loadTodayCount();
+    resetForm();
+    alert('✅ 搬入登録しました。\n看板写真は「搬入一覧」で個体を開いて「📷 看板つきで撮影」から撮れます（未撮影は 📷未 が目印）。');
+    const _listTab = document.querySelector('.tab[data-tab="list"]');
+    if (_listTab) _listTab.click();
 
   } catch(e) {
     alert('エラー: ' + e.message);
@@ -3123,7 +3126,10 @@ function resetForm() {
 /* ── Today count ── */
 async function loadTodayCount() {
   try {
-    const rows = await sb('GET', 'individuals', null, `?capture_date=eq.${today()}&deleted_at=is.null&select=id`);
+    const _t = today();
+    const _dayStart = new Date(_t + 'T00:00:00+09:00').toISOString();
+    const rows = await sb('GET', 'individuals', null,
+      `?or=(capture_date.eq.${_t},created_at.gte.${_dayStart})&deleted_at=is.null&select=id`);
     document.getElementById('todayCount').textContent = rows.length;
   } catch(e) {
     document.getElementById('todayCount').textContent = '-';
@@ -3133,7 +3139,11 @@ async function loadTodayCount() {
 /* ── List tab ── */
 async function loadList() {
   try {
-    todayData = await sb('GET', 'individuals', null, `?capture_date=eq.${today()}&deleted_at=is.null&order=receive_time.desc`);
+    const _t = today();
+    const _dayStart = new Date(_t + 'T00:00:00+09:00').toISOString(); // 今日(JST)0時をUTCで
+    // 「今日の搬入」＝捕獲日が今日 OR 今日登録した個体（前日以前に獲れて今日搬入した分も出す）
+    todayData = await sb('GET', 'individuals', null,
+      `?or=(capture_date.eq.${_t},created_at.gte.${_dayStart})&deleted_at=is.null&order=receive_time.desc`);
   } catch(e) {
     todayData = [];
   }
@@ -3176,11 +3186,14 @@ function renderList() {
     const emojiMap = {'イノシシ':'&#x1F417;','シカ':'&#x1F98C;','アライグマ':'&#x1F99D;','ハクビシン':'&#x1F43C;','キョン':'&#x1F98C;','タヌキ':'&#x1F99D;','ノウサギ':'&#x1F430;'};
     const emoji = emojiMap[r.species] || '&#x1F43E;';
     const qClass = r.quality === '良' ? 'q-good' : r.quality === '可' ? 'q-ok' : 'q-bad';
+    const photoBadge = r.image_url
+      ? '<span style="color:#6a9e5a;font-weight:700;">📷済</span>'
+      : '<span style="color:#d0703c;font-weight:800;">📷未</span>';
     return `<div class="card" onclick='showBoard(${JSON.stringify(r).replace(/'/g, "&#39;")})'>
       <div class="day-no">${dayNo[r.id] || '-'}</div>
       <div class="card-emoji">${emoji}</div>
       <div class="card-info">
-        <div class="card-label">${(r.serial_number != null ? '#' + r.serial_number + ' ' : '') + (r.label_id || '-')}</div>
+        <div class="card-label">${(r.serial_number != null ? '#' + r.serial_number + ' ' : '') + (r.label_id || '-')}　${photoBadge}</div>
         <div class="card-detail">${r.capture_time || ''} / ${r.hunter_name || '-'}</div>
       </div>
       <div class="card-meta">
