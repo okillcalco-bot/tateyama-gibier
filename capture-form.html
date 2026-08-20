@@ -1151,23 +1151,32 @@ async function refreshIndividualNumber() {
   let labelNum;
   if (species === 'イノシシ') {
     // DBの最大+1を基準にする（端末のカウンタが古いままだと使用済みの番号を出してしまうため）。
-    // 削除済みも含めて見る＝番号は削除しても解放されないため。
+    // 削除済み（deleted_at）は基準から除外＝削除された管理番号も欠番にせず繰り上げて再利用する。
+    // （個体は加工前の試し／誤登録のみ削除する運用のため、在庫・加工ログとの番号衝突は起きない）
     const lsLabelKey = `tgc_next_label_${prefix}`;
-    let dbLabelNext = 1;
+    let dbLabelNext = 1, dbLabelOk = false;
     try {
       const rows = await sb('GET', 'individuals', null,
-        `?label_id=like.TGC-08-${prefix}*&select=label_id&order=label_id.desc&limit=1`);
+        `?label_id=like.TGC-08-${prefix}*&deleted_at=is.null&select=label_id&order=label_id.desc&limit=1`);
       if (rows.length > 0) {
         const n = parseInt(String(rows[0].label_id).replace(`TGC-08-${prefix}`, ''), 10);
         dbLabelNext = isNaN(n) ? 1 : n + 1;
       }
+      dbLabelOk = true;
     } catch (e) { dbLabelNext = 1; }
     // 管理番号も開始番号設定を正とする（端末カウンタのドリフトを無視・自己修復）
     const startLabel = numStart('label_start_' + prefix);
+    const _queueEmptyL = (JSON.parse(localStorage.getItem('tgc_queue') || '[]') || []).length === 0;
     if (startLabel > 0) {
       labelNum = Math.max(dbLabelNext, startLabel);
       localStorage.removeItem(lsLabelKey);
+    } else if (dbLabelOk && _queueEmptyL) {
+      // オンラインで未送信キューも無い＝DBが最新の正。削除で空いた管理番号を繰り上げて再利用し、
+      // 端末カウンタもDBに合わせて下げる（欠番の再発を防ぐ）。
+      labelNum = dbLabelNext;
+      localStorage.setItem(lsLabelKey, String(dbLabelNext));
     } else {
+      // オフライン／未送信あり／DB読取失敗 → 端末カウンタと比較して重複を避ける
       const lsLabel = parseInt(localStorage.getItem(lsLabelKey) || '0') || 0;
       labelNum = Math.max(dbLabelNext, lsLabel);
     }
