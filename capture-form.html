@@ -1108,21 +1108,30 @@ async function refreshIndividualNumber() {
   if (species === 'イノシシ') {
     // 実際に捕獲済み（capture_date あり）の最大+1を基準にする。先に用意した空枠（仮-・捕獲日なし）は
     // まだ埋まっていない予約枠なので、次の番号を先送りしない。空枠の番号は入力時に一致させて埋める。
-    // 削除済み（ソフトデリート）は capture_date が残るので番号を再利用しない。
-    let dbNext = 1;
+    // 削除済み（ソフトデリート）は通し番号の基準から除外する＝削除された番号は欠番にせず繰り上げて
+    // 次の個体で再利用する（試し登録などを消したら、その番号を次の個体が引き継ぐ）。
+    let dbNext = 1, dbOk = false;
     try {
       const rows = await sb('GET', 'individuals', null,
-        `?species=eq.イノシシ&serial_number=not.is.null&capture_date=not.is.null&select=serial_number&order=serial_number.desc&limit=1`);
+        `?species=eq.イノシシ&serial_number=not.is.null&capture_date=not.is.null&deleted_at=is.null&select=serial_number&order=serial_number.desc&limit=1`);
       dbNext = rows.length > 0 ? (rows[0].serial_number || 0) + 1 : 1;
+      dbOk = true;
     } catch(e) { dbNext = 1; }
     // 開始番号設定（app_settings の serial_start）があればそれを正とする。
     // 端末ごとの localStorage カウンタは番号ドリフトの原因になるため、開始番号設定があるときは使わない
     // （さらに古い端末カウンタは消して自己修復する）。設定が無いときだけ端末カウンタを併用。
     const startSerial = numStart('serial_start');
+    const _queueEmpty = (JSON.parse(localStorage.getItem('tgc_queue') || '[]') || []).length === 0;
     if (startSerial > 0) {
       nextSerial = Math.max(dbNext, startSerial);
       localStorage.removeItem('tgc_next_serial_イノシシ');
+    } else if (dbOk && _queueEmpty) {
+      // オンラインで未送信キューも無い＝DBが最新の正。削除で空いた番号(削除済みは除外済み)を
+      // ここで繰り上げて再利用する。端末カウンタもDBに合わせて下げ、欠番を残さない。
+      nextSerial = dbNext;
+      localStorage.setItem('tgc_next_serial_イノシシ', String(dbNext));
     } else {
+      // オフライン／未送信あり／DB読取失敗 → 端末カウンタと比較して重複を避ける（繰り上げより重複回避を優先）
       const lsVal = parseInt(localStorage.getItem('tgc_next_serial_イノシシ') || '0') || 0;
       nextSerial = Math.max(dbNext, lsVal);
     }
