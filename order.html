@@ -47,6 +47,8 @@ input,select,textarea{font-family:inherit;font-size:16px;color:var(--text);
 .rtop{display:flex;align-items:baseline;gap:8px;min-width:0;min-height:24px}
 .rname{flex:1;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rdesc{font-size:11.5px;color:var(--text2);padding:2px 0 4px;line-height:1.6}
+.sliceopt{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);margin:2px 0 4px;cursor:pointer;user-select:none}
+.sliceopt input{width:18px;height:18px;accent-color:var(--gold)}
 .rbot{display:flex;align-items:center;gap:6px;margin-top:2px}
 .rusual{flex:1;font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden}
 .mark{font-size:15px;font-weight:700;line-height:1}
@@ -430,6 +432,7 @@ let listMode = 'stock';      // 'stock'（在庫あり） / 'reserve'（予約�
 let reserveCurrentSpecies = '';
 let reserving = false;       // 予約ボタンの連打ガード
 let qtyState = {};           // product_id → 選択中のkg
+let sliceState = {};         // product_id → スライス加工希望（+¥1000/kg）
 let orderRequestId = null;   // 確認画面へ進んだ時点で発行（再送しても二重注文しない）
 let placing = false;         // 確定ボタンの連打ガード
 let pendingChangeToken = null; // 初回パスワード設定用の短命トークン。メモリのみ・永続化しない（P1-5）
@@ -603,6 +606,15 @@ async function enterList() {
   renderAll();
 }
 
+// スライス加工（+¥1000/kg）を選べる部位か：イノシシ／シカの精肉カットのみ（枝肉・ミンチ・内臓・骨・ペットは対象外）
+function sliceable(p) {
+  if (!(p.species === 'イノシシ' || p.species === 'シカ')) return false;
+  const n = p.display_name || '';
+  if (/枝肉|ミンチ|ペット|骨|内臓|味肉|チチカブ|タン|ハツ|レバ|フワ|マメ|チレ|赤つなぎ/.test(n)) return false;
+  return /ロース|カタ|モモ|バラ|ネック|スネ|ヒレ/.test(n);
+}
+function toggleSlice(pid) { sliceState[pid] = !sliceState[pid]; renderAll(); }
+
 function productRow(p, usualKg) {
   const noPrice = p.unit_price == null;
   const outOfStock = p.mark === '×';
@@ -613,13 +625,17 @@ function productRow(p, usualKg) {
   const inCart = cartGet().some(c => c.product_id === p.product_id);
   const markCls = (p.mark === '◎' || p.mark === '◯') ? 'o' : p.mark === '△' ? 't' : 'x';
   const addLabel = inCart ? '追加済' : (outOfStock ? '取寄' : '追加');
+  const canSlice = sliceable(p) && canOrder;
+  const sliced = !!sliceState[p.product_id];
+  const uprice = noPrice ? null : p.unit_price + (sliced ? 1000 : 0);
   return `<div class="row${!canOrder ? ' out' : ''}" data-pid="${p.product_id}">
     <div class="rtop" ${p.description ? `onclick="toggleDesc('${p.product_id}')" style="cursor:pointer"` : ''}>
       <div class="rname">${esc(p.display_name)}${p.grade_label ? ' <span style="font-size:11px;color:var(--text3)">' + esc(p.grade_label) + '</span>' : ''}${(outOfStock && canOrder) ? ' <span style="font-size:10px;color:var(--amber)">お取り寄せ</span>' : ''}${p.description ? ' <span style="color:var(--text3);font-size:11px">ⓘ</span>' : ''}</div>
       <span class="mark ${markCls}">${p.mark}</span>
-      <span class="price">${noPrice ? '価格はお問い合わせください' : yen(p.unit_price) + '/kg'}</span>
+      <span class="price">${noPrice ? '価格はお問い合わせください' : yen(uprice) + '/kg'}${sliced ? ' <span style="font-size:10px;color:var(--gold)">スライス込</span>' : ''}</span>
     </div>
     ${p.description ? `<div class="rdesc hidden" id="desc-${p.product_id}">${esc(p.description)}</div>` : ''}
+    ${canSlice ? `<label class="sliceopt"><input type="checkbox" ${sliced ? 'checked' : ''} onclick="toggleSlice('${p.product_id}')"> 🔪 スライス加工（＋¥1,000/kg）</label>` : ''}
     <div class="rbot">
       <span class="rusual">${(outOfStock && canOrder) ? '在庫確認中・入荷次第お届け' : (usualKg ? 'いつも' + kg1(usualKg) + 'kg' : '')}</span>
       <div class="qty">
@@ -931,8 +947,10 @@ function qtyStep(pid, dir) {
 function addToCart(pid) {
   const p = catFind(pid); if (!p || p.unit_price == null) return;
   const kg = Number(qtyState[pid] ?? (usualKgOf(pid) || p.min_order_kg));
+  const slice = !!sliceState[pid];
   const cart = cartGet().filter(c => c.product_id !== pid);
-  cart.push({ product_id: pid, name: p.display_name, kg: kg, unit_price: p.unit_price });
+  cart.push({ product_id: pid, name: p.display_name + (slice ? '（スライス）' : ''), kg: kg,
+              unit_price: p.unit_price + (slice ? 1000 : 0), slice: slice });
   cartSet(cart);
   renderAll();
 }
@@ -1039,7 +1057,7 @@ async function placeOrder() {
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 注文を送信しています…';
   try {
     const res = await api.placeOrder(
-      cart.map(c => ({ product_id: c.product_id, kg: c.kg })),
+      cart.map(c => ({ product_id: c.product_id, kg: c.kg, slice: !!c.slice })),
       $('c-date').value, $('c-time').value, $('c-memo').value.trim() || null,
       orderRequestId);                 // 再送しても同じIDなので二重注文にならない
     // 完了画面: ご希望量と概算金額（在庫確保・確定はセンターで行う）
