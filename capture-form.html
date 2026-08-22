@@ -2849,27 +2849,31 @@ async function handleSubmit() {
     // 通し番号（連番）はイノシシのみ。新規登録時にDBの最大+1を自動採番（この次から連番）。
     // ただし、手入力の番号が「先に用意した空枠」（通し番号だけ登録済みで捕獲日が未入力）と一致すれば、
     // 新規行を作らずその空枠に登録する。
+    const prefix = getIndividualPrefix(state.species, state.capture_city);
     let serialForSave = (window.hunterMode || window.staffFieldMode || pending) ? null : serial;
     let matchedPlaceholderId = null;
+    // 先に用意した空枠（通し番号だけの行）に手入力番号が一致すれば、その枠に登録する（従来機能）
     if (!editRecordId && state.species === 'イノシシ' && !window.hunterMode && !window.staffFieldMode && !pending) {
       try {
         const placeholders = await sb('GET', 'individuals', null,
           `?species=eq.イノシシ&serial_number=eq.${serial}&capture_date=is.null&deleted_at=is.null&select=id&limit=1`);
-        if (placeholders.length) {
-          matchedPlaceholderId = placeholders[0].id;
-          serialForSave = serial;
-        } else {
-          const rows = await sb('GET', 'individuals', null, '?species=eq.イノシシ&serial_number=not.is.null&select=serial_number&order=serial_number.desc&limit=1');
-          const dbNext = rows.length ? ((rows[0].serial_number || 0) + 1) : 1;
-          serialForSave = Math.max(dbNext, serial || 0) || dbNext;
-          const sf = document.getElementById('indSerial'); if (sf) sf.value = serialForSave; // 表示・ラベルと一致させる
-        }
-      } catch (e) { serialForSave = serial || null; }
+        if (placeholders.length) { matchedPlaceholderId = placeholders[0].id; serialForSave = serial; }
+      } catch (e) { /* オフライン等。空枠マッチはスキップして通常のAUTO採番に回す */ }
     }
+    // 通常の新規登録＋センター受入（搬入待ち→採番）は「AUTO-<接頭辞>」を送り、DB側トリガに
+    // 原子的採番させる（端末カウンタのドリフトを排除）。空枠マッチ・通常の編集・搬入待ち保存・
+    // 捕獲者モードは対象外（従来どおり）。
+    const useAuto = ((!editRecordId) || window.receiveMode) && !matchedPlaceholderId
+      && !window.hunterMode && !window.staffFieldMode && !pending && !!prefix;
+    // 登録の冪等キー（オフライン再送で二重登録しないため。retry時も同じ値を使う）
+    const _submitRef = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+      : (Date.now().toString(36) + '-' + Math.random().toString(36).slice(2));
 
     const record = {
-      label_id: (window.hunterMode || window.staffFieldMode || pending) ? ('仮-' + Date.now().toString(36).toUpperCase()) : labelId,
-      serial_number: serialForSave,
+      submit_ref: _submitRef,
+      label_id: (window.hunterMode || window.staffFieldMode || pending) ? ('仮-' + Date.now().toString(36).toUpperCase())
+                : (useAuto ? ('AUTO-' + prefix) : labelId),
+      serial_number: useAuto ? null : serialForSave,
       intake_status: (window.hunterMode || window.staffFieldMode || pending) ? '搬入待ち' : (window.receiveMode ? null : undefined),
       species: state.species,
       sex: state.sex,
@@ -2956,24 +2960,34 @@ async function handleSubmit() {
     await svAfterSave(saved || record);
     // 修正の保存後もラベル印刷は出さず、看板つきカメラを開く（撮り直し用）
     if (editMode) { cancelEditMode(); loadTodayCount(); startCaptureAfterRegister(saved || record); return; }
-    // 端末カウンタを進める。ただしイノシシで共有の開始番号設定があるときは、
-    // 端末ドリフト防止のため端末カウンタは書かない（採番は app_settings を正とする）。
-    const _serialKey = getSerialKey(state.species);
-    const _serialShared = state.species === 'イノシシ' && numStart('serial_start') > 0;
-    if (_serialKey && !_serialShared) localStorage.setItem(_serialKey, String(serial + 1));
-    if (state.species === 'イノシシ') {
-      const _prefix = getIndividualPrefix(state.species, state.capture_city);
-      if (numStart('label_start_' + _prefix) <= 0) {
-        const _labelKey = `tgc_next_label_${_prefix}`;
-        const _labelNum = parseInt(document.getElementById('indLabelId').dataset.labelNum || '1');
-        localStorage.setItem(_labelKey, String(_labelNum + 1));
+    // AUTO採番では端末カウンタは採番の権限を持たない（DBが確定）。空枠マッチ等の非AUTO経路のみ
+    // 従来どおり端末カウンタを進める（表示プレビュー用）。
+    if (!useAuto) {
+      const _serialKey = getSerialKey(state.species);
+      const _serialShared = state.species === 'イノシシ' && numStart('serial_start') > 0;
+      if (_serialKey && !_serialShared) localStorage.setItem(_serialKey, String(serial + 1));
+      if (state.species === 'イノシシ') {
+        const _prefix = getIndividualPrefix(state.species, state.capture_city);
+        if (numStart('label_start_' + _prefix) <= 0) {
+          const _labelKey = `tgc_next_label_${_prefix}`;
+          const _labelNum = parseInt(document.getElementById('indLabelId').dataset.labelNum || '1');
+          localStorage.setItem(_labelKey, String(_labelNum + 1));
+        }
       }
     }
 
     // 登録後はカメラを強制しない。搬入一覧に溜めて、看板写真は一覧から後でまとめて撮る。
     loadTodayCount();
     resetForm();
-    alert('✅ 搬入登録しました。\n看板写真は「搬入一覧」の各個体にある「📷 撮影」ボタンから撮れます（撮影済みは 📷済 になります）。');
+    // DBが確定した番号を知らせる（AUTO採番はレスポンスに実番号が入る）。オフライン送信待ちは番号未確定。
+    const _assigned = saved && saved.label_id && !String(saved.label_id).startsWith('AUTO-') && saved.label_id !== record.label_id
+      ? saved.label_id
+      : (saved && saved.label_id && !String(saved.label_id).startsWith('AUTO-') && !useAuto ? saved.label_id : null);
+    const _offlineWait = !saved || String((saved && saved.label_id) || '').startsWith('AUTO-');
+    const _numMsg = _offlineWait
+      ? '（番号は送信時にセンターで確定します）'
+      : (_assigned || (saved && saved.label_id) ? `（個体番号: ${_assigned || saved.label_id}）` : '');
+    alert(`✅ 搬入登録しました。${_numMsg}\n看板写真は「搬入一覧」の各個体にある「📷 撮影」ボタンから撮れます（撮影済みは 📷済 になります）。`);
     const _listTab = document.querySelector('.tab[data-tab="list"]');
     if (_listTab) _listTab.click();
 
@@ -3013,6 +3027,9 @@ async function syncPending() {
     try {
       await sb('POST', 'individuals', record);
     } catch(e) {
+      // submit_ref の一意制約違反(23505/duplicate)＝既に登録済み → キューから外す（再送で二重登録しない）。
+      const msg = String(e && e.message || '');
+      if (/23505|duplicate key|individuals_submit_ref_ukey/i.test(msg)) continue;
       remaining.push(record);
     }
   }
