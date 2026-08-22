@@ -32,6 +32,7 @@ const NAV_ITEMS = [
   { href: "/gibier", label: "ジビエ", icon: "🐗" },
   { href: "/line", label: "捕獲者LINE", icon: "📱" },
   { href: "/gibier/reports", label: "捕獲報告", icon: "📷" },
+  { href: "/gibier/individuals", label: "個体トレース", icon: "🔎" },
   { href: "/hunters", label: "捕獲者の情報", icon: "🏹" },
   { href: "/manual", label: "使い方", icon: "📖" },
 ];
