@@ -3362,16 +3362,26 @@ async function handleShippingScan() {
     // 在庫を取得（削除済みも取得して理由を具体的に返す）
     const rows = await sb('GET', 'inventory', null, `?ident_code=eq.${encodeURIComponent(code)}&select=*`);
     if (!rows.length) {
-      // 見つからないとき、その個体の在庫候補を出して手入力を助ける（末尾の部位コードを外して同一個体を検索）
-      let hint = '';
-      const indBase = code.replace(/-[A-Z]{1,4}\d*(?:-\d+)?$/, '');
-      if (indBase && indBase !== code) {
-        try {
-          const cand = await sb('GET', 'inventory', null, `?ident_code=like.${encodeURIComponent(indBase + '-*')}&status=eq.在庫&deleted_at=is.null&select=ident_code,part_name,weight&order=ident_code`);
-          if (cand.length) hint = `\nこの個体の在庫: ` + cand.map(c => `${c.ident_code}（${c.part_name} ${Number(c.weight || 0).toFixed(1)}kg）`).join(' / ');
-        } catch (_) {}
+      // 識別コードが一致しない（部位がラベルで隠れて読めない等）→ 個体番号でその個体の在庫を出して選ばせる。
+      // 個体番号は 'TGC-08-<接頭辞><番号>' の3セグメント。部位コードが付いていれば外して個体で検索。
+      const segs = code.split('-');
+      const indBase = segs.length >= 4 ? segs.slice(0, 3).join('-') : code;
+      let packs = [];
+      try {
+        packs = await sb('GET', 'inventory', null,
+          `?or=(individual_code.eq.${encodeURIComponent(indBase)},ident_code.like.${encodeURIComponent(indBase + '-*')})&status=eq.在庫&deleted_at=is.null&select=ident_code,part_name,weight&order=ident_code`);
+      } catch (_) {}
+      if (packs.length) {
+        const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/'/g, '&#39;');
+        const btns = packs.map(pk =>
+          `<button type="button" class="btn" style="display:block;width:100%;text-align:left;margin:4px 0;padding:10px;font-size:14px;" `
+          + `onclick="document.getElementById('ship-scan-code').value='${esc(pk.ident_code)}';handleShippingScan();">`
+          + `📦 ${esc(pk.part_name || '-')}　${Number(pk.weight || 0).toFixed(1)}kg　<span style="color:#888;font-size:11px;">${esc(pk.ident_code)}</span></button>`
+        ).join('');
+        shipScanShowResult(false, `個体「${esc(indBase)}」の在庫 ${packs.length}件。割り当てる部位をタップしてください:<div style="margin-top:6px;">${btns}</div>`);
+        return;
       }
-      shipScanFail(`識別コード「${code}」の在庫が見つかりません。ラベルを確認してください。${hint}`); return;
+      shipScanFail(`「${code}」の在庫が見つかりません。ラベルの個体管理番号（例 TGC-08-M134 / TGC-08-シ013）を入力すると、その個体の在庫一覧から選べます。`); return;
     }
     const inv = rows.find(r => !r.deleted_at) || rows[0];
 
