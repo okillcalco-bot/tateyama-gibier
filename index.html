@@ -1662,6 +1662,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <input class="form-input" id="ship-direct-code" placeholder="商品バーコードをスキャン（識別コード）" autocomplete="off" style="flex:1;min-width:240px;font-size:18px;padding:12px 14px;" />
         <button class="btn" onclick="shipDirectScan()" style="font-size:16px;padding:12px 22px;">＋ 追加</button>
       </div>
+      <div id="ship-direct-paused" style="margin-top:10px;"></div>
+      <div id="ship-direct-summary" style="margin-top:10px;"></div>
       <div id="ship-direct-list" style="margin-top:10px;"></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
         <div class="form-group" style="margin:0;flex:1;min-width:220px;"><label>出荷先（お店名を検索 or そのまま入力）</label>
@@ -1669,6 +1671,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <datalist id="shipCustDatalist"></datalist>
         </div>
         <div class="form-group" style="margin:0;flex:1;min-width:180px;"><label>メモ（任意）</label><input class="form-input" id="ship-direct-memo" placeholder="現金払い、後日請求 など" /></div>
+        <button class="btn" id="ship-direct-pause" onclick="shipDirectPause()" style="font-size:15px;padding:12px 18px;" disabled title="今のリストを保存して、別の出荷を先に処理できます">⏸ 一時停止</button>
         <button class="btn btn-primary" id="ship-direct-confirm" onclick="shipDirectConfirm()" style="font-size:16px;padding:12px 24px;" disabled>出荷確定</button>
       </div>
     </div>
@@ -2074,7 +2077,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'inventory') loadInventory();
     if (btn.dataset.tab === 'individuals') indLoad();
     if (btn.dataset.tab === 'processing') loadProcessingSetup();
-    if (btn.dataset.tab === 'shipping') { loadShipping(); loadBaseOrders(); setTimeout(maintainShippingScannerFocus, 50); }
+    if (btn.dataset.tab === 'shipping') { loadShipping(); loadBaseOrders(); shipPausedRender(); setTimeout(maintainShippingScannerFocus, 50); }
     if (btn.dataset.tab === 'punch') loadPunch();
     if (btn.dataset.tab === 'products') loadProducts();
     if (btn.dataset.tab === 'kakou') loadKakou();
@@ -2233,13 +2236,34 @@ document.getElementById('ship-direct-cust').addEventListener('input', shipDirect
 function shipDirectUpdateConfirm() {
   const btn = document.getElementById('ship-direct-confirm');
   if (btn) btn.disabled = !(shipDirectItems.length && document.getElementById('ship-direct-cust').value.trim());
+  const pbtn = document.getElementById('ship-direct-pause');
+  if (pbtn) pbtn.disabled = !shipDirectItems.length;
 }
 
 function shipDirectRender() {
   const box = document.getElementById('ship-direct-list');
+  const sum = document.getElementById('ship-direct-summary');
   if (!shipDirectItems.length) {
     box.innerHTML = '';
+    if (sum) sum.innerHTML = '';
   } else {
+    // ── 部位ごとの重量をリアルタイム集計（種別＋部位でまとめる） ──
+    const g = {};
+    shipDirectItems.forEach(it => {
+      const key = (it.species || '-') + '｜' + (it.part_name || '-');
+      if (!g[key]) g[key] = { species: it.species || '-', part: it.part_name || '-', n: 0, w: 0 };
+      g[key].n++; g[key].w += parseFloat(it.weight) || 0;
+    });
+    const totW = shipDirectItems.reduce((s, i) => s + (parseFloat(i.weight) || 0), 0);
+    const gRows = Object.values(g).sort((a, b) => (a.species + a.part).localeCompare(b.species + b.part, 'ja'))
+      .map(x => `<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 10px;border-top:1px solid var(--border);">
+        <span>${speciesIcon(x.species)} ${x.species}　${x.part}</span>
+        <strong style="white-space:nowrap;">${x.n}点 / ${x.w.toFixed(2)}kg</strong></div>`).join('');
+    if (sum) sum.innerHTML = `<div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+        <div style="padding:7px 10px;background:var(--surface2);font-weight:700;font-size:13px;">📊 部位ごとの重量（リアルタイム）</div>
+        ${gRows}
+        <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 10px;background:var(--surface2);border-top:2px solid var(--border);"><span>合計</span><strong>${shipDirectItems.length}点 / ${totW.toFixed(2)}kg</strong></div>
+      </div>`;
     box.innerHTML = `<table><thead><tr><th>識別コード</th><th>種別</th><th>部位</th><th>重量(kg)</th><th></th></tr></thead><tbody>` +
       shipDirectItems.map((it, idx) => `<tr>
         <td style="color:var(--gold);font-weight:600;">${it.ident_code}</td>
@@ -2247,11 +2271,75 @@ function shipDirectRender() {
         <td>${it.part_name || '-'}</td>
         <td>${it.weight || '-'}</td>
         <td><button class="btn btn-sm" onclick="shipDirectRemove(${idx})">✕ 外す</button></td>
-      </tr>`).join('') +
-      `</tbody></table>
-      <div style="margin-top:6px;font-size:13px;color:var(--text2);">合計 <strong>${shipDirectItems.length}点 / ${shipDirectItems.reduce((s,i)=>s+(parseFloat(i.weight)||0),0).toFixed(2)}kg</strong></div>`;
+      </tr>`).join('') + `</tbody></table>`;
   }
   shipDirectUpdateConfirm();
+  shipPausedRender();
+}
+
+/* ── 出荷（直販）の一時停止・再開。同時に複数件を扱えるよう、作業中のリストを保存して切り替える ── */
+const SHIP_PAUSED_KEY = 'tgc_ship_paused_v1';
+function shipPausedLoad() { try { return JSON.parse(localStorage.getItem(SHIP_PAUSED_KEY) || '[]') || []; } catch (_) { return []; } }
+function shipPausedSave(a) { try { localStorage.setItem(SHIP_PAUSED_KEY, JSON.stringify(a || [])); } catch (_) {} }
+function _shipCurCust() { return (document.getElementById('ship-direct-cust').value || '').trim(); }
+function _shipCurMemo() { return (document.getElementById('ship-direct-memo').value || '').trim(); }
+
+function shipDirectPause() {
+  if (!shipDirectItems.length) { toast('先に商品を追加してください', 'error'); return; }
+  const arr = shipPausedLoad();
+  arr.push({ id: 'p' + Date.now() + '-' + Math.floor(Math.random() * 1000), cust: _shipCurCust(), memo: _shipCurMemo(), items: shipDirectItems.slice(), savedAt: new Date().toISOString() });
+  shipPausedSave(arr);
+  // 保存済みなので消えない。作業欄はクリアして次の出荷を始められるようにする。
+  shipDirectItems = [];
+  document.getElementById('ship-direct-cust').value = '';
+  document.getElementById('ship-direct-memo').value = '';
+  shipDirectRender();
+  toast('一時停止しました。「⏸ 一時停止中」から再開できます', 'info');
+}
+
+function shipPausedResume(id) {
+  const arr = shipPausedLoad();
+  const idx = arr.findIndex(x => x.id === id);
+  if (idx < 0) return;
+  // 作業中があれば失わないよう、先に一時停止へ退避してから対象を再開
+  if (shipDirectItems.length) {
+    arr.push({ id: 'p' + Date.now() + '-' + Math.floor(Math.random() * 1000), cust: _shipCurCust(), memo: _shipCurMemo(), items: shipDirectItems.slice(), savedAt: new Date().toISOString() });
+  }
+  const entry = arr.splice(idx, 1)[0];
+  shipPausedSave(arr);
+  shipDirectItems = (entry.items || []).slice();
+  document.getElementById('ship-direct-cust').value = entry.cust || '';
+  document.getElementById('ship-direct-memo').value = entry.memo || '';
+  shipDirectRender();
+  toast('再開しました: ' + (entry.cust || '（宛先未設定）'), 'info');
+}
+
+function shipPausedDelete(id) {
+  const arr = shipPausedLoad();
+  const e = arr.find(x => x.id === id);
+  const label = e ? (e.cust || '宛先未設定') + '（' + (e.items || []).length + '点）' : '';
+  if (!confirm('この一時停止中の出荷を削除しますか？\n\n' + label + '\n\n※在庫はまだ出荷していないので、在庫のまま残ります。')) return;
+  shipPausedSave(arr.filter(x => x.id !== id));
+  shipPausedRender();
+}
+
+function shipPausedRender() {
+  const box = document.getElementById('ship-direct-paused');
+  if (!box) return;
+  const arr = shipPausedLoad();
+  if (!arr.length) { box.innerHTML = ''; return; }
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/'/g, '&#39;');
+  box.innerHTML = `<div style="border:1px solid var(--gold);border-radius:var(--radius);overflow:hidden;">
+      <div style="padding:7px 10px;background:var(--surface2);font-weight:700;font-size:13px;">⏸ 一時停止中の出荷（${arr.length}件）</div>`
+    + arr.map(e => {
+        const w = (e.items || []).reduce((s, i) => s + (parseFloat(i.weight) || 0), 0);
+        return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-top:1px solid var(--border);flex-wrap:wrap;">
+          <div style="font-size:13px;line-height:1.5;"><strong>${esc(e.cust || '（宛先未設定）')}</strong>　${(e.items || []).length}点 / ${w.toFixed(2)}kg${e.memo ? `<br><span style="color:var(--text2);">${esc(e.memo)}</span>` : ''}</div>
+          <div style="display:flex;gap:6px;flex:none;">
+            <button class="btn btn-sm btn-primary" onclick="shipPausedResume('${e.id}')">▶ 再開</button>
+            <button class="btn btn-sm" onclick="shipPausedDelete('${e.id}')">✕ 削除</button>
+          </div></div>`;
+      }).join('') + `</div>`;
 }
 
 function shipDirectRemove(idx) {
