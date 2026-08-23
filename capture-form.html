@@ -394,6 +394,10 @@ textarea { min-height: 80px; resize: vertical; }
 #arCam { display: none; position: fixed; inset: 0; z-index: 10000; background: #000; }
 #arCam.show { display: block; }
 #arVideo { width: 100%; height: 100%; object-fit: cover; background: #000; }
+/* 横向き保存プレビュー：映像だけ回して、看板(#arBoard/#arWhiteboard)は正立のまま＝保存画像と一致 */
+#arCam.arrot90 #arVideo, #arCam.arrot270 #arVideo { width: 100vh; height: 100vw; position: absolute; top: 50%; left: 50%; }
+#arCam.arrot90 #arVideo { transform: translate(-50%, -50%) rotate(90deg); }
+#arCam.arrot270 #arVideo { transform: translate(-50%, -50%) rotate(-90deg); }
 #arBoard { position: absolute; left: 12px; bottom: 108px; max-width: 74%; background: rgba(0,0,0,.62); color: #fff; border-radius: 12px; padding: 10px 14px; line-height: 1.35; text-shadow: 0 1px 2px rgba(0,0,0,.8); }
 #arBoard .ar-code { font-size: clamp(20px, 6vw, 34px); font-weight: 800; letter-spacing: .02em; }
 #arBoard .ar-line { font-size: clamp(13px, 3.6vw, 19px); font-weight: 600; }
@@ -1025,6 +1029,7 @@ textarea { min-height: 80px; resize: vertical; }
   <div id="arMsg"></div>
   <div class="ar-bar">
     <button type="button" class="ar-btn ar-cancel" onclick="arClose()">✕ 閉じる</button>
+    <button type="button" class="ar-btn ar-rot" id="arRotBtn" onclick="arToggleRot()" title="横向きで保存（看板は正立）">📐 縦</button>
     <button type="button" class="ar-shutter" id="arShutterBtn" onclick="arCapture()" aria-label="撮影"></button>
     <button type="button" class="ar-btn ar-flip" onclick="arFlip()">🔄 切替</button>
   </div>
@@ -3472,6 +3477,18 @@ function boardNewInput() {
 
 /* ── 看板つきカメラ（AR風）── カメラ映像の左下に看板を重ねて撮影→端末保存 ── */
 let _arStream = null, _arFacing = 'environment', _arMsgT = null, _arAfterRegister = false;
+let _arRot = 0;  // 保存画像の向き（0=縦, 90/270=横）。iPhoneは画面が回らないので手動で切替。
+// 「📐 向き」ボタン：縦→横①→横②を巡回。保存する写真が横向きになり、看板は正立で合成される。
+function arToggleRot() {
+  _arRot = _arRot === 0 ? 90 : (_arRot === 90 ? 270 : 0);
+  const btn = document.getElementById('arRotBtn');
+  if (btn) btn.textContent = _arRot === 0 ? '📐 縦' : (_arRot === 90 ? '📐 横①' : '📐 横②');
+  arMsg(_arRot === 0 ? '縦向きで保存します'
+    : '横向きで保存します（看板は正立）。向きが逆なら「📐 横②/①」で切替');
+  // プレビュー映像も回して見た目を近づける（対応環境のみ）
+  const cam = document.getElementById('arCam');
+  if (cam) { cam.classList.remove('arrot90', 'arrot270'); if (_arRot === 90) cam.classList.add('arrot90'); else if (_arRot === 270) cam.classList.add('arrot270'); }
+}
 // 撮影モード: 'board'=受け入れ後の看板（左下・個体情報）／ 'whiteboard'=引き取り記録（右上のみ）
 let _arMode = 'board';
 // 搬入登録の直後に自動でカメラを開く＝受け入れ後の「看板」撮影（ホワイトボードは出さない）
@@ -3599,6 +3616,10 @@ async function arStart() {
 function arStopStream() { if (_arStream) { _arStream.getTracks().forEach(function (t) { t.stop(); }); _arStream = null; } }
 function arClose() {
   arStopStream();
+  // 向きは毎回「縦」に戻す
+  _arRot = 0;
+  const _rb = document.getElementById('arRotBtn'); if (_rb) _rb.textContent = '📐 縦';
+  const _cam = document.getElementById('arCam'); if (_cam) _cam.classList.remove('arrot90', 'arrot270');
   const v = document.getElementById('arVideo'); if (v) v.srcObject = null;
   const wb = document.getElementById('arWhiteboard'); if (wb) wb.classList.remove('show');
   const arBoardEl = document.getElementById('arBoard'); if (arBoardEl) arBoardEl.style.display = '';
@@ -3658,20 +3679,33 @@ async function arCapture() {
   const cw = v.clientWidth || window.innerWidth;
   const ch = v.clientHeight || window.innerHeight;
   const dpr = Math.min(3, window.devicePixelRatio || 1);   // 端末解像度で鮮明に。3倍で頭打ち（ファイル肥大防止）
-  const outW = Math.round(cw * dpr), outH = Math.round(ch * dpr);
+  const land = (_arRot === 90 || _arRot === 270);
+  // 論理サイズ(CSS px): 縦は cw×ch、横は回転して ch×cw
+  const logW = land ? ch : cw, logH = land ? cw : ch;
+  const outW = Math.round(logW * dpr), outH = Math.round(logH * dpr);
   const cv = document.getElementById('arCanvas');
   cv.width = outW; cv.height = outH;
   const ctx = cv.getContext('2d');
-  // cover トリミング: 画面に映っている映像の可視領域だけを切り出す（プレビューと一致）
+  // cover トリミング: 画面に映っている映像の可視領域だけを切り出す（縦見え cw×ch 基準）
   const coverScale = Math.max(cw / vw, ch / vh);
   const sW = cw / coverScale, sH = ch / coverScale;
   const sx = (vw - sW) / 2, sy = (vh - sH) / 2;
-  ctx.drawImage(v, sx, sy, sW, sH, 0, 0, outW, outH);
-  // 看板/ホワイトボードは画面と同じ CSS px 座標で描く（× dpr）。→ プレビューと保存の大きさが一致。
+  // 映像を描く。横向き指定時は、縦見えを±90°回して横向き画像にする（iPhoneは画面が回らないため）。
+  ctx.save();
+  if (land) {
+    ctx.translate(outW / 2, outH / 2);
+    ctx.rotate(_arRot * Math.PI / 180);
+    ctx.translate(-cw * dpr / 2, -ch * dpr / 2);
+    ctx.drawImage(v, sx, sy, sW, sH, 0, 0, cw * dpr, ch * dpr);
+  } else {
+    ctx.drawImage(v, sx, sy, sW, sH, 0, 0, outW, outH);
+  }
+  ctx.restore();
+  // 看板/ホワイトボードは最終フレームに正立で描く（横なら landscape の logW×logH 座標）。
   ctx.save();
   ctx.scale(dpr, dpr);
-  if (_arMode === 'whiteboard') arDrawWhiteboard(ctx, cw, ch, arWhiteboardData(_boardRec));
-  else arDrawBoard(ctx, cw, ch, arBoardData(_boardRec));
+  if (_arMode === 'whiteboard') arDrawWhiteboard(ctx, logW, logH, arWhiteboardData(_boardRec));
+  else arDrawBoard(ctx, logW, logH, arBoardData(_boardRec));
   ctx.restore();
 
   const stamp = ((_boardRec && _boardRec.label_id) || 'photo').replace(/[^\w-]/g, '_');
