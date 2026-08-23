@@ -1662,6 +1662,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <input class="form-input" id="ship-direct-code" placeholder="商品バーコードをスキャン（識別コード）" autocomplete="off" style="flex:1;min-width:240px;font-size:18px;padding:12px 14px;" />
         <button class="btn" onclick="shipDirectScan()" style="font-size:16px;padding:12px 22px;">＋ 追加</button>
       </div>
+      <div style="font-size:12px;color:var(--text2);margin-top:4px;">バーコードが読めない時は<strong>個体管理番号（例 TGC-08-M134）だけ</strong>入力しても、その個体の在庫から部位を選べます。</div>
+      <div id="ship-direct-pick" style="margin-top:8px;"></div>
       <div id="ship-direct-paused" style="margin-top:10px;"></div>
       <div id="ship-direct-summary" style="margin-top:10px;"></div>
       <div id="ship-direct-list" style="margin-top:10px;"></div>
@@ -2387,7 +2389,11 @@ async function shipDirectScan() {
   try {
     const invs = await sb('GET', 'inventory', null, `?ident_code=eq.${encodeURIComponent(code)}&deleted_at=is.null&select=id,ident_code,part_name,weight,species,individual_id,status`);
     if (!invs.length) {
-      toast(`在庫に「${code}」が見つかりません。ラベルの識別コードを確認してください`, 'error');
+      // 識別コードが一致しない → 個体番号（3セグメント）としてその個体の在庫を出し、部位を選ばせる
+      const segs = code.split('-');
+      const indBase = segs.length >= 4 ? segs.slice(0, 3).join('-') : code;
+      const shown = await shipDirectShowPicker(indBase);
+      if (!shown) toast(`「${code}」が見つかりません。ラベルの識別コード、または個体管理番号（例 TGC-08-M134）を入力してください`, 'error');
       playFeedbackSound(false);
       return;
     }
@@ -2407,10 +2413,41 @@ async function shipDirectScan() {
     shipDirectRender();
     playFeedbackSound(true);
     toast(`追加: ${inv.ident_code}（${inv.part_name || '-'} ${inv.weight || '?'}kg）`);
+    // 個体ピッカー表示中で同じ個体を足したら、続けて他の部位も選べるよう更新（追加済みは✓）
+    const pk = document.getElementById('ship-direct-pick');
+    if (window._shipPickIndBase && inv.ident_code.startsWith(window._shipPickIndBase + '-')) shipDirectShowPicker(window._shipPickIndBase);
+    else if (pk) { pk.innerHTML = ''; window._shipPickIndBase = null; }
   } catch(e) {
     toast('読み取りエラー: ' + e.message, 'error');
     playFeedbackSound(false);
   }
+}
+
+// 個体番号から在庫の部位ピッカーを表示（追加はタップで shipDirectScan 経由）。追加済みは✓表示。
+async function shipDirectShowPicker(indBase) {
+  const pick = document.getElementById('ship-direct-pick');
+  window._shipPickIndBase = indBase;
+  let packs = [];
+  try {
+    packs = await sb('GET', 'inventory', null,
+      `?or=(individual_code.eq.${encodeURIComponent(indBase)},ident_code.like.${encodeURIComponent(indBase + '-*')})&status=eq.在庫&deleted_at=is.null&select=ident_code,part_name,weight&order=ident_code`);
+  } catch (_) {}
+  if (!pick) return packs.length > 0;
+  if (!packs.length) { pick.innerHTML = ''; window._shipPickIndBase = null; return false; }
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/'/g, '&#39;');
+  const added = new Set(shipDirectItems.map(i => i.ident_code));
+  const btns = packs.map(p => {
+    const done = added.has(p.ident_code);
+    return `<button type="button" class="btn" ${done ? 'disabled' : ''} style="display:block;width:100%;text-align:left;margin:4px 0;padding:10px;font-size:14px;${done ? 'opacity:.5;' : ''}" `
+      + `onclick="document.getElementById('ship-direct-code').value='${esc(p.ident_code)}';shipDirectScan();">`
+      + `${done ? '✓ 追加済 ' : '📦 '}${esc(p.part_name || '-')}　${Number(p.weight || 0).toFixed(1)}kg　<span style="color:#888;font-size:11px;">${esc(p.ident_code)}</span></button>`;
+  }).join('');
+  pick.innerHTML = `<div style="border:1px solid var(--gold);border-radius:var(--radius);padding:8px 10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <span style="font-weight:700;font-size:13px;">個体「${esc(indBase)}」の在庫 ${packs.length}件 — 追加する部位をタップ</span>
+        <button type="button" class="btn btn-sm" onclick="document.getElementById('ship-direct-pick').innerHTML='';window._shipPickIndBase=null;">✕ 閉じる</button>
+      </div>${btns}</div>`;
+  return true;
 }
 
 async function shipDirectConfirm() {
