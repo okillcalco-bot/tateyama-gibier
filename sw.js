@@ -1,7 +1,8 @@
 // Service Worker for 館山ジビエセンター アプリ
-// v3: 同一オリジンのGETだけを扱う（Supabase等のAPIには一切さわらない）。
+// v4: 同一オリジンのGETだけを扱う（Supabase等のAPIには一切さわらない）。
 //     正常応答(res.ok)のみキャッシュし、404などのエラー応答は残さない。
-const CACHE = 'gibier-v3';
+//     画面(HTML)はブラウザHTTPキャッシュを迂回して必ず最新を取得（更新が反映されない問題の対策）。
+const CACHE = 'gibier-v4';
 const STATIC_ASSETS = ['manual-app.html', 'manifest.json'];
 
 self.addEventListener('install', e => {
@@ -37,9 +38,11 @@ self.addEventListener('fetch', e => {
   const isPage = req.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('.html');
 
   if (isPage) {
-    // 画面は必ずネットワーク優先。つながらないときだけキャッシュを出す
+    // 画面は必ずネットワーク優先。かつブラウザのHTTPキャッシュを迂回(no-store)して常に最新を取得する。
+    // （network-firstでも fetch がHTTPキャッシュの古いHTMLを返すと更新が反映されないため）。
+    // つながらないときだけキャッシュを出す。
     e.respondWith(
-      fetch(req)
+      fetch(req, { cache: 'no-store' })
         .then(res => cachePut(req, res))
         .catch(() => caches.match(req).then(c => c || caches.match('manual-app.html')))
     );

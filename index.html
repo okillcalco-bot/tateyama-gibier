@@ -2077,7 +2077,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'inventory') loadInventory();
     if (btn.dataset.tab === 'individuals') indLoad();
     if (btn.dataset.tab === 'processing') loadProcessingSetup();
-    if (btn.dataset.tab === 'shipping') { loadShipping(); loadBaseOrders(); shipPausedRender(); setTimeout(maintainShippingScannerFocus, 50); }
+    if (btn.dataset.tab === 'shipping') { loadShipping(); loadBaseOrders(); shipPausedRender(); shipActiveRestore(); setTimeout(maintainShippingScannerFocus, 50); }
     if (btn.dataset.tab === 'punch') loadPunch();
     if (btn.dataset.tab === 'products') loadProducts();
     if (btn.dataset.tab === 'kakou') loadKakou();
@@ -2231,7 +2231,8 @@ let shipDirectItems = [];
 document.getElementById('ship-direct-code').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); shipDirectScan(); }
 });
-document.getElementById('ship-direct-cust').addEventListener('input', shipDirectUpdateConfirm);
+document.getElementById('ship-direct-cust').addEventListener('input', () => { shipDirectUpdateConfirm(); shipActiveSave(); });
+document.getElementById('ship-direct-memo').addEventListener('input', shipActiveSave);
 
 function shipDirectUpdateConfirm() {
   const btn = document.getElementById('ship-direct-confirm');
@@ -2275,6 +2276,31 @@ function shipDirectRender() {
   }
   shipDirectUpdateConfirm();
   shipPausedRender();
+  shipActiveSave();   // 作業中のリストを端末に保存（リロードで消えないように）
+}
+
+/* ── 作業中の直販リストを端末に自動保存／復元（リロードでスキャン済みが消えないように） ── */
+const SHIP_ACTIVE_KEY = 'tgc_ship_active_v1';
+function shipActiveSave() {
+  try {
+    if (shipDirectItems.length) {
+      localStorage.setItem(SHIP_ACTIVE_KEY, JSON.stringify({ items: shipDirectItems, cust: _shipCurCust(), memo: _shipCurMemo() }));
+    } else {
+      localStorage.removeItem(SHIP_ACTIVE_KEY);
+    }
+  } catch (_) {}
+}
+function shipActiveRestore() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SHIP_ACTIVE_KEY) || 'null');
+    if (s && Array.isArray(s.items) && s.items.length) {
+      shipDirectItems = s.items;
+      const c = document.getElementById('ship-direct-cust'); if (c && s.cust) c.value = s.cust;
+      const m = document.getElementById('ship-direct-memo'); if (m && s.memo) m.value = s.memo;
+      shipDirectRender();
+      toast('前回スキャン中だった直販リストを復元しました', 'info');
+    }
+  } catch (_) {}
 }
 
 /* ── 出荷（直販）の一時停止・再開。同時に複数件を扱えるよう、作業中のリストを保存して切り替える ── */
