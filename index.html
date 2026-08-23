@@ -2261,7 +2261,7 @@ function shipDirectRemove(idx) {
 
 async function shipDirectScan() {
   const input = document.getElementById('ship-direct-code');
-  const code = (input.value || '').trim();
+  const code = normIdent(input.value);
   input.value = '';
   input.focus();
   if (!code) return;
@@ -2394,6 +2394,8 @@ async function barcodeLookup(code) {
       }
       return;
     }
+    // 全角/小文字/空白/共通頭の省略を吸収（短縮バーコード・手入力両対応）
+    code = normIdent(code);
     let items = await sb('GET', 'inventory', null, `?ident_code=eq.${encodeURIComponent(code)}&select=*`);
     if (items.length) {
       showDetailModal(items[0]);
@@ -3005,7 +3007,8 @@ function pmQuickSearch(q) {
 
 /* ===== Traceability ===== */
 async function traceSearch() {
-  const code = document.getElementById('trace-search').value.trim();
+  // 全角/小文字/空白/共通頭の省略を吸収（識別コード・個体番号どちらの手入力も拾いやすく）
+  const code = normIdent(document.getElementById('trace-search').value);
   if (!code) return;
   const resultEl = document.getElementById('trace-result');
   resultEl.innerHTML = '<div class="loading"><span class="spin"></span>検索中...</div>';
@@ -3331,7 +3334,8 @@ async function handleShippingScan() {
   if (shippingScanBusy) return;
   const input = document.getElementById('ship-scan-code');
   const btn = document.getElementById('ship-scan-submit');
-  const code = (input.value || '').trim();
+  // 全角/小文字/空白/共通頭の省略を吸収して照合（手入力・短縮バーコード両対応）
+  const code = normIdent(input.value);
 
   if (!code) {
     shipScanFail('バーコードが空です。スキャンし直すか、識別コードを入力してください。');
@@ -3357,7 +3361,18 @@ async function handleShippingScan() {
 
     // 在庫を取得（削除済みも取得して理由を具体的に返す）
     const rows = await sb('GET', 'inventory', null, `?ident_code=eq.${encodeURIComponent(code)}&select=*`);
-    if (!rows.length) { shipScanFail(`識別コード「${code}」の在庫が見つかりません。ラベルを確認してください。`); return; }
+    if (!rows.length) {
+      // 見つからないとき、その個体の在庫候補を出して手入力を助ける（末尾の部位コードを外して同一個体を検索）
+      let hint = '';
+      const indBase = code.replace(/-[A-Z]{1,4}\d*(?:-\d+)?$/, '');
+      if (indBase && indBase !== code) {
+        try {
+          const cand = await sb('GET', 'inventory', null, `?ident_code=like.${encodeURIComponent(indBase + '-*')}&status=eq.在庫&deleted_at=is.null&select=ident_code,part_name,weight&order=ident_code`);
+          if (cand.length) hint = `\nこの個体の在庫: ` + cand.map(c => `${c.ident_code}（${c.part_name} ${Number(c.weight || 0).toFixed(1)}kg）`).join(' / ');
+        } catch (_) {}
+      }
+      shipScanFail(`識別コード「${code}」の在庫が見つかりません。ラベルを確認してください。${hint}`); return;
+    }
     const inv = rows.find(r => !r.deleted_at) || rows[0];
 
     if (inv.deleted_at) { shipScanFail(`「${code}」は削除済みの在庫です。割当できません。`); return; }
@@ -4045,6 +4060,25 @@ function asciiLabel(s) {
     if (code >= 32 && code <= 126) return ch;
     return KANA_ROMAJI[ch] !== undefined ? KANA_ROMAJI[ch] : 'X';
   }).join('');
+}
+
+// バーコードに載せる短縮コード：共通の頭 'TGC-08-' を省いてバーの密度を下げる（読取安定）。
+// 例: 'TGC-08-M134-PF2' → 'M134-PF2' / 'TGC-08-SHI013-PF2' → 'SHI013-PF2'。
+// 人が読む識別コード(.bct)や在庫DBのident_codeはフル桁のまま。スキャン側でnormIdentが頭を補完する。
+function shortIdent(full) { return String(full || '').replace(/^TGC-08-/i, ''); }
+
+// 手入力・スキャン照合用の正規化：全角→半角・大文字化・空白除去・共通頭'TGC-08-'の補完。
+// フル桁('TGC-08-...')も短縮桁('M134-PF2')も同じフル桁に寄せて照合できる。
+function normIdent(raw) {
+  let s = String(raw == null ? '' : raw)
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/[－ー−]/g, '-')
+    .replace(/\s+/g, '')
+    .trim()
+    .toUpperCase();
+  if (!s) return '';
+  if (!s.startsWith('TGC')) s = 'TGC-08-' + s;   // 短縮コードに共通頭を補う
+  return s;
 }
 
 // ── ロットコード生成 ──
@@ -5067,7 +5101,8 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
   const expiryStr   = expiryDate.toLocaleDateString('ja-JP');
 
   // ── バーコードSVG生成（自前エンコーダー・外部依存なし）──
-  const barcodeSection = makeCode128SVG(identCode);
+  // 共通頭'TGC-08-'を省いた短縮コードをバーコード化してバー密度を下げる（読取安定）。人が読む.bctはフル桁。
+  const barcodeSection = makeCode128SVG(shortIdent(identCode));
 
   // ── iframe に書き込んで印刷 ──
   const iframe = document.createElement('iframe');
@@ -7263,7 +7298,7 @@ function kkPrintLabels(packs, prodName, species, origin, materials) {
     <div class="ex">消費期限　${expiryStr}</div>
     <div class="tmp">保存温度　-18℃以下</div>
     ${rawLine ? `<div class="rw">${esc2(rawLine)}</div>` : ''}
-    <div class="bc">${makeCode128SVG(p.ident_code)}</div>
+    <div class="bc">${makeCode128SVG(shortIdent(p.ident_code))}</div>
     <div class="bct">${esc2(p.ident_code)}</div>
     <div class="mk">館山ジビエセンター</div>
     <div class="ad">千葉県館山市西長田1163-5</div>
