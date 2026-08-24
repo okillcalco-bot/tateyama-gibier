@@ -640,9 +640,29 @@ th,td{padding:8px 6px;font-size:.8rem}
           <datalist id="moCustomerList"></datalist>
           <input type="hidden" id="moCustomer">
           <div id="moCustomerHit" style="font-size:.78rem;color:var(--text2);margin-top:4px;"></div>
+          <button type="button" class="btn btn-outline btn-sm" style="margin-top:6px" onclick="moToggleNewCustomer()">＋ 新規のお客様を登録</button>
         </div>
         <div class="form-group"><label>受注チャネル</label>
           <select id="moChannel"><option>電話</option><option>FAX</option><option>メール</option><option>直接</option></select>
+        </div>
+      </div>
+      <!-- メッセージだけで来た未登録の人を、その場で登録して使う -->
+      <div id="moNewCustomer" style="display:none;border:1px dashed var(--gold);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;background:var(--surface2);">
+        <div style="font-size:12.5px;color:var(--gold);font-weight:700;margin-bottom:8px">新規のお客様を登録して使う</div>
+        <div class="form-row">
+          <div class="form-group"><label>店舗名・お名前（必須）</label><input type="text" id="mnName"></div>
+          <div class="form-group"><label>カナ</label><input type="text" id="mnKana"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>電話</label><input type="text" id="mnPhone"></div>
+          <div class="form-group"><label>価格パターン</label>
+            <select id="mnRank"><option value="standard">スタンダード</option><option value="local">ローカル</option><option value="startmember">スタートメンバー</option></select></div>
+        </div>
+        <div class="form-group"><label>住所</label><input type="text" id="mnAddress"></div>
+        <div class="form-group"><label>別の読み方・呼び名（検索用・改行区切り・任意）</label><textarea id="mnAliases" rows="2" placeholder="例）エフユーアイジャパン"></textarea></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn-gold btn-sm" onclick="moSaveNewCustomer()">登録して使う</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="moToggleNewCustomer(false)">閉じる</button>
         </div>
       </div>
       <div class="form-row">
@@ -767,6 +787,9 @@ th,td{padding:8px 6px;font-size:.8rem}
       <div class="form-group"><label>カナ</label><input type="text" id="cfKana"></div>
       <div class="form-group"><label>電話</label><input type="text" id="cfPhone"></div>
     </div>
+    <div class="form-group"><label>別の読み方・呼び名（検索用・改行区切り）</label>
+      <textarea id="cfAliases" rows="2" placeholder="例）エフユーアイジャパン&#10;植山"></textarea>
+      <div style="font-size:.72rem;color:var(--text2);margin-top:2px">ここに入れた語でも検索・手入力注文で見つかります（複数可。植山さん＝エフユーアイジャパン 等）</div></div>
     <div class="form-group"><label>住所</label><input type="text" id="cfAddress"></div>
     <div class="form-group"><label>建物名</label><input type="text" id="cfBuilding"></div>
     <div class="form-row">
@@ -1713,7 +1736,7 @@ async function generateDoc(type){
 function renderCustomers(){
   const search=(document.getElementById('custSearch')?.value||'').toLowerCase();
   let filtered=allCustomers;
-  if(search) filtered=filtered.filter(c=>(c.name||'').toLowerCase().includes(search)||(c.code||'').toLowerCase().includes(search)||(c.phone||'').includes(search)||(c.kana||'').toLowerCase().includes(search));
+  if(search) filtered=filtered.filter(c=>(c.name||'').toLowerCase().includes(search)||(c.code||'').toLowerCase().includes(search)||(c.phone||'').includes(search)||(c.kana||'').toLowerCase().includes(search)||(Array.isArray(c.search_aliases)&&c.search_aliases.some(a=>(a||'').toLowerCase().includes(search))));
   if(document.getElementById('custStarOnly')?.checked) filtered=filtered.filter(c=>custStarState(c).on);
   custFiltered=filtered;
   renderPortalPreview();
@@ -2170,7 +2193,7 @@ async function custNextCode(){
 async function openAddCustomer(){
   document.getElementById('custModalTitle').textContent='顧客追加';
   document.getElementById('custEditId').value='';
-  ['cfName','cfKana','cfPhone','cfAddress','cfBuilding','cfContact','cfEmail','cfCompany1','cfCompany2','cfReqCode','cfReqPhone','cfDefaultItem','cfLoginId'].forEach(id=>document.getElementById(id).value='');
+  ['cfName','cfKana','cfPhone','cfAddress','cfBuilding','cfContact','cfEmail','cfCompany1','cfCompany2','cfReqCode','cfReqPhone','cfDefaultItem','cfLoginId','cfAliases'].forEach(id=>document.getElementById(id).value='');
   document.querySelectorAll('.cf-carrier').forEach(cb=>cb.checked=false);
   document.getElementById('cfHonorific').value='様';
   document.getElementById('cfTimeZone').value='0000';
@@ -2191,6 +2214,7 @@ function openEditCustomer(id){
   document.getElementById('cfCode').value=c.code||'';
   document.getElementById('cfName').value=c.name||'';
   document.getElementById('cfKana').value=c.kana||'';
+  document.getElementById('cfAliases').value=(Array.isArray(c.search_aliases)?c.search_aliases:[]).join('\n');
   document.getElementById('cfPhone').value=c.phone||'';
   document.getElementById('cfAddress').value=c.address||'';
   document.getElementById('cfBuilding').value=c.building||'';
@@ -2341,6 +2365,10 @@ function pwiPrint(){
   const w=window.open('','_blank'); if(w){w.document.open();w.document.write(html);w.document.close();}
 }
 
+// 検索用エイリアスの文字列（改行・読点・カンマ区切り）を配列へ。空・重複は除去。
+function parseAliases(s){
+  return [...new Set(String(s||'').split(/[\n,、，]+/).map(x=>x.trim()).filter(Boolean))];
+}
 async function saveCustomer(){
   const id=document.getElementById('custEditId').value;
   const phone=document.getElementById('cfPhone').value;
@@ -2348,6 +2376,7 @@ async function saveCustomer(){
     code:document.getElementById('cfCode').value,
     name:document.getElementById('cfName').value,
     kana:document.getElementById('cfKana').value,
+    search_aliases:parseAliases(document.getElementById('cfAliases').value),
     phone:phone,
     address:document.getElementById('cfAddress').value,
     building:document.getElementById('cfBuilding').value,
@@ -2496,9 +2525,60 @@ function populateCustomerDropdowns(){
   // 手入力注文の顧客検索（datalist・予測変換）
   const dl=document.getElementById('moCustomerList');
   if(dl){
-    dl.innerHTML=allCustomers.filter(c=>c.is_active!==false).map(c=>
-      `<option value="${esc(c.code)} ${esc(c.name)}">${esc(c.kana||'')} / ${esc(c.phone||'')}</option>`).join('');
+    const act=allCustomers.filter(c=>c.is_active!==false);
+    const main=act.map(c=>`<option value="${esc(c.code)} ${esc(c.name)}">${esc(c.kana||'')} / ${esc(c.phone||'')}</option>`);
+    // 別の読み方・呼び名でも候補に出す（入力すると本人に解決される）
+    const alias=[];
+    act.forEach(c=>(Array.isArray(c.search_aliases)?c.search_aliases:[]).forEach(a=>{ if(a) alias.push(`<option value="${esc(a)}">→ ${esc(c.code)} ${esc(c.name)}</option>`); }));
+    dl.innerHTML=main.concat(alias).join('');
   }
+}
+
+// 手入力注文：新規のお客様の登録欄を開閉する
+function moToggleNewCustomer(show){
+  const box=document.getElementById('moNewCustomer');
+  const open = (show===undefined) ? (box.style.display==='none') : !!show;
+  box.style.display = open ? '' : 'none';
+  if(open){
+    // 検索欄に打ちかけの名前があれば新規の名前欄へ引き継ぐ
+    const typed=(document.getElementById('moCustomerInput').value||'').trim();
+    if(typed && !document.getElementById('moCustomer').value) document.getElementById('mnName').value=typed;
+    setTimeout(()=>document.getElementById('mnName').focus(),50);
+  }else{
+    ['mnName','mnKana','mnPhone','mnAddress','mnAliases'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('mnRank').value='standard';
+  }
+}
+// 手入力注文：新規のお客様を登録して、その注文の宛先として選択する
+async function moSaveNewCustomer(){
+  const name=(document.getElementById('mnName').value||'').trim();
+  if(!name){alert('店舗名・お名前を入力してください');return}
+  const data={
+    code:await custNextCode(),
+    name:name,
+    kana:document.getElementById('mnKana').value.trim(),
+    phone:document.getElementById('mnPhone').value.trim(),
+    address:document.getElementById('mnAddress').value.trim(),
+    price_rank:document.getElementById('mnRank').value,
+    search_aliases:parseAliases(document.getElementById('mnAliases').value),
+    honorific:'様',
+    is_active:true
+  };
+  data.portal_login_id=data.code;
+  try{
+    const [row]=await sb('POST','customers',[data]);
+    if(!row||!row.id) throw new Error('登録結果が取得できませんでした');
+    allCustomers.push(row);
+    // この注文の宛先として選択
+    document.getElementById('moCustomer').value=row.id;
+    document.getElementById('moCustomerInput').value=`${row.code} ${row.name}`;
+    const hit=document.getElementById('moCustomerHit');
+    hit.style.color='var(--gold)';
+    hit.textContent=`✓ ${row.code} ${row.name}（新規登録・${rankLabel(row.price_rank)}）`;
+    onMoCustomerChange();
+    populateCustomerDropdowns();   // 検索候補（datalist）を更新
+    moToggleNewCustomer(false);
+  }catch(e){alert('顧客の登録エラー: '+(e&&e.message?e.message:e))}
 }
 
 // 手入力注文：検索欄の入力から顧客を確定する
@@ -2511,7 +2591,8 @@ function onMoCustomerInput(){
   let c=allCustomers.find(x=>`${x.code} ${x.name}`===v)
     || allCustomers.filter(x=>x.is_active!==false).find(x=>
         (x.name||'').toLowerCase().includes(lv)||(x.kana||'').toLowerCase().includes(lv)||
-        (x.code||'').toLowerCase().includes(lv)||(x.phone||'').includes(v));
+        (x.code||'').toLowerCase().includes(lv)||(x.phone||'').includes(v)||
+        (Array.isArray(x.search_aliases)&&x.search_aliases.some(a=>(a||'').toLowerCase().includes(lv))));
   if(c){
     document.getElementById('moCustomer').value=c.id;
     hit.style.color='var(--gold)';
