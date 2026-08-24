@@ -80,6 +80,8 @@ th{text-align:left;font-size:12px;font-weight:500;color:var(--text2);padding:8px
 th:hover{color:var(--gold);}
 td{padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle;}
 tr:hover td{background:var(--surface2);}
+/* 個体一覧: 各セルを1行に（横画面で「イノシ/シ」等の2段折返しを防ぐ）。あふれる分は親のoverflow-x:autoで横スクロール */
+#ind-table td{white-space:nowrap;}
 
 /* Badges */
 .badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600;letter-spacing:0.3px;}
@@ -590,7 +592,11 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <option value="">種別：全て</option>
           <option value="イノシシ">イノシシ</option>
           <option value="シカ">シカ</option>
+          <option value="キョン">キョン</option>
           <option value="アライグマ">アライグマ</option>
+          <option value="ハクビシン">ハクビシン</option>
+          <option value="タヌキ">タヌキ</option>
+          <option value="ノウサギ">ノウサギ</option>
         </select>
         <label style="font-size:13px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer;">
           <input type="checkbox" id="indSelectAll" onchange="indToggleAll(this.checked)"> 全選択
@@ -5464,8 +5470,6 @@ function indRender() {
     <td>${i.hunter_name || '-'}</td>
     <td>${i.quality || '-'}</td>
     <td style="white-space:nowrap;">
-      <button class="btn btn-sm" onclick="findingsOpen('${i.label_id}')" title="胎児の有無・内臓所見（解体中でも追記OK）">🔬 所見</button>
-      <a class="btn btn-sm" href="capture-form.html?cityform=${encodeURIComponent(i.label_id)}" target="_blank" title="市役所提出用の有害鳥獣捕獲票を印刷">🏛 市役所票</a>
       <button class="btn btn-sm" onclick="indOpenEdit('${i.label_id}')">編集</button>
       <button class="btn btn-sm btn-danger" onclick="indDelete('${i.label_id}')">削除</button>
     </td>
