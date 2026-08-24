@@ -1656,6 +1656,13 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px;">
         <div class="form-group" style="margin:0;"><label>出荷担当者</label><select class="form-input" id="ship-operator" style="max-width:220px;"><option value="">担当者を選択...</option></select></div>
       </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px;padding:8px 12px;border:1px dashed var(--border);border-radius:var(--radius);background:var(--surface2);">
+        <span style="font-size:12.5px;color:var(--gold);font-weight:700;">🚚 配送</span>
+        <div class="form-group" style="margin:0;"><label>業者</label><select class="form-input" id="ship-carrier" style="max-width:130px;" onchange="shipFreightPreview()"><option value="ヤマト">ヤマト運輸</option><option value="佐川">佐川急便</option></select></div>
+        <div class="form-group" style="margin:0;"><label>サイズ</label><select class="form-input" id="ship-size" style="max-width:110px;" onchange="shipFreightPreview()"><option value="60">60</option><option value="80">80</option><option value="100" selected>100</option><option value="120">120</option><option value="140">140</option><option value="160">160</option><option value="180">180</option><option value="200">200</option></select></div>
+        <label style="font-size:13px;color:var(--text2);display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="ship-cool" checked onchange="shipFreightPreview()"> クール便</label>
+        <span id="ship-freight-preview" style="font-size:13px;color:var(--text2);"></span>
+      </div>
       <div id="ship-scan-result" style="display:none;margin-top:12px;padding:12px 14px;border-radius:var(--radius);font-size:14px;line-height:1.6;"></div>
     </div>
 
@@ -3352,6 +3359,7 @@ async function shipSelectOrder(orderId) {
     el.style.color = 'var(--text)';
     el.innerHTML = `📌 割当先: <strong style="color:var(--gold);">注文 ${shipOrderLabel(cached.order)}</strong> / ${cached.order.customer_name || '-'} / 配達予定: ${fmt(cached.order.delivery_date)} — バーコードをスキャンしてください`;
   }
+  shipFreightPreview();   // 送料の目安を更新
   document.querySelectorAll('.order-card').forEach(c => c.style.outline = '');
   const card = document.getElementById(`order-${orderId}`);
   if (card) card.style.outline = '2px solid var(--gold)';
@@ -3643,6 +3651,37 @@ function shipOrder(orderId) {
   shipOrderConfirmed(orderId, dropdownAssignments);
 }
 
+// 配送: 選択中の業者・サイズ・クールを読む
+function shipDeliveryOpts() {
+  return {
+    carrier: document.getElementById('ship-carrier')?.value || 'ヤマト',
+    size: parseInt(document.getElementById('ship-size')?.value || '100', 10),
+    cool: !!document.getElementById('ship-cool')?.checked
+  };
+}
+// 住所から運賃（税抜）を計算。住所なし/料金表に無ければ null。
+async function shipComputeFreight(address, opts) {
+  if (!address) return null;
+  try {
+    const v = await sb('POST', 'rpc/tgc_compute_freight',
+      { p_carrier: opts.carrier, p_address: address, p_size: opts.size, p_is_cool: opts.cool });
+    return (v === null || v === undefined || v === '') ? null : Number(v);
+  } catch (e) { return null; }
+}
+// 選択中の注文で送料の目安を表示
+async function shipFreightPreview() {
+  const el = document.getElementById('ship-freight-preview'); if (!el) return;
+  if (!shipSelectedOrderId) { el.textContent = '（注文を選ぶと送料の目安を表示）'; return; }
+  const cache = shipOrdersCache[shipSelectedOrderId];
+  const addr = cache?.order?.delivery_address || '';
+  const opts = shipDeliveryOpts();
+  if (!addr) { el.innerHTML = '<span style="color:var(--gold)">お届け先住所が無く自動計算できません</span>'; return; }
+  el.textContent = '計算中…';
+  const f = await shipComputeFreight(addr, opts);
+  if (f == null) el.innerHTML = '<span style="color:var(--gold)">送料 未計算（' + (opts.carrier === '佐川' ? '佐川の料金表は未登録' : '料金表に該当なし') + '）</span>';
+  else el.innerHTML = '→ 送料 <b style="color:var(--gold)">¥' + f.toLocaleString() + '</b>（税抜）';
+}
+
 async function shipOrderConfirmed(orderId, dropdownAssignments) {
   const btn = document.getElementById(`ship-btn-${orderId}`);
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 出荷処理中...'; }
@@ -3663,15 +3702,21 @@ async function shipOrderConfirmed(orderId, dropdownAssignments) {
     // Update order status
     await sb('PATCH', 'orders', { status: '発送済' }, `?id=eq.${orderId}`);
 
-    // Create shipment
+    // Create shipment（配送情報・運賃も自動計算して保存）
     const order = await sb('GET', 'orders', null, `?id=eq.${orderId}&select=*`);
     if (order.length) {
+      const dopts = shipDeliveryOpts();
+      const freight = await shipComputeFreight(order[0].delivery_address || '', dopts);
       await sb('POST', 'shipments', [{
         order_id: orderId,
         customer_id: order[0].customer_id,
         shipment_date: new Date().toISOString().slice(0, 10),
         delivery_date: order[0].delivery_date,
-        status: '出荷済'
+        status: '出荷済',
+        carrier: dopts.carrier,
+        size_code: dopts.size,
+        is_cool: dopts.cool,
+        freight: freight
       }]);
     }
 
