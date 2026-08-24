@@ -309,6 +309,7 @@ th,td{padding:8px 6px;font-size:.8rem}
   <div class="tab-content" id="tab-customers">
     <div class="filter-bar">
       <input class="search-input" type="text" placeholder="名前・コード・電話で検索..." id="custSearch" oninput="renderCustomers()">
+      <label style="display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--text2);cursor:pointer;white-space:nowrap;"><input type="checkbox" id="custStarOnly" onchange="custPage.page=0;renderCustomers()"> ⭐ スターのみ</label>
       <button class="btn btn-gold btn-sm" onclick="openAddCustomer()">+ 顧客追加</button>
       <button class="btn btn-outline btn-sm" onclick="exportCustomersCSV()">⬇ CSVエクスポート</button>
       <button class="btn btn-outline btn-sm" onclick="document.getElementById('custCsvFile').click()">⬆ CSVインポート</button>
@@ -342,6 +343,7 @@ th,td{padding:8px 6px;font-size:.8rem}
           <option value="filtered">いま検索で出ているお客様だけ</option>
           <option value="active">有効なお客様すべて</option>
           <option value="ordered">注文したことがあるお客様だけ</option>
+          <option value="starred">⭐ スター付きのお客様だけ</option>
         </select>
         <button class="btn btn-gold btn-sm" onclick="exportPortalCsv()">&#x1f511; パスワードを発行して名簿CSV</button>
         <button class="btn btn-outline btn-sm" onclick="portalPrintSheets()">&#x1f5a8; 発行して案内文を印刷</button>
@@ -354,7 +356,7 @@ th,td{padding:8px 6px;font-size:.8rem}
     </div>
     <div class="table-wrap">
       <table class="customer-table">
-        <thead><tr><th>コード</th><th>名前</th><th>カナ</th><th>電話</th><th>住所</th><th>ログインID</th><th>パスワード</th><th>価格ランク</th><th>操作</th></tr></thead>
+        <thead><tr><th title="⭐優先：発送/請求の実績があると自動、クリックで手動でも指定">⭐</th><th>コード</th><th>名前</th><th>カナ</th><th>電話</th><th>住所</th><th>ログインID</th><th>パスワード</th><th>価格ランク</th><th title="この顧客あての請求書の枚数">請求書</th><th title="この顧客への発送回数">発送</th><th>操作</th></tr></thead>
         <tbody id="custBody"></tbody>
       </table>
     </div>
@@ -925,6 +927,7 @@ async function init(){
     if(!staffKeyGet()) await staffKeyEnsure();
     await Promise.all([loadOrders(),loadCustomers(),loadProducts(),loadInvoiceSettings(),loadOrgInfo()]);
     orderedCustomerIds=new Set(allOrders.map(o=>o.customer_id).filter(Boolean));
+    await loadCustomerActivity();   // 発送/請求の実績を集計（スター・カラム用）。allOrders 確定後に呼ぶ
     populateCustomerDropdowns();
     renderCustomers(); // 会社情報・注文実績がそろってから案内文の見本を出し直す
     const h=(location.hash||'').replace('#','');
@@ -1711,14 +1714,27 @@ function renderCustomers(){
   const search=(document.getElementById('custSearch')?.value||'').toLowerCase();
   let filtered=allCustomers;
   if(search) filtered=filtered.filter(c=>(c.name||'').toLowerCase().includes(search)||(c.code||'').toLowerCase().includes(search)||(c.phone||'').includes(search)||(c.kana||'').toLowerCase().includes(search));
+  if(document.getElementById('custStarOnly')?.checked) filtered=filtered.filter(c=>custStarState(c).on);
   custFiltered=filtered;
   renderPortalPreview();
+  // スター（実績＋手動）を上に、実績の多い順、次にコード順で並べる＝優先メール先が上に来る
+  filtered=filtered.slice().sort((a,b)=>{
+    const sa=custStarState(a), sb2=custStarState(b);
+    if(sa.on!==sb2.on) return sa.on?-1:1;
+    const ta=sa.ship+sa.inv, tb=sb2.ship+sb2.inv;
+    if(ta!==tb) return tb-ta;
+    return (a.code||'').localeCompare(b.code||'');
+  });
   const start=custPage.page*custPage.size;
   const page=filtered.slice(start,start+custPage.size);
   const body=document.getElementById('custBody');
   body.innerHTML=page.map(c=>{
     const rankClass={'standard':'rank-standard','local':'rank-premium','startmember':'rank-wholesale'}[c.price_rank]||'rank-standard';
+    const st=custStarState(c);
+    const starTitle = st.manual ? '手動スター（クリックで解除）' : (st.auto ? '実績スター：発送/請求あり（クリックで手動でも固定）' : 'クリックでスターを付ける');
+    const starCell = `<td style="text-align:center"><span onclick="toggleCustomerStar('${c.id}')" title="${starTitle}" style="cursor:pointer;font-size:16px;color:${st.on?'var(--gold)':'var(--text3)'};opacity:${(st.auto&&!st.manual)?'0.55':'1'}">${st.on?'★':'☆'}</span></td>`;
     return `<tr>
+      ${starCell}
       <td style="font-weight:700">${esc(c.code||'')}</td>
       <td>${esc(c.name||'')}</td>
       <td style="color:var(--text2)">${esc(c.kana||'')}</td>
@@ -1727,6 +1743,8 @@ function renderCustomers(){
       <td style="font-family:monospace">${esc(c.portal_login_id||c.code||'')}${c.portal_enabled?' <span title="注文サイト利用が有効" style="color:var(--green,#6a9e5a)">🔗</span>':''}</td>
       <td style="font-family:monospace;letter-spacing:1px;color:${c.__issuedPw?'var(--gold)':'var(--text3)'}">${c.__issuedPw?esc(c.__issuedPw):'（発行時のみ表示）'}</td>
       <td><span class="price-rank ${rankClass}">${rankLabel(c.price_rank)}</span></td>
+      <td style="text-align:center">${st.inv||'-'}</td>
+      <td style="text-align:center">${st.ship||'-'}</td>
       <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="portalCopyOne('${c.id}')" title="このお客様あての案内文をコピー">📨</button>
       <button class="btn btn-outline btn-sm" onclick="openEditCustomer('${c.id}')">編集</button>
       <button class="btn btn-sm" style="color:var(--red)" onclick="deleteCustomer('${c.id}')">🗑</button></td>
@@ -1761,6 +1779,43 @@ const ORDER_URL='https://tateyama-gibier.vercel.app/order.html';
 let orgInfo={name:'館山ジビエセンター',address:'千葉県館山市西長田1163-5',phone:'',email:''};
 let custFiltered=[];
 let orderedCustomerIds=new Set();
+
+/* 顧客ごとの実績（発送回数・請求書枚数）を集計してマップに入れる。
+   スター判定と一覧の請求書/発送カラムに使う。発送は shipments テーブル、
+   請求書は documents(doc_type=請求書)。customer_id が空の行は注文(order_id)経由で顧客に紐付ける。 */
+let shipCountMap={}, invCountMap={};
+async function loadCustomerActivity(){
+  shipCountMap={}; invCountMap={};
+  const ordCust={}; (allOrders||[]).forEach(o=>{ if(o.id) ordCust[o.id]=o.customer_id; });
+  try{
+    const ships=await sb('GET','shipments',null,'?select=customer_id,order_id&limit=100000');
+    (ships||[]).forEach(s=>{ const cid=s.customer_id||ordCust[s.order_id]; if(cid) shipCountMap[cid]=(shipCountMap[cid]||0)+1; });
+  }catch(e){}
+  try{
+    const invs=await sb('GET','documents',null,'?select=customer_id,order_id&doc_type=eq.'+encodeURIComponent('請求書')+'&limit=100000');
+    (invs||[]).forEach(d=>{ const cid=d.customer_id||ordCust[d.order_id]; if(cid) invCountMap[cid]=(invCountMap[cid]||0)+1; });
+  }catch(e){}
+}
+
+/* スターの状態。auto=実績あり（発送1回以上 or 請求書1回以上）、manual=担当者が手動指定。
+   on=どちらかが立っていれば点灯。 */
+function custStarState(c){
+  const ship=shipCountMap[c.id]||0, inv=invCountMap[c.id]||0;
+  const auto = ship>0 || inv>0;
+  const manual = !!c.is_starred;
+  return {ship, inv, auto, manual, on: manual||auto};
+}
+
+/* 行のスターをクリックしたとき：手動フラグ(is_starred)を反転して保存。
+   自動スター（実績あり）の顧客は手動を外しても実績スターとして点灯したまま。 */
+async function toggleCustomerStar(id){
+  const c=allCustomers.find(x=>x.id===id); if(!c) return;
+  const next=!c.is_starred;
+  c.is_starred=next;            // 楽観的更新
+  renderCustomers();
+  try{ await sb('PATCH','customers',{is_starred:next},'?id=eq.'+id); }
+  catch(e){ c.is_starred=!next; renderCustomers(); alert('スターの更新に失敗しました。通信状態をご確認ください。'); }
+}
 
 async function loadOrgInfo(){
   try{
@@ -1857,6 +1912,7 @@ function portalTargets(){
   const scope=document.getElementById('portalScope')?.value||'filtered';
   if(scope==='active') return allCustomers.filter(c=>c.is_active!==false);
   if(scope==='ordered') return allCustomers.filter(c=>orderedCustomerIds.has(c.id));
+  if(scope==='starred') return allCustomers.filter(c=>custStarState(c).on && c.is_active!==false);
   return (custFiltered.length?custFiltered:allCustomers).filter(c=>c.is_active!==false);
 }
 
