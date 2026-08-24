@@ -188,6 +188,20 @@ body.kb .bar{display:none}
 .trace-row .v{color:var(--text);font-weight:600}
 .trace-row.rad{background:rgba(106,158,90,.08)}
 .trace-row.rad .v{color:var(--green)}
+/* 注文履歴・納品状況 */
+.hcard{border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin:10px 0;background:var(--card,rgba(255,255,255,.02))}
+.htop{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+.hstatus{font-size:12px;font-weight:700;padding:2px 10px;border-radius:12px;border:1px solid var(--border);color:var(--text2)}
+.hstatus.s-発送済,.hstatus.s-納品完了{color:var(--gold);border-color:var(--gold)}
+.hcode{font-size:11px;color:var(--text3);font-family:monospace}
+.hmeta{font-size:12px;color:var(--text2);margin-bottom:6px}
+.hi{font-size:13px;padding:1px 0}
+.hi small{color:var(--text3)}
+.htotal{font-size:14px;font-weight:700;margin-top:4px}
+.htotal small{font-size:11px;color:var(--text3);font-weight:400}
+.hship{font-size:12.5px;color:var(--green);margin-top:6px}
+.hbtns{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.hbtns button{min-height:40px;padding:0 14px;border:1px solid var(--gold);background:transparent;color:var(--gold);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
 </style>
 </head>
 <body>
@@ -228,7 +242,7 @@ body.kb .bar{display:none}
 
 <!-- ══════════ 画面1: 選ぶ ══════════ -->
 <div id="scr-list" class="hidden">
-  <div class="hdr"><b id="h-name"></b><button onclick="doLogout()">ログアウト</button></div>
+  <div class="hdr"><b id="h-name"></b><div style="display:flex;gap:6px"><button onclick="openHistory()">🧾 注文履歴</button><button onclick="doLogout()">ログアウト</button></div></div>
 
   <!-- おすすめ掲示板（センターが選んだ売れ筋・おすすめ） -->
   <div id="bulletins" class="hidden"></div>
@@ -355,6 +369,13 @@ body.kb .bar{display:none}
   <button class="backlink" style="width:100%;justify-content:center" onclick="doLogout()">ログアウト</button>
 </div>
 
+<!-- ══════════ 画面: 注文履歴・納品状況 ══════════ -->
+<div id="scr-history" class="hidden">
+  <div class="hdr" style="margin:0 -14px"><b>注文履歴・納品状況</b><button onclick="showScreen('list')">← 戻る</button></div>
+  <div class="note" style="margin-top:10px">これまでのご注文と納品状況をご確認いただけます。発送済み・納品完了のご注文は、<strong>請求書・領収書</strong>を出力（印刷・PDF保存）できます。</div>
+  <div id="hist-rows" style="margin-top:8px"></div>
+</div>
+
 <script>
 'use strict';
 const SB_URL='https://clpdyrehdgzgiidbfucj.supabase.co';
@@ -415,7 +436,9 @@ const api = (() => {
     cancelReservation: (rid) => rpc('portal_cancel_reservation', { p_token: tok(), p_reservation_id: rid }),
     bulletins: () => rpc('portal_bulletins', {}),
     submitInquiry: (body, reqId) => rpc('portal_submit_inquiry', { p_token: tok(), p_body: body, p_request_id: reqId }),
-    traceIndividual: (label) => rpc('portal_trace_individual', { p_token: tok(), p_label: label })
+    traceIndividual: (label) => rpc('portal_trace_individual', { p_token: tok(), p_label: label }),
+    myOrders: () => rpc('portal_my_orders', { p_token: tok(), p_limit: 50 }),
+    issueDoc: (orderId, docType) => rpc('portal_issue_document', { p_token: tok(), p_order_id: orderId, p_doc_type: docType })
   };
 })();
 
@@ -466,7 +489,7 @@ function forceRelogin() {
 
 /* ══════════ 画面の切替（戻る対応） ══════════ */
 function showScreen(name) {
-  ['login', 'changepw', 'list', 'confirm', 'done'].forEach(s => $('scr-' + s).classList.toggle('hidden', s !== name));
+  ['login', 'changepw', 'list', 'confirm', 'done', 'history'].forEach(s => $('scr-' + s).classList.toggle('hidden', s !== name));
   window.scrollTo(0, 0);
   if (history.state?.scr !== name) history.pushState({ scr: name }, '', '#' + name);
 }
@@ -479,7 +502,7 @@ window.addEventListener('popstate', e => {
   else showScreenNoPush('list');
 });
 function showScreenNoPush(name) {
-  ['login', 'changepw', 'list', 'confirm', 'done'].forEach(s => $('scr-' + s).classList.toggle('hidden', s !== name));
+  ['login', 'changepw', 'list', 'confirm', 'done', 'history'].forEach(s => $('scr-' + s).classList.toggle('hidden', s !== name));
   window.scrollTo(0, 0);
 }
 
@@ -604,6 +627,155 @@ async function enterList() {
   if (!currentSpecies || !speciesList.includes(currentSpecies)) currentSpecies = speciesList[0] || '';
   $('last-warn').innerHTML = '';   // 一覧の読み直しでだけ警告を消す
   renderAll();
+}
+
+/* ══════════ 注文履歴・納品状況 ══════════ */
+let histOrders = [];
+const HIST_STATUS_LABEL = { '受注': '受付', '確認済': '確認済み', '発送済': '発送済み', '納品完了': '納品完了', 'キャンセル': 'キャンセル' };
+function jdate(s) { if (!s) return ''; const p = String(s).slice(0, 10).split('-'); return p.length === 3 ? `${p[0]}年${+p[1]}月${+p[2]}日` : String(s); }
+
+async function openHistory() {
+  showScreen('history');
+  const el = $('hist-rows');
+  el.innerHTML = '<div class="note">読み込み中…</div>';
+  try {
+    histOrders = await api.myOrders() || [];
+  } catch (e) {
+    if (sessionExpired(e)) { forceRelogin(); return; }
+    el.innerHTML = '<div class="note">読み込みに失敗しました。もう一度お試しください。</div>'; return;
+  }
+  renderHistory();
+}
+
+function renderHistory() {
+  const el = $('hist-rows');
+  if (!histOrders.length) { el.innerHTML = '<div class="note">ご注文の履歴はまだありません。</div>'; return; }
+  el.innerHTML = histOrders.map(o => {
+    const items = o.items || [];
+    const itemsHtml = items.map(i =>
+      `<div class="hi">${esc(i.name || i.species || '商品')}　<small>${kg1(i.kg || i.requested_kg || 0)}kg${i.unit_price != null ? ' × ' + yen(i.unit_price) + '/kg' : ''}</small></div>`
+    ).join('') || '<div class="hi"><small>明細なし</small></div>';
+    const ships = o.shipments || [];
+    let ship = '';
+    if (ships.length) {
+      ship = ships.map(s => `<div class="hship">🚚 発送 ${jdate(s.shipment_date)}${s.notes ? '　' + esc(s.notes) : ''}</div>`).join('');
+    } else if (o.status === '発送済' || o.status === '納品完了') {
+      ship = '<div class="hship">🚚 発送手配済み</div>';
+    }
+    const recIssued = Number(o.receipt_issued || 0);
+    const docBtns = o.can_doc ? `<div class="hbtns">
+        <button onclick="issuePortalDoc('${o.id}','請求書')">🧾 請求書</button>
+        <button onclick="issuePortalDoc('${o.id}','領収書')">🧾 領収書${recIssued > 0 ? '（再発行）' : ''}</button>
+      </div>` : '';
+    return `<div class="hcard">
+      <div class="htop"><span class="hstatus s-${esc(o.status || '')}">${esc(HIST_STATUS_LABEL[o.status] || o.status || '')}</span>
+        <span class="hcode">${esc(o.order_code || '')}</span></div>
+      <div class="hmeta">ご注文日: ${jdate(o.order_date || o.created_at)}${o.delivery_date ? '　／　納品希望: ' + jdate(o.delivery_date) : ''}</div>
+      ${itemsHtml}
+      ${o.total_amount ? `<div class="htotal">合計 ${yen(o.total_amount)}<small>（税込）</small></div>` : ''}
+      ${ship}
+      ${docBtns}
+    </div>`;
+  }).join('');
+}
+
+async function issuePortalDoc(orderId, docType) {
+  // クリックのユーザー操作内で先にウィンドウを開く（モバイルのポップアップブロック対策）
+  const w = window.open('', '_blank');
+  if (w) { try { w.document.write('<!doctype html><meta charset="utf-8"><p style="font-family:sans-serif;padding:24px;color:#555">発行中…</p>'); } catch (e) {} }
+  let d;
+  try {
+    d = await api.issueDoc(orderId, docType);
+  } catch (e) {
+    if (w) { try { w.close(); } catch (_) {} }
+    if (sessionExpired(e)) { forceRelogin(); return; }
+    const m = (e && e.message) ? String(e.message).replace(/^.*?:\s*/, '') : '発行できませんでした';
+    toast(m, 'error'); return;
+  }
+  if (!d) { if (w) { try { w.close(); } catch (_) {} } toast('発行できませんでした', 'error'); return; }
+  writeDocWindow(w, d);
+  if (docType === '領収書') {
+    const o = histOrders.find(x => x.id === orderId);
+    if (o) { o.receipt_issued = Number(o.receipt_issued || 0) + 1; renderHistory(); }
+  }
+}
+
+// 帳票（請求書・領収書）を新しいウィンドウに描画（印刷・PDF保存用）。自己完結HTML。
+function writeDocWindow(w, d) {
+  const iss = d.issuer || {}, cust = d.customer || {}, items = d.items || [];
+  const total = Number(d.total || 0);
+  const tax = Math.round(total - total / 1.08);      // ジビエ食肉＝軽減税率8%（税込価格の内税）
+  const net = total - tax;
+  const isReceipt = d.doc_type === '領収書';
+  const title = esc(d.doc_type) + (d.reissue ? '（再発行）' : '');
+  const rows = items.map(i => `<tr>
+      <td>${esc(i.name || i.species || '商品')}</td>
+      <td class="r">${i.qty != null ? kg1(i.qty) : ''}</td>
+      <td class="r">${i.unit_price != null ? yen(i.unit_price) : ''}</td>
+      <td class="r">${yen(i.subtotal != null ? i.subtotal : (i.amount || 0))}</td>
+    </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#888">明細なし</td></tr>';
+  const issuerBlock = `
+    <div class="issuer">
+      <div class="in">${esc(iss.issuer_name || '館山ジビエセンター')}${iss.issuer_sub ? '（' + esc(iss.issuer_sub) + '）' : ''}</div>
+      ${iss.postal || iss.address ? `<div>〒${esc(iss.postal || '')} ${esc(iss.address || '')}</div>` : ''}
+      ${iss.tel ? `<div>TEL: ${esc(iss.tel)}</div>` : ''}
+      ${iss.reg_number ? `<div>登録番号: ${esc(iss.reg_number)}</div>` : ''}
+      ${iss.seal_data_url ? `<img class="seal" src="${esc(iss.seal_data_url)}" alt="印">` : ''}
+    </div>`;
+  const html = `<!doctype html><html lang="ja"><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>${title}_${esc(d.order_code || '')}</title>
+    <style>
+      *{box-sizing:border-box} body{font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;color:#222;max-width:720px;margin:0 auto;padding:24px;background:#fff}
+      .toolbar{display:flex;gap:8px;margin-bottom:16px}
+      .toolbar button{padding:10px 18px;border:1px solid #888;background:#f5f5f5;border-radius:8px;font-size:14px;cursor:pointer}
+      h1{font-size:22px;text-align:center;letter-spacing:8px;margin:8px 0 4px;border-bottom:2px solid #222;padding-bottom:10px}
+      .reissue{text-align:center;color:#b00;font-size:12px;font-weight:700;margin-bottom:8px}
+      .meta{display:flex;justify-content:space-between;font-size:13px;margin:12px 0}
+      .to{font-size:17px;font-weight:700;border-bottom:1px solid #222;padding-bottom:4px;margin-bottom:2px}
+      .to-addr{font-size:12px;color:#555}
+      .amount{text-align:center;font-size:20px;font-weight:700;border:2px solid #222;padding:10px;margin:16px 0}
+      .proviso{font-size:13px;margin:6px 0 14px}
+      table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
+      th,td{border:1px solid #ccc;padding:6px 8px} th{background:#f2f2f2} .r{text-align:right}
+      .totals{margin-left:auto;width:60%;font-size:13px}
+      .totals div{display:flex;justify-content:space-between;padding:2px 0}
+      .totals .g{font-weight:700;font-size:15px;border-top:1px solid #222;margin-top:4px;padding-top:4px}
+      .rcv{text-align:center;margin:16px 0;font-size:14px}
+      .issuer{text-align:right;font-size:12px;margin-top:24px;position:relative;line-height:1.7}
+      .issuer .in{font-weight:700;font-size:14px}
+      .issuer .seal{position:absolute;right:0;top:-6px;width:64px;height:64px;object-fit:contain;opacity:.9}
+      .bank{white-space:pre-wrap;font-size:12px;border:1px solid #ccc;padding:8px;margin-top:10px;background:#fafafa}
+      .foot{font-size:11px;color:#888;margin-top:18px;text-align:center}
+      @media print{.toolbar{display:none}body{padding:0}}
+    </style></head><body>
+    <div class="toolbar"><button onclick="window.print()">🖨 印刷・PDF保存</button><button onclick="window.close()">閉じる</button></div>
+    <h1>${esc(d.doc_type)}</h1>
+    ${d.reissue ? '<div class="reissue">※ 再発行（' + esc(String(d.copy_no || '')) + '回目）</div>' : ''}
+    <div class="meta"><div>No. ${esc(d.doc_number || '')}</div><div>発行日: ${jdate(d.issue_date)}</div></div>
+    <div class="to">${esc(cust.name || '')} ${esc(cust.honorific || '様')}</div>
+    ${cust.address ? `<div class="to-addr">${esc(cust.address)}</div>` : ''}
+    <div class="amount">金額　${yen(total)}（税込）</div>
+    ${isReceipt ? '<div class="proviso">但し お品代として</div>' : `<div class="proviso">ご注文: ${esc(d.order_code || '')}${d.delivery_date ? '　／　納品: ' + jdate(d.delivery_date) : ''}</div>`}
+    <table>
+      <thead><tr><th>品名</th><th class="r">数量(kg)</th><th class="r">単価</th><th class="r">金額</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="totals">
+      <div><span>小計（税抜）</span><span>${yen(net)}</span></div>
+      <div><span>消費税（軽減税率8%）</span><span>${yen(tax)}</span></div>
+      <div class="g"><span>合計（税込）</span><span>${yen(total)}</span></div>
+    </div>
+    ${isReceipt ? '<div class="rcv">上記金額を正に領収いたしました。</div>'
+               : (iss.bank ? `<div class="bank">${esc(iss.bank)}</div>` : '')}
+    ${issuerBlock}
+    <div class="foot">ジビエは現物パック単位のため、金額はセンターで確定した内容です。ご不明点はセンターへお問い合わせください。</div>
+  </body></html>`;
+  if (w) {
+    try { w.document.open(); w.document.write(html); w.document.close(); return; } catch (e) {}
+  }
+  // ポップアップが開けなかった場合の案内
+  toast('印刷用の画面を開けませんでした。ブラウザのポップアップ許可をご確認ください。', 'error');
 }
 
 // スライス加工（+¥1000/kg）を選べる部位か：イノシシ／シカの精肉カットのみ（枝肉・ミンチ・内臓・骨・ペットは対象外）
