@@ -669,7 +669,8 @@ th,td{padding:8px 6px;font-size:.8rem}
         <div class="form-group"><label>配送業者</label>
           <select id="moCarrier"><option value="">-- 顧客を選ぶと候補表示 --</option></select>
         </div>
-        <div class="form-group"><label>価格パターン</label><input type="text" id="moRankLabel" readonly value="—"></div>
+        <div class="form-group"><label>価格パターン</label>
+          <select id="moRank" onchange="renderMoProducts()"><option value="standard">スタンダード</option><option value="local">ローカル</option><option value="startmember">スタートメンバー</option></select></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label>納品希望日</label><input type="date" id="moDate"></div>
@@ -2612,7 +2613,7 @@ function onMoCustomerChange(){
   document.getElementById('moDelivName').value=c.name||'';
   document.getElementById('moDelivPhone').value=c.phone||'';
   document.getElementById('moTimeZone').value=c.default_time_zone||'0000';
-  document.getElementById('moRankLabel').value=rankLabel(c.price_rank);
+  document.getElementById('moRank').value=c.price_rank||'standard';
   // 配送業者：顧客の既定業者を候補に（複数なら選択、無ければ全社から）
   const sel=document.getElementById('moCarrier');
   const carriers=(Array.isArray(c.default_carriers)&&c.default_carriers.length)?c.default_carriers:['ヤマト運輸','佐川急便','その他'];
@@ -2620,7 +2621,7 @@ function onMoCustomerChange(){
   renderMoProducts(); // 価格パターンに合わせて商品価格を更新
 }
 
-function openManualOrder(){
+async function openManualOrder(){
   moCart=[];
   renderMoCart();
   document.getElementById('moMemo').value='';
@@ -2628,44 +2629,58 @@ function openManualOrder(){
   document.getElementById('moCustomerInput').value='';
   document.getElementById('moCustomer').value='';
   document.getElementById('moCustomerHit').textContent='';
-  document.getElementById('moRankLabel').value='—';
+  document.getElementById('moRank').value='standard';
   document.getElementById('moCarrier').innerHTML='<option value="">-- 顧客を選ぶと候補表示 --</option>';
-  renderMoProducts();
+  if(typeof moToggleNewCustomer==='function') moToggleNewCustomer(false);
   openModal('manualOrderModal');
+  // 商品はお客様の注文サイトと同じカタログ（rank別価格つき）を使う。未取得なら取得。
+  if(!ppProducts.length){ document.getElementById('moProductList').innerHTML='<div class="empty">商品を読み込み中…</div>'; try{ await loadPortalProducts(); }catch(e){} }
+  renderMoProducts();
 }
 
+// 手入力注文の商品選択：お客様の注文サイトと同じカタログ（ppProducts）＋価格パターン別価格。
+function moRankVal(){ return document.getElementById('moRank')?.value || 'standard'; }
 function renderMoProducts(){
-  const speciesSet=[...new Set(allProducts.map(p=>p.species))];
-  if(!moSpecies&&speciesSet.length) moSpecies=speciesSet[0];
-  document.getElementById('moSpeciesTabs').innerHTML=speciesSet.map(s=>
-    `<button class="product-tab${s===moSpecies?' active':''}" onclick="moSpecies='${s}';renderMoProducts()">${esc(s)}</button>`
+  const listEl=document.getElementById('moProductList');
+  const tabsEl=document.getElementById('moSpeciesTabs');
+  if(!ppProducts.length){ tabsEl.innerHTML=''; listEl.innerHTML='<div class="empty">商品カタログが未取得です。「注文サイト設定」を一度開くか、再読み込みしてください。</div>'; return; }
+  // 注文可能な商品だけ（お客様サイトと同じ）。並びは sort_order。
+  const orderable=ppProducts.filter(p=>p.is_orderable!==false).slice().sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+  const speciesSet=[...new Set(orderable.map(p=>p.species))];
+  if(!moSpecies||!speciesSet.includes(moSpecies)) moSpecies=speciesSet[0]||'';
+  tabsEl.innerHTML=speciesSet.map(s=>
+    `<button class="product-tab${s===moSpecies?' active':''}" onclick="moSpecies='${esc(s)}';renderMoProducts()">${esc(s)}</button>`
   ).join('');
-  const prods=allProducts.filter(p=>p.species===moSpecies);
-  const custId=document.getElementById('moCustomer').value;
-  const cust=allCustomers.find(c=>c.id===custId);
-  const rank=cust?.price_rank||'standard';
-  document.getElementById('moProductList').innerHTML=prods.map(p=>{
-    const price=p['price_'+rank]||p.price_standard||0;
+  const rank=moRankVal();
+  const prods=orderable.filter(p=>p.species===moSpecies);
+  const markColor=m=>m==='◎'?'var(--green,#6a9e5a)':m==='△'?'#d8a03a':'var(--red)';
+  listEl.innerHTML=prods.map(p=>{
+    const price=ppPriceOf(p.id,rank);
+    const mark=ppMarks[p.id]||'';
+    const noPrice=(price==null);
     return `<div class="product-item">
-      <div><div class="name">${esc(p.part_name||'')}</div><div class="price">&yen;${Number(price).toLocaleString()}/kg</div></div>
-      <div style="display:flex;gap:6px;align-items:center">
-        <input type="number" min="0" step="0.1" placeholder="kg" id="mow_${p.id}">
-        <button class="btn btn-gold btn-sm" onclick="addToMoCart('${p.id}')">追加</button>
+      <div style="min-width:0">
+        <div class="name">${esc(p.display_name||'')}${p.grade_label?` <span style="font-size:11px;color:var(--text2)">${esc(p.grade_label)}</span>`:''}${mark?` <span style="color:${markColor(mark)};font-weight:700">${mark}</span>`:''}</div>
+        <div class="price">${noPrice?'<span style="color:var(--red)">価格なし（このパターンでは注文不可）</span>':'&yen;'+Number(price).toLocaleString()+'/kg'}</div>
       </div>
-    </div>`}).join('');
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="number" min="0" step="0.1" placeholder="kg" id="mow_${p.id}" ${noPrice?'disabled':''}>
+        <button class="btn btn-gold btn-sm" onclick="addToMoCart('${p.id}')" ${noPrice?'disabled':''}>追加</button>
+      </div>
+    </div>`}).join('') || '<div class="empty">この種別に注文できる商品がありません</div>';
 }
 
 function addToMoCart(pid){
   const inp=document.getElementById('mow_'+pid);
   const wt=parseFloat(inp?.value);
   if(!wt||wt<=0){alert('重量を入力してください');return}
-  const p=allProducts.find(x=>x.id===pid);
+  const p=ppProducts.find(x=>x.id===pid);
   if(!p) return;
-  const custId=document.getElementById('moCustomer').value;
-  const cust=allCustomers.find(c=>c.id===custId);
-  const rank=cust?.price_rank||'standard';
-  const price=p['price_'+rank]||p.price_standard||0;
-  moCart.push({product_id:pid,species:p.species,part_name:p.part_name,weight_kg:wt,unit_price:price,subtotal:Math.round(wt*price)});
+  const rank=moRankVal();
+  const price=ppPriceOf(pid,rank);
+  if(price==null){alert('この価格パターンでは価格が設定されていません');return}
+  moCart.push({product_id_v2:pid, product_name:p.display_name, species:p.species, part_name:p.display_name,
+    grade_snapshot:p.grade_label||null, price_rank_applied:rank, weight_kg:wt, unit_price:price, subtotal:Math.round(wt*price)});
   if(inp) inp.value='';
   renderMoCart();
 }
@@ -2700,7 +2715,7 @@ async function submitManualOrder(){
     delivery_address:document.getElementById('moAddress').value,
     delivery_name:document.getElementById('moDelivName').value,
     delivery_phone:document.getElementById('moDelivPhone').value,
-    price_rank:cust?.price_rank||'standard',
+    price_rank:moRankVal(),
     carrier:document.getElementById('moCarrier').value||null,
     total_amount:total,
     memo:document.getElementById('moMemo').value,
@@ -2709,7 +2724,7 @@ async function submitManualOrder(){
   };
   try{
     const [order]=await sb('POST','orders',[orderData]);
-    const items=moCart.map(c=>({order_id:order.id,product_id:c.product_id,species:c.species,part_name:c.part_name,weight_kg:c.weight_kg,unit_price:c.unit_price,subtotal:c.subtotal,weight:c.weight_kg,amount:c.subtotal}));
+    const items=moCart.map(c=>({order_id:order.id,product_id_v2:c.product_id_v2||null,product_name:c.product_name||c.part_name,species:c.species,part_name:c.part_name,grade_snapshot:c.grade_snapshot||null,price_rank_applied:c.price_rank_applied||moRankVal(),weight_kg:c.weight_kg,requested_kg:c.weight_kg,unit_price:c.unit_price,subtotal:c.subtotal,weight:c.weight_kg,amount:c.subtotal}));
     await sb('POST','order_items',items);
     closeModal('manualOrderModal');
     await loadOrders();
