@@ -658,10 +658,14 @@ function renderHistory() {
     const ships = o.shipments || [];
     let ship = '';
     if (ships.length) {
-      ship = ships.map(s => `<div class="hship">🚚 発送 ${jdate(s.shipment_date)}${s.notes ? '　' + esc(s.notes) : ''}</div>`).join('');
+      ship = ships.map(s => {
+        const cs = [s.carrier, s.size_code ? s.size_code + 'サイズ' : '', s.is_cool ? 'クール' : ''].filter(Boolean).join('・');
+        return `<div class="hship">🚚 発送 ${jdate(s.shipment_date)}${cs ? '　' + esc(cs) : ''}${s.notes ? '　' + esc(s.notes) : ''}</div>`;
+      }).join('');
     } else if (o.status === '発送済' || o.status === '納品完了') {
       ship = '<div class="hship">🚚 発送手配済み</div>';
     }
+    if (o.freight != null) ship += `<div class="hship">📦 送料 ¥${Math.round(Number(o.freight) * 1.1).toLocaleString()}<small style="color:var(--text3)">（税込）</small></div>`;
     const recIssued = Number(o.receipt_issued || 0);
     const docBtns = o.can_doc ? `<div class="hbtns">
         <button onclick="issuePortalDoc('${o.id}','請求書')">🧾 請求書</button>
@@ -703,9 +707,13 @@ async function issuePortalDoc(orderId, docType) {
 // 帳票（請求書・領収書）を新しいウィンドウに描画（印刷・PDF保存用）。自己完結HTML。
 function writeDocWindow(w, d) {
   const iss = d.issuer || {}, cust = d.customer || {}, items = d.items || [];
-  const total = Number(d.total || 0);
-  const tax = Math.round(total - total / 1.08);      // ジビエ食肉＝軽減税率8%（税込価格の内税）
-  const net = total - tax;
+  const total = Number(d.total || 0);                 // 商品 税込（軽減税率8%の内税）
+  const gTax = Math.round(total - total / 1.08);      // 商品の消費税（8%内税）
+  const gNet = total - gTax;
+  const freightNet = (d.freight == null) ? null : Number(d.freight);   // 送料（税抜）
+  const freightIncl = (freightNet == null) ? 0 : Math.round(freightNet * 1.1); // 送料（税込・10%）
+  const fTax = freightIncl - (freightNet || 0);
+  const grand = total + freightIncl;                  // 総合計（税込）
   const isReceipt = d.doc_type === '領収書';
   const title = esc(d.doc_type) + (d.reissue ? '（再発行）' : '');
   const rows = items.map(i => `<tr>
@@ -755,16 +763,18 @@ function writeDocWindow(w, d) {
     <div class="meta"><div>No. ${esc(d.doc_number || '')}</div><div>発行日: ${jdate(d.issue_date)}</div></div>
     <div class="to">${esc(cust.name || '')} ${esc(cust.honorific || '様')}</div>
     ${cust.address ? `<div class="to-addr">${esc(cust.address)}</div>` : ''}
-    <div class="amount">金額　${yen(total)}（税込）</div>
+    <div class="amount">金額　${yen(grand)}（税込）</div>
     ${isReceipt ? '<div class="proviso">但し お品代として</div>' : `<div class="proviso">ご注文: ${esc(d.order_code || '')}${d.delivery_date ? '　／　納品: ' + jdate(d.delivery_date) : ''}</div>`}
     <table>
       <thead><tr><th>品名</th><th class="r">数量(kg)</th><th class="r">単価</th><th class="r">金額</th></tr></thead>
-      <tbody>${rows}</tbody>
+      <tbody>${rows}${freightNet != null ? `<tr><td>送料${d.freight_carrier ? '（' + esc(d.freight_carrier) + '）' : ''}</td><td class="r"></td><td class="r"></td><td class="r">${yen(freightIncl)}</td></tr>` : ''}</tbody>
     </table>
     <div class="totals">
-      <div><span>小計（税抜）</span><span>${yen(net)}</span></div>
-      <div><span>消費税（軽減税率8%）</span><span>${yen(tax)}</span></div>
-      <div class="g"><span>合計（税込）</span><span>${yen(total)}</span></div>
+      <div><span>商品（8%対象・税込）</span><span>${yen(total)}</span></div>
+      ${freightNet != null ? `<div><span>送料（10%対象・税込）</span><span>${yen(freightIncl)}</span></div>` : ''}
+      <div><span>内 消費税（8%）</span><span>${yen(gTax)}</span></div>
+      ${freightNet != null ? `<div><span>内 消費税（10%）</span><span>${yen(fTax)}</span></div>` : ''}
+      <div class="g"><span>合計（税込）</span><span>${yen(grand)}</span></div>
     </div>
     ${isReceipt ? '<div class="rcv">上記金額を正に領収いたしました。</div>'
                : (iss.bank ? `<div class="bank">${esc(iss.bank)}</div>` : '')}

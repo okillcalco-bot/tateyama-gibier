@@ -7,9 +7,9 @@ const ORDERS = [{
   id: 'o1', order_code: 'DIR-20260821-001', status: '発送済',
   order_date: '2026-08-20', delivery_date: '2026-08-22', delivery_time_zone: '0812',
   total_amount: 6000, memo: null, created_at: '2026-08-20T00:00:00Z',
-  can_doc: true, receipt_issued: 0,
+  can_doc: true, receipt_issued: 0, freight: 1300,
   items: [{ name: 'イノシシ ロース', species: 'イノシシ', kg: 1.2, unit_price: 5000, amount: 6000 }],
-  shipments: [{ shipment_date: '2026-08-21', delivery_date: '2026-08-22', status: '出荷済', notes: '送り状番号: 1234-5678' }]
+  shipments: [{ shipment_date: '2026-08-21', delivery_date: '2026-08-22', status: '出荷済', notes: '送り状番号: 1234-5678', carrier: 'ヤマト', size_code: 100, is_cool: true, freight: 1300 }]
 }, {
   id: 'o2', order_code: 'ORD-2', status: '受注',
   order_date: '2026-08-23', delivery_date: '2026-08-25', total_amount: 0,
@@ -21,7 +21,8 @@ const RECEIPT = {
   issue_date: '2026-08-24', order_code: 'DIR-20260821-001', delivery_date: '2026-08-22',
   customer: { name: 'エース商店', honorific: '様', address: '千葉県館山市1-1' },
   items: [{ name: 'イノシシ ロース', qty: 1.2, unit_price: 5000, subtotal: 6000 }],
-  total: 6000, issuer: { issuer_name: '合同会社アルコ', postal: '294-0014', address: '館山市山本1-3', tel: '0470-29-3919', reg_number: 'T1234567890123', bank: '千葉銀行 館山支店 普通 1234567' }
+  total: 6000, freight: 1300, freight_carrier: 'ヤマト',
+  issuer: { issuer_name: '合同会社アルコ', postal: '294-0014', address: '館山市山本1-3', tel: '0470-29-3919', reg_number: 'T1234567890123', bank: '千葉銀行 館山支店 普通 1234567' }
 };
 
 (async () => {
@@ -64,6 +65,7 @@ const RECEIPT = {
   // 納品情報（送り状番号）表示
   const shipTxt = await page.$eval('#hist-rows', el => el.innerText);
   results.push(['発送日・送り状番号を表示', /発送 2026年8月21日/.test(shipTxt) && /1234-5678/.test(shipTxt), '']);
+  results.push(['納品情報に配送(ヤマト100サイズ)・送料税込1430', /ヤマト・100サイズ・クール/.test(shipTxt) && /送料 ¥1,430/.test(shipTxt), '']);
   // can_doc=false の注文には帳票ボタンが無い（ボタンは o1 の2つだけ）
   const nBtns = await page.$$eval('#hist-rows .hbtns button', els => els.length);
   results.push(['帳票ボタンは発送済のみ2つ', nBtns === 2, nBtns]);
@@ -79,7 +81,10 @@ const RECEIPT = {
   results.push(['領収文を表示', /上記金額を正に領収いたしました/.test(docText), '']);
   results.push(['但し書き「お品代として」', /お品代として/.test(docText), '']);
   results.push(['発行元（社内設定）を流用', /合同会社アルコ/.test(docText) && /登録番号: T1234567890123/.test(docText), '']);
-  results.push(['税込合計6000・軽減税率8%', /6,000/.test(docText) && /軽減税率8%/.test(docText), '']);
+  results.push(['商品8%対象6000を表示', /6,000/.test(docText) && /8%/.test(docText), '']);
+  results.push(['送料行（ヤマト）を表示', /送料（ヤマト）/.test(docText) && /1,430/.test(docText), '']);
+  results.push(['送料10%対象を表示', /10%/.test(docText), '']);
+  results.push(['総合計7430（商品6000＋送料税込1430）', /7,430/.test(docText), '']);
   await popup.close();
 
   // 領収書発行後、ボタンが「（再発行）」に変わる
