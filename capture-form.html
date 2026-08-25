@@ -1171,17 +1171,22 @@ async function refreshIndividualNumber() {
     } catch (e) { dbLabelNext = 1; }
     // 管理番号も開始番号設定を正とする（端末カウンタのドリフトを無視・自己修復）
     const startLabel = numStart('label_start_' + prefix);
-    const _queueEmptyL = (JSON.parse(localStorage.getItem('tgc_queue') || '[]') || []).length === 0;
     if (startLabel > 0) {
       labelNum = Math.max(dbLabelNext, startLabel);
       localStorage.removeItem(lsLabelKey);
-    } else if (dbLabelOk && _queueEmptyL) {
-      // オンラインで未送信キューも無い＝DBが最新の正。削除で空いた管理番号を繰り上げて再利用し、
-      // 端末カウンタもDBに合わせて下げる（欠番の再発を防ぐ）。
-      labelNum = dbLabelNext;
+    } else if (dbLabelOk) {
+      // DBが読めた＝DB最大+1が正（実際の採番はDBトリガが確定する）。
+      // 未送信キューにある同じ接頭辞のAUTO登録数だけ予定番号を進めて表示する。
+      // 古い端末カウンタ（ドリフト）は使わず、DBに合わせて下げる（欠番・番号飛びの再発防止）。
+      let qN = 0;
+      try {
+        const q = JSON.parse(localStorage.getItem('tgc_queue') || '[]') || [];
+        qN = q.filter(r => r && r.label_id === ('AUTO-' + prefix)).length;
+      } catch (e) {}
+      labelNum = dbLabelNext + qN;
       localStorage.setItem(lsLabelKey, String(dbLabelNext));
     } else {
-      // オフライン／未送信あり／DB読取失敗 → 端末カウンタと比較して重複を避ける
+      // DB読取失敗（オフライン）→ 端末カウンタと比較して重複を避ける
       const lsLabel = parseInt(localStorage.getItem(lsLabelKey) || '0') || 0;
       labelNum = Math.max(dbLabelNext, lsLabel);
     }
@@ -2868,7 +2873,9 @@ async function handleSubmit() {
     // 通常の新規登録＋センター受入（搬入待ち→採番）は「AUTO-<接頭辞>」を送り、DB側トリガに
     // 原子的採番させる（端末カウンタのドリフトを排除）。空枠マッチ・通常の編集・搬入待ち保存・
     // 捕獲者モードは対象外（従来どおり）。
-    const useAuto = ((!editRecordId) || window.receiveMode) && !matchedPlaceholderId
+    // 引き取りの仮-個体を「編集」保存したときも、DBトリガで本番号を自動採番する（仮-のまま手直しした場合のみ）
+    const editingPlaceholder = !!editRecordId && /^仮-/.test(labelId || '');
+    const useAuto = ((!editRecordId) || window.receiveMode || editingPlaceholder) && !matchedPlaceholderId
       && !window.hunterMode && !window.staffFieldMode && !pending && !!prefix;
     // 登録の冪等キー（オフライン再送で二重登録しないため。retry時も同じ値を使う）
     const _submitRef = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
