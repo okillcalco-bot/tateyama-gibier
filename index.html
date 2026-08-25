@@ -5974,6 +5974,18 @@ function indCollectWarnings() {
   return out;
 }
 
+// 種別＋市町村から個体番号の接頭辞を決める（capture-form.html と同一ロジック）
+function getIndividualPrefix(species, city) {
+  if (species === 'イノシシ') return city === '南房総市' ? 'M' : 'T';
+  if (species === 'シカ')     return 'シ';
+  if (species === 'アライグマ') return 'ア';
+  if (species === 'ハクビシン') return 'ハ';
+  if (species === 'キョン')    return 'キ';
+  if (species === 'タヌキ')    return 'タ';
+  if (species === 'ノウサギ')  return 'ウ';
+  return null;
+}
+
 async function indSave() {
   // 手入力の個体データはバイト（スタッフ）も編集可。削除・マスタ編集は管理者のみ（別途requireAdmin）。
   if (indEditId && !isLoggedIn()) return;
@@ -6035,6 +6047,17 @@ async function indSave() {
     const bs = document.getElementById('ind-f-butcher_staff');
     if (bs) payload.butcher_staff = bs.value.trim() || null;
     if (indEditId) {
+      // 引き取りの仮-個体を編集保存したら、DB側トリガで本番号を自動採番する（手で本番号に直していない場合のみ）
+      const editingPlaceholder = /^仮-/.test(indEditId) && label_id === indEditId;
+      const autoPrefix = editingPlaceholder ? getIndividualPrefix(payload.species, payload.capture_city) : null;
+      if (editingPlaceholder && autoPrefix) {
+        payload.label_id = 'AUTO-' + autoPrefix;   // トリガが本ラベル(TGC-08-…)＋通し番号を採番
+        payload.serial_number = null;
+        await sb('PATCH', 'individuals', payload, '?label_id=eq.' + encodeURIComponent(indEditId));
+        toast('本番号を自動採番して保存しました');
+        indCloseModal(); indLoad();
+        btn.disabled = false; btn.textContent = '保存'; return;
+      }
       const labelChanged = label_id && label_id !== indEditId;
       if (labelChanged) {
         if (!confirm(`個体管理番号を変更します。\n\n　${indEditId}　→　${label_id}\n\nこの個体に紐づく在庫・加工の記録も新しい番号に付け替わります。よろしいですか？`)) {
