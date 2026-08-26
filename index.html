@@ -2448,7 +2448,7 @@ async function shipDirectScan() {
     return;
   }
   try {
-    const invs = await sb('GET', 'inventory', null, `?ident_code=eq.${encodeURIComponent(code)}&deleted_at=is.null&select=id,ident_code,part_name,weight,species,individual_id,status`);
+    const invs = await sb('GET', 'inventory', null, `?${invScanFilter(code)}&deleted_at=is.null&select=id,ident_code,part_name,weight,species,individual_id,status`);
     if (!invs.length) {
       // 識別コードが一致しない → 個体番号（3セグメント）としてその個体の在庫を出し、部位を選ばせる
       const segs = code.split('-');
@@ -2608,7 +2608,7 @@ async function barcodeLookup(code) {
     }
     // 全角/小文字/空白/共通頭の省略を吸収（短縮バーコード・手入力両対応）
     code = normIdent(code);
-    let items = await sb('GET', 'inventory', null, `?ident_code=eq.${encodeURIComponent(code)}&select=*`);
+    let items = await sb('GET', 'inventory', null, `?${invScanFilter(code)}&select=*`);
     if (items.length) {
       showDetailModal(items[0]);
       toast('在庫アイテムが見つかりました', 'info');
@@ -3233,7 +3233,7 @@ async function traceSearch() {
     let invItem = null;
     let fromInv = false;
     if (!individuals.length) {
-      const inv = await sb('GET', 'inventory', null, `?ident_code=eq.${encodeURIComponent(code)}&select=*`);
+      const inv = await sb('GET', 'inventory', null, `?${invScanFilter(code)}&select=*`);
       if (inv.length) {
         invItem = inv[0];
         individuals = await sb('GET', 'individuals', null, `?label_id=eq.${encodeURIComponent(inv[0].individual_id)}&select=*`);
@@ -3573,7 +3573,7 @@ async function handleShippingScan() {
     const orderLabel = shipOrderLabel(cached.order);
 
     // 在庫を取得（削除済みも取得して理由を具体的に返す）
-    const rows = await sb('GET', 'inventory', null, `?ident_code=eq.${encodeURIComponent(code)}&select=*`);
+    const rows = await sb('GET', 'inventory', null, `?${invScanFilter(code)}&select=*`);
     if (!rows.length) {
       // 識別コードが一致しない（部位がラベルで隠れて読めない等）→ 個体番号でその個体の在庫を出して選ばせる。
       // 個体番号は 'TGC-08-<接頭辞><番号>' の3セグメント。部位コードが付いていれば外して個体で検索。
@@ -4341,6 +4341,17 @@ function normIdent(raw) {
   return s;
 }
 
+/* スキャン入力から在庫を引くための検索条件を作る。
+   ラベルのバーコードは8桁の数字キー(scan_code)。桁数が一定なのでバーが太く、確実に読める。
+   旧ラベル（識別コードを直接印字したもの）や手入力にも従来どおり対応する。 */
+function invScanFilter(raw) {
+  const s = String(raw == null ? '' : raw)
+    .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/\s+/g, '').trim();
+  if (/^\d{8}$/.test(s)) return 'scan_code=eq.' + s;
+  return 'ident_code=eq.' + encodeURIComponent(normIdent(s));
+}
+
 // ── ロットコード生成 ──
 function generateLotCode(individualCode, partName, seq) {
   const partAbbr = {
@@ -4556,6 +4567,7 @@ async function pmSelectIndividual(labelId) {
     return;
   }
   pmOperatorName = pmCurrentOperator;
+  pmEnsureScanCodes(10);   // ラベル用の数字キーを先に確保しておく（印刷は保存より先に走るため）
 
   try {
     const inds = await sb('GET', 'individuals', null, `?label_id=eq.${encodeURIComponent(labelId)}&select=*`);
@@ -4737,8 +4749,8 @@ function pmPrintOnly() {
     toast('先に登録してください','error');
     return;
   }
-  const { weight_kg, lotCode, identCode, fullPartName, labelWeight } = pmLastPrintInfo;
-  pmPrintLabel(weight_kg, lotCode, identCode, fullPartName, labelWeight);
+  const { weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode } = pmLastPrintInfo;
+  pmPrintLabel(weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode || pmScanCodeGet(identCode));
   // 再印刷したら直前登録カードの印刷状態も更新
   if (pmLastAction && pmLastAction.ident === identCode) {
     pmShowLastAction({ ...pmLastAction, printed: true });
@@ -5046,9 +5058,10 @@ function pmDoPrint(weight_kg) {
   const baseName  = pmSelectedPart.part_name;
   const fullPart  = (pmBoneIn ? '骨付き ' : '') + baseName + (pmGrade !== '並' ? ' [' + pmGrade + ']' : '') + (pmRetail ? ' [小売]' : '');
   const lw        = (pmRetail && PM_RETAIL_WEIGHTS[baseName]) ? PM_RETAIL_WEIGHTS[baseName] : weight_kg;
-  pmLastPrintInfo = { weight_kg, lotCode, identCode, fullPartName: fullPart, labelWeight: lw };
+  const scanCode = pmScanCodeGet(identCode);
+  pmLastPrintInfo = { weight_kg, lotCode, identCode, fullPartName: fullPart, labelWeight: lw, scanCode };
   pmLastLabelPrinted = true; // 直前登録カードの「ラベル印刷済み」判定に使用
-  pmPrintLabel(weight_kg, lotCode, identCode, fullPart, lw);  // ← window.print() はここで呼ばれる
+  pmPrintLabel(weight_kg, lotCode, identCode, fullPart, lw, scanCode);  // ← window.print() はここで呼ばれる
 }
 
 // ── 登録・印刷（確認をはさまず直接実行）──
@@ -5146,7 +5159,8 @@ async function pmOnWeightReceived(weight_kg) {
     const fullPartName = (pmBoneIn ? '骨付き ' : '') + baseName + (pmGrade !== '並' ? ' [' + pmGrade + ']' : '') + (pmRetail ? ' [小売]' : '');
     const basePart = pmSelectedPart.part_name;
     const labelWeight = (pmRetail && PM_RETAIL_WEIGHTS[basePart]) ? PM_RETAIL_WEIGHTS[basePart] : weight_kg;
-    pmLastPrintInfo = { weight_kg, lotCode, identCode, fullPartName, labelWeight };
+    const scanCode = pmScanCodeGet(identCode);
+    pmLastPrintInfo = { weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode };
 
     // 3. DB保存
     const record = {
@@ -5165,6 +5179,7 @@ async function pmOnWeightReceived(weight_kg) {
       unit_price: parseInt(pmSelectedPart.price_standard) || 0,
       lot_code: lotCode
     };
+    if (scanCode) record.scan_code = scanCode;   // ラベルに印字した番号と在庫行を一致させる
     const pmLoc = pmGetLocationCode();
     if (pmLoc) record.location_code = pmLoc; // 冷凍庫選択時のみ（カラム未追加のDBでも壊さない）
     await sb('POST', 'inventory', record);
@@ -5189,7 +5204,7 @@ async function pmOnWeightReceived(weight_kg) {
     // 5.5 ラベル未印刷なら自動で印刷（はかりの「プリント」ボタン経由の登録でも同時に印刷する）
     if (!pmLastLabelPrinted) {
       try {
-        pmPrintLabel(weight_kg, lotCode, identCode, fullPartName, labelWeight);
+        pmPrintLabel(weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode);
         pmLastLabelPrinted = true;
       } catch(e) {}
     }
@@ -5321,12 +5336,25 @@ function makeCode128SVG(text, barH) {
     '10111101110','11101011110','11110101110','11010000100','11010010000',
     '11010011100'];
   barH = barH || 38;
-  const START_B = 104;
-  let vals = [START_B], check = START_B;
-  for (let i = 0; i < text.length; i++) {
-    const v = text.charCodeAt(i) - 32;
-    if (v < 0 || v > 94) return '';
-    vals.push(v); check += v * (i + 1);
+  text = String(text == null ? '' : text);
+  let vals, check;
+  // 数字だけ（偶数桁）ならCode128-Cを使う。2桁で1シンボルになるのでバーが太くなり、
+  // 同じ38mm幅でも読み取り余裕が大きくなる（8桁=0.48mm/バー、英数8文字だと0.31mm）。
+  if (/^\d+$/.test(text) && text.length >= 4 && text.length % 2 === 0) {
+    const START_C = 105;
+    vals = [START_C]; check = START_C;
+    for (let i = 0; i < text.length; i += 2) {
+      const v = parseInt(text.substr(i, 2), 10);
+      vals.push(v); check += v * (i / 2 + 1);
+    }
+  } else {
+    const START_B = 104;
+    vals = [START_B]; check = START_B;
+    for (let i = 0; i < text.length; i++) {
+      const v = text.charCodeAt(i) - 32;
+      if (v < 0 || v > 94) return '';
+      vals.push(v); check += v * (i + 1);
+    }
   }
   vals.push(check % 103);
   const bits = vals.map(v => T[v]).join('') + '1100011101011';
@@ -5343,6 +5371,27 @@ function makeCode128SVG(text, barH) {
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + barH
     + '" preserveAspectRatio="none" shape-rendering="crispEdges" style="display:block;width:38mm;height:14mm;">'
     + '<rect width="' + W + '" height="' + barH + '" fill="#fff"/>' + rects + '</svg>';
+}
+
+/* ── ラベル用の数字キー（scan_code）の先取り確保 ──
+   ラベル印刷は保存より先に走ることがあるため、8桁キーをあらかじめ確保しておく。
+   確保できなかったときは従来どおり識別コードをバーコード化する（動作は止めない）。 */
+let pmScanPool = [];
+let pmScanCodeFor = {};   // identCode → scan_code（印刷と保存で必ず同じ番号を使う）
+async function pmEnsureScanCodes(min) {
+  if (pmScanPool.length >= (min || 5)) return;
+  try {
+    const r = await sb('POST', 'rpc/tgc_reserve_scan_codes', { p_n: 20 });
+    if (Array.isArray(r)) pmScanPool.push(...r.filter(Boolean));
+  } catch (e) { /* 取れなくても識別コードで印刷できるので止めない */ }
+}
+function pmScanCodeGet(identCode) {
+  if (!identCode) return null;
+  if (pmScanCodeFor[identCode]) return pmScanCodeFor[identCode];
+  const c = pmScanPool.shift() || null;
+  if (c) pmScanCodeFor[identCode] = c;
+  pmEnsureScanCodes();
+  return c;
 }
 
 // 精肉ラベル(40mm×60mm)のHTMLを組み立てる。印刷とレイアウト検証で共用する純粋関数。
@@ -5386,7 +5435,7 @@ function pmLabelHtml(d) {
 }
 
 // ── ラベル印刷 ──
-function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
+function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight, scanCode) {
   if (!partName) partName = pmSelectedPart.part_name;
   if (labelWeight === undefined) labelWeight = weight_kg;
   const species     = pmIndividual.species || '';
@@ -5401,8 +5450,9 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight) {
   const expiryStr   = expiryDate.toLocaleDateString('ja-JP');
 
   // ── バーコードSVG生成（自前エンコーダー・外部依存なし）──
-  // 共通頭'TGC-08-'を省いた短縮コードをバーコード化してバー密度を下げる（読取安定）。人が読む.bctはフル桁。
-  const barcodeSection = makeCode128SVG(shortIdent(identCode));
+  // バーコードは8桁の数字キー（Code128-C・2桁=1シンボル）。桁数が一定なのでバーが太く、確実に読める。
+  // キーが確保できていない場合のみ、従来どおり短縮した識別コードを入れる。
+  const barcodeSection = makeCode128SVG(scanCode || shortIdent(identCode));
 
   const html = pmLabelHtml({
     origin, speciesName, labelId: pmIndividual.label_id, partName,
@@ -7534,7 +7584,7 @@ async function kkScanAdd() {
   input.value = '';
   if (kkMaterials.some(m => m.ident_code === code)) { toast('すでに追加済みです', 'error'); input.focus(); return; }
   try {
-    const rows = await sb('GET', 'inventory', null, `?ident_code=eq.${encodeURIComponent(code)}&deleted_at=is.null&select=id,ident_code,part_name,weight,weight_kg,species,individual_id,status,tier`);
+    const rows = await sb('GET', 'inventory', null, `?${invScanFilter(code)}&deleted_at=is.null&select=id,ident_code,part_name,weight,weight_kg,species,individual_id,status,tier`);
     if (!rows.length) { toast(`在庫に見つかりません: ${code}`, 'error'); playFeedbackSound(false); input.focus(); return; }
     const inv = rows[0];
     if (inv.status === '加工済') { toast('この肉はすでに加工済です', 'error'); playFeedbackSound(false); input.focus(); return; }
@@ -7719,7 +7769,13 @@ async function kkSubmit() {
         location_code: location
       });
     }
-    await sb('POST', 'inventory', packRows);
+    const createdPacks = await sb('POST', 'inventory', packRows);
+    // 登録された行の数字キーをラベルに使う（桁数が一定なので確実に読める）
+    if (Array.isArray(createdPacks)) {
+      const byCode = {};
+      createdPacks.forEach(r => { if (r && r.ident_code) byCode[r.ident_code] = r.scan_code; });
+      packs.forEach(p => { if (byCode[p.ident_code]) p.scan_code = byCode[p.ident_code]; });
+    }
 
     // 2. 原料ブロックを加工済に
     for (const m of kkMaterials) {
@@ -7807,7 +7863,7 @@ function kkPrintLabels(packs, prodName, species, origin, materials) {
     <div class="ex">消費期限　${expiryStr}</div>
     <div class="tmp">保存温度　-18℃以下</div>
     ${rawLine ? `<div class="rw">${esc2(rawLine)}</div>` : ''}
-    <div class="bc">${makeCode128SVG(shortIdent(p.ident_code))}</div>
+    <div class="bc">${makeCode128SVG(p.scan_code || shortIdent(p.ident_code))}</div>
     <div class="bct">${esc2(p.ident_code)}</div>
     <div class="mk">館山ジビエセンター</div>
     <div class="ad">千葉県館山市西長田1163-5</div>
@@ -7949,7 +8005,12 @@ async function kkRepackSubmit() {
         location_code: b.location_code
       });
     }
-    await sb('POST', 'inventory', packRows);
+    const createdPacks = await sb('POST', 'inventory', packRows);
+    if (Array.isArray(createdPacks)) {
+      const byCode = {};
+      createdPacks.forEach(r => { if (r && r.ident_code) byCode[r.ident_code] = r.scan_code; });
+      packs.forEach(p => { if (byCode[p.ident_code]) p.scan_code = byCode[p.ident_code]; });
+    }
     try {
       const logRows = packs.map(p => ({ parent_ident_code: b.batchCode, child_ident_code: p.ident_code, weight: null, result_weight_kg: w, process_type: b.prodName, operator: operator, individual_id: null }));
       await sb('POST', 'processing_log', logRows);
