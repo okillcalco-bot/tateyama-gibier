@@ -5394,6 +5394,33 @@ function pmScanCodeGet(identCode) {
   return c;
 }
 
+/* 品名がラベル幅(38mm)に1行で収まるよう文字サイズを自動で詰める。
+   「ペットフード用（な / し）」のように語の途中で折り返すのを防ぐ。
+   全角=1・半角=0.5で数え、1行に収まる大きさを求める（下限7ptまで）。 */
+function labelPartFontPt(name, maxPt) {
+  maxPt = maxPt || 11;
+  const w = [...String(name || '')].reduce((n, ch) => n + (/[ -ÿ｡-ﾟ]/.test(ch) ? 0.55 : 1), 0);
+  if (w <= 0) return maxPt;
+  const fit = 100 / w;   // 38mm を w文字で割った1文字あたりの大きさ(pt)
+  return Math.max(7, Math.min(maxPt, Math.floor(fit * 10) / 10));
+}
+
+/* 上の計算は見積もりなので、実際に描画してから1行に収まるまで詰める仕上げを入れる。
+   ラベル文書内で同期実行されるため、印刷前に必ず反映される（外部フォント無しなので測定も安定）。 */
+const LABEL_FIT_SCRIPT = `<script>(function(){
+  var els=document.querySelectorAll('.p');
+  for(var i=0;i<els.length;i++){
+    var el=els[i], g=function(){return getComputedStyle(el)};
+    var pt=parseFloat(g().fontSize)/1.3333;               // px→pt
+    for(var n=0;n<24;n++){
+      var lh=parseFloat(g().lineHeight)||parseFloat(g().fontSize)*1.25;
+      if(el.getBoundingClientRect().height<=lh*1.2) break; // 1行に収まった
+      if(pt<=7) break;                                     // これ以上は小さくしない
+      pt=Math.round((pt-0.3)*10)/10; el.style.fontSize=pt+'pt';
+    }
+  }
+})();<\/script>`;
+
 // 精肉ラベル(40mm×60mm)のHTMLを組み立てる。印刷とレイアウト検証で共用する純粋関数。
 function pmLabelHtml(d) {
   const css = `
@@ -5405,7 +5432,7 @@ function pmLabelHtml(d) {
     body > div { flex:none; }
     .o  { font-size:8.5pt; font-weight:bold; border-bottom:.5pt solid #000; padding-bottom:.4mm; white-space:nowrap; }
     .id { font-size:5pt; color:#333; margin-top:.4mm; }
-    .p  { font-size:11pt; font-weight:bold; margin-top:.4mm; }
+    .p  { font-size:11pt; font-weight:bold; margin-top:.4mm; line-height:1.25; line-break:strict; overflow-wrap:normal; }
     .w  { font-size:15pt; font-weight:bold; line-height:1.1; }
     .wu { font-size:9pt; }
     .ex { font-size:7pt; font-weight:bold; margin-top:.5mm; }
@@ -5422,7 +5449,7 @@ function pmLabelHtml(d) {
 </style></head><body>
     <div class="o">${d.origin}　${d.speciesName}</div>
     <div class="id">個体管理番号　${d.labelId}</div>
-    <div class="p">${d.partName}</div>
+    <div class="p" style="font-size:${labelPartFontPt(d.partName)}pt">${d.partName}</div>
     <div class="w">${Number(d.labelWeight).toFixed(3)}<span class="wu"> kg</span></div>
     <div class="wn">※ビニール袋の重さ（10g）を引いているため、実数値とは異なります</div>
     <div class="ex">消費期限　${d.expiryStr}</div>
@@ -5431,7 +5458,7 @@ function pmLabelHtml(d) {
     <div class="bct">${d.identCode}</div>
     <div class="mk">館山ジビエセンター</div>
     <div class="ad">千葉県館山市西長田1163-5</div>
-  </body></html>`;
+  ${LABEL_FIT_SCRIPT}</body></html>`;
 }
 
 // ── ラベル印刷 ──
@@ -7843,7 +7870,7 @@ function kkPrintLabels(packs, prodName, species, origin, materials) {
     /* 文字ブロックは縮ませない。バーコードは下の .bc で領域を確保する */
     .lb > div { flex:none; }
     .o  { font-size:8.5pt; font-weight:bold; border-bottom:.5pt solid #000; padding-bottom:.4mm; white-space:nowrap; }
-    .p  { font-size:11pt; font-weight:bold; margin-top:.8mm; }
+    .p  { font-size:11pt; font-weight:bold; margin-top:.8mm; line-height:1.25; line-break:strict; overflow-wrap:normal; }
     .w  { font-size:15pt; font-weight:bold; line-height:1.1; margin-top:.4mm; }
     .wu { font-size:9pt; }
     .ex { font-size:7pt; font-weight:bold; margin-top:.5mm; }
@@ -7858,7 +7885,7 @@ function kkPrintLabels(packs, prodName, species, origin, materials) {
   `;
   const body = packs.map(p => `<div class="lb">
     <div class="o">${esc2(origin)}　${esc2(speciesName)}</div>
-    <div class="p">${esc2(prodName)}</div>
+    <div class="p" style="font-size:${labelPartFontPt(prodName)}pt">${esc2(prodName)}</div>
     <div class="w">${Number(p.weight).toFixed(3)}<span class="wu"> kg</span></div>
     <div class="ex">消費期限　${expiryStr}</div>
     <div class="tmp">保存温度　-18℃以下</div>
@@ -7874,7 +7901,7 @@ function kkPrintLabels(packs, prodName, species, origin, materials) {
   document.body.appendChild(iframe);
   const doc = iframe.contentDocument || iframe.contentWindow.document;
   doc.open();
-  doc.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${css}</style></head><body>${body}</body></html>`);
+  doc.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${css}</style></head><body>${body}${LABEL_FIT_SCRIPT}</body></html>`);
   doc.close();
   iframe.contentWindow.focus();
   iframe.contentWindow.print();
