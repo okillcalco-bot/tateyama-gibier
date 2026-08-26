@@ -41,6 +41,21 @@ const path = require('path');
   results.push(['label_id=AUTO-M を送る', patch && patch.body.label_id === 'AUTO-M', patch && patch.body.label_id]);
   results.push(['serial_number=null を送る', patch && patch.body.serial_number === null, patch && String(patch.body.serial_number)]);
   results.push(['WHEREは仮-で特定', patch && /label_id=eq\.%E4%BB%AE-TESTPICKUP/.test(patch.url), patch && patch.url.split('?')[1]]);
+  // 通し番号が無い個体（令和7年度の非イノシシ）はラベルの番号を代わりに表示する
+  const serialCells = await page.evaluate(() => {
+    indAllData = [
+      { label_id: 'TGC-07-キ060', species: 'キョン', serial_number: null, capture_city: '館山市' },
+      { label_id: 'TGC-08-T001', species: 'イノシシ', serial_number: 12, capture_city: '館山市' },
+      { label_id: '仮-TESTX', species: 'イノシシ', serial_number: null, capture_city: '館山市' }
+    ];
+    indSortCol = 'label_id'; indSortAsc = true;
+    indRender();
+    return [...document.querySelectorAll('#ind-body tr')].map(tr => tr.children[1].textContent.trim());
+  });
+  results.push(['通し番号ありはその数字', serialCells.includes('12'), serialCells.join(',')]);
+  results.push(['通し番号なしはラベルの番号', serialCells.includes('060'), serialCells.join(',')]);
+  results.push(['番号が取れない個体は-', serialCells.includes('-'), serialCells.join(',')]);
+
   results.push(['pageerrorなし', errors.length === 0, errors.join(' / ')]);
 
   let pass = 0;

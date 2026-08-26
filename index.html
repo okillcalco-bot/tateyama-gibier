@@ -5721,6 +5721,14 @@ function indSort(col) {
 }
 
 let indAllData = [];
+/* 通し番号が無い個体（令和7年度の非イノシシなど）は「-」ではなくラベルの番号を見せる。
+   採番そのものはイノシシと体系を共有するため触らず、表示だけ補う。 */
+function indSerialDisplay(i) {
+  if (i.serial_number != null) return String(i.serial_number);
+  const m = String(i.label_id || '').match(/(\d{2,4})\s*$/);
+  return m ? `<span style="color:var(--text3);" title="ラベルの番号（通し番号は未設定）">${m[1]}</span>` : '-';
+}
+
 function indRender() {
   const body = document.getElementById('ind-body');
   if (!body) return;
@@ -5741,7 +5749,7 @@ function indRender() {
   }
   body.innerHTML = data.map(i => `<tr>
     <td><input type="checkbox" class="ind-chk" data-id="${i.label_id}" onchange="indUpdateBulkBtn()"></td>
-    <td style="text-align:center;">${i.serial_number != null ? i.serial_number : '-'}</td>
+    <td style="text-align:center;">${indSerialDisplay(i)}</td>
     <td style="color:var(--gold);font-weight:700;">${i.label_id}</td>
     <td>${i.species || '-'}</td>
     <td>${i.sex || '-'}</td>
