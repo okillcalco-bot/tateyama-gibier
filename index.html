@@ -1742,11 +1742,11 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);">
         <div class="form-group" style="margin:0;min-width:190px;"><label>受け渡し</label>
           <select class="form-input" id="ship-direct-method" onchange="shipDirectMethodChange()">
+            <option value="発送" selected>発送する（送料あり）</option>
             <option value="手渡し">手渡し・持ち帰り（送料なし）</option>
-            <option value="発送">発送する（送料あり）</option>
           </select>
         </div>
-        <div id="ship-direct-delivery" style="display:none;gap:10px;flex-wrap:wrap;align-items:flex-end;flex:1;">
+        <div id="ship-direct-delivery" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;flex:1;">
           <div class="form-group" style="margin:0;min-width:120px;"><label>運送会社</label>
             <select class="form-input" id="ship-direct-carrier" onchange="shipDirectFreightAuto(true)">
               <option value="ヤマト">ヤマト運輸</option><option value="佐川">佐川急便</option>
@@ -2253,6 +2253,10 @@ async function loadBaseOrders() {
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
           <input class="input" id="base-track-${o.unique_key}" placeholder="送り状番号（任意）" style="flex:1;min-width:170px;max-width:260px;">
+          <select class="input" id="base-carrier-${o.unique_key}" style="max-width:120px;"><option value="ヤマト">ヤマト</option><option value="佐川">佐川</option></select>
+          <select class="input" id="base-size-${o.unique_key}" style="max-width:80px;"><option value="60">60</option><option value="80">80</option><option value="100" selected>100</option><option value="140">140</option><option value="160">160</option></select>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;white-space:nowrap;"><input type="checkbox" id="base-cool-${o.unique_key}" checked> クール</label>
+          <input class="input" id="base-freight-${o.unique_key}" type="number" min="0" step="1" inputmode="numeric" placeholder="送料(税抜)" style="max-width:110px;">
           <button class="btn btn-primary btn-sm" onclick="baseOrderShip('${o.unique_key}')">📦 発送処理（在庫を引く）</button>
         </div>
       </div>`;
@@ -2272,7 +2276,10 @@ async function baseOrderShip(key) {
   const buyer = `${od.last_name || ''} ${od.first_name || ''}`.trim() || 'BASE購入者';
   const trackEl = document.getElementById('base-track-' + key);
   const trackNo = trackEl ? trackEl.value.trim() : '';
-  if (!confirm(`BASE注文の発送処理をしますか？\n\n購入者: ${buyer}\n${items.map(i => `・${i.title} × ${i.amount}`).join('\n')}\n送り状番号: ${trackNo || '（未入力）'}\n\n・センター在庫から自動で差し引きます\n・BASE側も「発送済み」に更新します（購入者に発送メールが届きます）`)) return;
+  const _fEl = document.getElementById('base-freight-' + key);
+  const _fv = _fEl ? parseInt(_fEl.value, 10) : NaN;
+  const _fTxt = isFinite(_fv) && _fv >= 0 ? `¥${_fv.toLocaleString()}（税抜）` : '未入力（請求書に送料が載りません）';
+  if (!confirm(`BASE注文の発送処理をしますか？\n\n購入者: ${buyer}\n${items.map(i => `・${i.title} × ${i.amount}`).join('\n')}\n送り状番号: ${trackNo || '（未入力）'}\n送料: ${_fTxt}\n\n・センター在庫から自動で差し引きます\n・BASE側も「発送済み」に更新します（購入者に発送メールが届きます）`)) return;
   try {
     const prods = await sb('GET', 'products', null, '?deleted_at=is.null&select=id,name,stock_qty,base_item_id');
     const byBaseId = {};
@@ -2310,7 +2317,15 @@ async function baseOrderShip(key) {
         try { await sb('POST', 'rpc/base_dispatch', { p_order_item_id: String(it.order_item_id), p_tracking: trackNo || null }); } catch (e) {}
       }
     }
-    await sb('POST', 'shipments', { order_id: orderId, shipment_date: new Date().toISOString().slice(0, 10), status: '出荷済', notes: 'BASE注文 ' + key + (trackNo ? ' / 送り状番号: ' + trackNo : '') });
+    const baseShipBody = { order_id: orderId, shipment_date: new Date().toISOString().slice(0, 10), status: '出荷済', notes: 'BASE注文 ' + key + (trackNo ? ' / 送り状番号: ' + trackNo : '') };
+    // 運送会社・サイズ・クール・送料（請求書・納品書の送料欄の元になる）
+    const _bc = document.getElementById('base-carrier-' + key), _bs = document.getElementById('base-size-' + key);
+    const _bl = document.getElementById('base-cool-' + key), _bf = document.getElementById('base-freight-' + key);
+    if (_bc) baseShipBody.carrier = _bc.value;
+    if (_bs) baseShipBody.size_code = parseInt(_bs.value, 10);
+    if (_bl) baseShipBody.is_cool = _bl.checked;
+    if (_bf) { const v = parseInt(_bf.value, 10); if (isFinite(v) && v >= 0) baseShipBody.freight = v; }
+    await sb('POST', 'shipments', baseShipBody);
     playFeedbackSound(true);
     toast(`BASE注文の発送処理が完了しました（${items.length}品目）` + (unmatched.length ? `\n⚠ 在庫と対応付けなし: ${unmatched.join('・')}（⚙BASE連携で対応付けを確認）` : ''));
     loadBaseOrders();

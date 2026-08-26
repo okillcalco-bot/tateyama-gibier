@@ -44,15 +44,29 @@ const CUSTOMERS = [
   await page.evaluate(async () => { if (typeof loadShipping === 'function') await loadShipping(); });
   await page.waitForTimeout(400);
 
-  // 1) 既定は手渡し＝送料欄は隠れている
+  // 1) 既定は発送＝最初から送料欄が出ている（出荷の大半が発送のため）
   const init = await page.evaluate(() => ({
     method: document.getElementById('ship-direct-method').value,
     disp: document.getElementById('ship-direct-delivery').style.display
   }));
-  results.push(['既定は手渡し（送料なし）', init.method === '手渡し', init.method]);
-  results.push(['手渡しでは送料欄が隠れる', init.disp === 'none' || init.disp === '', init.disp]);
+  results.push(['既定は発送（送料あり）', init.method === '発送', init.method]);
+  results.push(['最初から送料欄が出ている', init.disp === 'flex', init.disp]);
 
-  // 2) 発送に切り替えると送料欄が出る
+  // 2) 手渡しに切り替えると送料欄が隠れ、金額もクリアされる
+  await page.evaluate(() => {
+    document.getElementById('ship-direct-freight').value = '999';
+    document.getElementById('ship-direct-method').value = '手渡し';
+    shipDirectMethodChange();
+  });
+  await page.waitForTimeout(200);
+  const hid = await page.evaluate(() => ({
+    disp: document.getElementById('ship-direct-delivery').style.display,
+    v: document.getElementById('ship-direct-freight').value
+  }));
+  results.push(['手渡しで送料欄が隠れる', hid.disp === 'none', hid.disp]);
+  results.push(['手渡しで金額がクリアされる', hid.v === '', hid.v]);
+
+  // 発送へ戻す
   await page.evaluate(() => { document.getElementById('ship-direct-method').value = '発送'; shipDirectMethodChange(); });
   await page.waitForTimeout(200);
   const shown = await page.$eval('#ship-direct-delivery', el => el.style.display);
