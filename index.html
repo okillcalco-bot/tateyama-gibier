@@ -1737,6 +1737,37 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <button class="btn" id="ship-direct-pause" onclick="shipDirectPause()" style="font-size:15px;padding:12px 18px;" disabled title="今のリストを保存して、別の出荷を先に処理できます">⏸ 一時停止</button>
         <button class="btn btn-primary" id="ship-direct-confirm" onclick="shipDirectConfirm()" style="font-size:16px;padding:12px 24px;" disabled>出荷確定</button>
       </div>
+
+      <!-- 受け渡し方法と送料。請求書・納品書の送料欄はここから作られる -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);">
+        <div class="form-group" style="margin:0;min-width:190px;"><label>受け渡し</label>
+          <select class="form-input" id="ship-direct-method" onchange="shipDirectMethodChange()">
+            <option value="手渡し">手渡し・持ち帰り（送料なし）</option>
+            <option value="発送">発送する（送料あり）</option>
+          </select>
+        </div>
+        <div id="ship-direct-delivery" style="display:none;gap:10px;flex-wrap:wrap;align-items:flex-end;flex:1;">
+          <div class="form-group" style="margin:0;min-width:120px;"><label>運送会社</label>
+            <select class="form-input" id="ship-direct-carrier" onchange="shipDirectFreightAuto(true)">
+              <option value="ヤマト">ヤマト運輸</option><option value="佐川">佐川急便</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0;min-width:95px;"><label>サイズ</label>
+            <select class="form-input" id="ship-direct-size" onchange="shipDirectFreightAuto(true)">
+              <option value="60">60</option><option value="80">80</option>
+              <option value="100" selected>100</option><option value="140">140</option><option value="160">160</option>
+            </select>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;padding-bottom:11px;font-size:14px;white-space:nowrap;">
+            <input type="checkbox" id="ship-direct-cool" checked onchange="shipDirectFreightAuto(true)"> クール便
+          </label>
+          <div class="form-group" style="margin:0;min-width:120px;"><label>送料（税抜）</label>
+            <input class="form-input" id="ship-direct-freight" type="number" min="0" step="1" inputmode="numeric" placeholder="自動計算" />
+          </div>
+          <button class="btn" onclick="shipDirectFreightAuto(true)" style="padding:11px 16px;margin-bottom:1px;">↻ 再計算</button>
+        </div>
+      </div>
+      <div id="ship-direct-freight-note" style="font-size:12px;color:var(--text3);margin-top:6px;"></div>
     </div>
 
     <div class="section" id="ship-base">
@@ -2294,8 +2325,57 @@ let shipDirectItems = [];
 document.getElementById('ship-direct-code').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); shipDirectScan(); }
 });
-document.getElementById('ship-direct-cust').addEventListener('input', () => { shipDirectUpdateConfirm(); shipActiveSave(); });
+document.getElementById('ship-direct-cust').addEventListener('input', () => { shipDirectUpdateConfirm(); shipActiveSave(); shipDirectFreightAuto(false); });
+// 送料を手で入れたら、実行中の自動計算の結果は捨てる（手入力が最優先）
+document.getElementById('ship-direct-freight')?.addEventListener('input', () => { shipFreightSeq++; shipActiveSave(); });
 document.getElementById('ship-direct-memo').addEventListener('input', shipActiveSave);
+
+/* ── 直販出荷の受け渡し方法と送料 ──
+   出荷の大半はこの直販経路を通るため、送料はここで記録しないと請求書・納品書に載らない。 */
+let shipCustAddrMap = {};   // 店名 → 住所（送料の自動計算に使う）
+let shipFreightSeq = 0;     // 自動計算の世代番号。手入力や再操作があれば古い結果は捨てる
+
+function shipDirectMethodChange() {
+  const send = document.getElementById('ship-direct-method')?.value === '発送';
+  const box = document.getElementById('ship-direct-delivery');
+  if (box) box.style.display = send ? 'flex' : 'none';
+  const f = document.getElementById('ship-direct-freight');
+  if (!send && f) f.value = '';
+  const note = document.getElementById('ship-direct-freight-note');
+  if (note) note.textContent = send ? '' : '手渡し・持ち帰りとして記録します（送料なし）。';
+  if (send) shipDirectFreightAuto(false);
+  shipActiveSave();
+}
+
+// 出荷先の住所から送料を自動計算して入れる。住所が分からないときは手入力できる。
+async function shipDirectFreightAuto(force) {
+  const note = document.getElementById('ship-direct-freight-note');
+  const fEl = document.getElementById('ship-direct-freight');
+  if (!fEl || document.getElementById('ship-direct-method')?.value !== '発送') return;
+  if (!force && fEl.value) return;              // 手入力済みは尊重する
+  const name = (document.getElementById('ship-direct-cust')?.value || '').trim();
+  const addr = shipCustAddrMap[name] || '';
+  if (!addr) {
+    if (note) note.innerHTML = '<span style="color:var(--gold)">住所が分からないため自動計算できません。送料を直接入力してください。</span>';
+    return;
+  }
+  const opts = {
+    carrier: document.getElementById('ship-direct-carrier').value,
+    size: parseInt(document.getElementById('ship-direct-size').value, 10),
+    cool: document.getElementById('ship-direct-cool').checked
+  };
+  const seq = ++shipFreightSeq;
+  if (note) note.textContent = '計算中…';
+  const v = await shipComputeFreight(addr, opts);
+  // 計算中に手入力・条件変更があったら、古い結果で上書きしない
+  if (seq !== shipFreightSeq) return;
+  if (v == null) {
+    if (note) note.innerHTML = '<span style="color:var(--gold)">この地域・サイズは料金表にありません。送料を直接入力してください。</span>';
+    return;
+  }
+  fEl.value = v;
+  if (note) note.innerHTML = `${esc2(name)} の住所から算出: <b style="color:var(--gold)">¥${v.toLocaleString()}</b>（税抜・${esc2(opts.carrier)} ${opts.size}サイズ${opts.cool ? '・クール' : ''}）`;
+}
 
 function shipDirectUpdateConfirm() {
   const btn = document.getElementById('ship-direct-confirm');
@@ -2519,7 +2599,18 @@ async function shipDirectConfirm() {
   if (!shipDirectItems.length) { toast('先に商品をスキャンしてください', 'error'); return; }
   if (!custName) { toast('出荷先（お店名など）を入力してください', 'error'); return; }
   const totalW = shipDirectItems.reduce((s,i)=>s+(parseFloat(i.weight)||0),0);
-  if (!confirm(`注文なし出荷を確定しますか？\n\n出荷先: ${custName}\n商品: ${shipDirectItems.length}点 / ${totalW.toFixed(2)}kg\n${shipDirectItems.map(i=>`・${i.ident_code}（${i.part_name||'-'}）`).join('\n')}\n\n在庫が「出荷済」になります。`)) return;
+  // 受け渡し方法と送料も確認画面に出す（送料の入れ忘れをここで気づけるように）
+  const _dm = document.getElementById('ship-direct-method')?.value || '手渡し';
+  let _dl = '受け渡し: 手渡し・持ち帰り（送料なし）';
+  if (_dm === '発送') {
+    const _fv = parseInt(document.getElementById('ship-direct-freight').value, 10);
+    const _cr = document.getElementById('ship-direct-carrier').value;
+    const _sz = document.getElementById('ship-direct-size').value;
+    const _cl = document.getElementById('ship-direct-cool').checked ? '・クール' : '';
+    _dl = `受け渡し: 発送（${_cr} ${_sz}サイズ${_cl}）\n送料: ` +
+      (isFinite(_fv) && _fv >= 0 ? `¥${_fv.toLocaleString()}（税抜）` : '未入力（あとで請求書に反映されません）');
+  }
+  if (!confirm(`注文なし出荷を確定しますか？\n\n出荷先: ${custName}\n${_dl}\n商品: ${shipDirectItems.length}点 / ${totalW.toFixed(2)}kg\n${shipDirectItems.map(i=>`・${i.ident_code}（${i.part_name||'-'}）`).join('\n')}\n\n在庫が「出荷済」になります。`)) return;
 
   const btn = document.getElementById('ship-direct-confirm');
   btn.disabled = true;
@@ -2557,6 +2648,14 @@ async function shipDirectConfirm() {
 
     const shipBody = { order_id: orderId, shipment_date: now.toISOString().slice(0,10), status: '出荷済', notes: `直販（注文なし） ${custName}${operator ? ' 担当:'+operator : ''}` };
     if (customerId) shipBody.customer_id = customerId;
+    // 受け渡し方法と送料（請求書・納品書の送料欄はここから作られる）
+    if (document.getElementById('ship-direct-method')?.value === '発送') {
+      shipBody.carrier = document.getElementById('ship-direct-carrier').value;
+      shipBody.size_code = parseInt(document.getElementById('ship-direct-size').value, 10);
+      shipBody.is_cool = document.getElementById('ship-direct-cool').checked;
+      const fv = parseInt(document.getElementById('ship-direct-freight').value, 10);
+      if (isFinite(fv) && fv >= 0) shipBody.freight = fv;
+    }
     await sb('POST', 'shipments', shipBody);
 
     for (const i of shipDirectItems) {
@@ -3421,9 +3520,11 @@ async function loadShipping() {
   // 直販の出荷先候補（顧客台帳の名前だけ）。キー未設定の端末では候補が出ないだけで、
   // 名前を手入力すれば staff_lookup_customer_id が紐付けを解決する
   try {
-    const custs = await sb('GET', 'customers', null, '?select=name&order=name.asc&limit=300');
+    const custs = await sb('GET', 'customers', null, '?select=name,address&order=name.asc&limit=300');
     const dl = document.getElementById('shipCustDatalist');
     if (dl) dl.innerHTML = custs.map(c => `<option value="${(c.name||'').replace(/"/g,'&quot;')}">`).join('');
+    shipCustAddrMap = {};
+    custs.forEach(c => { if (c.name) shipCustAddrMap[c.name] = c.address || ''; });
   } catch(e) {}
   try {
     // 受注（新規・未対応）も出す。誰でもここから受付→割当→出荷まで進められるようにするため

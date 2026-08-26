@@ -1,5 +1,37 @@
 # CLAUDE.md（リポジトリルート）
 
+## 進め方の約束（2026-08-26 合意）
+
+**軸は「1個体の一生が1本の線で繋がっていること」。**
+生態 → 個体 → 精肉 → 加工 → 販売 → 食べた人の声。この線を太く・切れなくすることが
+すべての改善の判断基準。迷ったら「この変更は線を通すか」で決める。
+
+1. **品質上の欠陥は判断を仰がずに直す。** 折り返しの乱れ・重なり・読めないラベルなど、
+   見て分かる不具合は「直すか聞く」のではなく直してから報告する。
+   相談するのは業務のやり方が変わるとき、またはどちらが良いか判断できないときだけ。
+2. **勘で直さず、まず測る。** 症状が繰り返すときは局所修正を疑い、全件を数える。
+   （例: バーコードが読めない → 在庫722件の桁数を実測 → 7割が限界割れと判明 →
+   ラベル余白ではなく「何を印字するか」を変えた）
+3. **局所最適より全体最適。** 同じ症状が3回出たら、対症療法をやめて構造を変える。
+4. **サイレント失敗を作らない。** 書き込みの失敗を握り潰さない。失敗は必ず画面に出す。
+   （加工ログが1件も保存されていなかった事故の再発防止）
+5. **直したら、測り方をテストに残す。** 目視で分かる不具合こそ実測テストにする
+   （実寸で描画して位置を測る等）。`tests/e2e/` に追加し、回帰も毎回流す。
+
+### 定期ループ（Routine）
+
+平日19:00 JSTに1周だけPDCAを回す。1回の実行で扱う改善は1件に絞る。
+測って何も見つからなければ何も変えない（無理に変更を作らない）。
+
+### 現状の実測値（2026-08-26 時点・次に測るときの基準）
+
+- 個体600頭 → 精肉まで235頭 → 販売まで到達49頭（**ここの断絶が最大の課題**）
+- 出荷27件中、送料が入っているのは0件（書類の送料欄に直結）
+- 生態データ: 捕獲地区/方法/性別/体重は596〜600件あるが、緯度経度1・推定年齢0・体長0・餌0
+- 食べた人の声: 0件（未実装。ラベルQRから集める設計）
+
+---
+
 このリポジトリには2つの世代のシステムが共存している。
 
 ## 1. ジビエ基幹システム（本番稼働中・ルート直下）
@@ -12,6 +44,21 @@
 - DBスキーマの変更は `/migrations` に「追加のみ」のSQLを置く既存流儀に従う
 - 既存テーブル: individuals, hunters, staff, attendance, products,
   product_movements, orders, customers, area_master など
+
+### 作業手順（毎回これに従う）
+
+- Supabase project_id: `clpdyrehdgzgiidbfucj` / 本番: https://tateyama-gibier.vercel.app
+- ブランチ: `claude/tateyama-gibier-ux-ws4c5p`
+  毎回 `git fetch origin main && git checkout -B <branch> origin/main` から始める
+- E2E: `CHROME=/opt/pw-browsers/chromium-1194/chrome-linux/chrome
+  NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node tests/e2e/<name>.e2e.js`
+  **変更したら関連する既存テストも全部流す**（tests/e2e/ 配下）
+- デプロイ: PRを作って squash merge → Vercelが自動反映（**約6分**）
+- 反映確認: サンドボックスからvercel.appへ直接出られないため、Supabaseの
+  `execute_sql` で `select position('目印' in (extensions.http_get('https://tateyama-gibier.vercel.app/index.html')).content)`
+- **元データ（individuals / inventory / orders）は書き換えない。** 復元や補完は追記のみ。
+- DBの破壊的な検証は `do $$ ... raise exception 'TESTRESULT: %', msg; end $$;` で
+  ロールバックさせて確認する
 
 ## 2. ALCO OS（`alco-os/`）
 
