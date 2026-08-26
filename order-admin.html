@@ -1730,7 +1730,7 @@ async function generateDoc(type){
     // 一覧を更新（発行済みは下がる）
     selected.forEach(o=>{(docDocsMap[o.id]=docDocsMap[o.id]||new Set()).add(type);});
     renderDocOrders();
-  }catch(e){console.error('書類保存エラー:',e)}
+  }catch(e){console.error('書類保存エラー:',e); alert('⚠ 書類の発行記録の保存に失敗しました。プレビューは表示されていますが「発行済み」として記録されていません。\n\n'+String(e.message||e));}
 }
 
 // ── Customers Tab ──
@@ -3259,13 +3259,13 @@ async function invIssue(){
             document_id:docId,line_no:i+1,name:l.name,quantity:l.qty,unit:l.unit||null,
             unit_price:l.price,tax_rate:l.tax!=null?l.tax:8,amount:l.amount||0
           })));
-        }catch(e){console.error('明細保存エラー',e)}
+        }catch(e){console.error('明細保存エラー',e); alert('⚠ 明細の保存に失敗しました。請求書ヘッダーは保存済みですが明細が空の可能性があります。もう一度保存し直してください。\n\n'+String(e.message||e));}
         // 取り込んだ注文を紐付け（二重請求防止）
         if(p.order_ids && p.order_ids.length){
           try{
             await sb('DELETE','document_orders','',`?document_id=eq.${docId}`);
             await sb('POST','document_orders',p.order_ids.map(oid=>({document_id:docId,order_id:oid})));
-          }catch(e){console.error('注文紐付けエラー',e)}
+          }catch(e){console.error('注文紐付けエラー',e); alert('⚠ 注文の紐付け保存に失敗しました。二重請求防止の記録が残っていない可能性があります。\n\n'+String(e.message||e));}
         }
       }
       invRenderPrint(p,number,{});
