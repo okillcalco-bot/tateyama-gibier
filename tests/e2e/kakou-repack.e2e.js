@@ -15,6 +15,13 @@ const path = require('path');
     // 追加パックPOST
     if (m === 'POST' && /\/inventory/.test(u)) { try { postedInv = JSON.parse(route.request().postData() || '[]'); } catch (e) {} return route.fulfill({ status: 201, contentType: 'application/json', body: '[]' }); }
     if (m === 'POST' && /\/processing_log/.test(u)) { try { postedLog = JSON.parse(route.request().postData() || '[]'); } catch (e) {} return route.fulfill({ status: 201, contentType: 'application/json', body: '[]' }); }
+    // 最近の加工処理（tier3を in庫 から集計）
+    if (m === 'GET' && /\/inventory/.test(u) && /or=\(individual_code\.like\.TGC-MIB/.test(u)) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([
+        { individual_code: 'TGC-MIB-20260826-001', part_name: 'ミンチ肉（粗挽き）', process_type: 'ミンチ肉（粗挽き）', species: 'イノシシ', weight: '0.25', weight_kg: '0.250', operator: '沖浩志', processed_by: '沖浩志', processed_at: '2026-08-26T03:06:20Z', created_at: '2026-08-26T03:06:20Z' },
+        { individual_code: 'TGC-MIB-20260826-001', part_name: 'ミンチ肉（粗挽き）', process_type: 'ミンチ肉（粗挽き）', species: 'イノシシ', weight: '1', weight_kg: '1.000', operator: '沖浩志', processed_by: '沖浩志', processed_at: '2026-08-26T05:00:00Z', created_at: '2026-08-26T05:00:00Z' }
+      ]) });
+    }
     // バッチの既存パック（1件目＝規格の元）
     if (m === 'GET' && /\/inventory/.test(u) && /individual_code=eq\./.test(u)) {
       if (/limit=1/.test(u)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ species: 'イノシシ', part_name: 'ミンチ肉（粗挽き）', process_type: 'ミンチ肉（粗挽き）', weight: '0.25', weight_kg: '0.250', parent_inventory_id: 'P-1', location_code: 'F1' }]) });
@@ -64,6 +71,15 @@ const path = require('path');
   results.push(['トレーサビリティ3件POST', Array.isArray(postedLog) && postedLog.length === 3 && postedLog[0].parent_ident_code === 'TGC-MIB-20260826-001', postedLog && postedLog.length]);
   const closed = await page.$eval('#kkRepackModal', el => el.style.display);
   results.push(['登録後モーダルを閉じる', closed === 'none', closed]);
+
+  // 最近の加工処理が在庫(tier3)から描画され、バッチが1行に集約される
+  await page.evaluate(async () => { await loadKakouLog(); });
+  await page.waitForTimeout(200);
+  const logHtml = await page.$eval('#kk-log-body', el => el.innerText);
+  results.push(['加工履歴にバッチが出る', /TGC-MIB-20260826-001/.test(logHtml), logHtml.replace(/\n/g, ' ').slice(0, 120)]);
+  results.push(['規格を集約表示(0.25×1 / 1×1・計2)', /0\.25kg×1/.test(logHtml) && /1kg×1/.test(logHtml) && /計2パック/.test(logHtml), logHtml.replace(/\n/g, ' ')]);
+  results.push(['履歴行にも追加パックボタン', /追加パック/.test(logHtml), '']);
+
   results.push(['pageerrorなし', errors.length === 0, errors.join(' / ')]);
 
   let pass = 0;
