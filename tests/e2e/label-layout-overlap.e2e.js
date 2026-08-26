@@ -71,6 +71,34 @@ const path = require('path');
   check('ペットフード用', await measure('TGC-08-M168', 'ペットフード用（なし）'));
   check('長い識別コード', await measure('TGC-08-M167-AJ-2', 'ロース'));
 
+  // 品名は語の途中で折り返さない（実際に使う品名で1行に収まること）
+  const NAMES = ['ロース', 'モモ', 'ウデ', 'ミンチ用', 'ペットフード用（なし）', 'ペットフード用（あり）',
+    '骨付き ロース [上]', '骨付き モモ [上] [小売]', 'スライス肉（1.5mm）', 'ミンチ肉（粗挽き）'];
+  const wraps = await page.evaluate(async (names) => {
+    const out = [];
+    for (const n of names) {
+      const html = pmLabelHtml({
+        origin: '館山産', speciesName: 'イノシシ肉', labelId: 'TGC-08-M168', partName: n,
+        labelWeight: 0.76, expiryStr: '2027/8/26', identCode: 'TGC-08-M168', barcodeSvg: makeCode128SVG('10000926')
+      });
+      const f = document.createElement('iframe');
+      f.style.cssText = 'position:fixed;left:-9999px;top:0;border:0;width:40mm;height:60mm;';
+      document.body.appendChild(f);
+      const d = f.contentDocument; d.open(); d.write(html); d.close();
+      await new Promise(r => setTimeout(r, 80));
+      const el = d.querySelector('.p');
+      const cs = d.defaultView.getComputedStyle(el);
+      const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.25;
+      out.push({ n, lines: Math.round(el.getBoundingClientRect().height / lh), pt: parseFloat(cs.fontSize) });
+      f.remove();
+    }
+    return out;
+  }, NAMES);
+  const wrapped = wraps.filter(w => w.lines > 1).map(w => w.n);
+  results.push(['品名が全て1行に収まる', wrapped.length === 0, wrapped.length ? '折返し: ' + wrapped.join(' / ') : `${wraps.length}件OK`]);
+  const tooSmall = wraps.filter(w => w.pt < 9).map(w => w.n);
+  results.push(['縮めすぎていない(9px以上)', tooSmall.length === 0, tooSmall.join(' / ')]);
+
   results.push(['pageerrorなし', errors.length === 0, errors.join(' / ')]);
 
   let pass = 0;
