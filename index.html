@@ -990,6 +990,23 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     </div>
   </div>
 
+  <!-- 個体の一生（捕獲→精肉→加工→とどけた先） -->
+  <div id="indLifeModal" style="display:none;position:fixed;inset:0;z-index:620;background:rgba(0,0,0,.75);overflow-y:auto;">
+    <div style="max-width:780px;margin:20px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:0;overflow:hidden;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:18px 22px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:2;">
+        <div>
+          <div style="font-size:11px;letter-spacing:.16em;color:var(--text3);">TRACEABILITY</div>
+          <div id="ind-life-title" style="font-size:19px;font-weight:700;color:var(--gold);">個体の一生</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn btn-sm" onclick="indLifePrint()">🖨 印刷</button>
+          <button onclick="document.getElementById('indLifeModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:24px;cursor:pointer;line-height:1;">✕</button>
+        </div>
+      </div>
+      <div id="ind-life-body" style="padding:20px 22px 26px;"></div>
+    </div>
+  </div>
+
   <!-- 加工処理：在庫から原料を選ぶモーダル -->
   <div id="kkStockModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
     <div style="max-width:640px;margin:24px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:22px;">
@@ -5546,10 +5563,224 @@ function indRender() {
     <td>${i.hunter_name || '-'}</td>
     <td>${i.quality || '-'}</td>
     <td style="white-space:nowrap;">
+      <button class="btn btn-sm" style="color:var(--green);border:1px solid var(--green);" onclick="indLifeOpen('${i.label_id}')">🌿 一生</button>
       <button class="btn btn-sm" onclick="indOpenEdit('${i.label_id}')">編集</button>
       <button class="btn btn-sm btn-danger" onclick="indDelete('${i.label_id}')">削除</button>
     </td>
   </tr>`).join('');
+}
+
+/* ── 個体の一生：捕獲(いのち) → 精肉 → 加工 → とどけた先 を1枚でたどる ── */
+let indLifeData = null;
+
+async function indLifeOpen(labelId) {
+  const modal = document.getElementById('indLifeModal');
+  const body = document.getElementById('ind-life-body');
+  document.getElementById('ind-life-title').textContent = labelId;
+  body.innerHTML = '<div class="loading"><span class="spin"></span>たどっています...</div>';
+  modal.style.display = 'block';
+  const enc = encodeURIComponent(labelId);
+  try {
+    let ind = (indAllData || []).find(x => x.label_id === labelId);
+    if (!ind) {
+      const r = await sb('GET', 'individuals', null, `?label_id=eq.${enc}&deleted_at=is.null&limit=1`);
+      ind = r && r[0];
+    }
+    if (!ind) { body.innerHTML = '<div class="empty-state">個体が見つかりません</div>'; return; }
+
+    const parts = await sb('GET', 'inventory', null, `?individual_id=eq.${enc}&deleted_at=is.null&select=id,ident_code,part_name,weight,weight_kg,status,tier,process_type,processed_at,created_at,location_code&order=created_at.asc`) || [];
+
+    let logs = [];
+    try { logs = await sb('GET', 'processing_log', null, `?individual_id=eq.${enc}&select=parent_ident_code,child_ident_code,weight,process_type,operator,created_at`) || []; } catch (e) {}
+    const batchCodes = [...new Set(logs.map(l => l.child_ident_code).filter(c => /-(MI|SL)B-/.test(c || '')))];
+
+    let packs = [];
+    if (batchCodes.length) {
+      try { packs = await sb('GET', 'inventory', null, `?individual_code=in.(${batchCodes.join(',')})&tier=eq.3&deleted_at=is.null&select=id,ident_code,individual_code,part_name,process_type,weight,weight_kg,status,processed_at&order=created_at.asc`) || []; } catch (e) {}
+    }
+
+    let items = [], orders = [], custs = [];
+    const invIds = [...parts.map(p => p.id), ...packs.map(p => p.id)];
+    if (invIds.length) {
+      try { items = await sb('GET', 'order_items', null, `?inventory_id=in.(${invIds.join(',')})&select=id,order_id,inventory_id,part_name,product_name,weight,weight_kg,unit_price,amount,subtotal`) || []; } catch (e) {}
+    }
+    const orderIds = [...new Set(items.map(x => x.order_id).filter(Boolean))];
+    if (orderIds.length) {
+      try { orders = await sb('GET', 'orders', null, `?id=in.(${orderIds.join(',')})&select=id,order_code,order_date,delivery_date,status,customer_id,customer_name,delivery_name`) || []; } catch (e) {}
+    }
+    const custIds = [...new Set(orders.map(o => o.customer_id).filter(Boolean))];
+    if (custIds.length) {
+      try { custs = await sb('GET', 'customers', null, `?id=in.(${custIds.join(',')})&select=id,name,code`) || []; } catch (e) {}
+    }
+
+    indLifeData = { ind, parts, logs, batchCodes, packs, items, orders, custs };
+    indLifeRender();
+  } catch (e) {
+    body.innerHTML = `<div class="empty-state">読み込みエラー: ${esc2(sbSafeMsg(e))}</div>`;
+  }
+}
+
+function indLifeW(r) { return parseFloat(r.weight != null ? r.weight : r.weight_kg) || 0; }
+// 値が無い項目は「未記録」と灰色で出す＝何を足せば線が濃くなるかが一目で分かる
+function indLifeField(label, val, unit) {
+  const has = val !== null && val !== undefined && String(val).trim() !== '';
+  return `<div style="display:flex;gap:8px;font-size:13px;padding:3px 0;">
+    <span style="color:var(--text3);min-width:82px;flex-shrink:0;">${esc2(label)}</span>
+    <span style="${has ? 'color:var(--text);font-weight:500;' : 'color:var(--text3);opacity:.55;'}">${has ? esc2(String(val)) + (unit || '') : '未記録'}</span>
+  </div>`;
+}
+function indLifeStage(on, icon, name, sub) {
+  return `<div style="flex:1;min-width:96px;text-align:center;padding:9px 6px;border-radius:9px;border:1px solid ${on ? 'var(--green)' : 'var(--border)'};background:${on ? 'rgba(70,160,110,.10)' : 'transparent'};">
+    <div style="font-size:17px;line-height:1.2;${on ? '' : 'opacity:.35;'}">${icon}</div>
+    <div style="font-size:11.5px;font-weight:700;margin-top:2px;color:${on ? 'var(--green)' : 'var(--text3)'};">${esc2(name)}</div>
+    <div style="font-size:10.5px;color:var(--text3);margin-top:1px;">${esc2(sub)}</div>
+  </div>`;
+}
+
+function indLifeRender() {
+  const d = indLifeData; if (!d) return;
+  const i = d.ind;
+  document.getElementById('ind-life-title').textContent = `${i.label_id}　${i.species || ''}`;
+
+  const meat = d.parts.filter(p => p.tier !== 3);
+  const meatKg = meat.reduce((s, p) => s + indLifeW(p), 0);
+  const bodyKg = parseFloat(i.weight_total) || 0;
+  const yieldPct = bodyKg > 0 && meatKg > 0 ? Math.round(meatKg / bodyKg * 1000) / 10 : null;
+  const packKg = d.packs.reduce((s, p) => s + indLifeW(p), 0);
+  const custNames = [...new Set(d.orders.map(o => {
+    const c = d.custs.find(x => String(x.id) === String(o.customer_id));
+    return (c && c.name) || o.customer_name || o.delivery_name || '';
+  }).filter(Boolean))];
+
+  const stages = `<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:20px;">
+    ${indLifeStage(true, '🌿', 'いのち', fmt(i.capture_date) || '—')}
+    ${indLifeStage(!!i.radiation_test_date, '🔬', '検査', i.radiation_test_date ? '実施済' : '—')}
+    ${indLifeStage(meat.length > 0, '🔪', '精肉', meat.length ? meat.length + '部位' : '—')}
+    ${indLifeStage(d.packs.length > 0, '⚙️', '加工', d.packs.length ? d.packs.length + 'パック' : '—')}
+    ${indLifeStage(d.items.length > 0, '🚚', 'とどけた', custNames.length ? custNames.length + '件' : '—')}
+    ${indLifeStage(false, '💬', 'こえ', '準備中')}
+  </div>`;
+
+  const sec = (color, icon, title, right, inner) => `<div style="border-left:3px solid ${color};padding:0 0 0 14px;margin-bottom:22px;">
+    <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:9px;flex-wrap:wrap;">
+      <span style="font-size:15px;font-weight:700;">${icon} ${esc2(title)}</span>
+      ${right ? `<span style="font-size:12px;color:var(--text2);">${right}</span>` : ''}
+    </div>${inner}</div>`;
+
+  // ① いのち（生態）
+  const life = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:0 22px;">
+    <div>
+      ${indLifeField('捕獲日', fmt(i.capture_date))}
+      ${indLifeField('時刻', i.capture_time)}
+      ${indLifeField('場所', [i.capture_city, i.capture_area, i.capture_koaza].filter(Boolean).join(' '))}
+      ${indLifeField('緯度経度', i.capture_lat && i.capture_lng ? `${i.capture_lat}, ${i.capture_lng}` : '')}
+      ${indLifeField('捕獲方法', i.capture_method)}
+      ${indLifeField('餌', i.bait_type)}
+      ${indLifeField('天候', i.weather)}
+      ${indLifeField('捕獲者', i.hunter_name)}
+    </div>
+    <div>
+      ${indLifeField('性別', i.sex)}
+      ${indLifeField('体重', bodyKg || '', ' kg')}
+      ${indLifeField('体長', i.body_length_cm, ' cm')}
+      ${indLifeField('推定年齢', i.age_estimate)}
+      ${indLifeField('幼獣', i.is_juvenile === true ? 'はい' : i.is_juvenile === false ? 'いいえ' : '')}
+      ${indLifeField('胎児', i.has_fetus === true ? 'あり' : i.has_fetus === false ? 'なし' : '')}
+      ${indLifeField('捕獲時異常', i.capture_anomalies)}
+      ${indLifeField('内臓異常', i.organ_anomalies)}
+    </div>
+  </div>`;
+
+  // ② 検査
+  const insp = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:0 22px;">
+    <div>
+      ${indLifeField('検査日', fmt(i.radiation_test_date))}
+      ${indLifeField('判明日', fmt(i.radiation_result_date))}
+    </div>
+    <div>
+      ${indLifeField('結果', i.radiation_result)}
+      ${indLifeField('肉ランク', i.meat_rank)}
+    </div>
+  </div>`;
+
+  // ③ 精肉
+  const meatBody = meat.length
+    ? `<div style="overflow-x:auto;"><table style="width:100%;font-size:12.5px;min-width:420px;">
+        <thead><tr><th style="text-align:left;">部位</th><th style="text-align:left;">識別コード</th><th style="text-align:right;">重さ</th><th style="text-align:left;">状態</th></tr></thead>
+        <tbody>${meat.map(p => `<tr>
+          <td>${esc2(p.part_name || '-')}</td>
+          <td style="color:var(--gold);font-size:11.5px;">${esc2(p.ident_code || '-')}</td>
+          <td style="text-align:right;">${indLifeW(p).toFixed(2)}kg</td>
+          <td>${esc2(p.status || '-')}</td></tr>`).join('')}</tbody></table></div>`
+    : '<div style="font-size:12.5px;color:var(--text3);">まだ精肉の記録がありません。</div>';
+
+  // ④ 加工
+  const procBody = d.packs.length
+    ? d.batchCodes.map(b => {
+        const ps = d.packs.filter(p => p.individual_code === b);
+        if (!ps.length) return '';
+        const sizes = {};
+        ps.forEach(p => { const k = indLifeW(p).toFixed(3); sizes[k] = (sizes[k] || 0) + 1; });
+        const label = Object.entries(sizes).sort((x, y) => (+x[0]) - (+y[0])).map(([w, n]) => `${(+w)}kg×${n}`).join(' / ');
+        return `<div style="padding:8px 0;border-bottom:1px solid var(--border);">
+          <div style="font-size:13px;font-weight:600;">${esc2(ps[0].process_type || ps[0].part_name || '加工品')}</div>
+          <div style="font-size:11.5px;color:var(--text2);margin-top:2px;">${esc2(label)}（計${ps.length}パック）・<span style="color:var(--gold);">${esc2(b)}</span></div>
+        </div>`;
+      }).join('')
+    : (d.logs.length ? '<div style="font-size:12.5px;color:var(--text3);">加工の記録はありますが、完成パックが見つかりません。</div>'
+                     : '<div style="font-size:12.5px;color:var(--text3);">この個体はまだ加工処理されていません。</div>');
+
+  // ⑤ とどけた先
+  const saleBody = d.items.length
+    ? `<div style="overflow-x:auto;"><table style="width:100%;font-size:12.5px;min-width:440px;">
+        <thead><tr><th style="text-align:left;">とどけた先</th><th style="text-align:left;">品名</th><th style="text-align:right;">数量</th><th style="text-align:left;">日付</th></tr></thead>
+        <tbody>${d.items.map(it => {
+          const o = d.orders.find(x => String(x.id) === String(it.order_id));
+          const c = o && d.custs.find(x => String(x.id) === String(o.customer_id));
+          const who = (c && c.name) || (o && (o.customer_name || o.delivery_name)) || '（顧客未設定）';
+          const qty = parseFloat(it.weight_kg != null ? it.weight_kg : it.weight);
+          return `<tr>
+            <td style="font-weight:600;">${esc2(who)}</td>
+            <td>${esc2(it.product_name || it.part_name || '-')}</td>
+            <td style="text-align:right;">${qty ? qty.toFixed(2) + 'kg' : '-'}</td>
+            <td>${o ? fmt(o.order_date) : '-'}</td></tr>`;
+        }).join('')}</tbody></table></div>`
+    : '<div style="font-size:12.5px;color:var(--text3);">まだ販売の記録がひも付いていません。</div>';
+
+  const voice = `<div style="font-size:12.5px;color:var(--text2);line-height:1.75;">
+    食べた人の感想・反応を記録する場所です。<br>
+    <span style="color:var(--text3);">パックのラベルにQRを載せて、受け取った人がこの個体の物語を見て、そのまま感想を残せる仕組みを準備中です。</span>
+  </div>`;
+
+  document.getElementById('ind-life-body').innerHTML = stages
+    + sec('var(--green)', '🌿', 'いのち（捕獲・生態）', '', life)
+    + sec('#7aa9d8', '🔬', '検査', '', insp)
+    + sec('var(--gold)', '🔪', '精肉', meat.length ? `合計 ${meatKg.toFixed(2)}kg${yieldPct != null ? `・体重比 ${yieldPct}%` : ''}` : '', meatBody)
+    + sec('#b58bd0', '⚙️', '加工', d.packs.length ? `合計 ${packKg.toFixed(2)}kg` : '', procBody)
+    + sec('#e0a45a', '🚚', 'とどけた先', custNames.length ? esc2(custNames.join('・')) : '', saleBody)
+    + sec('var(--border)', '💬', 'とどいた先の声', '準備中', voice);
+}
+
+function indLifePrint() {
+  const html = document.getElementById('ind-life-body').innerHTML;
+  const title = document.getElementById('ind-life-title').textContent;
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;border:none;opacity:0;';
+  document.body.appendChild(iframe);
+  const doc = iframe.contentDocument || iframe.contentWindow.document;
+  doc.open();
+  doc.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title><style>
+    @page{size:A4;margin:14mm}
+    body{font-family:'Meiryo','Yu Gothic',sans-serif;color:#111;font-size:12px;line-height:1.7}
+    h1{font-size:17px;margin:0 0 14px;border-bottom:2px solid #333;padding-bottom:6px}
+    table{border-collapse:collapse;width:100%}
+    th,td{border:1px solid #bbb;padding:4px 7px;font-size:11px}
+    :root{--text:#111;--text2:#444;--text3:#888;--gold:#8a6d2b;--green:#2f7d55;--border:#ccc}
+  </style></head><body><h1>${title}　いのちの記録</h1>${html}</body></html>`);
+  doc.close();
+  iframe.contentWindow.focus();
+  iframe.contentWindow.print();
+  setTimeout(() => { try { iframe.remove(); } catch (_) {} }, 8000);
 }
 
 // 搬入待ち（捕獲者フォームからの仮登録）バナー
