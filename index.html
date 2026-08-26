@@ -983,7 +983,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div class="section-title">最近の加工処理</div>
       <div style="overflow-x:auto;">
         <table>
-          <thead><tr><th>日時</th><th>加工</th><th>原料</th><th>完成品</th><th>作業者</th><th>操作</th></tr></thead>
+          <thead><tr><th>日時</th><th>加工品</th><th>完成パック</th><th>バッチ番号</th><th>作業者</th><th>操作</th></tr></thead>
           <tbody id="kk-log-body"><tr><td colspan="6" class="empty-state">読み込み中...</td></tr></tbody>
         </table>
       </div>
@@ -7486,14 +7486,15 @@ async function kkSubmit() {
     }
 
     // 3. トレーサビリティ記録（原料→バッチ→完成品の2段）
+    // PostgRESTの一括INSERTは全行で同じキーが必要 → 7キーで統一
     const logRows = [];
     kkMaterials.forEach(m => logRows.push({
       parent_ident_code: m.ident_code, child_ident_code: batchCode,
-      weight: kkMatWeight(m), process_type: processType, operator: operator, individual_id: m.individual_id || null
+      weight: kkMatWeight(m), result_weight_kg: null, process_type: processType, operator: operator, individual_id: m.individual_id || null
     }));
     packs.forEach(p => logRows.push({
       parent_ident_code: batchCode, child_ident_code: p.ident_code,
-      result_weight_kg: packW, process_type: processType, operator: operator
+      weight: null, result_weight_kg: packW, process_type: processType, operator: operator, individual_id: null
     }));
     try { await sb('POST', 'processing_log', logRows); } catch (e) { /* ログ失敗は業務を止めない */ }
 
@@ -7585,29 +7586,33 @@ async function loadKakouLog() {
   const body = document.getElementById('kk-log-body');
   if (!body) return;
   try {
-    const logs = await sb('GET', 'processing_log', null, `?process_type=not.is.null&order=created_at.desc&limit=40`);
-    // バッチ（child が TGC-xxB-）を1行にまとめる
-    const rows = logs.filter(l => /-(MI|SL)B-/.test(l.child_ident_code || ''));
+    // 完成パック（tier3）＝加工処理の実績。バッチ(individual_code)ごとにまとめる。
+    const rows = await sb('GET', 'inventory', null, `?tier=eq.3&deleted_at=is.null&or=(individual_code.like.TGC-MIB-*,individual_code.like.TGC-SLB-*)&select=individual_code,part_name,process_type,species,weight,weight_kg,operator,processed_by,processed_at,created_at&order=created_at.desc&limit=1000`);
     if (!rows.length) { body.innerHTML = '<tr><td colspan="6" class="empty-state">記録がありません</td></tr>'; return; }
-    // child_ident_code(バッチ)ごとに原料数を集計
-    const batchMats = {};
-    logs.forEach(l => { if (/-(MI|SL)B-/.test(l.child_ident_code || '')) { (batchMats[l.child_ident_code] = batchMats[l.child_ident_code] || []).push(l.parent_ident_code); } });
-    const seen = new Set();
-    let html = '';
-    rows.forEach(l => {
-      if (seen.has(l.child_ident_code)) return;
-      seen.add(l.child_ident_code);
-      const mats = batchMats[l.child_ident_code] || [];
-      html += `<tr>
-        <td>${fmtDt(l.created_at)}</td>
-        <td>${esc2(l.process_type || '-')}</td>
-        <td style="font-size:12px;color:var(--text2);">${esc2(mats.slice(0, 3).join('・'))}${mats.length > 3 ? ' 他' : ''}（${mats.length}点）</td>
-        <td style="color:var(--gold);font-size:12px;">${esc2(l.child_ident_code || '-')}</td>
-        <td>${esc2(l.operator || '-')}</td>
-        <td><button class="btn btn-sm btn-primary" style="padding:3px 10px;font-size:12px;white-space:nowrap;" onclick="kkRepackOpen('${esc2(l.child_ident_code || '')}')">追加パック</button></td>
-      </tr>`;
+    const batches = {};
+    rows.forEach(r => {
+      const b = r.individual_code;
+      if (!b) return;
+      const at = r.processed_at || r.created_at;
+      const g = batches[b] || (batches[b] = { code: b, prod: r.process_type || r.part_name || '-', species: r.species || '', op: r.operator || r.processed_by || '-', at: at, sizes: {}, n: 0 });
+      const w = parseFloat(r.weight != null ? r.weight : r.weight_kg) || 0;
+      const key = w.toFixed(3);
+      g.sizes[key] = (g.sizes[key] || 0) + 1;
+      g.n++;
+      if (at > g.at) g.at = at;
     });
-    body.innerHTML = html || '<tr><td colspan="6" class="empty-state">記録がありません</td></tr>';
+    const list = Object.values(batches).slice(0, 60);
+    body.innerHTML = list.map(g => {
+      const sizes = Object.entries(g.sizes).sort((a, b) => (+a[0]) - (+b[0])).map(([w, n]) => `${(+w)}kg×${n}`).join(' / ');
+      return `<tr>
+        <td>${fmtDt(g.at)}</td>
+        <td>${esc2(g.prod)}${g.species ? `<span style="color:var(--text3);font-size:11px;"> ${esc2(g.species)}</span>` : ''}</td>
+        <td style="font-size:12px;color:var(--text2);">${esc2(sizes)}（計${g.n}パック）</td>
+        <td style="color:var(--gold);font-size:12px;">${esc2(g.code)}</td>
+        <td>${esc2(g.op)}</td>
+        <td><button class="btn btn-sm btn-primary" style="padding:3px 10px;font-size:12px;white-space:nowrap;" onclick="kkRepackOpen('${esc2(g.code)}')">追加パック</button></td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="6" class="empty-state">記録がありません</td></tr>';
   } catch (e) { body.innerHTML = '<tr><td colspan="6" class="empty-state">読み込みエラー</td></tr>'; }
 }
 
@@ -7702,7 +7707,7 @@ async function kkRepackSubmit() {
     }
     await sb('POST', 'inventory', packRows);
     try {
-      const logRows = packs.map(p => ({ parent_ident_code: b.batchCode, child_ident_code: p.ident_code, result_weight_kg: w, process_type: b.prodName, operator: operator }));
+      const logRows = packs.map(p => ({ parent_ident_code: b.batchCode, child_ident_code: p.ident_code, weight: null, result_weight_kg: w, process_type: b.prodName, operator: operator, individual_id: null }));
       await sb('POST', 'processing_log', logRows);
     } catch (e) { /* ログ失敗は業務を止めない */ }
     kkPrintLabels(packs, b.prodName, b.species, b.origin, []);
