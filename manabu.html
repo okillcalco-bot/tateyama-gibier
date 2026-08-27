@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>獣を知る | 館山ジビエセンター</title>
+<meta name="robots" content="noindex">
+<style>
+  :root{
+    --bg:#f6f4ee; --card:#fff; --ink:#1d211c; --ink2:#57604f; --ink3:#8e9486;
+    --line:#e4ded0; --moss:#3c6b4a; --moss-soft:#e8f0e9; --gold:#a8781f; --gold-soft:#f6ecd8;
+    --red:#a8322c; --red-soft:#fbeceb;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --bg:#12150f; --card:#1a1e18; --ink:#e9ece5; --ink2:#a5ad9f; --ink3:#727a6d;
+           --line:#282e26; --moss:#7ab493; --moss-soft:#1b2c21; --gold:#d3a95c; --gold-soft:#2e2718;
+           --red:#e8837c; --red-soft:#2c1a19; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    line-height:1.85;-webkit-text-size-adjust:100%}
+  .wrap{max-width:760px;margin:0 auto;padding:18px 16px 60px}
+  header{padding:10px 0 4px}
+  .back{display:inline-block;font-size:13px;color:var(--ink2);text-decoration:none;
+    border:1px solid var(--line);border-radius:999px;padding:5px 14px;background:var(--card)}
+  .eyebrow{font-size:11px;letter-spacing:.2em;color:var(--gold);margin:16px 0 6px}
+  h1{font-size:25px;margin:0;font-weight:700;letter-spacing:.02em}
+  .sub{font-size:13.5px;color:var(--ink2);margin:8px 0 0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin:14px 0}
+  h2{font-size:17px;margin:30px 0 6px;display:flex;align-items:center;gap:9px;scroll-margin-top:12px}
+  h2 .ic{font-size:20px}
+  h3{font-size:15px;margin:0 0 8px}
+  p{margin:0 0 10px}
+  .lead{font-size:14px;color:var(--ink2)}
+  .rule{background:var(--red-soft);border:1.5px solid var(--red);border-radius:14px;padding:18px;margin:14px 0}
+  .rule h3{color:var(--red);font-size:16px}
+  .rule ol{margin:10px 0 0 20px;padding:0}
+  .rule li{margin-bottom:12px;font-size:14.5px}
+  .rule b{font-size:15.5px}
+  .note{background:var(--gold-soft);border-left:4px solid var(--gold);border-radius:8px;
+    padding:12px 14px;font-size:13.5px;margin:12px 0}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--ink3);font-weight:600;white-space:nowrap}
+  .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+  .chip{font-size:12px;background:var(--moss-soft);color:var(--moss);border-radius:999px;padding:3px 11px}
+  details{border:1px solid var(--line);border-radius:12px;background:var(--card);margin:10px 0;overflow:hidden}
+  summary{padding:13px 16px;cursor:pointer;font-weight:700;font-size:15px;list-style:none;
+    display:flex;align-items:center;gap:9px}
+  summary::-webkit-details-marker{display:none}
+  summary::after{content:'＋';margin-left:auto;color:var(--ink3);font-weight:400}
+  details[open] summary::after{content:'−'}
+  details .body{padding:0 16px 16px;font-size:14px}
+  .kv{display:flex;gap:10px;padding:4px 0;font-size:13.5px;border-bottom:1px dashed var(--line)}
+  .kv:last-child{border-bottom:none}
+  .kv .k{color:var(--ink3);flex:0 0 96px}
+  .toc{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 0}
+  .toc a{font-size:13px;text-decoration:none;color:var(--moss);background:var(--moss-soft);
+    border-radius:999px;padding:5px 13px}
+  .q{margin:0 0 6px;font-weight:700;font-size:14.5px}
+  .opts{display:flex;flex-direction:column;gap:7px;margin-bottom:6px}
+  .opts button{text-align:left;padding:11px 13px;border:1px solid var(--line);border-radius:9px;
+    background:var(--bg);color:var(--ink);font-size:14px;font-family:inherit;cursor:pointer;line-height:1.6}
+  .opts button:hover{border-color:var(--moss)}
+  .opts button.ok{background:var(--moss-soft);border-color:var(--moss);color:var(--moss);font-weight:700}
+  .opts button.ng{background:var(--red-soft);border-color:var(--red);color:var(--red)}
+  .why{font-size:13.5px;color:var(--ink2);background:var(--bg);border-radius:9px;padding:11px 13px;margin-top:4px}
+  .score{font-size:14px;font-weight:700;color:var(--gold);margin-top:12px}
+  ul{margin:0 0 10px 20px;padding:0}
+  li{margin-bottom:6px}
+  .src{font-size:12.5px;color:var(--ink3);line-height:1.9}
+  .src a{color:var(--moss)}
+  footer{text-align:center;font-size:11.5px;color:var(--ink3);margin-top:34px;line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="back" href="index.html">← 業務トップ</a>
+    <p class="eyebrow">館山ジビエセンター</p>
+    <h1>獣を知る</h1>
+    <p class="sub">ここに運ばれてくる獣が、どんな暮らしをして、何を持っているのか。<br>
+      安全に扱うために、知っておきたいこと。</p>
+  </header>
+
+  <div class="note">
+    <b>この頁は社内の学習用のまとめです。</b>
+    実際の判断は、厚生労働省と千葉県の<b>ガイドラインが正</b>です。
+    食べられるかどうかで迷ったときは、この頁ではなく<b>人に聞いてください</b>。
+    出典は<a href="#src">いちばん下</a>にまとめてあります。
+  </div>
+
+  <div class="toc">
+    <a href="#kihon">まず覚える3つ</a>
+    <a href="#kemono">来る獣</a>
+    <a href="#byouki">知っておく病気</a>
+    <a href="#mi">自分の身を守る</a>
+    <a href="#dame">食べられない個体</a>
+    <a href="#quiz">確認クイズ</a>
+  </div>
+
+  <!-- ══ まず覚える3つ ══ -->
+  <h2 id="kihon"><span class="ic">🔥</span>まず、この3つ</h2>
+  <div class="rule">
+    <h3>これだけは、例外なく</h3>
+    <ol>
+      <li><b>中心部を75℃で1分以上、加熱する。</b><br>
+        表面を焼いただけでは、肉の内側にいる病原体は死にません。
+        「新鮮だから」「冷凍したから」「炙ったから」は、どれも安全の理由になりません。</li>
+      <li><b>生では絶対に出さない。</b><br>
+        刺身・ユッケ・タタキ・レバ刺し、すべて不可。お客様に聞かれても断ってください。</li>
+      <li><b>迷ったら止めて、人を呼ぶ。</b><br>
+        「たぶん大丈夫」で先に進めない。判断がつかないものは、食用にしません。
+        止めたことで叱られることはありません。</li>
+    </ol>
+  </div>
+
+  <!-- ══ 来る獣 ══ -->
+  <h2 id="kemono"><span class="ic">🌿</span>ここに来る獣</h2>
+  <p class="lead">館山ジビエセンターに実際に運ばれてきた頭数です（令和8年度・搬入台帳より）。
+    イノシシが大半ですが、房総ならではのキョンが2番目に多いのが特徴です。</p>
+  <div class="card scroll">
+    <table>
+      <tr><th>獣種</th><th>頭数</th><th>食肉にするか</th></tr>
+      <tr><td>イノシシ</td><td>477</td><td>する（主力）</td></tr>
+      <tr><td>キョン</td><td>64</td><td>する</td></tr>
+      <tr><td>ハクビシン</td><td>20</td><td>しない（防除）</td></tr>
+      <tr><td>アライグマ</td><td>19</td><td>しない（防除）</td></tr>
+      <tr><td>シカ</td><td>15</td><td>する</td></tr>
+      <tr><td>タヌキ</td><td>4</td><td>しない（防除）</td></tr>
+      <tr><td>ノウサギ</td><td>3</td><td>しない（防除）</td></tr>
+    </table>
+  </div>
+
+  <details>
+    <summary>🐗 イノシシ（ニホンイノシシ）</summary>
+    <div class="body">
+      <div class="kv"><span class="k">繁殖</span><span>おおむね2歳で初産。冬（12〜2月）に交尾し、妊娠4〜5か月で春（4〜6月）に出産。一度に3〜5頭ほど産む。</span></div>
+      <div class="kv"><span class="k">寿命</span><span>野生ではおよそ10年前後。</span></div>
+      <div class="kv"><span class="k">暮らし</span><span>オスは大人になると単独。メスは子や姉妹と群れる。定住と移動を繰り返し、定住地は10〜100haほど。</span></div>
+      <div class="kv"><span class="k">食べもの</span><span>雑食だが植物が中心。季節でかなり変わる。</span></div>
+      <div class="chips">
+        <span class="chip">春: タケノコ・竹の地下茎</span><span class="chip">夏: 昆虫・ミミズなど動物質が増える</span>
+        <span class="chip">秋冬: ドングリなど堅果・根や地下茎</span><span class="chip">通年: イモ・稲・果実などの農作物</span>
+      </div>
+      <p style="margin-top:10px;">島根県石見地方の調査では、<b>春はタケノコが胃内容の57.9%</b>を占めたという報告があります。
+        捕獲票の「胃の内容物」を残しておくと、館山ではどうなのかが数年で見えてきます。</p>
+      <h3 style="margin-top:14px;">年齢の見かた（歯）</h3>
+      <p>すべての歯が生えそろうまで約3年かかります。目安として——</p>
+      <ul>
+        <li><b>犬歯がまだ乳歯</b>なら 0歳</li>
+        <li><b>下顎のいちばん奥の第3大臼歯がきれいに生えている</b>なら 3.5歳以上</li>
+      </ul>
+      <p class="lead">もっと正確に出すには歯のセメント質の年輪を顕微鏡で数えますが、現場では上の2点で十分です。
+        捕獲票の「推定年齢」に入れてください。</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>🦌 キョン（特定外来生物）</summary>
+    <div class="body">
+      <div class="kv"><span class="k">大きさ</span><span>成獣で体重10kg前後、体高50cmほど。肩までの高さは40cmくらいで、中型犬と同じくらい。</span></div>
+      <div class="kv"><span class="k">繁殖</span><span>早ければ<b>生後半年ほどで妊娠</b>する。1回の出産は1頭。</span></div>
+      <div class="kv"><span class="k">食べもの</span><span>森林や林縁で木の葉やドングリ類。最近は住宅地の花壇や家庭菜園にも出る。</span></div>
+      <div class="kv"><span class="k">房総での数</span><span>令和4年度に千葉県内で<b>約71,500頭</b>と推定（95%信用区間 38,985〜111,672頭）。</span></div>
+      <p style="margin-top:10px;">キョンは<b>特定外来生物</b>で、千葉県は「第2次キョン防除実施計画」で
+        最終的な完全排除を目指しています。生きたままの運搬や飼育は法律で禁止されています。
+        捕獲個体を食肉として活かすことは、防除と両立します。</p>
+      <p class="lead">小さいぶん歩留まりは低いですが、クセが少なく食べやすい肉です。</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>🦌 ニホンジカ</summary>
+    <div class="body">
+      <div class="kv"><span class="k">繁殖</span><span>秋に交尾し、妊娠約220〜230日で5〜7月頃に<b>1頭</b>出産。2歳以上で性成熟し、成獣の妊娠率は80〜90%。</span></div>
+      <div class="kv"><span class="k">寿命</span><span>最長でオス約15年、メス約20年。</span></div>
+      <div class="kv"><span class="k">暮らし</span><span>群れで生活。繁殖期以外はオスの群れとメスの群れに分かれる。</span></div>
+      <div class="kv"><span class="k">食べもの</span><span>イネ科の草、木の葉、ドングリ、ササなど。シキミやアセビなど有毒な一部を除き、ほとんどの植物を食べる。</span></div>
+      <p style="margin-top:10px;">イノシシと違い、シカは<b>1年に1頭</b>しか産みません。同じ数を捕っても、
+        個体数への効き方が違います。</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>🦝 アライグマ・ハクビシン・タヌキ（食肉にはしない）</summary>
+    <div class="body">
+      <p>これらは防除で運ばれてきますが、当センターでは<b>食肉にしません</b>。
+        ただし<b>扱うときの注意は、むしろこちらのほうが要ります</b>。</p>
+      <ul>
+        <li><b>レプトスピラ症</b> — アライグマの排泄物を介して人に感染する。家畜やペットにも感染する。</li>
+        <li><b>アライグマ回虫</b> — 糞で汚れた土や物から感染する。目などの粘膜から入ると視力障害を起こすことがある。</li>
+        <li><b>疥癬（かいせん）</b> — ヒゼンダニによる皮膚病。<b>人にも飼い犬にもうつる</b>。毛が抜けている個体は疑う。</li>
+      </ul>
+      <p>素手で触らない。糞尿で汚れた場所に近づかない。
+        使った機材は洗剤で洗ってから消毒し、可能ならバーナーで焼くか煮沸します。</p>
+    </div>
+  </details>
+
+  <!-- ══ 知っておく病気 ══ -->
+  <h2 id="byouki"><span class="ic">🔬</span>知っておく病気</h2>
+  <p class="lead">野生の獣は、餌も健康状態も誰も管理していません。だから家畜の肉とは前提が違います。
+    「元気そうに見えた」は、安全の根拠になりません。</p>
+
+  <details>
+    <summary>E型肝炎ウイルス（HEV）</summary>
+    <div class="body">
+      <p>ジビエでいちばん現実に起きている食中毒です。日本での確認例——</p>
+      <ul>
+        <li><b>2003年4月・兵庫県</b> 野生シカ肉の生食が原因。特定の食品とE型急性肝炎の因果関係が確認された、日本で最初の事例。</li>
+        <li><b>2005年3月・福岡県</b> 野生イノシシ肉を食べた11名中1名が発症。ウイルス遺伝子検査でイノシシ肉との因果関係が確認された。</li>
+      </ul>
+      <p>加熱すれば防げます。中心部75℃1分以上を徹底してください。</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>寄生虫（旋毛虫・住肉胞子虫・肺吸虫・トキソプラズマ）</summary>
+    <div class="body">
+      <ul>
+        <li><b>旋毛虫（トリヒナ）</b> — クマ肉での感染例が知られる。発熱・皮疹・だるさ・筋肉痛など多彩な症状。</li>
+        <li><b>住肉胞子虫（ザルコシスティス）</b> — シカ肉からの感染例。</li>
+        <li><b>ウェステルマン肺吸虫</b> — イノシシ肉からの感染例。</li>
+        <li><b>トキソプラズマ</b> — 生肉・加熱不十分な肉から感染しうる。</li>
+      </ul>
+      <p class="note" style="margin-top:12px;">
+        <b>冷凍は安全の根拠になりません。</b>寄生虫の種類によっては冷凍が効かないものがあります。
+        表面を焼いただけでも、肉塊の内部までは失活しません。
+        <b>中心部までしっかり加熱</b>する以外に確実な方法はありません。</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>腸管出血性大腸菌ほかの細菌</summary>
+    <div class="body">
+      <p>生または加熱不十分なシカ肉・イノシシ肉で、腸管出血性大腸菌による食中毒が知られています。
+        内臓を傷つけて中身が肉に触れると汚染が広がるので、内臓摘出は丁寧に、
+        器具と手はこまめに洗浄・消毒します。</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>SFTS（重症熱性血小板減少症候群）— 食べる人ではなく、扱う人の病気</summary>
+    <div class="body">
+      <p>マダニが媒介するウイルス感染症です。<b>肉を食べて感染するのではなく、作業する側が感染します。</b></p>
+      <div class="kv"><span class="k">感染経路</span><span>マダニに咬まれる。加えて<b>感染した動物との接触</b>、動物や患者の血液・体液との接触でも感染しうる。</span></div>
+      <div class="kv"><span class="k">潜伏期間</span><span>咬まれてから6日〜2週間ほど。</span></div>
+      <div class="kv"><span class="k">初期症状</span><span>発熱、だるさ、食欲不振・吐き気・嘔吐・下痢・腹痛などの消化器症状。</span></div>
+      <p style="margin-top:10px;"><b>弱っている野生動物には素手で触らない。</b>
+        搬入から数日たって発熱したら、「野生動物を扱った」と必ず医師に伝えてください。
+        伝えるかどうかで診断の速さが変わります。</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>豚熱（CSF）— 人にはうつらない。でも大事</summary>
+    <div class="body">
+      <p><b>豚熱は人には感染しません。</b>仮に感染した個体の肉を食べても、人の健康に影響はないというのが
+        食品安全委員会の見解です。野生イノシシに撒かれている経口ワクチンも、肉の安全性に影響しません。</p>
+      <p>ただし<b>豚とイノシシにとっては重大な病気</b>で、家畜防疫上きわめて重要です。
+        千葉県は野生イノシシの豚熱検査を継続しています。
+        狩猟した地域で家畜伝染病のまん延が確認された場合、その地域で獲った個体を食用にしてはいけません。</p>
+      <p class="lead">＝ 人の健康の話ではなく、<b>養豚を守る</b>ための決まりです。</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>放射性物質 — 千葉のイノシシは全頭検査</summary>
+    <div class="body">
+      <p>食品中の放射性セシウムの基準値は、一般食品で<b>1kgあたり100ベクレル</b>です（平成24年4月1日以降）。</p>
+      <p>千葉県では平成25年1月から、県内の処理加工施設から出荷されるイノシシ肉について
+        <b>全頭検査</b>を行っています。出荷制限が解除された平成25年1月18日から令和8年3月31日までに、
+        県内15施設で16,508検体が分析されました。</p>
+      <p>当センターの検査結果は個体ごとに記録され、
+        ラベルのQRから「この肉の物語」を開いたお客様にも表示されます。
+        <b>検査日と結果を、その日のうちに記録に入れてください。</b>お客様が見る画面に直結しています。</p>
+    </div>
+  </details>
+
+  <!-- ══ 自分の身を守る ══ -->
+  <h2 id="mi"><span class="ic">🧤</span>自分の身を守る</h2>
+  <div class="card">
+    <p>ここまでの病気の多くは、<b>食べる人より先に、扱う人が出会います。</b></p>
+    <ul>
+      <li><b>手袋をする。</b>特に手に傷があるときは必ず。傷は事前に覆っておく。</li>
+      <li><b>素手で目や口を触らない。</b>血や体液が跳ねる作業では目の保護も考える。</li>
+      <li><b>弱っている個体・様子のおかしい個体には触らない。</b></li>
+      <li><b>マダニ対策。</b>山では長袖長ズボン、肌を出さない、忌避剤。帰ったら体を確認する。</li>
+      <li><b>器具は洗ってから消毒する。</b>洗剤で汚れを落とさないと消毒剤は効きません。</li>
+      <li><b>作業後は手を洗う。</b>いちばん基本で、いちばん効きます。</li>
+    </ul>
+    <div class="note">
+      <b>体調が悪くなったら、野生動物を扱ったことを医師に伝える。</b>
+      SFTSもE型肝炎も、それを言うかどうかで診断までの時間が変わります。遠慮しないでください。
+    </div>
+  </div>
+
+  <!-- ══ 食べられない個体 ══ -->
+  <h2 id="dame"><span class="ic">🚫</span>食べられない個体の見分け方</h2>
+  <div class="card">
+    <h3>捕獲のとき・受け入れのとき</h3>
+    <p>捕獲時の様子に、次のような異常があった個体は食用にしません。</p>
+    <div class="chips">
+      <span class="chip">元気がない</span><span class="chip">足取りがおかしい・ふらつく</span>
+      <span class="chip">下痢をしている</span><span class="chip">脱毛している</span>
+      <span class="chip">腫瘍のようなものがある</span><span class="chip">明らかに痩せている</span>
+    </div>
+    <p style="margin-top:12px;">狩猟する地域で<b>家畜伝染病のまん延が確認された場合</b>、
+      その地域で獲った個体は食用にできません。地域の発生状況は日頃から情報を取っておきます。</p>
+
+    <h3 style="margin-top:20px;">解体のとき</h3>
+    <p>摘出した内臓と筋肉を、<b>望診（見る）と触診（触る）</b>で確認し、記録します。
+      厚生労働省ガイドラインのカラーアトラスが判断の基準です。</p>
+    <div class="note">
+      <b>全部廃棄にするのは、次の場合です。</b>
+      <ul style="margin:8px 0 0 20px;">
+        <li>複数の臓器に異常を認めたもの</li>
+        <li>全身的な異常を認めたもの</li>
+        <li><b>食用として問題がないと判断できないもの</b></li>
+      </ul>
+      3つめが大事です。「異常だと分かった」ときだけでなく、
+      <b>「大丈夫だと言い切れない」ときも廃棄</b>します。
+    </div>
+    <p style="margin-top:12px;">確認した結果は、異常があってもなくても捕獲票に記録してください。
+      記録がないと、後から「見たのか見ていないのか」が分かりません。</p>
+  </div>
+
+  <!-- ══ クイズ ══ -->
+  <h2 id="quiz"><span class="ic">✅</span>確認クイズ</h2>
+  <p class="lead">読んだあとに、6問だけ。答えるとその場で解説が出ます。</p>
+  <div id="quizList"></div>
+
+  <!-- ══ 出典 ══ -->
+  <h2 id="src"><span class="ic">📚</span>出典</h2>
+  <div class="card src" id="srcList">
+    <p style="color:var(--ink2);font-size:13.5px;">
+      判断の根拠は、下の公式資料です。この頁と食い違ったときは<b>公式資料が正しい</b>ものとして扱ってください。</p>
+    <p><b>衛生管理</b><br>
+      ・<a href="https://www.mhlw.go.jp/file/06-Seisakujouhou-11130500-Shokuhinanzenbu/GLhonbun_1.pdf" target="_blank" rel="noopener">厚生労働省 野生鳥獣肉の衛生管理に関する指針（ガイドライン）</a><br>
+      ・<a href="https://www.pref.chiba.lg.jp/ryuhan/pbmgm/norin/torikumi/bosogibier/documents/guideline.pdf" target="_blank" rel="noopener">千葉県野生鳥獣肉に係る衛生管理ガイドライン（令和4年1月）</a><br>
+      ・<a href="https://www.mhlw.go.jp/stf/web_magazine/closeup/33.html" target="_blank" rel="noopener">厚生労働省 ジビエによる食中毒の予防について</a><br>
+      ・<a href="https://www.pref.yamaguchi.lg.jp/site/syoku-anshin/295190.html" target="_blank" rel="noopener">山口県 野生鳥獣肉の衛生管理対策</a></p>
+    <p><b>E型肝炎・寄生虫</b><br>
+      ・<a href="https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/kenkou_iryou/kenkou/kekkaku-kansenshou/hepatitis-e-virus_qa.html" target="_blank" rel="noopener">厚生労働省 E型肝炎ウイルスの感染事例・Q&amp;A</a><br>
+      ・<a href="https://agriknowledge.affrc.go.jp/RN/2030911203.pdf" target="_blank" rel="noopener">野生鳥獣肉(ジビエ)食に原因する寄生虫症（山口獣医学雑誌）</a><br>
+      ・<a href="http://www.fukushihoken.metro.tokyo.jp/shokuhin//////musi/10.html" target="_blank" rel="noopener">東京都 食品衛生の窓「旋毛虫（トリヒナ）」</a></p>
+    <p><b>SFTS</b><br>
+      ・<a href="https://id-info.jihs.go.jp/diseases/sa/sfts/index.html" target="_blank" rel="noopener">国立健康危機管理研究機構 重症熱性血小板減少症候群（SFTS）</a><br>
+      ・<a href="https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/kenkou_iryou/kenkou/kekkaku-kansenshou19/sfts_qa.html" target="_blank" rel="noopener">厚生労働省 SFTS Q&amp;A</a></p>
+    <p><b>豚熱・放射性物質</b><br>
+      ・<a href="https://www.maff.go.jp/j/nousin/gibier/tonko.html" target="_blank" rel="noopener">農林水産省 豚熱（CSF）について</a><br>
+      ・<a href="https://www.pref.chiba.lg.jp/eishi/denshikan/butanetsu.html" target="_blank" rel="noopener">千葉県 CSF（豚熱）に関する食の安全・安心について</a><br>
+      ・<a href="https://www.pref.chiba.lg.jp/noushin/h-kensakekka/inoshishi-shisetsu.html" target="_blank" rel="noopener">千葉県 県内処理加工施設で加工されるイノシシ肉の放射性物質検査結果</a></p>
+    <p><b>生態</b><br>
+      ・<a href="https://www.naro.go.jp/org/nilgs/choju/wildlife/project/ino-HP/ino-eco.html" target="_blank" rel="noopener">農研機構 イノシシの生態解明と農作物被害防止技術の開発</a><br>
+      ・<a href="https://www.naro.go.jp/org/nilgs/choju/wildlife/project/ino-HP/materials/1-6.pdf" target="_blank" rel="noopener">農研機構「春の主食はタケノコ」</a><br>
+      ・<a href="https://wmo.co.jp/field_note/no-93-%E3%82%A4%E3%83%8E%E3%82%B7%E3%82%B7%E3%81%AE%E7%89%99" target="_blank" rel="noopener">野生動物保護管理事務所（WMO）「イノシシの牙」</a><br>
+      ・<a href="https://www.pref.chiba.lg.jp/shizen/shingikai/kyon/documents/1genzyou.pdf" target="_blank" rel="noopener">千葉県 キョンの現状（生息状況・推定生息数）</a><br>
+      ・<a href="https://www.pref.chiba.lg.jp/shizen/choujuu/kyon/2nd_kyon.html" target="_blank" rel="noopener">第2次千葉県キョン防除実施計画</a><br>
+      ・<a href="https://www.pref.kanagawa.jp/docs/f4y/03shinrin/sika/01_about.html" target="_blank" rel="noopener">神奈川県 ニホンジカについて</a></p>
+    <p><b>アライグマ・ハクビシン</b><br>
+      ・<a href="https://www.pref.nara.lg.jp/n094/28728.html" target="_blank" rel="noopener">奈良県 アライグマの感染症について</a><br>
+      ・<a href="https://www.city.meguro.tokyo.jp/kankyouhozen/kurashi/kankyou/hakubishin_higai.html" target="_blank" rel="noopener">目黒区 ハクビシンやアライグマによる被害を防ぐために</a></p>
+    <p style="margin-top:14px;color:var(--ink3);">
+      搬入頭数は当センターの搬入台帳の実測値（令和8年度）です。</p>
+  </div>
+
+  <footer>
+    館山ジビエセンター（合同会社アルコ）<br>千葉県館山市西長田1163-5
+  </footer>
+</div>
+
+<script>
+const QUIZ = [
+  { q: '冷凍しておいたイノシシ肉。生で出しても大丈夫？',
+    a: ['だめ。冷凍は安全の理由にならない', '冷凍したなら大丈夫', '表面を炙れば大丈夫'], c: 0,
+    why: '寄生虫の種類によっては冷凍が効きません。表面を焼いても肉塊の内部までは失活しません。中心部75℃1分以上の加熱以外に確実な方法はありません。' },
+  { q: '加熱の条件は？',
+    a: ['中心部75℃で1分以上', '表面に焼き色がつくまで', '中心部60℃で3分'], c: 0,
+    why: '中心部の温度が75℃で1分間以上、またはこれと同等以上の効力を有する方法。表面ではなく「中心部」です。' },
+  { q: '解体中、内臓のひとつに気になる箇所を見つけた。ほかは異常なし。どうする？',
+    a: ['判断がつかないなら食用にしない', '1つだけなら問題ない', 'その臓器だけ捨てて肉は出す'], c: 0,
+    why: '「食用として問題がないと判断できないもの」は全部廃棄です。異常だと分かったときだけでなく、大丈夫だと言い切れないときも廃棄します。迷ったら人を呼んでください。' },
+  { q: '搬入から4日後、発熱した。病院で何を言う？',
+    a: ['野生動物を扱ったことを必ず伝える', '普通の風邪として受診する', '治るまで様子を見る'], c: 0,
+    why: 'SFTSはマダニに咬まれてから6日〜2週間で発症します。動物との接触でも感染しえます。野生動物を扱ったと伝えるかどうかで、診断までの時間が変わります。' },
+  { q: '豚熱（CSF）に感染したイノシシの肉を食べたら？',
+    a: ['人には感染しない', '人にも感染する', '加熱しても危険'], c: 0,
+    why: '豚熱は人には感染しません。ただし豚とイノシシには重大な病気で、家畜防疫上きわめて重要です。まん延が確認された地域で獲った個体は食用にできません。' },
+  { q: '毛が抜けているアライグマが運ばれてきた。',
+    a: ['素手で触らない。疥癬は人にもうつる', '食肉にはしないので普通に扱ってよい', '毛が抜けるのは季節のせい'], c: 0,
+    why: '疥癬はヒゼンダニによる皮膚病で、人にも飼い犬にもうつります。アライグマはレプトスピラ症やアライグマ回虫も持ちうるので、食肉にしないぶんむしろ扱いに注意が要ります。' }
+];
+let answered = {};
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+function renderQuiz() {
+  document.getElementById('quizList').innerHTML = QUIZ.map((item, i) => `
+    <div class="card">
+      <p class="q">${i + 1}. ${esc(item.q)}</p>
+      <div class="opts" id="opt${i}">
+        ${item.a.map((t, j) => `<button type="button" onclick="answer(${i},${j})">${esc(t)}</button>`).join('')}
+      </div>
+      <div id="why${i}"></div>
+    </div>`).join('') + '<div class="score" id="score"></div>';
+  Object.keys(answered).forEach(i => paint(Number(i)));
+  paintScore();
+}
+function answer(i, j) {
+  if (answered[i] != null) return;
+  answered[i] = j;
+  try { localStorage.setItem('tg_manabu_quiz', JSON.stringify(answered)); } catch (e) {}
+  paint(i); paintScore();
+}
+function paint(i) {
+  const item = QUIZ[i], chosen = answered[i];
+  if (chosen == null) return;
+  [...document.querySelectorAll(`#opt${i} button`)].forEach((b, j) => {
+    if (j === item.c) b.classList.add('ok');
+    else if (j === chosen) b.classList.add('ng');
+  });
+  document.getElementById('why' + i).innerHTML =
+    `<div class="why">${chosen === item.c ? '◯ ' : '✕ '}${esc(item.why)}</div>`;
+}
+function paintScore() {
+  const done = Object.keys(answered).length;
+  const ok = Object.keys(answered).filter(i => answered[i] === QUIZ[i].c).length;
+  document.getElementById('score').textContent =
+    done === 0 ? '' : done < QUIZ.length ? `${done}/${QUIZ.length}問 回答ずみ`
+      : `${ok}/${QUIZ.length}問 正解。おつかれさまでした。`;
+}
+try {
+  const saved = JSON.parse(localStorage.getItem('tg_manabu_quiz') || '{}');
+  if (saved && typeof saved === 'object') answered = saved;
+} catch (e) {}
+renderQuiz();
+</script>
+</body>
+</html>
