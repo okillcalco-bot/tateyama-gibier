@@ -28,21 +28,25 @@
   h1{font-size:25px;margin:0;font-weight:700;letter-spacing:.02em}
   .sub{font-size:13.5px;color:var(--ink2);margin:8px 0 0}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin:14px 0}
-  h2{font-size:17px;margin:30px 0 6px;display:flex;align-items:center;gap:9px;scroll-margin-top:12px}
+  h2{font-size:17px;margin:32px 0 6px;display:flex;align-items:center;gap:9px;scroll-margin-top:12px}
   h2 .ic{font-size:20px}
-  h3{font-size:15px;margin:0 0 8px}
+  h3{font-size:14.5px;margin:16px 0 7px;color:var(--moss)}
+  h3:first-child{margin-top:0}
   p{margin:0 0 10px}
   .lead{font-size:14px;color:var(--ink2)}
   .rule{background:var(--red-soft);border:1.5px solid var(--red);border-radius:14px;padding:18px;margin:14px 0}
-  .rule h3{color:var(--red);font-size:16px}
+  .rule h3{color:var(--red);font-size:16px;margin-top:0}
   .rule ol{margin:10px 0 0 20px;padding:0}
   .rule li{margin-bottom:12px;font-size:14.5px}
   .rule b{font-size:15.5px}
   .note{background:var(--gold-soft);border-left:4px solid var(--gold);border-radius:8px;
     padding:12px 14px;font-size:13.5px;margin:12px 0}
+  .warn{background:var(--red-soft);border-left:4px solid var(--red);border-radius:8px;
+    padding:12px 14px;font-size:13.5px;margin:12px 0}
   table{width:100%;border-collapse:collapse;font-size:13.5px}
   th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
   th{color:var(--ink3);font-weight:600;white-space:nowrap}
+  td.n{text-align:right;font-variant-numeric:tabular-nums}
   .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
   .chip{font-size:12px;background:var(--moss-soft);color:var(--moss);border-radius:999px;padding:3px 11px}
@@ -50,15 +54,18 @@
   summary{padding:13px 16px;cursor:pointer;font-weight:700;font-size:15px;list-style:none;
     display:flex;align-items:center;gap:9px}
   summary::-webkit-details-marker{display:none}
-  summary::after{content:'＋';margin-left:auto;color:var(--ink3);font-weight:400}
+  summary::after{content:'＋';margin-left:auto;color:var(--ink3);font-weight:400;flex:0 0 auto}
   details[open] summary::after{content:'−'}
   details .body{padding:0 16px 16px;font-size:14px}
-  .kv{display:flex;gap:10px;padding:4px 0;font-size:13.5px;border-bottom:1px dashed var(--line)}
+  .sci{font-size:11.5px;color:var(--ink3);font-style:italic;font-weight:400}
+  .kv{display:flex;gap:10px;padding:5px 0;font-size:13.5px;border-bottom:1px dashed var(--line)}
   .kv:last-child{border-bottom:none}
-  .kv .k{color:var(--ink3);flex:0 0 96px}
+  .kv .k{color:var(--ink3);flex:0 0 84px}
   .toc{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 0}
   .toc a{font-size:13px;text-decoration:none;color:var(--moss);background:var(--moss-soft);
     border-radius:999px;padding:5px 13px}
+  .cook{background:var(--moss-soft);border-radius:10px;padding:12px 14px;margin:12px 0;font-size:13.5px}
+  .cook b{color:var(--moss)}
   .q{margin:0 0 6px;font-weight:700;font-size:14.5px}
   .opts{display:flex;flex-direction:column;gap:7px;margin-bottom:6px}
   .opts button{text-align:left;padding:11px 13px;border:1px solid var(--line);border-radius:9px;
@@ -72,6 +79,7 @@
   li{margin-bottom:6px}
   .src{font-size:12.5px;color:var(--ink3);line-height:1.9}
   .src a{color:var(--moss)}
+  .src b{color:var(--ink2)}
   footer{text-align:center;font-size:11.5px;color:var(--ink3);margin-top:34px;line-height:1.9}
 </style>
 </head>
@@ -82,14 +90,15 @@
     <p class="eyebrow">館山ジビエセンター</p>
     <h1>獣を知る</h1>
     <p class="sub">ここに運ばれてくる獣が、どんな暮らしをして、何を持っているのか。<br>
-      安全に扱うために、知っておきたいこと。</p>
+      おいしく、安全に扱うために。</p>
   </header>
 
   <div class="note">
     <b>この頁は社内の学習用のまとめです。</b>
     実際の判断は、厚生労働省と千葉県の<b>ガイドラインが正</b>です。
     食べられるかどうかで迷ったときは、この頁ではなく<b>人に聞いてください</b>。
-    出典は<a href="#src">いちばん下</a>にまとめてあります。
+    病気の治療の記述は「医師がどう治すか」を知っておくためのもので、
+    自分で判断するためのものではありません。出典は<a href="#src">いちばん下</a>にあります。
   </div>
 
   <div class="toc">
@@ -108,7 +117,8 @@
     <ol>
       <li><b>中心部を75℃で1分以上、加熱する。</b><br>
         表面を焼いただけでは、肉の内側にいる病原体は死にません。
-        「新鮮だから」「冷凍したから」「炙ったから」は、どれも安全の理由になりません。</li>
+        「新鮮だから」「炙ったから」は安全の理由になりません。
+        冷凍で死ぬ寄生虫もいますが、<b>冷凍が効かないものもいます</b>。加熱は全部に効きます。</li>
       <li><b>生では絶対に出さない。</b><br>
         刺身・ユッケ・タタキ・レバ刺し、すべて不可。お客様に聞かれても断ってください。</li>
       <li><b>迷ったら止めて、人を呼ぶ。</b><br>
@@ -119,150 +129,543 @@
 
   <!-- ══ 来る獣 ══ -->
   <h2 id="kemono"><span class="ic">🌿</span>ここに来る獣</h2>
-  <p class="lead">館山ジビエセンターに実際に運ばれてきた頭数です（令和8年度・搬入台帳より）。
-    イノシシが大半ですが、房総ならではのキョンが2番目に多いのが特徴です。</p>
+  <p class="lead">当センターの搬入台帳の実測です。<b>7種すべてを食肉にしています。</b>
+    タヌキとノウサギは令和8年度はまだ搬入がなく、数字は令和7年度のものです。</p>
   <div class="card scroll">
     <table>
-      <tr><th>獣種</th><th>頭数</th><th>食肉にするか</th></tr>
-      <tr><td>イノシシ</td><td>477</td><td>する（主力）</td></tr>
-      <tr><td>キョン</td><td>64</td><td>する</td></tr>
-      <tr><td>ハクビシン</td><td>20</td><td>しない（防除）</td></tr>
-      <tr><td>アライグマ</td><td>19</td><td>しない（防除）</td></tr>
-      <tr><td>シカ</td><td>15</td><td>する</td></tr>
-      <tr><td>タヌキ</td><td>4</td><td>しない（防除）</td></tr>
-      <tr><td>ノウサギ</td><td>3</td><td>しない（防除）</td></tr>
+      <tr><th>獣種</th><th>令和8年度</th><th>令和7年度</th></tr>
+      <tr><td>イノシシ</td><td class="n">477</td><td class="n">0</td></tr>
+      <tr><td>キョン</td><td class="n">53</td><td class="n">11</td></tr>
+      <tr><td>ハクビシン</td><td class="n">18</td><td class="n">2</td></tr>
+      <tr><td>アライグマ</td><td class="n">15</td><td class="n">4</td></tr>
+      <tr><td>シカ</td><td class="n">9</td><td class="n">2</td></tr>
+      <tr><td>タヌキ</td><td class="n">0</td><td class="n">4</td></tr>
+      <tr><td>ノウサギ</td><td class="n">0</td><td class="n">3</td></tr>
     </table>
+    <p class="lead" style="margin:10px 0 0;font-size:12.5px;">
+      シカは捕獲日が入っていないものが別に4頭あります（年度に振り分けられていません）。</p>
   </div>
 
   <details>
-    <summary>🐗 イノシシ（ニホンイノシシ）</summary>
+    <summary>🐗 イノシシ <span class="sci">Sus scrofa</span></summary>
     <div class="body">
-      <div class="kv"><span class="k">繁殖</span><span>おおむね2歳で初産。冬（12〜2月）に交尾し、妊娠4〜5か月で春（4〜6月）に出産。一度に3〜5頭ほど産む。</span></div>
-      <div class="kv"><span class="k">寿命</span><span>野生ではおよそ10年前後。</span></div>
-      <div class="kv"><span class="k">暮らし</span><span>オスは大人になると単独。メスは子や姉妹と群れる。定住と移動を繰り返し、定住地は10〜100haほど。</span></div>
-      <div class="kv"><span class="k">食べもの</span><span>雑食だが植物が中心。季節でかなり変わる。</span></div>
+      <h3>暮らし</h3>
+      <div class="kv"><span class="k">繁殖</span><span>おおむね2歳で初産。冬（12〜2月）に交尾し、妊娠4〜5か月で春（4〜6月）に出産。一度に3〜5頭ほど産みます。捕獲してもすぐ埋め合わされるのは、この繁殖力のためです。</span></div>
+      <div class="kv"><span class="k">寿命</span><span>野生でおよそ10年前後（オス6年・メス10年という報告もあります）。</span></div>
+      <div class="kv"><span class="k">社会</span><span>オスは大人になると単独で暮らし、メスは子や姉妹と群れます。定住と移動を繰り返す暮らし方をしていて、定住する場所は10〜100haほど。それを行動圏の中にいくつも持っています。</span></div>
+      <h3>食べもの</h3>
+      <p>雑食ですが、胃の内容物を調べると<b>植物質が動物質より圧倒的に多い</b>のが特徴です。季節でかなり変わります。</p>
       <div class="chips">
-        <span class="chip">春: タケノコ・竹の地下茎</span><span class="chip">夏: 昆虫・ミミズなど動物質が増える</span>
-        <span class="chip">秋冬: ドングリなど堅果・根や地下茎</span><span class="chip">通年: イモ・稲・果実などの農作物</span>
+        <span class="chip">春: タケノコ・竹の地下茎</span><span class="chip">夏: 昆虫・両生類・ミミズなど動物質が増える</span>
+        <span class="chip">秋冬: ドングリなど堅果・根や地下茎</span><span class="chip">通年: イモ・稲・カキ・ナシなどの農作物</span>
       </div>
-      <p style="margin-top:10px;">島根県石見地方の調査では、<b>春はタケノコが胃内容の57.9%</b>を占めたという報告があります。
-        捕獲票の「胃の内容物」を残しておくと、館山ではどうなのかが数年で見えてきます。</p>
-      <h3 style="margin-top:14px;">年齢の見かた（歯）</h3>
-      <p>すべての歯が生えそろうまで約3年かかります。目安として——</p>
+      <p style="margin-top:10px;">島根県石見地方の調査では<b>春はタケノコが57.9%</b>を占め、
+        秋から冬にかけてはクズなどの根塊が認められています。
+        農研機構の研究でも、3月から6月にかけて根・塊茎の割合が高くなることが確認されています。</p>
+      <p class="lead">捕獲票の「胃の内容物」を残していけば、館山ではどうなのかが数年で見えてきます。
+        季節ごとの食べものが分かれば、被害の出る時期も読めるようになります。</p>
+      <h3>年齢の見かた（歯）</h3>
+      <p>すべての歯が生えそろうまで約3年かかります。現場ではこの2点で足ります。</p>
       <ul>
         <li><b>犬歯がまだ乳歯</b>なら 0歳</li>
         <li><b>下顎のいちばん奥の第3大臼歯がきれいに生えている</b>なら 3.5歳以上</li>
       </ul>
-      <p class="lead">もっと正確に出すには歯のセメント質の年輪を顕微鏡で数えますが、現場では上の2点で十分です。
-        捕獲票の「推定年齢」に入れてください。</p>
+      <p class="lead">もっと正確に出すには歯のセメント質の年輪を顕微鏡で数えます。</p>
+      <div class="cook">
+        <h3 style="margin-top:0;">肉とおすすめの調理</h3>
+        <p><b>秋から冬にかけて脂が乗ります。</b>肩ロースは柔らかく、高級な部位です。
+          脂に甘みがあるのがイノシシの持ち味なので、脂を落としきらない調理が向きます。</p>
+        <ul style="margin-bottom:0;">
+          <li><b>ぼたん鍋</b> — 定番。薄切りにして味噌仕立て。脂の甘さがそのまま出ます。</li>
+          <li><b>煮込み</b> — スネやスジは赤ワイン煮・味噌煮でほろりとします。</li>
+          <li><b>ロース・肩ロースの焼き</b> — 中心部75℃1分以上を守りつつ、焼きすぎないこと。</li>
+        </ul>
+        <p style="margin:10px 0 0;"><b>下処理が味を決めます。</b>血抜きと、脂の酸化した部分の除去を丁寧に。</p>
+      </div>
+      <div class="warn" style="margin-bottom:0;">
+        この獣で特に注意: <b>E型肝炎</b>・<b>肺吸虫</b>（イノシシは待機宿主です）・<b>旋毛虫</b>。
+        豚熱は人には感染しませんが、まん延地域の個体は食用にできません。
+      </div>
     </div>
   </details>
 
   <details>
-    <summary>🦌 キョン（特定外来生物）</summary>
+    <summary>🦌 キョン <span class="sci">Muntiacus reevesi</span></summary>
     <div class="body">
-      <div class="kv"><span class="k">大きさ</span><span>成獣で体重10kg前後、体高50cmほど。肩までの高さは40cmくらいで、中型犬と同じくらい。</span></div>
-      <div class="kv"><span class="k">繁殖</span><span>早ければ<b>生後半年ほどで妊娠</b>する。1回の出産は1頭。</span></div>
-      <div class="kv"><span class="k">食べもの</span><span>森林や林縁で木の葉やドングリ類。最近は住宅地の花壇や家庭菜園にも出る。</span></div>
-      <div class="kv"><span class="k">房総での数</span><span>令和4年度に千葉県内で<b>約71,500頭</b>と推定（95%信用区間 38,985〜111,672頭）。</span></div>
-      <p style="margin-top:10px;">キョンは<b>特定外来生物</b>で、千葉県は「第2次キョン防除実施計画」で
-        最終的な完全排除を目指しています。生きたままの運搬や飼育は法律で禁止されています。
-        捕獲個体を食肉として活かすことは、防除と両立します。</p>
-      <p class="lead">小さいぶん歩留まりは低いですが、クセが少なく食べやすい肉です。</p>
+      <p class="lead">中国南東部・台湾原産のシカ科。日本では<b>特定外来生物</b>で、
+        生きたままの運搬や飼育は法律で禁止されています。房総半島は国内最大の分布域です。</p>
+      <h3>暮らし</h3>
+      <div class="kv"><span class="k">大きさ</span><span>成獣で体重10kg前後、体高50cmほど。肩までの高さは40cmくらいで、中型犬と同じくらいです。</span></div>
+      <div class="kv"><span class="k">繁殖</span><span><b>季節繁殖をしません。</b>出産は一年中ほぼ均等に分布します。妊娠期間は約210日、産子は1頭（まれに双子）。</span></div>
+      <div class="kv"><span class="k">増え方</span><span>メスは<b>出産直後に発情</b>するため、ほぼ切れ目なく妊娠している状態になり、<b>2年で約3頭</b>を産みます。繁殖を始めるのは季節によらず<b>体重が約10kgに達したとき</b>です。</span></div>
+      <div class="kv"><span class="k">数</span><span>千葉県内で令和4年度に<b>約71,500頭</b>と推定（95%信用区間 38,985〜111,672頭）。イギリスでも侵略的外来種として拡大し、1960年代に南部で少数だったものが2016年には887の10kmメッシュを占めるまでになりました。</span></div>
+      <h3>食べもの</h3>
+      <p>樹木の葉や芽を食べる<b>ブラウザー</b>で、花・堅果・液果・キノコなど<b>栄養価の高いものを選んで食べます</b>。
+        森林内や林縁部が主ですが、近年は住宅地の花壇や家庭菜園にも出ます。</p>
+      <div class="note" style="margin-bottom:0;">
+        <b>なぜ減らないのか。</b>季節繁殖しない・出産直後にまた妊娠する・小さい体（10kg）で繁殖を始める。
+        この3つが揃っているので、シカのように「秋だけ繁殖する」動物とは増え方の性質が違います。
+        千葉県は「第2次キョン防除実施計画」で最終的な完全排除を目指しています。
+      </div>
+      <div class="cook">
+        <h3 style="margin-top:0;">肉とおすすめの調理</h3>
+        <p><b>シカに似ていますが、よりマイルドでクセがありません。</b>
+          「匂いやクセがなく柔らかい」という評価が多く、ジビエを初めて食べる人にも出しやすい肉です。
+          小さいぶん歩留まりは低くなります。</p>
+        <ul style="margin-bottom:0;">
+          <li><b>ロースト・焼き</b> — 肉本来の味が出て、失敗も少ない。いちばん向いています。</li>
+          <li><b>赤ワイン煮込み</b> — ジビエの王道。持ち味を引き出せます。</li>
+          <li><b>カツ</b> — 揚げると中心までしっかり火が入り、やわらかく仕上がります。</li>
+          <li><b>もも肉の蒸し煮</b> — 塩胡椒・白ワイン・香味野菜で下味をつけて圧力鍋で。</li>
+        </ul>
+      </div>
     </div>
   </details>
 
   <details>
-    <summary>🦌 ニホンジカ</summary>
+    <summary>🦌 ニホンジカ <span class="sci">Cervus nippon</span></summary>
     <div class="body">
-      <div class="kv"><span class="k">繁殖</span><span>秋に交尾し、妊娠約220〜230日で5〜7月頃に<b>1頭</b>出産。2歳以上で性成熟し、成獣の妊娠率は80〜90%。</span></div>
+      <h3>暮らし</h3>
+      <div class="kv"><span class="k">繁殖</span><span>秋に交尾し、妊娠約220〜230日で5〜7月頃に<b>1頭</b>出産。2歳以上で性成熟し、成獣の妊娠率は80〜90%です。</span></div>
       <div class="kv"><span class="k">寿命</span><span>最長でオス約15年、メス約20年。</span></div>
-      <div class="kv"><span class="k">暮らし</span><span>群れで生活。繁殖期以外はオスの群れとメスの群れに分かれる。</span></div>
-      <div class="kv"><span class="k">食べもの</span><span>イネ科の草、木の葉、ドングリ、ササなど。シキミやアセビなど有毒な一部を除き、ほとんどの植物を食べる。</span></div>
-      <p style="margin-top:10px;">イノシシと違い、シカは<b>1年に1頭</b>しか産みません。同じ数を捕っても、
-        個体数への効き方が違います。</p>
+      <div class="kv"><span class="k">社会</span><span>群れで生活し、繁殖期以外はオスの群れとメスの群れに分かれます。</span></div>
+      <div class="kv"><span class="k">房総では</span><span>当センターへの搬入は令和8年度で9頭と多くありません。房総半島ではキョンのほうが圧倒的に多く、そこが他県のジビエ施設と違うところです。</span></div>
+      <h3>食べもの</h3>
+      <p>イネ科の草、木の葉、ドングリ、ササなど。<b>シキミやアセビなど有毒な一部を除き、ほとんどの植物を食べられます。</b>
+        「食べられる植物の幅が異常に広い」ことが、シカが増えると森の下層植生が消える理由です。
+        食べ残されるのは毒のあるものだけなので、森の植生そのものが選別されてしまいます。</p>
+      <p>シカは<b>反芻動物</b>で、胃が4つに分かれています。
+        草を一度飲み込んでから口に戻して噛み直し、微生物の力で繊維を分解します。
+        解体のときに消化管の中身が多いのはこのためで、<b>内臓を傷つけると汚染が一気に広がります</b>。丁寧に扱ってください。</p>
+      <div class="note">
+        <b>イノシシとの決定的な違い。</b>シカは1年に1頭しか産みません。
+        イノシシは1回に3〜5頭。同じ数を捕っても、個体数への効き方がまったく違います。
+      </div>
+      <div class="cook">
+        <h3 style="margin-top:0;">肉とおすすめの調理</h3>
+        <p><b>脂が少なく、加熱すると固くなりやすい</b>のがシカの性質です。
+          対処は2つに分かれます——<b>短時間で火を入れる</b>か、<b>長時間かけて煮る</b>か。中途半端が一番固くなります。</p>
+        <ul style="margin-bottom:0;">
+          <li><b>短時間</b> — ステーキ、焼き肉、ロースト。弱火でじっくり火を通すと柔らかく仕上がります。</li>
+          <li><b>長時間</b> — 大和煮、赤ワイン煮。スネや肩に向きます。</li>
+          <li><b>コンフィ</b> — 80℃で30分以上煮る。しっとりします。</li>
+        </ul>
+        <p style="margin:10px 0 0;"><b>部位で使い分けます。</b>
+          ロース・ヒレは短時間の焼きへ。モモは薄く切ってソテーかロースト。
+          スネ・肩・スジは長時間の煮込みへ回すと、繊維がほどけて柔らかくなります。</p>
+      </div>
+      <div class="warn" style="margin-bottom:0;">
+        この獣で特に注意: <b>E型肝炎</b>（2003年の兵庫県の事例は野生シカ肉の生食が原因）・
+        <b>住肉胞子虫</b>・<b>肺吸虫</b>（シカも待機宿主です）。
+      </div>
     </div>
   </details>
 
   <details>
-    <summary>🦝 アライグマ・ハクビシン・タヌキ（食肉にはしない）</summary>
+    <summary>🦝 アライグマ <span class="sci">Procyon lotor</span></summary>
     <div class="body">
-      <p>これらは防除で運ばれてきますが、当センターでは<b>食肉にしません</b>。
-        ただし<b>扱うときの注意は、むしろこちらのほうが要ります</b>。</p>
+      <p class="lead">北米原産。1970年代後半にアニメの人気でペットとして大量に輸入され、
+        遺棄や逸走で野生化しました。現在は<b>47都道府県すべて</b>に分布する特定外来生物です。</p>
+      <h3>暮らし</h3>
+      <div class="kv"><span class="k">繁殖</span><span>年1回、春から夏に2〜6頭。<b>1歳から毎年</b>産みます。</span></div>
+      <div class="kv"><span class="k">行動</span><span>夜行性で警戒心が強く、環境への適応力が非常に高い。木造家屋や社寺に棲みつきます。</span></div>
+      <div class="kv"><span class="k">食べもの</span><span>雑食。果実・野菜・小型哺乳類・両生類・爬虫類。</span></div>
+      <h3>前足がすべてを決めている</h3>
+      <p>アライグマの前足は指が5本あり、<b>人の手のように物をつかめます</b>。
+        水中に手を入れて獲物を探る動作が「洗う」ように見えることが名前の由来です。
+        この器用さのために、手ひとつで開く扉やフタを開けてしまい、木にも登り、
+        家屋の隙間から侵入して屋根裏に棲みつきます。<b>対策が効きにくいのはこの手のせいです。</b></p>
+      <h3>タヌキとの見分け方</h3>
+      <p>タヌキとよく間違えられますが、確実に見分けられます。</p>
       <ul>
-        <li><b>レプトスピラ症</b> — アライグマの排泄物を介して人に感染する。家畜やペットにも感染する。</li>
-        <li><b>アライグマ回虫</b> — 糞で汚れた土や物から感染する。目などの粘膜から入ると視力障害を起こすことがある。</li>
-        <li><b>疥癬（かいせん）</b> — ヒゼンダニによる皮膚病。<b>人にも飼い犬にもうつる</b>。毛が抜けている個体は疑う。</li>
+        <li><b>尾に黒い縞が5〜7本</b>ある（タヌキの尾は太くふさふさで縞がない）</li>
+        <li><b>指が5本で爪が長く</b>、足跡の爪あとがはっきり残る</li>
+        <li>胴長60cmほど（タヌキは45〜55cmほど）</li>
       </ul>
-      <p>素手で触らない。糞尿で汚れた場所に近づかない。
-        使った機材は洗剤で洗ってから消毒し、可能ならバーナーで焼くか煮沸します。</p>
+      <p class="lead">搬入時に獣種を取り違えると、その個体の記録が全部ずれます。迷ったら尾を見てください。</p>
+      <div class="cook">
+        <h3 style="margin-top:0;">肉とおすすめの調理</h3>
+        <p><b>獣臭さはあまりなく、柔らかい鶏のもも肉に近い肉質</b>という評価です。脂身もおいしいと言われます。</p>
+        <p><b>血抜きが味の最大の決め手です。</b>捕獲後、逆さに吊るして30分以上しっかり抜くこと。
+          締め方と血の抜き方で、同じ個体でも味がまるで変わります。</p>
+        <ul style="margin-bottom:0;">
+          <li><b>から揚げ・ソテー</b> — 鶏もも肉に近い扱いで。</li>
+          <li><b>煮込み</b> — 脂の甘みが出ます。</li>
+        </ul>
+      </div>
+      <div class="warn" style="margin-bottom:0;">
+        この獣で特に注意: <b>アライグマ回虫</b>（肉ではなく<b>糞から</b>感染します。重篤になりえます）・
+        <b>レプトスピラ症</b>・<b>旋毛虫</b>・<b>疥癬</b>。
+        <b>食肉にする獣の中で、扱いに最も注意が要る一種です。</b>
+      </div>
+    </div>
+  </details>
+
+  <details>
+    <summary>🐾 ハクビシン <span class="sci">Paguma larvata</span></summary>
+    <div class="body">
+      <p class="lead">ジャコウネコ科。東南アジアから中国南東部が原産で、明治以前に日本に入ってきたとされます。
+        <b>夜行性かつ樹上性で目撃されにくく、研究例が非常に少ないため、生態はほとんど分かっていません。</b></p>
+      <h3>暮らし</h3>
+      <div class="kv"><span class="k">生息地</span><span>多くは海抜200〜1,000mの低山の山林。樹洞や、タヌキなどが使い古した巣穴を住みかにします。民家の床下や屋根裏にも棲みつきます。</span></div>
+      <div class="kv"><span class="k">繁殖</span><span><b>ほぼ年中出産が可能。</b>1回の産仔数は1〜4頭、性成熟は生後10〜12か月、妊娠期間は約2か月。</span></div>
+      <div class="kv"><span class="k">寿命</span><span>野生で約10年、飼育下では15〜20年。</span></div>
+      <div class="kv"><span class="k">身体</span><span>木登りが非常に得意。昼間は住処に潜んでいます。</span></div>
+      <h3>食べもの</h3>
+      <p><b>果実類を最も好みます。</b>イチジク、カキ、ナシ、ミカンなど。昆虫類・甲殻類・両生類・爬虫類も食べます。</p>
+      <p>果実への執着が強く、しかも<b>木登りが非常に得意で電線の上も渡れる</b>ため、
+        果樹園では熟した実だけを選んで食べていきます。
+        地面からの侵入を防いでも上から入ってくるので、被害が止めにくい相手です。</p>
+      <h3>名前と見分け方</h3>
+      <p><b>「白鼻芯」</b>——額から鼻にかけて白い線が一本通っているのが名前の由来で、そのまま見分け方になります。</p>
+      <ul>
+        <li>額から鼻先へ<b>白い筋</b>が通る</li>
+        <li>尾が<b>細く長い</b>（先に向かって黒くなり、先端が白い個体もいる）</li>
+        <li><b>指は4本</b>で、足跡は全体に丸くネコに似ているが爪あとははっきり出る</li>
+        <li>胴長50〜60cmほど</li>
+      </ul>
+      <div class="cook">
+        <h3 style="margin-top:0;">肉とおすすめの調理</h3>
+        <p><b>果実を食べて育つため、クセや匂いが少なく、上品で食べやすい肉です。</b>
+          アライグマやタヌキと比べても際立って食べやすいと評価されます。</p>
+        <p><b>秋から冬に獲れた個体は、甘みのある脂をたっぷり蓄えていてジューシーです。</b>
+          猟師の間では脂の多さを活かした調理が定番になっています。</p>
+        <ul style="margin-bottom:0;">
+          <li><b>シチュー</b> — 脂が溶け出してコクが出ます。</li>
+          <li><b>すき焼き</b> — 濃いめの味付けが脂に合います。</li>
+          <li><b>その他の煮込み全般</b> — 脂を活かす方向が向きます。</li>
+        </ul>
+      </div>
+    </div>
+  </details>
+
+  <details>
+    <summary>🦝 タヌキ <span class="sci">Nyctereutes procyonoides</span></summary>
+    <div class="body">
+      <p class="lead">イヌ科。日本のほぼ全域に分布します。典型的な生息地は里山（半自然林と農地が混ざった環境）ですが、
+        食物や活動場所を柔軟に使い分ける性質があり、都市部にも適応しています。</p>
+      <h3>暮らし</h3>
+      <div class="kv"><span class="k">つがい</span><span><b>厳密な一夫一妻</b>です。オスとメスが永続的なペアをつくり、行動圏を共有して一緒に採食します。相手が死んだときだけ新しいペアをつくります。</span></div>
+      <div class="kv"><span class="k">子育て</span><span>オスがメスに食物を運び、子育てにも参加します。<b>イヌ科としては珍しいほど両親の関与が強い</b>種です。</span></div>
+      <div class="kv"><span class="k">冬</span><span>寒冷地では冬に活動が著しく落ち、厳しい天候のあいだは巣にこもります（冬眠に近いtorpor）。春になると再び動き出します。</span></div>
+      <h3>ため糞（同じ場所に糞をする）</h3>
+      <p>タヌキは<b>毎日ほぼ決まった場所に糞をします</b>。「ため糞」と呼ばれる習性で、
+        仲間の糞のにおいから、何を食べているか・仲間がどんな状態かを知る<b>情報交換の場</b>として使われています。
+        アナグマにも同じ習性があります。</p>
+      <p>おもしろいのは、<b>ため糞場ではシカが採食を避けるため植物が生い茂る</b>ことです。
+        ため糞場の内側では実生の種数もサイズも外より有意に大きいという調査があります。
+        タヌキの排泄習性が、森の一部を守る結果になっているわけです。</p>
+      <p class="lead">現場では、ため糞を見つけたらタヌキかアナグマがいる印になります。
+        ただし<b>糞は素手で扱わないでください</b>（レプトスピラ・寄生虫の卵）。</p>
+      <h3>食べもの</h3>
+      <p>非常に適応力の高い雑食です。陸では昆虫・小型齧歯類・両生類・鳥・卵を捕り、
+        湖や川では<b>前足で水中の獲物をすくい取ります</b>。季節と場所に応じて、茎・根・葉・球根・果実・堅果・液果・種子も食べます。秋は果実や種子が中心になります。</p>
+      <div class="cook">
+        <h3 style="margin-top:0;">肉とおすすめの調理</h3>
+        <p><b>ジビエ上級者向けです。</b>強い獣臭があり、ジビエを初めて食べる人には向きません。
+          ただし<b>クセと同じくらい旨味も強く</b>、調理次第ではアナグマやハクビシンに匹敵する力を持ちます。</p>
+        <ul style="margin-bottom:0;">
+          <li><b>下処理を徹底する</b> — 血抜きと脂の処理で臭みは大きく変わります。ここを省くと食べられません。</li>
+          <li><b>濃い味の煮込み</b> — 味噌、生姜、香味野菜。狸汁が伝統的なのは理にかなっています。</li>
+        </ul>
+      </div>
+      <div class="warn" style="margin-bottom:0;">
+        この獣で特に注意: <b>旋毛虫</b>。日本のタヌキでの保有率は1.6%（Trichinella T9）ですが、
+        欧州ではエストニアで57.5%、ポーランドで39.8%という報告があり、
+        <b>タヌキは旋毛虫の重要な保有動物です</b>。加熱を絶対に省かないこと。
+      </div>
+    </div>
+  </details>
+
+  <details>
+    <summary>🐰 ノウサギ <span class="sci">Lepus brachyurus</span></summary>
+    <div class="body">
+      <p class="lead"><b>日本固有種</b>です。本州・四国・九州とその属島に分布し、
+        海岸地帯から農耕地、林野、牧草地、山岳地帯まで幅広く生息しています。</p>
+      <h3>暮らし</h3>
+      <div class="kv"><span class="k">大きさ</span><span>頭胴長45〜54cm、尾長2〜5cm、体重1.3〜2.5kg。毛は褐色で腹は白。</span></div>
+      <div class="kv"><span class="k">巣</span><span><b>穴を掘りません。</b>アナウサギとの決定的な違いです。昼は茂みや岩陰で休み、夜に草原や伐採地へ出ます。</span></div>
+      <div class="kv"><span class="k">社会</span><span>一般に単独で暮らします。</span></div>
+      <div class="kv"><span class="k">繁殖</span><span>交尾期は2〜7月、出産は4〜8月。妊娠期間は48〜52日（平均49.7日）、産仔数は1〜8頭（平均3頭）。</span></div>
+      <div class="kv"><span class="k">子</span><span>生まれた時点で<b>目が開き、毛が生えそろい、すぐ動けます</b>（早成性）。穴を掘らない暮らしに合った性質です。</span></div>
+      <h3>食べもの</h3>
+      <p>草本植物のほか、木本植物の枝や樹皮も食べます。冬に樹皮を食べるため、林業被害の対象になります。</p>
+      <h3>自分の糞を食べる（食糞）</h3>
+      <p>ウサギは<b>2種類の糞</b>を出します。ふだん目にする硬い糞と、<b>深夜から早朝に出す軟らかいクリーム状の糞（盲腸糞）</b>です。
+        後者は肛門から直接口に運んで食べます。</p>
+      <p>草はほとんどが食物繊維で、タンパク質もビタミンも足りません。
+        そこでウサギは、<b>胃より大きい盲腸</b>を発酵タンクにして腸内細菌に繊維を分解させ、
+        細菌がつくったアミノ酸・ビタミンB群・ビタミンKを、盲腸糞ごと食べて回収しています。
+        <b>食糞ができないと栄養障害を起こします。</b>草だけで生きるための仕組みです。</p>
+      <p class="lead">解体のときに消化管の内容が特徴的なのは、この二段構えの消化のためです。</p>
+      <div class="cook">
+        <h3 style="margin-top:0;">肉とおすすめの調理</h3>
+        <p>脂がほとんどない締まった赤身です。パサつきやすいので、<b>水分と脂を補う調理</b>が向きます。</p>
+        <ul style="margin-bottom:0;">
+          <li><b>煮込み</b> — 赤ワイン煮、シヴェ。骨からいい出汁が出ます。</li>
+          <li><b>リエット・パテ</b> — 脂を加えて練る。パサつきを逆手に取れます。</li>
+          <li><b>ロースは短時間</b> — 火を入れすぎると一気に固くなります。</li>
+        </ul>
+      </div>
+      <div class="warn" style="margin-bottom:0;">
+        <b>この獣は、扱うときが最も危険です。</b>
+        <b>野兎病</b>は<b>10〜50個の菌が皮膚に入るか吸い込むだけで発症します</b>。
+        皮を剥ぐ作業で感染します。<b>必ず手袋をしてください。</b>詳しくは下の「知っておく病気」を。
+      </div>
     </div>
   </details>
 
   <!-- ══ 知っておく病気 ══ -->
   <h2 id="byouki"><span class="ic">🔬</span>知っておく病気</h2>
   <p class="lead">野生の獣は、餌も健康状態も誰も管理していません。だから家畜の肉とは前提が違います。
-    「元気そうに見えた」は、安全の根拠になりません。</p>
+    「元気そうに見えた」は安全の根拠になりません。<br>
+    それぞれ<b>どうやって起こるか／症状／どう治すか</b>を書きます。
+    治療は医師が行うものです。ここに書くのは、<b>受診したときに何が起きるかを知っておくため</b>です。</p>
 
   <details>
     <summary>E型肝炎ウイルス（HEV）</summary>
     <div class="body">
-      <p>ジビエでいちばん現実に起きている食中毒です。日本での確認例——</p>
+      <h3>どうやって起こるか</h3>
+      <p>ウイルスを持った獣の<b>肉や内臓を、生か加熱不十分で食べる</b>ことで感染します。
+        ジビエでいちばん現実に起きている食中毒です。日本での確認例——</p>
       <ul>
         <li><b>2003年4月・兵庫県</b> 野生シカ肉の生食が原因。特定の食品とE型急性肝炎の因果関係が確認された、日本で最初の事例。</li>
-        <li><b>2005年3月・福岡県</b> 野生イノシシ肉を食べた11名中1名が発症。ウイルス遺伝子検査でイノシシ肉との因果関係が確認された。</li>
+        <li><b>2005年3月・福岡県</b> 野生イノシシ肉を食べた11名中1名が発症。ウイルス遺伝子検査で因果関係が確認された。</li>
       </ul>
-      <p>加熱すれば防げます。中心部75℃1分以上を徹底してください。</p>
+      <h3>症状</h3>
+      <p>潜伏期は<b>2〜9週（平均6週）</b>と長く、食べたことを忘れた頃に出ます。
+        倦怠感、食欲不振、発熱、黄疸（皮膚や白目が黄色くなる）。
+        <b>多くは無症状か軽症で治まります</b>が、肝炎を発症した場合の重症化率は1割強と高く、
+        国内でも劇症化による死亡例が報告されています。</p>
+      <div class="warn">
+        <b>妊婦（特に妊娠後期）は重症化しやすく、致死率は10〜25%に及ぶ</b>とされます。
+        臓器移植後や化学療法中など<b>免疫が抑えられている人では慢性化</b>することがあります。
+      </div>
+      <h3>治し方</h3>
+      <p>急性E型肝炎に<b>特別な治療法はありません</b>。安静と対症療法で回復を待ちます。
+        まれにある慢性E型肝炎には、リバビリンの12週間投与が効く可能性があります。</p>
+      <p class="lead"><b>加熱すれば防げます。</b>これが唯一で確実な対策です。</p>
     </div>
   </details>
 
   <details>
-    <summary>寄生虫（旋毛虫・住肉胞子虫・肺吸虫・トキソプラズマ）</summary>
+    <summary>旋毛虫症（トリヒナ症）— タヌキ・アライグマ・イノシシ</summary>
     <div class="body">
+      <h3>どうやって起こるか</h3>
+      <p>獣の<b>筋肉の中で袋に包まれている幼虫</b>を、生か加熱不十分で食べると起こります。
+        飲み込まれた幼虫は小腸で成虫になり、産まれた新しい幼虫が<b>血に乗って全身の筋肉へ移動</b>して住みつきます。
+        この「腸の段階」と「筋肉の段階」で症状が変わります。</p>
+      <div class="card scroll" style="margin:10px 0;">
+        <table>
+          <tr><th>地域・動物</th><th>保有率</th></tr>
+          <tr><td>日本のアライグマ</td><td>0.9%（T9）</td></tr>
+          <tr><td>日本のタヌキ</td><td>1.6%（T9）</td></tr>
+          <tr><td>エストニアのタヌキ</td><td>57.5%</td></tr>
+          <tr><td>ポーランドのタヌキ</td><td>39.8%</td></tr>
+        </table>
+        <p class="lead" style="margin:8px 0 0;font-size:12.5px;">
+          日本の数字は2003〜2006年に北海道・和歌山・長崎で採取された個体の調査によります。
+          低いですが<b>ゼロではありません</b>。</p>
+      </div>
+      <h3>症状</h3>
       <ul>
-        <li><b>旋毛虫（トリヒナ）</b> — クマ肉での感染例が知られる。発熱・皮疹・だるさ・筋肉痛など多彩な症状。</li>
-        <li><b>住肉胞子虫（ザルコシスティス）</b> — シカ肉からの感染例。</li>
-        <li><b>ウェステルマン肺吸虫</b> — イノシシ肉からの感染例。</li>
-        <li><b>トキソプラズマ</b> — 生肉・加熱不十分な肉から感染しうる。</li>
+        <li><b>感染初期（腸の段階）</b> 下痢、腹痛、嘔吐。</li>
+        <li><b>感染から1週間ほど（筋肉の段階）</b> 顔面のむくみ、<b>まぶたの腫れ</b>、白目の炎症、発熱、筋肉痛、発疹。
+          血液検査で<b>好酸球が増える</b>のが特徴です。</li>
       </ul>
-      <p class="note" style="margin-top:12px;">
-        <b>冷凍は安全の根拠になりません。</b>寄生虫の種類によっては冷凍が効かないものがあります。
-        表面を焼いただけでも、肉塊の内部までは失活しません。
-        <b>中心部までしっかり加熱</b>する以外に確実な方法はありません。</p>
+      <h3>治し方</h3>
+      <p>アルベンダゾールやメベンダゾールで駆虫し、ステロイド系の抗炎症薬を併用します。
+        <b>ただし薬で駆除できるのは腸の中の虫だけで、筋肉に入った幼虫は駆除できません。</b>
+        筋肉痛には鎮痛薬で対応します。だから<b>入れないことが何より重要</b>です。</p>
+      <div class="warn" style="margin-bottom:0;">
+        <b>旋毛虫は冷凍で死なない種類があります。</b>加熱以外に確実な方法はありません。
+      </div>
     </div>
   </details>
 
   <details>
-    <summary>腸管出血性大腸菌ほかの細菌</summary>
+    <summary>住肉胞子虫（サルコシスティス）— シカ</summary>
     <div class="body">
-      <p>生または加熱不十分なシカ肉・イノシシ肉で、腸管出血性大腸菌による食中毒が知られています。
-        内臓を傷つけて中身が肉に触れると汚染が広がるので、内臓摘出は丁寧に、
-        器具と手はこまめに洗浄・消毒します。</p>
+      <h3>どうやって起こるか</h3>
+      <p>獣の筋肉の中にいる原虫を、生か加熱不十分で食べると起こります。
+        <b>人には寄生しません。</b>虫が持つ毒素で一時的に消化器症状が出るタイプの食中毒です。</p>
+      <h3>症状</h3>
+      <p>食後<b>4〜8時間</b>で下痢、嘔吐、腹部の不快感。
+        <b>症状は軽く、回復も速く、後遺症はありません。</b></p>
+      <h3>治し方</h3>
+      <p>対症療法で回復します。</p>
+      <div class="note" style="margin-bottom:0;">
+        <b>これは冷凍が効きます。</b>中心温度で<b>−20℃なら48時間以上</b>、−30℃なら36時間以上、
+        −40℃なら18時間以上で病原性が失われます（馬肉での基準）。
+        旋毛虫と違うところです。ただし<b>加熱ならどちらにも効きます</b>。
+      </div>
+    </div>
+  </details>
+
+  <details>
+    <summary>肺吸虫症（ウェステルマン肺吸虫）— イノシシ・シカ</summary>
+    <div class="body">
+      <h3>どうやって起こるか</h3>
+      <p>本来はサワガニやモクズガニなど<b>淡水のカニ</b>が中間宿主です。
+        そのカニを食べたイノシシやシカの筋肉に幼虫が留まり（<b>待機宿主</b>）、
+        その肉を生か加熱不十分で食べた人に移ります。<b>イノシシ肉が原因の症例が報告されています。</b></p>
+      <h3>症状</h3>
+      <ul>
+        <li><b>感染から約1か月</b> 幼虫が胸腔や肺に入り、胸膜炎を起こします。胸水や気胸が出ます。</li>
+        <li><b>感染から2〜3か月</b> 肺の中で成熟して産卵する頃に、咳と痰が出ます。</li>
+        <li>虫のいる袋と気管支がつながると<b>血痰</b>が出て、痰から虫卵が見つかります。</li>
+      </ul>
+      <p>腹痛・胸痛・咳・発熱と症状はさまざまですが、<b>ほとんどの症例で好酸球が増えます</b>。
+        結核や肺がんと間違われることがあるので、<b>ジビエを食べたと医師に伝えることが診断に直結します</b>。</p>
+      <h3>治し方</h3>
+      <p>プラジカンテルが有効です。症状も画像所見も改善したという報告があります。</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>腸管出血性大腸菌（O157など）</summary>
+    <div class="body">
+      <h3>どうやって起こるか</h3>
+      <p>獣の<b>腸の中にいる菌が、解体のときに肉に付く</b>ことで起こります。
+        内臓を傷つけて中身が肉に触れると一気に広がります。
+        生または加熱不十分なシカ肉・イノシシ肉での食中毒が知られています。</p>
+      <h3>症状</h3>
+      <p>激しい腹痛と水様性の下痢、<b>血便</b>。重症例では溶血性尿毒症症候群（HUS）を起こし、
+        腎臓の機能が落ちることがあります。子どもと高齢者で重くなりやすい病気です。</p>
+      <h3>防ぎ方</h3>
+      <p>内臓摘出を丁寧に。器具と手はこまめに洗浄・消毒。そして加熱。
+        <b>この菌は熱に弱いので、中心部75℃1分以上で確実に死にます。</b></p>
     </div>
   </details>
 
   <details>
     <summary>SFTS（重症熱性血小板減少症候群）— 食べる人ではなく、扱う人の病気</summary>
     <div class="body">
-      <p>マダニが媒介するウイルス感染症です。<b>肉を食べて感染するのではなく、作業する側が感染します。</b></p>
-      <div class="kv"><span class="k">感染経路</span><span>マダニに咬まれる。加えて<b>感染した動物との接触</b>、動物や患者の血液・体液との接触でも感染しうる。</span></div>
-      <div class="kv"><span class="k">潜伏期間</span><span>咬まれてから6日〜2週間ほど。</span></div>
-      <div class="kv"><span class="k">初期症状</span><span>発熱、だるさ、食欲不振・吐き気・嘔吐・下痢・腹痛などの消化器症状。</span></div>
-      <p style="margin-top:10px;"><b>弱っている野生動物には素手で触らない。</b>
-        搬入から数日たって発熱したら、「野生動物を扱った」と必ず医師に伝えてください。
-        伝えるかどうかで診断の速さが変わります。</p>
+      <h3>どうやって起こるか</h3>
+      <p>マダニが媒介するウイルス感染症です。<b>肉を食べて感染するのではありません。</b></p>
+      <ul>
+        <li>マダニに咬まれる（主な経路）</li>
+        <li><b>感染した動物との接触</b></li>
+        <li>動物や患者の<b>血液・体液との接触</b></li>
+      </ul>
+      <p>つまり、山で咬まれるだけでなく、<b>搬入された獣を扱う作業そのものが経路になります。</b></p>
+      <h3>症状</h3>
+      <p>潜伏期は咬まれてから<b>6日〜2週間</b>。
+        発熱、全身のだるさ、消化器症状（食欲不振・吐き気・嘔吐・下痢・腹痛）、リンパ節の腫れ。
+        重症化すると<b>サイトカインストーム、DIC（血が固まらなくなる）、多臓器不全</b>へ進みます。</p>
+      <div class="warn"><b>国内の致死率は約27%（疫学調査では27〜31%）。</b>この頁で扱う病気の中で最も重い一つです。</div>
+      <h3>治し方</h3>
+      <p><b>2024年6月、ファビピラビル（アビガン）が世界初のSFTS治療薬として承認されました。</b>
+        治験では死亡率が半減しています。</p>
+      <p>治療は病期で分けて行われます。ウイルスが増える時期にはファビピラビルを速やかに投与し、
+        免疫が暴走する時期にはステロイドなどを併用します。
+        <b>発症から5〜6日以内の早期投与が、予後を大きく左右します。</b></p>
+      <div class="warn" style="margin-bottom:0;">
+        だから<b>すぐ受診すること</b>と<b>「野生動物を扱った」と伝えること</b>が、そのまま生存率に効きます。
+        弱っている野生動物には素手で触らないでください。
+      </div>
+    </div>
+  </details>
+
+  <details>
+    <summary>レプトスピラ症（ワイル病）— アライグマほか</summary>
+    <div class="body">
+      <h3>どうやって起こるか</h3>
+      <p>感染した動物の<b>尿</b>で汚染された土や水が、<b>体の傷や粘膜（目・口・鼻）に触れる</b>ことで感染します。
+        汚染された飲食物からの経口感染もあります。<b>手に傷があるときの素手作業が最も危険です。</b></p>
+      <h3>症状</h3>
+      <p>潜伏期は<b>5〜14日</b>。発熱、悪寒、頭痛、筋肉痛、腹痛、<b>結膜充血（白目が赤くなる）</b>。
+        第4〜6病日に<b>黄疸</b>が出たり、出血傾向が強まったりします。</p>
+      <p>軽症で回復することも多いのですが、重症型が<b>ワイル病</b>で、<b>黄疸・出血・腎障害</b>を伴います。</p>
+      <h3>治し方</h3>
+      <p><b>テトラサイクリン系やペニシリン系の抗菌薬が有効</b>です。
+        重症の場合は輸液や透析を行うこともあります。</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>アライグマ回虫症 — 肉ではなく「糞」から</summary>
+    <div class="body">
+      <h3>どうやって起こるか</h3>
+      <p><b>肉を食べて感染するのではありません。</b>アライグマの<b>糞で汚染された土や物に付いた卵を、口に入れる</b>ことで感染します。</p>
+      <ul>
+        <li>メスの成虫は<b>1日に10万個以上</b>の卵を産みます。</li>
+        <li>卵は外の環境で<b>2〜4週間かけて感染力を持つ</b>ようになります。</li>
+        <li>卵は環境中で<b>長期間生き残ります</b>。感染に必要な量も比較的少なくて済みます。</li>
+      </ul>
+      <h3>症状</h3>
+      <p>人の体内では成虫になれず、<b>幼虫が体内をさまよいます（幼虫移行症）</b>。
+        幼虫が<b>脳</b>に入ると重篤な神経症状を起こし、死亡することがあります。
+        <b>眼</b>に入ると視力障害を起こします。</p>
+      <h3>治し方</h3>
+      <p>駆虫薬（アルベンダゾールなど）が用いられますが、
+        <b>神経に入ってからでは回復が難しく、予後が悪いことがあります。</b>
+        入れないことが決定的に重要な病気です。</p>
+      <div class="warn" style="margin-bottom:0;">
+        <b>防ぎ方は「肉の加熱」ではありません。</b>
+        糞・巣材・汚れた場所を素手で扱わない。作業後は必ず手を洗う。
+        使った機材は洗剤で洗ってから消毒し、可能ならバーナーで焼くか煮沸する。
+        <b>口に手を持っていかない。</b>
+      </div>
+    </div>
+  </details>
+
+  <details>
+    <summary>野兎病（ツラレミア）— ノウサギ。皮を剥ぐときが最も危険</summary>
+    <div class="body">
+      <h3>どうやって起こるか</h3>
+      <p>細菌（<i>Francisella tularensis</i>）による人獣共通感染症で、<b>4類感染症</b>に指定されています。</p>
+      <ul>
+        <li><b>感染したノウサギの解体・接触</b>で、皮膚の傷や粘膜から入る（最も多い）</li>
+        <li>咬まれる・引っかかれる</li>
+        <li><b>エアロゾルや粉じんを吸い込む</b></li>
+        <li>汚染された水や肉を口にする</li>
+      </ul>
+      <div class="warn">
+        <b>この菌は10〜50個体が皮内に入るか吸い込むだけで発症します。</b>
+        目に見えない量で成立するということです。<b>ノウサギは必ず手袋をして扱ってください。</b>
+      </div>
+      <h3>症状</h3>
+      <p>潜伏期は通常<b>3〜5日</b>（1日から3週間の幅があります）。
+        悪寒、発熱、食欲不振、全身のだるさ、頭痛、腹痛、下痢など多彩です。</p>
+      <p>最も多いのは皮膚からの感染で、<b>菌が入った場所に潰瘍ができ、発熱とリンパ節の腫れを伴います</b>（潰瘍リンパ節型）。
+        リンパ節の腫れと発熱だけのこともあります。</p>
+      <h3>治し方</h3>
+      <p><b>ストレプトマイシン（筋肉注射）またはゲンタマイシンを7〜10日間</b>投与します。
+        日本での推奨は、これに<b>テトラサイクリンまたはミノサイクリンの内服を2週間併用</b>する方法です。</p>
+      <p class="lead"><b>適切に治療すればほとんどの人が回復します。</b>
+        日本に分布する菌は <i>holarctica</i> 亜種で病原性が比較的弱く、死亡は極めてまれです。
+        ただし「弱い」のは治療した場合の話で、感染しやすさは変わりません。</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>疥癬（かいせん）— アライグマ・ハクビシン</summary>
+    <div class="body">
+      <h3>どうやって起こるか</h3>
+      <p><b>ヒゼンダニ</b>という小さなダニが皮膚に潜り込む病気です。
+        感染した個体に人が触れ、ダニが皮膚に移ることで起こります。<b>人にも飼い犬にもうつります。</b></p>
+      <p class="lead"><b>毛が抜けている個体は疥癬を疑ってください。</b>これが現場で使える見分け方です。</p>
+      <h3>症状</h3>
+      <p>強いかゆみと発疹。夜に特にかゆくなるのが特徴です。</p>
+      <h3>治し方</h3>
+      <p>駆虫薬（イベルメクチンの内服、フェノトリンなどの外用）で治療します。
+        皮膚科を受診してください。衣類や寝具の洗濯も必要になります。</p>
     </div>
   </details>
 
   <details>
     <summary>豚熱（CSF）— 人にはうつらない。でも大事</summary>
     <div class="body">
-      <p><b>豚熱は人には感染しません。</b>仮に感染した個体の肉を食べても、人の健康に影響はないというのが
-        食品安全委員会の見解です。野生イノシシに撒かれている経口ワクチンも、肉の安全性に影響しません。</p>
-      <p>ただし<b>豚とイノシシにとっては重大な病気</b>で、家畜防疫上きわめて重要です。
-        千葉県は野生イノシシの豚熱検査を継続しています。
-        狩猟した地域で家畜伝染病のまん延が確認された場合、その地域で獲った個体を食用にしてはいけません。</p>
-      <p class="lead">＝ 人の健康の話ではなく、<b>養豚を守る</b>ための決まりです。</p>
+      <h3>人への影響</h3>
+      <p><b>豚熱は人には感染しません。</b>仮に感染した個体の肉を食べても、
+        人の健康に影響はないというのが食品安全委員会の見解です。
+        野生イノシシに撒かれている経口ワクチンも、肉の安全性に影響しません。</p>
+      <h3>なぜ大事か</h3>
+      <p><b>豚とイノシシにとっては重大な病気</b>で、家畜防疫上きわめて重要です。
+        千葉県は野生イノシシの豚熱検査を継続しています。</p>
+      <p><b>狩猟した地域で家畜伝染病のまん延が確認された場合、その地域で獲った個体を食用にしてはいけません。</b>
+        人の健康の話ではなく、<b>養豚を守る</b>ための決まりです。</p>
     </div>
   </details>
 
@@ -273,27 +676,35 @@
       <p>千葉県では平成25年1月から、県内の処理加工施設から出荷されるイノシシ肉について
         <b>全頭検査</b>を行っています。出荷制限が解除された平成25年1月18日から令和8年3月31日までに、
         県内15施設で16,508検体が分析されました。</p>
-      <p>当センターの検査結果は個体ごとに記録され、
+      <div class="note" style="margin-bottom:0;">
+        当センターの検査結果は個体ごとに記録され、
         ラベルのQRから「この肉の物語」を開いたお客様にも表示されます。
-        <b>検査日と結果を、その日のうちに記録に入れてください。</b>お客様が見る画面に直結しています。</p>
+        <b>検査日と結果を、その日のうちに記録に入れてください。</b>お客様が見る画面に直結しています。
+      </div>
     </div>
   </details>
 
   <!-- ══ 自分の身を守る ══ -->
   <h2 id="mi"><span class="ic">🧤</span>自分の身を守る</h2>
   <div class="card">
-    <p>ここまでの病気の多くは、<b>食べる人より先に、扱う人が出会います。</b></p>
+    <p>ここまでの病気の多くは、<b>食べる人より先に、扱う人が出会います。</b>
+      SFTS・レプトスピラ・アライグマ回虫・野兎病・疥癬は、どれも作業中に感染します。</p>
     <ul>
-      <li><b>手袋をする。</b>特に手に傷があるときは必ず。傷は事前に覆っておく。</li>
-      <li><b>素手で目や口を触らない。</b>血や体液が跳ねる作業では目の保護も考える。</li>
+      <li><b>手袋をする。</b>特に手に傷があるときは必ず。傷は事前に覆っておく。
+        <b>ノウサギとアライグマは例外なく手袋。</b></li>
+      <li><b>素手で目・口・鼻を触らない。</b>血や体液が跳ねる作業では目の保護も考える。</li>
       <li><b>弱っている個体・様子のおかしい個体には触らない。</b></li>
+      <li><b>毛が抜けている個体は疥癬を疑う。</b></li>
       <li><b>マダニ対策。</b>山では長袖長ズボン、肌を出さない、忌避剤。帰ったら体を確認する。</li>
-      <li><b>器具は洗ってから消毒する。</b>洗剤で汚れを落とさないと消毒剤は効きません。</li>
+      <li><b>器具は洗ってから消毒する。</b>洗剤で汚れを落とさないと消毒剤は効きません。
+        アライグマを扱った器具は、可能ならバーナーで焼くか煮沸する。</li>
       <li><b>作業後は手を洗う。</b>いちばん基本で、いちばん効きます。</li>
     </ul>
-    <div class="note">
-      <b>体調が悪くなったら、野生動物を扱ったことを医師に伝える。</b>
-      SFTSもE型肝炎も、それを言うかどうかで診断までの時間が変わります。遠慮しないでください。
+    <div class="warn">
+      <b>体調が悪くなったら、野生動物を扱ったことを医師に必ず伝える。</b><br>
+      SFTSはファビピラビルの<b>発症5〜6日以内</b>の投与で予後が変わります。
+      肺吸虫症は結核や肺がんと間違われます。野兎病も一般的な感染症では出ない薬が要ります。
+      <b>「野生動物を扱った」の一言が、診断までの時間を縮めます。</b>遠慮しないでください。
     </div>
   </div>
 
@@ -310,7 +721,7 @@
     <p style="margin-top:12px;">狩猟する地域で<b>家畜伝染病のまん延が確認された場合</b>、
       その地域で獲った個体は食用にできません。地域の発生状況は日頃から情報を取っておきます。</p>
 
-    <h3 style="margin-top:20px;">解体のとき</h3>
+    <h3>解体のとき</h3>
     <p>摘出した内臓と筋肉を、<b>望診（見る）と触診（触る）</b>で確認し、記録します。
       厚生労働省ガイドラインのカラーアトラスが判断の基準です。</p>
     <div class="note">
@@ -329,42 +740,97 @@
 
   <!-- ══ クイズ ══ -->
   <h2 id="quiz"><span class="ic">✅</span>確認クイズ</h2>
-  <p class="lead">読んだあとに、6問だけ。答えるとその場で解説が出ます。</p>
+  <p class="lead">読んだあとに、8問だけ。答えるとその場で解説が出ます。</p>
   <div id="quizList"></div>
 
   <!-- ══ 出典 ══ -->
   <h2 id="src"><span class="ic">📚</span>出典</h2>
   <div class="card src" id="srcList">
     <p style="color:var(--ink2);font-size:13.5px;">
-      判断の根拠は、下の公式資料です。この頁と食い違ったときは<b>公式資料が正しい</b>ものとして扱ってください。</p>
-    <p><b>衛生管理</b><br>
+      判断の根拠は下の資料です。この頁と食い違ったときは<b>公式資料が正しい</b>ものとして扱ってください。</p>
+
+    <p><b>衛生管理（ガイドライン）</b><br>
       ・<a href="https://www.mhlw.go.jp/file/06-Seisakujouhou-11130500-Shokuhinanzenbu/GLhonbun_1.pdf" target="_blank" rel="noopener">厚生労働省 野生鳥獣肉の衛生管理に関する指針（ガイドライン）</a><br>
       ・<a href="https://www.pref.chiba.lg.jp/ryuhan/pbmgm/norin/torikumi/bosogibier/documents/guideline.pdf" target="_blank" rel="noopener">千葉県野生鳥獣肉に係る衛生管理ガイドライン（令和4年1月）</a><br>
       ・<a href="https://www.mhlw.go.jp/stf/web_magazine/closeup/33.html" target="_blank" rel="noopener">厚生労働省 ジビエによる食中毒の予防について</a><br>
       ・<a href="https://www.pref.yamaguchi.lg.jp/site/syoku-anshin/295190.html" target="_blank" rel="noopener">山口県 野生鳥獣肉の衛生管理対策</a></p>
-    <p><b>E型肝炎・寄生虫</b><br>
+
+    <p><b>E型肝炎</b><br>
       ・<a href="https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/kenkou_iryou/kenkou/kekkaku-kansenshou/hepatitis-e-virus_qa.html" target="_blank" rel="noopener">厚生労働省 E型肝炎ウイルスの感染事例・Q&amp;A</a><br>
-      ・<a href="https://agriknowledge.affrc.go.jp/RN/2030911203.pdf" target="_blank" rel="noopener">野生鳥獣肉(ジビエ)食に原因する寄生虫症（山口獣医学雑誌）</a><br>
-      ・<a href="http://www.fukushihoken.metro.tokyo.jp/shokuhin//////musi/10.html" target="_blank" rel="noopener">東京都 食品衛生の窓「旋毛虫（トリヒナ）」</a></p>
+      ・<a href="https://id-info.jihs.go.jp/infectious-diseases/hepatitis-e/detail/index.html" target="_blank" rel="noopener">国立健康危機管理研究機構 E型肝炎（詳細版）</a><br>
+      ・<a href="https://www.msdmanuals.com/ja-jp/professional/02-%E8%82%9D%E8%83%86%E9%81%93%E7%96%BE%E6%82%A3/%E8%82%9D%E7%82%8E/e%E5%9E%8B%E8%82%9D%E7%82%8E" target="_blank" rel="noopener">MSDマニュアル プロフェッショナル版「E型肝炎」</a></p>
+
+    <p><b>寄生虫</b><br>
+      ・<a href="https://id-info.jihs.go.jp/niid/ja/typhi-m/iasr-reference/7215-446r06.html" target="_blank" rel="noopener">国立健康危機管理研究機構「わが国における旋毛虫症」</a><br>
+      ・<a href="https://www.msdmanuals.com/ja-jp/professional/13-%E6%84%9F%E6%9F%93%E6%80%A7%E7%96%BE%E6%82%A3/%E7%B7%9A%E8%99%AB-%E7%B7%9A%E5%BD%A2%E5%8B%95%E7%89%A9/%E6%97%8B%E6%AF%9B%E8%99%AB%E7%97%87" target="_blank" rel="noopener">MSDマニュアル プロフェッショナル版「旋毛虫症」</a><br>
+      ・<a href="https://link.springer.com/article/10.1007/s00436-006-0402-x" target="_blank" rel="noopener">Epidemiology, histopathology, and muscle distribution of <i>Trichinella</i> T9 in feral raccoons (<i>Procyon lotor</i>) and wildlife of Japan（Parasitology Research）</a><br>
+      ・<a href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5732378/" target="_blank" rel="noopener"><i>Trichinella</i> spp. biomass has increased in raccoon dogs and red foxes in Estonia</a><br>
+      ・<a href="https://www.hokeniryo1.metro.tokyo.lg.jp/shokuhin/musi/30.html" target="_blank" rel="noopener">東京都 食品衛生の窓「サルコシスティス・フェアリー」</a><br>
+      ・<a href="https://www.maff.go.jp/j/syouan/seisaku/foodpoisoning/f_encyclopedia/s_fayeri_qa.html" target="_blank" rel="noopener">農林水産省 馬肉を介したザルコシスティス・フェアリーによる食中毒Q&amp;A</a><br>
+      ・<a href="https://is.jrs.or.jp/quicklink/journal/nopass_pdf/ajrs/005060356j.pdf" target="_blank" rel="noopener">日本呼吸器学会誌 ウェステルマン肺吸虫症（イノシシ肉が感染源の症例）</a><br>
+      ・<a href="https://www.jmedj.co.jp/blogs/product/product_24653" target="_blank" rel="noopener">日本医事新報社「肺吸虫症［私の治療］」</a><br>
+      ・<a href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2730233/" target="_blank" rel="noopener"><i>Baylisascaris procyonis</i>: An Emerging Helminthic Zoonosis</a><br>
+      ・<a href="https://agriknowledge.affrc.go.jp/RN/2030911203.pdf" target="_blank" rel="noopener">野生鳥獣肉(ジビエ)食に原因する寄生虫症（山口獣医学雑誌）</a></p>
+
     <p><b>SFTS</b><br>
       ・<a href="https://id-info.jihs.go.jp/diseases/sa/sfts/index.html" target="_blank" rel="noopener">国立健康危機管理研究機構 重症熱性血小板減少症候群（SFTS）</a><br>
-      ・<a href="https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/kenkou_iryou/kenkou/kekkaku-kansenshou19/sfts_qa.html" target="_blank" rel="noopener">厚生労働省 SFTS Q&amp;A</a></p>
+      ・<a href="https://id-info.jihs.go.jp/surveillance/iasr/IASR/Vol46/546/546r04.html" target="_blank" rel="noopener">SFTSに対するファビピラビルの承認と現状について（2025年）</a><br>
+      ・<a href="https://www.fujifilm.com/fftc/ja/news/332" target="_blank" rel="noopener">富士フイルム富山化学「アビガン錠」SFTS適応追加のお知らせ（2024年6月）</a></p>
+
+    <p><b>レプトスピラ症・野兎病・疥癬</b><br>
+      ・<a href="https://id-info.jihs.go.jp/infectious-diseases/leptospirosis/detail/index.html" target="_blank" rel="noopener">国立健康危機管理研究機構 レプトスピラ症（詳細版）</a><br>
+      ・<a href="https://id-info.jihs.go.jp/infectious-diseases/tularemia/detail/index.html" target="_blank" rel="noopener">国立健康危機管理研究機構 野兎病（詳細版）</a><br>
+      ・<a href="https://dcc-irs.jihs.go.jp/material/manual/tularemia.html" target="_blank" rel="noopener">国立国際医療センター 国際感染症センター「野兎病（Tularemia）」</a><br>
+      ・<a href="https://www.kansensho.or.jp/ref/d81.html" target="_blank" rel="noopener">日本感染症学会 感染症クイック・リファレンス「野兎病」</a><br>
+      ・<a href="https://www.pref.nara.lg.jp/n094/28728.html" target="_blank" rel="noopener">奈良県 アライグマの感染症について</a><br>
+      ・<a href="https://www.city.meguro.tokyo.jp/kankyouhozen/kurashi/kankyou/hakubishin_higai.html" target="_blank" rel="noopener">目黒区 ハクビシンやアライグマによる被害を防ぐために</a></p>
+
     <p><b>豚熱・放射性物質</b><br>
       ・<a href="https://www.maff.go.jp/j/nousin/gibier/tonko.html" target="_blank" rel="noopener">農林水産省 豚熱（CSF）について</a><br>
       ・<a href="https://www.pref.chiba.lg.jp/eishi/denshikan/butanetsu.html" target="_blank" rel="noopener">千葉県 CSF（豚熱）に関する食の安全・安心について</a><br>
       ・<a href="https://www.pref.chiba.lg.jp/noushin/h-kensakekka/inoshishi-shisetsu.html" target="_blank" rel="noopener">千葉県 県内処理加工施設で加工されるイノシシ肉の放射性物質検査結果</a></p>
-    <p><b>生態</b><br>
+
+    <p><b>生態（イノシシ・シカ）</b><br>
       ・<a href="https://www.naro.go.jp/org/nilgs/choju/wildlife/project/ino-HP/ino-eco.html" target="_blank" rel="noopener">農研機構 イノシシの生態解明と農作物被害防止技術の開発</a><br>
+      ・<a href="https://www.naro.go.jp/org/nilgs/choju/wildlife/project/ino-HP/materials/1-2.pdf" target="_blank" rel="noopener">農研機構「捕獲を埋め合わす強力な繁殖力」</a><br>
       ・<a href="https://www.naro.go.jp/org/nilgs/choju/wildlife/project/ino-HP/materials/1-6.pdf" target="_blank" rel="noopener">農研機構「春の主食はタケノコ」</a><br>
       ・<a href="https://wmo.co.jp/field_note/no-93-%E3%82%A4%E3%83%8E%E3%82%B7%E3%82%B7%E3%81%AE%E7%89%99" target="_blank" rel="noopener">野生動物保護管理事務所（WMO）「イノシシの牙」</a><br>
+      ・<a href="https://www.pref.kanagawa.jp/docs/f4y/03shinrin/sika/01_about.html" target="_blank" rel="noopener">神奈川県 ニホンジカについて</a><br>
+      ・<a href="https://www.jstage.jst.go.jp/article/hozen/30/1/30_2425/_html/-char/ja" target="_blank" rel="noopener">浅間山周辺ニホンジカ集団の齢構成・繁殖および成長特性（保全生態学研究）</a></p>
+
+    <p><b>生態（キョン）</b><br>
+      ・<a href="https://link.springer.com/article/10.1007/s10344-021-01477-3" target="_blank" rel="noopener">History of introduction of Reeves' muntjac in Great Britain and ecological characteristics facilitating expansion of feral populations（European Journal of Wildlife Research）</a><br>
+      ・<a href="https://invasives.ie/app/uploads/2010/03/muntjac_deer_General-factsheet_MammalSociety.pdf" target="_blank" rel="noopener">Mammal Society: Reeves Muntjac species fact sheet</a><br>
+      ・<a href="https://www.nonnativespecies.org/non-native-species/information-portal/view/2263" target="_blank" rel="noopener">GB Non-native Species Secretariat: Reeves's Muntjac</a><br>
       ・<a href="https://www.pref.chiba.lg.jp/shizen/shingikai/kyon/documents/1genzyou.pdf" target="_blank" rel="noopener">千葉県 キョンの現状（生息状況・推定生息数）</a><br>
-      ・<a href="https://www.pref.chiba.lg.jp/shizen/choujuu/kyon/2nd_kyon.html" target="_blank" rel="noopener">第2次千葉県キョン防除実施計画</a><br>
-      ・<a href="https://www.pref.kanagawa.jp/docs/f4y/03shinrin/sika/01_about.html" target="_blank" rel="noopener">神奈川県 ニホンジカについて</a></p>
-    <p><b>アライグマ・ハクビシン</b><br>
-      ・<a href="https://www.pref.nara.lg.jp/n094/28728.html" target="_blank" rel="noopener">奈良県 アライグマの感染症について</a><br>
-      ・<a href="https://www.city.meguro.tokyo.jp/kankyouhozen/kurashi/kankyou/hakubishin_higai.html" target="_blank" rel="noopener">目黒区 ハクビシンやアライグマによる被害を防ぐために</a></p>
+      ・<a href="https://www.pref.chiba.lg.jp/shizen/choujuu/kyon/2nd_kyon.html" target="_blank" rel="noopener">第2次千葉県キョン防除実施計画</a></p>
+
+    <p><b>生態（アライグマ・ハクビシン・タヌキ・ノウサギ）</b><br>
+      ・<a href="https://www.pref.chiba.lg.jp/shizen/choujuu/araiguma.html" target="_blank" rel="noopener">千葉県 特定外来生物 アライグマ</a><br>
+      ・<a href="https://www.biodic.go.jp/pamph_list/youchui.pdf" target="_blank" rel="noopener">環境省「分布を拡大する外来哺乳類 アライグマ ハクビシン ヌートリア」</a><br>
+      ・<a href="https://iwate-u.repo.nii.ac.jp/record/2000014/files/FUKUSHIMA-Yoshiki-2023-A.pdf" target="_blank" rel="noopener">都市部に生息するハクビシン（<i>Paguma larvata</i>）による生息地利用（岩手大学）</a><br>
+      ・<a href="https://www.city.shirakawa.fukushima.jp/data/doc/1660876990_doc_79_0.pdf" target="_blank" rel="noopener">白河市鳥獣被害防止対策協議会「ハクビシン」</a><br>
+      ・<a href="https://animaldiversity.org/accounts/Nyctereutes_procyonoides/" target="_blank" rel="noopener">Animal Diversity Web: <i>Nyctereutes procyonoides</i>（raccoon dog）</a><br>
+      ・<a href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC12332538/" target="_blank" rel="noopener">Influence of Food Resource Availability on the Activity Time of Raccoon Dogs in Urban Parks in Tokyo</a><br>
+      ・<a href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9312373/" target="_blank" rel="noopener">DNA metabarcoding による水辺のタヌキの動物食組成の解析（Korea）</a><br>
+      ・<a href="https://dept.dokkyomed.ac.jp/dep-m/macro/mammal/jp/species_all/lepus_brachyurus.html" target="_blank" rel="noopener">獨協医科大学 日本の哺乳類「<i>Lepus brachyurus</i>（ノウサギ）」</a><br>
+      ・<a href="https://www.ffpri.go.jp/tmk/kengakuannai/midokoro/honyurui/nihonnousagi.html" target="_blank" rel="noopener">森林総合研究所 多摩森林科学園「ニホンノウサギ」</a></p>
+
+    <p><b>調理</b><br>
+      ・<a href="https://www.gibier.or.jp/wp-content/themes/gibier.or.jp/images/contents/handbook/gibierhandbook_2nd_05.pdf" target="_blank" rel="noopener">日本ジビエ振興協会 ジビエハンドブック（調理法・販売方法）</a><br>
+      ・<a href="https://www.pref.fukuoka.lg.jp/uploaded/life/703431_61913247_misc.pdf" target="_blank" rel="noopener">福岡県 イノシシ・シカ肉料理レシピ集</a><br>
+      ・<a href="https://www.pref.kagawa.lg.jp/documents/17266/inoshishi-recipe.pdf" target="_blank" rel="noopener">香川県 イノシシ肉料理レシピ集</a><br>
+      ・<a href="https://www.pref.oita.jp/uploaded/attachment/2192008.pdf" target="_blank" rel="noopener">大分レディースハンタークラブ「家庭で簡単にできるジビエ料理レシピ」</a><br>
+      ・<a href="https://note.com/gibiernomori/n/nf29ff96647cc" target="_blank" rel="noopener">ジビエの森「キョンもいいけどアライグマのお肉も食べてみて欲しい（ハクビシンもおすすめ）」</a><br>
+      ・<a href="https://note.com/gibiernomori/n/n76dadddc8244" target="_blank" rel="noopener">ジビエの森「キョンのお肉について」</a><br>
+      ・<a href="https://hakubishin-kujyo.jp/hakubishin-food" target="_blank" rel="noopener">ハクビシンは食べると美味しい？どんな味？代表的な料理や調理時の注意点</a><br>
+      ・<a href="https://chikatoshoukai.com/eat-raccoon/" target="_blank" rel="noopener">新狩猟世界「『食べて減らすのだ！』実は美味しい『アライグマ』」</a></p>
+
     <p style="margin-top:14px;color:var(--ink3);">
-      搬入頭数は当センターの搬入台帳の実測値（令和8年度）です。</p>
+      搬入頭数は当センターの搬入台帳の実測値です（年度は4月始まり）。<br>
+      調理法の一部は猟師・ジビエ事業者の実践知にもとづくもので、査読された文献ではありません。
+      味の評価には個人差があります。
+    </p>
   </div>
 
   <footer>
@@ -374,24 +840,30 @@
 
 <script>
 const QUIZ = [
-  { q: '冷凍しておいたイノシシ肉。生で出しても大丈夫？',
-    a: ['だめ。冷凍は安全の理由にならない', '冷凍したなら大丈夫', '表面を炙れば大丈夫'], c: 0,
-    why: '寄生虫の種類によっては冷凍が効きません。表面を焼いても肉塊の内部までは失活しません。中心部75℃1分以上の加熱以外に確実な方法はありません。' },
+  { q: '冷凍しておいたタヌキ肉。生で出しても大丈夫？',
+    a: ['だめ。旋毛虫は冷凍で死なない種類がある', '冷凍したなら大丈夫', '表面を炙れば大丈夫'], c: 0,
+    why: '住肉胞子虫は冷凍（中心温度−20℃で48時間以上など）で不活化しますが、旋毛虫には冷凍が効かない種類があります。タヌキは旋毛虫の重要な保有動物です。加熱はどちらにも効きます。' },
   { q: '加熱の条件は？',
     a: ['中心部75℃で1分以上', '表面に焼き色がつくまで', '中心部60℃で3分'], c: 0,
     why: '中心部の温度が75℃で1分間以上、またはこれと同等以上の効力を有する方法。表面ではなく「中心部」です。' },
+  { q: 'ノウサギを解体する。いちばん大事なことは？',
+    a: ['必ず手袋をする', '手早く済ませる', 'よく水洗いする'], c: 0,
+    why: '野兎病菌は10〜50個体が皮膚に入るか吸い込むだけで発症します。皮を剥ぐ作業が最も危険です。潜伏期は3〜5日で、菌が入った場所に潰瘍ができ、発熱とリンパ節の腫れを伴います。適切な抗菌薬治療でほとんど回復しますが、まず感染しないことです。' },
+  { q: 'アライグマ回虫は、どうやって人に感染する？',
+    a: ['糞で汚れた土や物の卵を口に入れて', '肉を生で食べて', '咬まれて'], c: 0,
+    why: '肉からではありません。糞に含まれる卵からです。メス1匹が1日10万個以上産卵し、卵は2〜4週間で感染力を持ち、環境中で長く生き残ります。幼虫が脳や眼に入ると重篤で予後が悪いことがあります。加熱では防げません。手を洗い、口に手を持っていかないことです。' },
+  { q: '搬入から4日後、発熱した。病院で何を言う？',
+    a: ['野生動物を扱ったことを必ず伝える', '普通の風邪として受診する', '治るまで様子を見る'], c: 0,
+    why: 'SFTSはマダニ咬傷だけでなく動物との接触でも感染し、国内の致死率は約27%です。2024年に承認されたファビピラビルは発症5〜6日以内の投与で予後が変わります。伝えるかどうかが治療開始の速さを決めます。' },
+  { q: 'キョンが減らないのはなぜ？',
+    a: ['季節繁殖せず、出産直後にまた妊娠するから', '天敵がいないから', '寿命が長いから'], c: 0,
+    why: 'キョンは季節繁殖をせず一年中出産します。妊娠期間は約210日で、メスは出産直後に発情するためほぼ切れ目なく妊娠し、2年で約3頭を産みます。しかも体重10kgに達すれば季節によらず繁殖を始めます。1年に1頭のシカとは増え方の性質が違います。' },
   { q: '解体中、内臓のひとつに気になる箇所を見つけた。ほかは異常なし。どうする？',
     a: ['判断がつかないなら食用にしない', '1つだけなら問題ない', 'その臓器だけ捨てて肉は出す'], c: 0,
     why: '「食用として問題がないと判断できないもの」は全部廃棄です。異常だと分かったときだけでなく、大丈夫だと言い切れないときも廃棄します。迷ったら人を呼んでください。' },
-  { q: '搬入から4日後、発熱した。病院で何を言う？',
-    a: ['野生動物を扱ったことを必ず伝える', '普通の風邪として受診する', '治るまで様子を見る'], c: 0,
-    why: 'SFTSはマダニに咬まれてから6日〜2週間で発症します。動物との接触でも感染しえます。野生動物を扱ったと伝えるかどうかで、診断までの時間が変わります。' },
-  { q: '豚熱（CSF）に感染したイノシシの肉を食べたら？',
-    a: ['人には感染しない', '人にも感染する', '加熱しても危険'], c: 0,
-    why: '豚熱は人には感染しません。ただし豚とイノシシには重大な病気で、家畜防疫上きわめて重要です。まん延が確認された地域で獲った個体は食用にできません。' },
-  { q: '毛が抜けているアライグマが運ばれてきた。',
-    a: ['素手で触らない。疥癬は人にもうつる', '食肉にはしないので普通に扱ってよい', '毛が抜けるのは季節のせい'], c: 0,
-    why: '疥癬はヒゼンダニによる皮膚病で、人にも飼い犬にもうつります。アライグマはレプトスピラ症やアライグマ回虫も持ちうるので、食肉にしないぶんむしろ扱いに注意が要ります。' }
+  { q: 'シカ肉を焼いたら固くなった。次はどうする？',
+    a: ['短時間で仕上げるか、長時間煮込むかに振り切る', '中火で普通に焼く', '塩を多めにする'], c: 0,
+    why: 'シカは脂が少なく加熱で固くなりやすい肉です。ステーキやローストのように弱火で短時間か、大和煮・赤ワイン煮のように長時間かけるか、どちらかに振り切ると柔らかくなります。80℃で30分以上のコンフィも向きます。中途半端がいちばん固くなります。' }
 ];
 let answered = {};
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -416,7 +888,7 @@ function answer(i, j) {
 }
 function paint(i) {
   const item = QUIZ[i], chosen = answered[i];
-  if (chosen == null) return;
+  if (chosen == null || !item) return;
   [...document.querySelectorAll(`#opt${i} button`)].forEach((b, j) => {
     if (j === item.c) b.classList.add('ok');
     else if (j === chosen) b.classList.add('ng');
@@ -425,8 +897,8 @@ function paint(i) {
     `<div class="why">${chosen === item.c ? '◯ ' : '✕ '}${esc(item.why)}</div>`;
 }
 function paintScore() {
-  const done = Object.keys(answered).length;
-  const ok = Object.keys(answered).filter(i => answered[i] === QUIZ[i].c).length;
+  const done = Object.keys(answered).filter(i => Number(i) < QUIZ.length).length;
+  const ok = Object.keys(answered).filter(i => Number(i) < QUIZ.length && answered[i] === QUIZ[i].c).length;
   document.getElementById('score').textContent =
     done === 0 ? '' : done < QUIZ.length ? `${done}/${QUIZ.length}問 回答ずみ`
       : `${ok}/${QUIZ.length}問 正解。おつかれさまでした。`;
