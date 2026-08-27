@@ -620,6 +620,14 @@ textarea { min-height: 80px; resize: vertical; }
         <label class="form-label">推定年齢 (歳)</label>
         <input type="number" class="input" id="age" placeholder="0" step="1" min="0" inputmode="numeric">
       </div>
+      <div class="form-row">
+        <label class="form-label">胃の内容物（内臓摘出のときに見えたもの・複数可）</label>
+        <div class="usual-chips" id="stomachChips"></div>
+        <input type="text" class="input" id="stomachNote" placeholder="選択肢に無いものがあれば（任意）" style="margin-top:8px;">
+        <div style="font-size:0.82rem;color:var(--text2);margin-top:5px;">
+          何を食べて育ったかの記録です。分からないときは空のままで構いません。
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1348,7 +1356,36 @@ const state = {
 };
 let todayData = [];
 /* ── Init ── */
+/* ── 胃の内容物（何を食べて育ったか） ──
+   内臓摘出のときに必ず目に入るのに、書く場所が無かった。
+   打つ手間を増やさないよう、房総で実際に多いものを選ぶだけにしてある。 */
+const STOMACH_OPTIONS = ['ドングリ・堅果', 'タケノコ・竹', 'イモ類', '稲・米', '落花生',
+  '果実', '草・根・地下茎', '昆虫・ミミズ', '動物質（その他）', '農作物（その他）', 'ほとんど空'];
+let stomachSel = [];
+
+function renderStomachChips() {
+  const box = document.getElementById('stomachChips');
+  if (!box) return;
+  box.innerHTML = STOMACH_OPTIONS.map(o =>
+    `<button type="button" class="usual-chip${stomachSel.includes(o) ? ' active' : ''}" data-val="${svEsc(o)}"
+             onclick="toggleStomach(this.dataset.val)">${svEsc(o)}</button>`).join('');
+}
+function toggleStomach(v) {
+  const i = stomachSel.indexOf(v);
+  // 「ほとんど空」は他と同時に選べない（両方立つと何を見たのか分からなくなる）
+  if (i >= 0) stomachSel.splice(i, 1);
+  else if (v === 'ほとんど空') stomachSel = [v];
+  else stomachSel = stomachSel.filter(x => x !== 'ほとんど空').concat([v]);
+  renderStomachChips();
+}
+function getStomachContents() { return stomachSel.length ? stomachSel.slice() : null; }
+function setStomachContents(arr) {
+  stomachSel = Array.isArray(arr) ? arr.filter(x => x != null && String(x) !== '') : [];
+  renderStomachChips();
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+  renderStomachChips();
   // スタッフリストを読み込む
   try {
     const staffRows = await sb('GET', 'staff', null, '?select=name&order=name&is_active=eq.true&deleted_at=is.null');
@@ -2341,6 +2378,8 @@ function loadForEdit(rec) {
   sv('processTime', rec.process_time);
   sv('weight', rec.weight_total);
   sv('age', rec.age_estimate);
+  sv('stomachNote', rec.stomach_note);
+  setStomachContents(rec.stomach_contents);
   sv('memo', rec.memo);
   ['species','sex','weather','capture_city','capture_method',
    'finishing_method','hit_location','gutting','hunter_health',
@@ -2891,6 +2930,8 @@ async function handleSubmit() {
       sex: state.sex,
       weight_total: parseFloat(document.getElementById('weight').value) || null,
       age_estimate: parseInt(document.getElementById('age').value) || null,
+      stomach_contents: getStomachContents(),
+      stomach_note: (document.getElementById('stomachNote').value || '').trim() || null,
       capture_date: document.getElementById('captureDate').value,
       capture_time: document.getElementById('captureTime').value,
       weather: state.weather,

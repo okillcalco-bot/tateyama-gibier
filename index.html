@@ -5914,6 +5914,8 @@ let indEditId = null;
 const indCache = new Map();
 let indSortCol = 'capture_date';
 let indSortAsc = false;   // 既定は新しい順（直近入力した個体をすぐ確認できるように）
+// 胃の内容物は入力欄を持たないので、ここには入れない（入れても indSetField が空振りするだけ）。
+// 入力は捕獲票（capture-form.html）で行い、ここでは🌿一生ビューに表示するだけ。
 const IND_ALL_FIELDS = ['label_id','serial_number','species','sex','age_estimate','weight_total','quality',
   'capture_date','capture_time','capture_city','capture_area','hunter_name',
   'weather','capture_method','finishing_method','hit_location',
@@ -6029,6 +6031,12 @@ async function indLifeOpen(labelId) {
 
 function indLifeW(r) { return parseFloat(r.weight != null ? r.weight : r.weight_kg) || 0; }
 // 値が無い項目は「未記録」と灰色で出す＝何を足せば線が濃くなるかが一目で分かる
+// 胃の内容物は配列＋補足の2列。1行にまとめて見せる
+function indStomachText(i) {
+  const arr = Array.isArray(i.stomach_contents) ? i.stomach_contents.filter(Boolean) : [];
+  const note = (i.stomach_note || '').trim();
+  return [arr.join('・'), note].filter(Boolean).join(' / ');
+}
 function indLifeField(label, val, unit) {
   const has = val !== null && val !== undefined && String(val).trim() !== '';
   return `<div style="display:flex;gap:8px;font-size:13px;padding:3px 0;">
@@ -6095,6 +6103,7 @@ function indLifeRender() {
       ${indLifeField('胎児', i.has_fetus === true ? 'あり' : i.has_fetus === false ? 'なし' : '')}
       ${indLifeField('捕獲時異常', i.capture_anomalies)}
       ${indLifeField('内臓異常', i.organ_anomalies)}
+      ${indLifeField('胃の内容物', indStomachText(i))}
     </div>
   </div>`;
 
