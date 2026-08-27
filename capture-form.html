@@ -651,6 +651,7 @@ textarea { min-height: 80px; resize: vertical; }
         <div style="flex:1 1 150px;min-width:0;">
           <label class="form-label">持込日<span class="req-badge">必須</span></label>
           <input type="date" class="input" id="captureDate">
+          <div id="captureDateStale" style="display:none;font-size:11.5px;color:var(--gold-light);font-weight:600;margin-top:4px;"></div>
         </div>
         <div style="flex:1 1 150px;min-width:0;">
           <label class="form-label">目視時刻<span class="req-badge">必須</span></label>
@@ -1576,10 +1577,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       o.value = n; o.textContent = n; sel.appendChild(o);
     });
   }
-  const now = jstNow();
-  document.getElementById('captureDate').value = formatDate(now);
-  document.getElementById('captureTime').value = formatTime(now);
-  if (typeof updateMishitRef === 'function') updateMishitRef();
+  tgSetAutoDateTime();
+  ['captureDate', 'captureTime'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', () => { el.dataset.autofill = ''; });
+  });
   // 採番の開始番号（全端末共通）は、番号を作り始める前に読む
   await loadNumStart();
   setupToggles();
@@ -2996,6 +2998,15 @@ function collectWarnings() {
   }
   const mins = bleedToIntakeMinutes();
   if (mins !== null && mins > 60) out.push(`放血から受入まで ${mins}分（目安の1時間を超えています）`);
+  // 持込日が今日でない。前日に開いた画面をそのまま使うと前日の日付が残る（TGC-08-T297の事故）。
+  // 前日搬入をあとから登録することも実際にあるので、止めずに確認だけする。
+  const cd = (document.getElementById('captureDate')?.value || '').trim();
+  const td = today();
+  if (cd && cd !== td) {
+    const diff = Math.round((new Date(td) - new Date(cd)) / 86400000);
+    out.push(`持込日が今日（${td}）ではなく ${cd} です`
+      + (diff > 0 ? `（${diff}日前）` : '（未来の日付）'));
+  }
   return out;
 }
 /* 放血→受入の経過分。どちらか欠けていれば null */
@@ -3346,6 +3357,36 @@ async function hunterDoneCityForm(){
   try { await cityFormPrint(window._hunterDoneRecord || {}); } catch(_e){ alert('市役所票の表示に失敗しました: ' + _e.message); }
 }
 /* ── Reset form ── */
+/* ── 持込日が「画面を開いた日」のまま古くならないようにする ──
+   捕獲票はPWAで開きっぱなしにして使うため、日付をまたぐと持込日が前日のまま残る。
+   2026-08-26に画面を開き、翌8-27の1件目(TGC-08-T297)を登録して前日の日付が入った事故の対策。
+   自動で入れた値には印を付けておき、人が触っていなければ復帰時に今日へ入れ直す。 */
+function tgSetAutoDateTime() {
+  const now = jstNow();
+  const d = document.getElementById('captureDate');
+  const t = document.getElementById('captureTime');
+  if (d) { d.value = formatDate(now); d.dataset.autofill = '1'; }
+  if (t) { t.value = formatTime(now); t.dataset.autofill = '1'; }
+  if (typeof updateMishitRef === 'function') updateMishitRef();
+}
+// 画面が復帰したとき、人が触っていない自動入力の日付だけを今日に直す
+function tgRefreshStaleDate() {
+  const d = document.getElementById('captureDate');
+  if (!d || !d.dataset || d.dataset.autofill !== '1') return;   // 手入力は絶対に触らない
+  if (editMode || window.receiveMode) return;                    // 既存記録の編集中も触らない
+  const t = today();
+  if (d.value === t) return;
+  d.value = t;
+  const tm = document.getElementById('captureTime');
+  if (tm && tm.dataset && tm.dataset.autofill === '1') { tm.value = formatTime(jstNow()); }
+  if (typeof updateMishitRef === 'function') updateMishitRef();
+  const note = document.getElementById('captureDateStale');
+  if (note) { note.textContent = `📅 日付が変わったので持込日を ${t} に更新しました`; note.style.display = ''; }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) tgRefreshStaleDate(); });
+window.addEventListener('focus', tgRefreshStaleDate);
+window.addEventListener('pageshow', tgRefreshStaleDate);
+
 function resetForm() {
   clearAreaDone();
   ['hunterSuggest', 'finisherSuggest', 'carrierSuggest'].forEach(id => { const e = document.getElementById(id); if (e) { e.style.display = 'none'; e.innerHTML = ''; } });
@@ -3396,11 +3437,9 @@ function resetForm() {
   document.getElementById('indLabelId').value = '';
   document.getElementById('indLabelId').placeholder = '種別・市町村を選択';
 
-  // Reset date/time to now（JST基準）
-  const now = jstNow();
-  document.getElementById('captureDate').value = formatDate(now);
-  document.getElementById('captureTime').value = formatTime(now);
-  if (typeof updateMishitRef === 'function') updateMishitRef();
+  // Reset date/time to now（JST基準）。自動入力の印も付け直す
+  tgSetAutoDateTime();
+  const _stale = document.getElementById('captureDateStale'); if (_stale) _stale.style.display = 'none';
 
   // Clear checkboxes
   document.querySelectorAll('.check-item').forEach(c => c.classList.remove('checked'));
