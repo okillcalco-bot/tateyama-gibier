@@ -621,6 +621,18 @@ textarea { min-height: 80px; resize: vertical; }
         <input type="number" class="input" id="age" placeholder="0" step="1" min="0" inputmode="numeric">
       </div>
       <div class="form-row">
+        <label class="form-label">体長 (cm)</label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input type="number" class="input" id="bodyLength" placeholder="0" step="0.1" min="0"
+                 inputmode="decimal" style="flex:1 1 120px;min-width:0;">
+          <button type="button" class="now-btn" style="flex:0 0 auto;padding:10px 14px;"
+                  onclick="blMeasureOpen()">📷 写真で測る</button>
+        </div>
+        <div style="font-size:0.82rem;color:var(--text2);margin-top:5px;">
+          直接入れても、メジャーが写った写真から測っても構いません。時間がなければ空のままで大丈夫です。
+        </div>
+      </div>
+      <div class="form-row">
         <label class="form-label">胃の内容物（内臓摘出のときに見えたもの・複数可）</label>
         <div class="usual-chips" id="stomachChips"></div>
         <input type="text" class="input" id="stomachNote" placeholder="選択肢に無いものがあれば（任意）" style="margin-top:8px;">
@@ -963,6 +975,46 @@ textarea { min-height: 80px; resize: vertical; }
   </div>
 </div>
 
+
+<!-- 体長を写真から測る（メジャーが写っていれば、4回タップで出せる） -->
+<div class="modal-overlay" id="blModal">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-head">
+      <h3>📷 写真から体長を測る</h3>
+      <div class="modal-close" onclick="blMeasureClose()">&times;</div>
+    </div>
+    <div class="modal-body">
+      <div id="blPick">
+        <p style="font-size:13px;line-height:1.8;color:var(--text2);">
+          個体とメジャーが一緒に写った写真を選んでください。<br>
+          写真は端末の中だけで使い、どこにも送りません。
+        </p>
+        <input type="file" class="input" id="blFile" accept="image/*" style="margin-top:10px;">
+      </div>
+
+      <div id="blWork" style="display:none;">
+        <div id="blStep" style="font-size:14px;font-weight:700;color:var(--gold-light);margin-bottom:6px;"></div>
+        <div id="blHint" style="font-size:12.5px;color:var(--text2);line-height:1.7;margin-bottom:8px;"></div>
+        <div style="position:relative;width:100%;overflow:auto;border:1px solid var(--border2);border-radius:8px;background:#000;">
+          <canvas id="blCanvas" style="display:block;max-width:100%;touch-action:manipulation;"></canvas>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;">
+          <label style="font-size:13px;color:var(--text2);">メジャーの2点間の実寸</label>
+          <input type="number" class="input" id="blKnownCm" value="50" step="1" min="1"
+                 inputmode="decimal" style="width:100px;" oninput="blRecalc()">
+          <span style="font-size:13px;color:var(--text2);">cm</span>
+        </div>
+        <div id="blResult" style="font-size:15px;font-weight:700;margin-top:10px;"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+          <button type="button" class="now-btn" style="padding:10px 14px;" onclick="blUndo()">↩ 1つ戻す</button>
+          <button type="button" class="now-btn" style="padding:10px 14px;" onclick="blReset()">最初から</button>
+          <button type="button" class="print-btn" style="flex:1 1 160px;margin:0;" id="blUse"
+                  onclick="blUse()" disabled>この値を使う</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Hunter Done Modal（捕獲者モード送信完了。市役所票は任意で出す） -->
 <div class="modal-overlay" id="hunterDoneModal">
@@ -1356,6 +1408,117 @@ const state = {
 };
 let todayData = [];
 /* ── Init ── */
+/* ── 体長を写真から測る ──
+   メジャーの目盛りを自動で読むのは、撮影角度・ピント・影で簡単に外れる。
+   外れたときに「85cm」と黙って入るのは空欄より悪いので、人が4点タップして
+   比率で出す方式にした。写真は端末の中だけで扱い、どこにも送らない。
+   欄は任意なので、時間がなければ触らなくてよい。 */
+const BL_STEPS = [
+  { t: '① メジャーの基準点', h: 'メジャーの「0cm」など、はっきり分かる目盛りを1つタップしてください。' },
+  { t: '② メジャーのもう1点', h: '①から少し離れた目盛りをタップし、下の欄に①②間の実寸(cm)を入れてください。長くとるほど精度が上がります。' },
+  { t: '③ 鼻先', h: '個体の鼻先をタップしてください。' },
+  { t: '④ 尾の付け根', h: '尾の付け根をタップしてください。' }
+];
+let blImg = null, blPts = [], blScale = 1;
+
+function blMeasureOpen() {
+  blImg = null; blPts = []; blScale = 1;
+  document.getElementById('blPick').style.display = '';
+  document.getElementById('blWork').style.display = 'none';
+  document.getElementById('blFile').value = '';
+  document.getElementById('blModal').classList.add('show');
+}
+function blMeasureClose() { document.getElementById('blModal').classList.remove('show'); }
+
+function blLoadFile(file) {
+  if (!file) return;
+  const img = new Image();
+  img.onload = () => {
+    blImg = img; blPts = [];
+    const cv = document.getElementById('blCanvas');
+    // 画面に収まる範囲まで縮めて描く（比率で計算するので縮小しても結果は変わらない）
+    const max = 1200;
+    blScale = Math.min(1, max / Math.max(img.width, img.height));
+    cv.width = Math.round(img.width * blScale);
+    cv.height = Math.round(img.height * blScale);
+    document.getElementById('blPick').style.display = 'none';
+    document.getElementById('blWork').style.display = '';
+    blDraw();
+  };
+  img.onerror = () => alert('この写真は読み込めませんでした。別の写真でお試しください。');
+  const fr = new FileReader();
+  fr.onload = e => { img.src = e.target.result; };
+  fr.readAsDataURL(file);
+}
+
+function blCanvasTap(ev) {
+  if (!blImg || blPts.length >= 4) return;
+  const cv = document.getElementById('blCanvas');
+  const r = cv.getBoundingClientRect();
+  const src = (ev.touches && ev.touches[0]) || ev;
+  // 表示サイズとcanvasの実サイズがずれるので、必ず比で戻す
+  blPts.push({ x: (src.clientX - r.left) * (cv.width / r.width),
+               y: (src.clientY - r.top) * (cv.height / r.height) });
+  blDraw();
+}
+
+function blDraw() {
+  const cv = document.getElementById('blCanvas'), c = cv.getContext('2d');
+  c.drawImage(blImg, 0, 0, cv.width, cv.height);
+  const COL = ['#2f9bd6', '#2f9bd6', '#e0b021', '#e0b021'];
+  const line = (a, b, col) => {
+    c.strokeStyle = col; c.lineWidth = Math.max(2, cv.width / 400);
+    c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke();
+  };
+  if (blPts.length >= 2) line(blPts[0], blPts[1], COL[0]);
+  if (blPts.length >= 4) line(blPts[2], blPts[3], COL[2]);
+  blPts.forEach((p, i) => {
+    const rr = Math.max(6, cv.width / 130);
+    c.beginPath(); c.arc(p.x, p.y, rr, 0, Math.PI * 2);
+    c.fillStyle = COL[i]; c.fill();
+    c.strokeStyle = '#fff'; c.lineWidth = Math.max(2, rr / 3); c.stroke();
+    // 番号は写真の上に載るので、縁取りしないと明るい写真で読めなくなる
+    const fs = Math.max(15, rr * 2.4);
+    c.font = `bold ${fs}px sans-serif`;
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    const ty = p.y + rr + fs * 0.75;
+    c.lineWidth = Math.max(3, fs / 4); c.strokeStyle = 'rgba(0,0,0,.85)';
+    c.strokeText(String(i + 1), p.x, ty);
+    c.fillStyle = '#fff'; c.fillText(String(i + 1), p.x, ty);
+  });
+  const step = BL_STEPS[Math.min(blPts.length, 3)];
+  document.getElementById('blStep').textContent = blPts.length >= 4 ? '測れました' : step.t;
+  document.getElementById('blHint').textContent = blPts.length >= 4
+    ? '位置がずれていたら「1つ戻す」で直せます。実寸(cm)を変えるとその場で計算し直します。' : step.h;
+  blRecalc();
+}
+
+// ①②間の実寸が分かっているので、③④間との比で体長が出る
+function blComputeCm() {
+  if (blPts.length < 4) return null;
+  const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const ref = d(blPts[0], blPts[1]);
+  const known = parseFloat(document.getElementById('blKnownCm').value);
+  if (!(ref > 0) || !isFinite(known) || known <= 0) return null;
+  return d(blPts[2], blPts[3]) / ref * known;
+}
+function blRecalc() {
+  const cm = blComputeCm();
+  const out = document.getElementById('blResult'), btn = document.getElementById('blUse');
+  if (cm == null) { out.textContent = ''; btn.disabled = true; return; }
+  out.textContent = `体長 約 ${cm.toFixed(1)} cm`;
+  out.style.color = 'var(--gold-light)';
+  btn.disabled = false;
+}
+function blUndo() { if (blPts.length) { blPts.pop(); blDraw(); } }
+function blReset() { blPts = []; blDraw(); }
+function blUse() {
+  const cm = blComputeCm();
+  if (cm == null) return;
+  document.getElementById('bodyLength').value = cm.toFixed(1);
+  blMeasureClose();
+}
+
 /* ── 胃の内容物（何を食べて育ったか） ──
    内臓摘出のときに必ず目に入るのに、書く場所が無かった。
    打つ手間を増やさないよう、房総で実際に多いものを選ぶだけにしてある。 */
@@ -1386,6 +1549,10 @@ function setStomachContents(arr) {
 
 document.addEventListener('DOMContentLoaded', async () => {
   renderStomachChips();
+  const blF = document.getElementById('blFile');
+  if (blF) blF.addEventListener('change', e => blLoadFile(e.target.files && e.target.files[0]));
+  const blC = document.getElementById('blCanvas');
+  if (blC) blC.addEventListener('click', blCanvasTap);
   // スタッフリストを読み込む
   try {
     const staffRows = await sb('GET', 'staff', null, '?select=name&order=name&is_active=eq.true&deleted_at=is.null');
@@ -2378,6 +2545,7 @@ function loadForEdit(rec) {
   sv('processTime', rec.process_time);
   sv('weight', rec.weight_total);
   sv('age', rec.age_estimate);
+  sv('bodyLength', rec.body_length_cm);
   sv('stomachNote', rec.stomach_note);
   setStomachContents(rec.stomach_contents);
   sv('memo', rec.memo);
@@ -2930,6 +3098,7 @@ async function handleSubmit() {
       sex: state.sex,
       weight_total: parseFloat(document.getElementById('weight').value) || null,
       age_estimate: parseInt(document.getElementById('age').value) || null,
+      body_length_cm: parseFloat(document.getElementById('bodyLength').value) || null,
       stomach_contents: getStomachContents(),
       stomach_note: (document.getElementById('stomachNote').value || '').trim() || null,
       capture_date: document.getElementById('captureDate').value,
