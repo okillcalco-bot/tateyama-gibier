@@ -100,6 +100,7 @@ tr:hover td{background:var(--surface2);}
 .btn-danger:hover{background:#a03838;border-color:#a03838;}
 .btn-sm{padding:4px 10px;font-size:12px;}
 .btn:disabled{opacity:.4;cursor:not-allowed;}
+.btn.active{background:var(--gold2);color:#fff;border-color:var(--gold2);}
 
 /* Forms */
 .form-group{margin-bottom:16px;}
@@ -438,6 +439,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <button class="tab-btn" data-tab="inventory">&#x1F4E6; 在庫一覧</button>
   <button class="tab-btn" data-tab="shipping">&#x1F4E4; 出荷処理<span class="nav-badge" id="nav-badge-shipping"></span></button>
   <button class="tab-btn" data-tab="trace">&#x1F50D; トレーサビリティ</button>
+  <button class="tab-btn" data-tab="voices">&#x1F4AC; 食べた人の声<span class="nav-badge" id="nav-badge-voices"></span></button>
   <div class="nav-group">受発注</div>
   <a class="tab-btn" href="order-admin.html">&#x1F4CB; 受発注管理<span class="nav-badge" id="nav-badge-orders"></span></a>
   <a class="tab-btn" href="order.html" target="_blank">&#x1F6D2; 注文ポータル（お客様用）</a>
@@ -780,6 +782,30 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
     </div>
     <div id="trace-result"></div>
+  </div>
+
+  <!-- 食べた人の声（承認してから公開する） -->
+  <div class="tab-panel" id="panel-voices">
+    <div class="section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>💬 食べた人の声</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-sm active" id="vc-tab-pending"   onclick="vcSetStatus('pending')">承認待ち</button>
+          <button class="btn btn-sm"        id="vc-tab-published" onclick="vcSetStatus('published')">公開中</button>
+          <button class="btn btn-sm"        id="vc-tab-rejected"  onclick="vcSetStatus('rejected')">却下</button>
+        </div>
+      </div>
+      <div style="font-size:13px;color:var(--text3);line-height:1.7;">
+        ラベルのQRから寄せられた感想です。<strong>公開するを押したものだけ</strong>が「この肉の物語」ページに出ます。
+        押すまではお客様には見えません。
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;">
+        <span style="font-size:13px;color:var(--text3);">担当者</span>
+        <input class="form-input" id="vc-operator" placeholder="承認した人の名前" style="max-width:200px;"
+               oninput="try{localStorage.setItem('tg_vc_operator',this.value)}catch(e){}">
+      </div>
+    </div>
+    <div id="vc-list"></div>
   </div>
 
   <!-- Punch (出退勤打刻) -->
@@ -2186,6 +2212,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'datamgmt') loadDataMgmt();
     if (btn.dataset.tab === 'shifts') loadShiftBoard();
     if (btn.dataset.tab === 'board') loadBoard();
+    if (btn.dataset.tab === 'voices') loadVoices();
   });
 });
 
@@ -8146,6 +8173,94 @@ async function kkSubmit() {
   } catch (e) { playFeedbackSound(false); toast('記録に失敗しました: ' + sbSafeMsg(e), 'error'); }
 }
 
+/* ── 食べた人の声（承認してから公開する） ──
+   ラベルのQRから届いた感想は、公開ボタンを押すまでお客様には見えない。
+   お客様は自分が書いたものが載るのを待っているので、承認待ちはバッジで気づけるようにしてある。 */
+let vcStatus = 'pending';
+let vcRows = [];
+
+function vcOperator() {
+  const el = document.getElementById('vc-operator');
+  return el ? el.value.trim() : '';
+}
+function vcSetStatus(st) {
+  vcStatus = st;
+  ['pending', 'published', 'rejected'].forEach(s => {
+    const b = document.getElementById('vc-tab-' + s);
+    if (b) b.classList.toggle('active', s === st);
+  });
+  loadVoices();
+}
+
+async function loadVoices() {
+  const box = document.getElementById('vc-list');
+  if (!box) return;
+  box.innerHTML = '<div class="section" style="color:var(--text3);">読み込んでいます…</div>';
+  // 担当者名は端末に覚えさせる（毎回打たせない）
+  const opEl = document.getElementById('vc-operator');
+  if (opEl && !opEl.value) { try { opEl.value = localStorage.getItem('tg_vc_operator') || ''; } catch (e) {} }
+  try {
+    vcRows = await sb('POST', 'rpc/staff_voices_list', { p_status: vcStatus, p_limit: 500 }) || [];
+  } catch (e) {
+    box.innerHTML = `<div class="section" style="color:var(--red);">感想を読み込めませんでした: ${esc2(sbSafeMsg(e))}</div>`;
+    return;
+  }
+  vcRender();
+}
+
+function vcRender() {
+  const box = document.getElementById('vc-list');
+  if (!vcRows.length) {
+    const msg = vcStatus === 'pending' ? '承認待ちの感想はありません。'
+      : vcStatus === 'published' ? 'まだ公開した感想はありません。'
+      : '却下した感想はありません。';
+    box.innerHTML = `<div class="section" style="color:var(--text3);">${msg}</div>`;
+    return;
+  }
+  const h = vcRows.map(v => {
+    const stars = v.rating ? '★'.repeat(v.rating) + '☆'.repeat(5 - v.rating) : '';
+    const btns = v.status === 'pending'
+      ? `<button class="btn btn-sm btn-primary" onclick="vcModerate('${v.id}','publish')">公開する</button>
+         <button class="btn btn-sm" onclick="vcModerate('${v.id}','reject')">却下する</button>`
+      : v.status === 'published'
+      ? `<button class="btn btn-sm" onclick="vcModerate('${v.id}','unpublish')">公開を取り下げる</button>
+         <button class="btn btn-sm" onclick="vcModerate('${v.id}','reject')">却下する</button>`
+      : `<button class="btn btn-sm" onclick="vcModerate('${v.id}','restore')">承認待ちに戻す</button>
+         <button class="btn btn-sm btn-primary" onclick="vcModerate('${v.id}','publish')">そのまま公開する</button>`;
+    return `<div class="section">
+      <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;font-size:13px;color:var(--text3);">
+        <strong style="font-size:15px;color:var(--text);">${esc2(v.nickname || '名前なし')}</strong>
+        ${stars ? `<span style="color:var(--gold);letter-spacing:1px;">${stars}</span>` : ''}
+        ${v.dish ? `<span>${esc2(v.dish)}</span>` : ''}
+        <span style="margin-left:auto;">${esc2(v.at || '')}</span>
+      </div>
+      ${v.comment ? `<div style="margin-top:8px;white-space:pre-wrap;line-height:1.8;">${esc2(v.comment)}</div>`
+                  : '<div style="margin-top:8px;color:var(--text3);">（感想の文章はありません）</div>'}
+      <div style="margin-top:10px;font-size:12px;color:var(--text3);">
+        ${esc2(v.product || '商品不明')}　/　${esc2(v.individual_label || '個体不明')}　/　ラベル番号 ${esc2(v.scan_code || '-')}
+        ${v.moderated_by ? `　/　${esc2(v.moderated_by)}` : ''}
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">${btns}</div>
+    </div>`;
+  }).join('');
+  box.innerHTML = h;
+}
+
+async function vcModerate(id, action) {
+  const label = { publish: '公開', unpublish: '公開の取り下げ', reject: '却下', restore: '承認待ちへ戻す' }[action] || action;
+  if (action === 'publish' && !confirm('この感想を「この肉の物語」ページに公開します。よろしいですか？')) return;
+  if (action === 'reject' && !confirm('この感想を却下します。お客様には表示されません。よろしいですか？')) return;
+  try {
+    await sb('POST', 'rpc/staff_voice_moderate', { p_id: id, p_action: action, p_by: vcOperator() || null });
+    toast(label + 'しました');
+    await loadVoices();
+    refreshNavBadges();
+  } catch (e) {
+    // 書き込みの失敗は握り潰さない
+    toast(label + 'に失敗しました: ' + sbSafeMsg(e), 'error');
+  }
+}
+
 /* 加工品パックのラベル（40mm×60mm）。
    CSSと1枚分の中身を関数に分け、印刷とレイアウト実測で同じものを使う。 */
 function kkLabelCss() {
@@ -10284,6 +10399,11 @@ async function refreshNavBadges() {
     setBadge('nav-badge-intake', intakeN);
     setCard('dc-aging', agingN);
   } catch (e) { setCard('dc-aging', '-'); }
+  // 承認待ちの「食べた人の声」（お客様を待たせないよう、気づける場所に出す）
+  try {
+    const v = await sb('POST', 'rpc/staff_voices_list', { p_status: 'pending', p_limit: 1000 });
+    setBadge('nav-badge-voices', (v || []).length, true);
+  } catch (e) {}
   // 出荷待ち注文（新規＋確認済）／新規注文は受発注管理にも出す
   try {
     const orders = await sb('GET', 'orders', null, '?status=in.(受注,確認済)&select=id,status');
