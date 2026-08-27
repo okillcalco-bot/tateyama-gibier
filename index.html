@@ -5489,6 +5489,175 @@ function makeCode128SVG(text, barH) {
     + '<rect width="' + W + '" height="' + barH + '" fill="#fff"/>' + rects + '</svg>';
 }
 
+/* QRコード（バイトモード・誤り訂正M・バージョン1〜6）。
+   加工品ラベルに「この肉の物語」への入口を刷るため、外部ライブラリなしで自前生成する。
+   （ラベル印刷はオフラインでも動く必要があるのでCDNには依存しない） */
+function makeQRSVG(text, sizeMm) {
+  // ---- GF(256) ----
+  const EXP = new Array(512), LOG = new Array(256);
+  for (let i = 0, x = 1; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11d; }
+  for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+  const gmul = (a, b) => (a === 0 || b === 0) ? 0 : EXP[LOG[a] + LOG[b]];
+  function rsGen(n) {
+    let g = [1];
+    for (let i = 0; i < n; i++) {
+      const ng = new Array(g.length + 1).fill(0);
+      for (let j = 0; j < g.length; j++) { ng[j] ^= g[j]; ng[j + 1] ^= gmul(g[j], EXP[i]); }
+      g = ng;
+    }
+    return g;
+  }
+  function rsEncode(data, n) {
+    const g = rsGen(n), res = new Array(n).fill(0);
+    for (const d of data) {
+      const f = d ^ res[0];
+      res.shift(); res.push(0);
+      for (let i = 0; i < n; i++) res[i] ^= gmul(g[i + 1], f);
+    }
+    return res;
+  }
+  // v1..v6 / EC=M : [データ語数, ブロック数, 1ブロックのEC語数]
+  const SPEC = { 1: [16, 1, 10], 2: [28, 1, 16], 3: [44, 1, 26], 4: [64, 2, 18], 5: [86, 2, 24], 6: [108, 4, 16] };
+  const ALIGN = { 1: [], 2: [6, 18], 3: [6, 22], 4: [6, 26], 5: [6, 30], 6: [6, 34] };
+
+  const bytes = Array.from(new TextEncoder().encode(String(text)));
+  let ver = 0;
+  for (let v = 1; v <= 6; v++) { if (Math.ceil((12 + 8 * bytes.length) / 8) <= SPEC[v][0]) { ver = v; break; } }
+  if (!ver) return '';
+  const [dataWords, blocks, ecPer] = SPEC[ver];
+
+  const bits = [];
+  const push = (val, len) => { for (let i = len - 1; i >= 0; i--) bits.push((val >> i) & 1); };
+  push(0b0100, 4); push(bytes.length, 8);
+  bytes.forEach(b => push(b, 8));
+  for (let i = 0; i < 4 && bits.length < dataWords * 8; i++) bits.push(0);
+  while (bits.length % 8) bits.push(0);
+  const dw = [];
+  for (let i = 0; i < bits.length; i += 8) dw.push(parseInt(bits.slice(i, i + 8).join(''), 2));
+  const PADS = [0xEC, 0x11];
+  for (let i = 0; dw.length < dataWords; i++) dw.push(PADS[i % 2]);
+
+  const per = dataWords / blocks;
+  const dBlocks = [], eBlocks = [];
+  for (let b = 0; b < blocks; b++) {
+    const chunk = dw.slice(b * per, (b + 1) * per);
+    dBlocks.push(chunk); eBlocks.push(rsEncode(chunk, ecPer));
+  }
+  const finalWords = [];
+  for (let i = 0; i < per; i++) for (const b of dBlocks) finalWords.push(b[i]);
+  for (let i = 0; i < ecPer; i++) for (const b of eBlocks) finalWords.push(b[i]);
+
+  const N = 17 + 4 * ver;
+  const M = Array.from({ length: N }, () => new Array(N).fill(null));
+  const RES = Array.from({ length: N }, () => new Array(N).fill(false));  // true=機能パターン
+  const set = (r, c, v) => { M[r][c] = v; RES[r][c] = true; };
+
+  const finder = (r0, c0) => {
+    for (let r = -1; r <= 7; r++) for (let c = -1; c <= 7; c++) {
+      const rr = r0 + r, cc = c0 + c;
+      if (rr < 0 || cc < 0 || rr >= N || cc >= N) continue;
+      const on = (r >= 0 && r <= 6 && (c === 0 || c === 6)) || (c >= 0 && c <= 6 && (r === 0 || r === 6))
+        || (r >= 2 && r <= 4 && c >= 2 && c <= 4);
+      set(rr, cc, on ? 1 : 0);
+    }
+  };
+  finder(0, 0); finder(0, N - 7); finder(N - 7, 0);
+  for (let i = 8; i < N - 8; i++) { const v = i % 2 === 0 ? 1 : 0; set(6, i, v); set(i, 6, v); }
+  const ac = ALIGN[ver];
+  for (const r of ac) for (const c of ac) {
+    if ((r <= 8 && c <= 8) || (r <= 8 && c >= N - 9) || (r >= N - 9 && c <= 8)) continue;
+    for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++)
+      set(r + dr, c + dc, (Math.max(Math.abs(dr), Math.abs(dc)) !== 1) ? 1 : 0);
+  }
+  set(N - 8, 8, 1);
+  for (let i = 0; i < 9; i++) { if (!RES[8][i]) set(8, i, 0); if (!RES[i][8]) set(i, 8, 0); }
+  for (let i = 0; i < 8; i++) { if (!RES[8][N - 1 - i]) set(8, N - 1 - i, 0); if (!RES[N - 1 - i][8]) set(N - 1 - i, 8, 0); }
+
+  const dataBits = [];
+  finalWords.forEach(w => { for (let i = 7; i >= 0; i--) dataBits.push((w >> i) & 1); });
+  let bi = 0, up = true;
+  for (let col = N - 1; col > 0; col -= 2) {
+    if (col === 6) col--;
+    for (let k = 0; k < N; k++) {
+      const row = up ? N - 1 - k : k;
+      for (const c of [col, col - 1]) {
+        if (RES[row][c]) continue;
+        M[row][c] = bi < dataBits.length ? dataBits[bi++] : 0;
+      }
+    }
+    up = !up;
+  }
+
+  const MASKS = [
+    (i, j) => (i + j) % 2 === 0, (i, j) => i % 2 === 0, (i, j) => j % 3 === 0,
+    (i, j) => (i + j) % 3 === 0, (i, j) => (Math.floor(i / 2) + Math.floor(j / 3)) % 2 === 0,
+    (i, j) => (i * j) % 2 + (i * j) % 3 === 0, (i, j) => ((i * j) % 2 + (i * j) % 3) % 2 === 0,
+    (i, j) => ((i + j) % 2 + (i * j) % 3) % 2 === 0
+  ];
+  function penalty(g) {
+    let p = 0;
+    for (let i = 0; i < N; i++) {
+      for (const line of [g[i], g.map(r => r[i])]) {
+        let run = 1;
+        for (let j = 1; j < N; j++) {
+          if (line[j] === line[j - 1]) { run++; if (run === 5) p += 3; else if (run > 5) p++; }
+          else run = 1;
+        }
+        const s = line.join('');
+        for (const pat of ['10111010000', '00001011101']) {
+          let idx = s.indexOf(pat);
+          while (idx !== -1) { p += 40; idx = s.indexOf(pat, idx + 1); }
+        }
+      }
+    }
+    for (let i = 0; i < N - 1; i++) for (let j = 0; j < N - 1; j++) {
+      const a = g[i][j];
+      if (a === g[i][j + 1] && a === g[i + 1][j] && a === g[i + 1][j + 1]) p += 3;
+    }
+    let dark = 0;
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) if (g[i][j]) dark++;
+    p += Math.floor(Math.abs(dark * 100 / (N * N) - 50) / 5) * 10;
+    return p;
+  }
+  function fmtBits(mask) {
+    let d = (0b00 << 3) | mask, v = d << 10;   // 0b00 = 誤り訂正レベルM
+    for (let i = 4; i >= 0; i--) if ((v >> (i + 10)) & 1) v ^= 0x537 << i;
+    return ((d << 10) | v) ^ 0x5412;
+  }
+
+  let best = null, bestP = Infinity;
+  for (let m = 0; m < 8; m++) {
+    const g = M.map((row, i) => row.map((v, j) => RES[i][j] ? v : (v ^ (MASKS[m](i, j) ? 1 : 0))));
+    const f = fmtBits(m);
+    for (let i = 0; i < 15; i++) {
+      const b = (f >> i) & 1;
+      // 左上のコピー（bit0が(0,8)、bit14が(8,0)）
+      if (i <= 5) g[i][8] = b;
+      else if (i === 6) g[7][8] = b;
+      else if (i === 7) g[8][8] = b;
+      else if (i === 8) g[8][7] = b;
+      else g[8][14 - i] = b;
+      // 右上・左下のコピー
+      if (i <= 7) g[8][N - 1 - i] = b;
+      else g[N - 15 + i][8] = b;
+    }
+    g[N - 8][8] = 1;
+    const p = penalty(g);
+    if (p < bestP) { bestP = p; best = g; }
+  }
+
+  const Q = 4, T = N + Q * 2;   // Qは静穏帯（規格の最小4モジュール）
+  let rects = '';
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++)
+    if (best[i][j]) rects += '<rect x="' + (j + Q) + '" y="' + (i + Q) + '" width="1" height="1"/>';
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + T + ' ' + T + '" shape-rendering="crispEdges"'
+    + ' style="display:block;width:' + sizeMm + 'mm;height:' + sizeMm + 'mm;">'
+    + '<rect width="' + T + '" height="' + T + '" fill="#fff"/><g fill="#000">' + rects + '</g></svg>';
+}
+
+// ラベルQRの行き先（「この肉の物語」公開ページ）
+function storyUrl(scanCode) { return 'https://tateyama-gibier.vercel.app/s.html?c=' + scanCode; }
+
 /* ── ラベル用の数字キー（scan_code）の先取り確保 ──
    ラベル印刷は保存より先に走ることがあるため、8桁キーをあらかじめ確保しておく。
    確保できなかったときは従来どおり識別コードをバーコード化する（動作は止めない）。 */
@@ -7977,16 +8146,10 @@ async function kkSubmit() {
   } catch (e) { playFeedbackSound(false); toast('記録に失敗しました: ' + sbSafeMsg(e), 'error'); }
 }
 
-// 加工品パックのラベル（40mm×60mm・複数ページ一括印刷）
-function kkPrintLabels(packs, prodName, species, origin, materials) {
-  const speciesName = (species || '').includes('イノシシ') ? 'イノシシ肉' :
-    ((species || '').includes('鹿') || (species || '').includes('シカ')) ? '鹿肉' : (species || '');
-  const expiry = new Date(); expiry.setFullYear(expiry.getFullYear() + 1);
-  const expiryStr = expiry.toLocaleDateString('ja-JP');
-  const origins = [...new Set((materials || []).map(m => m.individual_id).filter(Boolean))];
-  const rawLine = origins.length ? '原料 ' + origins.slice(0, 4).join('・') + (origins.length > 4 ? ' 他' : '') : '';
-
-  const css = `
+/* 加工品パックのラベル（40mm×60mm）。
+   CSSと1枚分の中身を関数に分け、印刷とレイアウト実測で同じものを使う。 */
+function kkLabelCss() {
+  return `
     @page { size: 40mm 60mm; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     .lb { width:40mm; height:60mm; font-family:'Meiryo','Yu Gothic',sans-serif;
@@ -8000,25 +8163,62 @@ function kkPrintLabels(packs, prodName, species, origin, materials) {
     .ex { font-size:7pt; font-weight:bold; margin-top:.5mm; }
     .tmp{ font-size:5.5pt; color:#333; }
     .rw { font-size:4.5pt; color:#444; margin-top:.4mm; }
+    .rw .nb { white-space:nowrap; }   /* 個体番号がハイフンで折り返されないように */
     /* flex-basisで高さを確保し、縮小も禁止（0にすると中のSVGが上下にはみ出して文字に重なる） */
-    .bc { flex:0 0 12.5mm; height:12.5mm; display:flex; align-items:center; justify-content:center; }
-    .bc svg { display:block; width:38mm !important; height:12mm !important; shape-rendering:crispEdges; }
+    .bc { flex:0 0 9.5mm; height:9.5mm; display:flex; align-items:center; justify-content:center; }
+    .bc svg { display:block; width:38mm !important; height:9mm !important; shape-rendering:crispEdges; }
     .bct{ font-size:6.5pt; font-weight:bold; text-align:center; font-family:monospace; letter-spacing:.3px; }
-    .mk { font-size:4.5pt; color:#444; margin-top:.3mm; }
+    /* QRと発行元を横に並べる（縦に積むと60mmに収まらない） */
+    .ft { display:flex; align-items:flex-end; gap:1mm; margin-top:.4mm; }
+    .qr { flex:0 0 13mm; }
+    .qr svg { display:block; width:13mm !important; height:13mm !important; }
+    .ftx{ flex:1 1 auto; min-width:0; }
+    .qc { font-size:5pt; font-weight:bold; line-height:1.25; }
+    .qc small { display:block; font-weight:normal; font-size:4.5pt; color:#444; }
+    .mk { font-size:4.5pt; color:#444; margin-top:.6mm; }
     .ad { font-size:4.5pt; color:#444; }
   `;
-  const body = packs.map(p => `<div class="lb">
-    <div class="o">${esc2(origin)}　${esc2(speciesName)}</div>
-    <div class="p" style="font-size:${labelPartFontPt(prodName)}pt">${esc2(prodName)}</div>
+}
+// 原料の個体番号は「TGC-08-」と「M167」に割れると読めなくなるので、番号ごとに改行を禁止する
+function kkRawHtml(rawLine) {
+  return String(rawLine).split('・').map(x => `<span class="nb">${esc2(x)}</span>`).join('・');
+}
+function kkLabelBody(p, c) {
+  return `<div class="lb">
+    <div class="o">${esc2(c.origin)}　${esc2(c.speciesName)}</div>
+    <div class="p" style="font-size:${labelPartFontPt(c.prodName)}pt">${esc2(c.prodName)}</div>
     <div class="w">${Number(p.weight).toFixed(3)}<span class="wu"> kg</span></div>
-    <div class="ex">消費期限　${expiryStr}</div>
+    <div class="ex">消費期限　${c.expiryStr}</div>
     <div class="tmp">保存温度　-18℃以下</div>
-    ${rawLine ? `<div class="rw">${esc2(rawLine)}</div>` : ''}
+    ${c.rawLine ? `<div class="rw">${kkRawHtml(c.rawLine)}</div>` : ''}
     <div class="bc">${makeCode128SVG(p.scan_code || shortIdent(p.ident_code))}</div>
     <div class="bct">${esc2(p.ident_code)}</div>
-    <div class="mk">館山ジビエセンター</div>
-    <div class="ad">千葉県館山市西長田1163-5</div>
-  </div>`).join('');
+    <div class="ft">
+      ${p.scan_code ? `<div class="qr">${makeQRSVG(storyUrl(p.scan_code), 13)}</div>` : ''}
+      <div class="ftx">
+        ${p.scan_code ? `<div class="qc">この肉の物語<small>獲れた場所と一頭の記録</small><small>ご感想もどうぞ</small></div>` : ''}
+        <div class="mk">館山ジビエセンター</div>
+        <div class="ad">千葉県館山市西長田1163-5</div>
+      </div>
+    </div>
+  </div>`;
+}
+// レイアウト実測用（1枚分の完全なHTML）
+function kkLabelHtml(p, c) {
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${kkLabelCss()}</style></head><body>${kkLabelBody(p, c)}${LABEL_FIT_SCRIPT}</body></html>`;
+}
+
+function kkPrintLabels(packs, prodName, species, origin, materials) {
+  const speciesName = (species || '').includes('イノシシ') ? 'イノシシ肉' :
+    ((species || '').includes('鹿') || (species || '').includes('シカ')) ? '鹿肉' : (species || '');
+  const expiry = new Date(); expiry.setFullYear(expiry.getFullYear() + 1);
+  const expiryStr = expiry.toLocaleDateString('ja-JP');
+  const origins = [...new Set((materials || []).map(m => m.individual_id).filter(Boolean))];
+  const rawLine = origins.length ? '原料 ' + origins.slice(0, 4).join('・') + (origins.length > 4 ? ' 他' : '') : '';
+
+  const css = kkLabelCss();
+  const ctx = { prodName, speciesName, origin, expiryStr, rawLine };
+  const body = packs.map(p => kkLabelBody(p, ctx)).join('');
 
   const iframe = document.createElement('iframe');
   iframe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;border:none;opacity:0;';
