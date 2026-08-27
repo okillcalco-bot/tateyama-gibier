@@ -136,7 +136,7 @@ function render(){
 
   h+=`<div class="card">
     <h2><span class="ic">💬</span>召し上がった感想をお聞かせください</h2>
-    <div style="font-size:13px;color:var(--ink2);margin-bottom:6px;">いただいた声は、この一頭の記録として残ります。</div>
+    <div style="font-size:13px;color:var(--ink2);margin-bottom:6px;">いただいた声は、この一頭の記録として残ります。<br>センターで確認したのち、このページに掲載させていただきます。</div>
     <label>おいしさ</label>
     <div class="stars" id="stars">${[1,2,3,4,5].map(n=>`<button type="button" data-n="${n}" onclick="setRating(${n})">★</button>`).join('')}</div>
     <label for="dish">どんな料理にしましたか（任意）</label>
@@ -182,10 +182,10 @@ async function send(){
       p_rating:rating||null, p_dish:document.getElementById('dish').value, p_comment:comment});
     if(r && r.ok){
       msg.style.color='var(--moss)';
-      msg.textContent='ありがとうございました。この一頭の記録に残りました。';
+      msg.textContent='ありがとうございました。この一頭の記録に残りました。センターで確認のうえ掲載します。';
       story=await rpc('story_get',{p_code:code}); rating=0; render();
       const m2=document.getElementById('msg');
-      if(m2){ m2.style.color='var(--moss)'; m2.textContent='ありがとうございました。この一頭の記録に残りました。'; }
+      if(m2){ m2.style.color='var(--moss)'; m2.textContent='ありがとうございました。この一頭の記録に残りました。センターで確認のうえ掲載します。'; }
     }else{
       msg.style.color='var(--gold)'; msg.textContent=(r&&r.error)||'送信できませんでした。';
       btn.disabled=false;
