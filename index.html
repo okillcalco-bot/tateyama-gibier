@@ -2822,17 +2822,13 @@ function shipDirectRemove(idx) {
 
 async function shipDirectScan() {
   const input = document.getElementById('ship-direct-code');
-  const code = normIdent(input.value);
+  const raw = input.value;                       // 照合には読み取ったそのままを渡す
+  const code = normIdent(raw);                   // 表示・個体番号の切り出し用
   input.value = '';
   input.focus();
   if (!code) return;
-  if (shipDirectItems.some(i => i.ident_code === code)) {
-    toast(`「${code}」はすでにリストに入っています`, 'error');
-    playFeedbackSound(false);
-    return;
-  }
   try {
-    const invs = await sb('GET', 'inventory', null, `?${invScanFilter(code)}&deleted_at=is.null&select=id,ident_code,part_name,weight,species,individual_id,status`);
+    const invs = await sb('GET', 'inventory', null, `?${invScanFilter(raw)}&deleted_at=is.null&select=id,ident_code,part_name,weight,species,individual_id,status`);
     if (!invs.length) {
       // 識別コードが一致しない → 個体番号（3セグメント）としてその個体の在庫を出し、部位を選ばせる
       const segs = code.split('-');
@@ -2843,6 +2839,13 @@ async function shipDirectScan() {
       return;
     }
     const inv = invs[0];
+    // 二度読みは在庫のidで見る。バーコード(数字キー)は打った文字と識別コードが違うので、
+    // 文字の一致で見ていると同じパックが2行入ってしまう。
+    if (shipDirectItems.some(i => String(i.id) === String(inv.id))) {
+      toast(`「${inv.ident_code}」はすでにリストに入っています`, 'error');
+      playFeedbackSound(false);
+      return;
+    }
     if (inv.status !== '在庫') {
       toast(`「${code}」はステータスが「${inv.status}」のため出せません（在庫のみ出荷できます）`, 'error');
       playFeedbackSound(false);
@@ -3009,9 +3012,10 @@ async function barcodeLookup(code) {
       }
       return;
     }
-    // 全角/小文字/空白/共通頭の省略を吸収（短縮バーコード・手入力両対応）
-    code = normIdent(code);
-    let items = await sb('GET', 'inventory', null, `?${invScanFilter(code)}&select=*`);
+    // 照合は読み取ったそのままで。表示・個体台帳の検索にはフル桁を使う
+    const rawCode = code;
+    code = normIdent(rawCode);
+    let items = await sb('GET', 'inventory', null, `?${invScanFilter(rawCode)}&select=*`);
     if (items.length) {
       showDetailModal(items[0]);
       toast('在庫アイテムが見つかりました', 'info');
@@ -3623,7 +3627,8 @@ function pmQuickSearch(q) {
 /* ===== Traceability ===== */
 async function traceSearch() {
   // 全角/小文字/空白/共通頭の省略を吸収（識別コード・個体番号どちらの手入力も拾いやすく）
-  const code = normIdent(document.getElementById('trace-search').value);
+  const rawCode = document.getElementById('trace-search').value;
+  const code = normIdent(rawCode);
   if (!code) return;
   const resultEl = document.getElementById('trace-result');
   resultEl.innerHTML = '<div class="loading"><span class="spin"></span>検索中...</div>';
@@ -3636,7 +3641,7 @@ async function traceSearch() {
     let invItem = null;
     let fromInv = false;
     if (!individuals.length) {
-      const inv = await sb('GET', 'inventory', null, `?${invScanFilter(code)}&select=*`);
+      const inv = await sb('GET', 'inventory', null, `?${invScanFilter(rawCode)}&select=*`);
       if (inv.length) {
         invItem = inv[0];
         individuals = await sb('GET', 'individuals', null, `?label_id=eq.${encodeURIComponent(inv[0].individual_id)}&select=*`);
@@ -3948,12 +3953,34 @@ function shipScanFail(message) {
   playFeedbackSound(false);
 }
 
+/* 引けなかったときに、その個体の「生きている在庫」を出してタップで選ばせる。
+   ラベルが読めない・削除済みの行を指している、どちらの行き止まりもここで拾う。
+   1件も無ければ false を返し、呼び出し側が理由を出す。 */
+async function shipScanOfferPacks(indBase, headline) {
+  if (!indBase) return false;
+  let packs = [];
+  try {
+    packs = await sb('GET', 'inventory', null,
+      `?or=(individual_code.eq.${encodeURIComponent(indBase)},individual_id.eq.${encodeURIComponent(indBase)},ident_code.like.${encodeURIComponent(indBase + '-*')})&status=eq.在庫&deleted_at=is.null&select=ident_code,part_name,weight&order=ident_code`);
+  } catch (_) { return false; }
+  if (!packs.length) return false;
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/'/g, '&#39;');
+  const btns = packs.map(pk =>
+    `<button type="button" class="btn" style="display:block;width:100%;text-align:left;margin:4px 0;padding:10px;font-size:14px;" `
+    + `onclick="document.getElementById('ship-scan-code').value='${esc(pk.ident_code)}';handleShippingScan();">`
+    + `📦 ${esc(pk.part_name || '-')}　${Number(pk.weight || 0).toFixed(1)}kg　<span style="color:#888;font-size:11px;">${esc(pk.ident_code)}</span></button>`
+  ).join('');
+  shipScanShowResult(false, `${esc(headline)} ${packs.length}件。割り当てる部位をタップしてください:<div style="margin-top:6px;">${btns}</div>`);
+  return true;
+}
+
 async function handleShippingScan() {
   if (shippingScanBusy) return;
   const input = document.getElementById('ship-scan-code');
   const btn = document.getElementById('ship-scan-submit');
-  // 全角/小文字/空白/共通頭の省略を吸収して照合（手入力・短縮バーコード両対応）
-  const code = normIdent(input.value);
+  // 照合は読み取ったそのまま（invScanFilter）。表示・個体番号の切り出しにはフル桁を使う
+  const raw = input.value;
+  const code = normIdent(raw);
 
   if (!code) {
     shipScanFail('バーコードが空です。スキャンし直すか、識別コードを入力してください。');
@@ -3978,32 +4005,29 @@ async function handleShippingScan() {
     const orderLabel = shipOrderLabel(cached.order);
 
     // 在庫を取得（削除済みも取得して理由を具体的に返す）
-    const rows = await sb('GET', 'inventory', null, `?${invScanFilter(code)}&select=*`);
+    const rows = await sb('GET', 'inventory', null, `?${invScanFilter(raw)}&select=*`);
     if (!rows.length) {
       // 識別コードが一致しない（部位がラベルで隠れて読めない等）→ 個体番号でその個体の在庫を出して選ばせる。
       // 個体番号は 'TGC-08-<接頭辞><番号>' の3セグメント。部位コードが付いていれば外して個体で検索。
+      // 数字キーは個体番号を含まないので、この切り出しはできない。
+      if (/^\d+$/.test(code)) {
+        shipScanFail(`バーコード「${code}」に対応する在庫がありません。ラベルの個体管理番号（例 TGC-08-M134 / TGC-08-シ013）を入力すると、その個体の在庫一覧から選べます。`); return;
+      }
       const segs = code.split('-');
       const indBase = segs.length >= 4 ? segs.slice(0, 3).join('-') : code;
-      let packs = [];
-      try {
-        packs = await sb('GET', 'inventory', null,
-          `?or=(individual_code.eq.${encodeURIComponent(indBase)},ident_code.like.${encodeURIComponent(indBase + '-*')})&status=eq.在庫&deleted_at=is.null&select=ident_code,part_name,weight&order=ident_code`);
-      } catch (_) {}
-      if (packs.length) {
-        const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/'/g, '&#39;');
-        const btns = packs.map(pk =>
-          `<button type="button" class="btn" style="display:block;width:100%;text-align:left;margin:4px 0;padding:10px;font-size:14px;" `
-          + `onclick="document.getElementById('ship-scan-code').value='${esc(pk.ident_code)}';handleShippingScan();">`
-          + `📦 ${esc(pk.part_name || '-')}　${Number(pk.weight || 0).toFixed(1)}kg　<span style="color:#888;font-size:11px;">${esc(pk.ident_code)}</span></button>`
-        ).join('');
-        shipScanShowResult(false, `個体「${esc(indBase)}」の在庫 ${packs.length}件。割り当てる部位をタップしてください:<div style="margin-top:6px;">${btns}</div>`);
-        return;
-      }
+      if (await shipScanOfferPacks(indBase, `個体「${indBase}」の在庫`)) return;
       shipScanFail(`「${code}」の在庫が見つかりません。ラベルの個体管理番号（例 TGC-08-M134 / TGC-08-シ013）を入力すると、その個体の在庫一覧から選べます。`); return;
     }
     const inv = rows.find(r => !r.deleted_at) || rows[0];
 
-    if (inv.deleted_at) { shipScanFail(`「${code}」は削除済みの在庫です。割当できません。`); return; }
+    if (inv.deleted_at) {
+      // ラベルは出たが、その行は後から削除されている（登録し直しでラベルだけ古いまま等）。
+      // 手元には実物のパックがあるので、同じ個体の生きている在庫を出して選ばせる。
+      const indBase = inv.individual_id || inv.individual_code || '';
+      if (indBase && await shipScanOfferPacks(indBase,
+        `「${code}」は削除済みです（登録し直しなどでラベルだけ古い可能性）。同じ個体「${indBase}」の在庫`)) return;
+      shipScanFail(`「${code}」は削除済みの在庫です。割当できません。`); return;
+    }
     if (inv.status === '出荷済') { shipScanFail(`「${code}」はすでに出荷済みです。`); return; }
     if (inv.status === '廃棄') { shipScanFail(`「${code}」は廃棄済みの在庫です。`); return; }
 
@@ -4049,9 +4073,11 @@ async function handleShippingScan() {
     await sb('PATCH', 'inventory', { status: '引当済', updated_at: new Date().toISOString() }, `?id=eq.${inv.id}`);
 
     const w = parseFloat(inv.weight || inv.weight_kg) || 0;
-    shipScanShowResult(true, `割当完了: <strong>${code}</strong>（${invPart || '-'} ${w ? w.toFixed(1) + 'kg' : '重量不明'}） → 注文 <strong>${orderLabel}</strong> / 商品行「${target.part_name || '-'}」`);
+    // 数字キーで読んだときも、人が照合できるように識別コードで出す
+    const shown = inv.ident_code || code;
+    shipScanShowResult(true, `割当完了: <strong>${shown}</strong>（${invPart || '-'} ${w ? w.toFixed(1) + 'kg' : '重量不明'}） → 注文 <strong>${orderLabel}</strong> / 商品行「${target.part_name || '-'}」`);
     playFeedbackSound(true);
-    toast(`割当完了: ${code} → 注文 ${orderLabel}「${target.part_name || '-'}」`);
+    toast(`割当完了: ${shown} → 注文 ${orderLabel}「${target.part_name || '-'}」`);
     await loadShipping();
   } catch (err) {
     shipScanFail(`通信エラーで割当できませんでした: ${err.message}`);
@@ -4741,29 +4767,50 @@ function asciiLabel(s) {
 // 人が読む識別コード(.bct)や在庫DBのident_codeはフル桁のまま。スキャン側でnormIdentが頭を補完する。
 function shortIdent(full) { return String(full || '').replace(/^TGC-08-/i, ''); }
 
-// 手入力・スキャン照合用の正規化：全角→半角・大文字化・空白除去・共通頭'TGC-08-'の補完。
-// フル桁('TGC-08-...')も短縮桁('M134-PF2')も同じフル桁に寄せて照合できる。
-function normIdent(raw) {
-  let s = String(raw == null ? '' : raw)
+// 文字の揺れだけを吸収する：全角→半角・長音/ダッシュ→ハイフン・空白除去・大文字化。
+// ここでは「何のコードか」を決めない。
+function normScanText(raw) {
+  return String(raw == null ? '' : raw)
     .replace(/[Ａ-Ｚａ-ｚ０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
     .replace(/[－ー−]/g, '-')
     .replace(/\s+/g, '')
     .trim()
     .toUpperCase();
-  if (!s) return '';
-  if (!s.startsWith('TGC')) s = 'TGC-08-' + s;   // 短縮コードに共通頭を補う
-  return s;
+}
+
+/* 読み取った文字列が在庫のどれに当たるかは、勘で決めずに候補を並べて全部照合する。
+   在庫722件を実測した結果（2026-08-28）:
+     - scan_code は1024件すべてが8桁の数字。数字だけの ident_code は0件。
+       → 数字だけなら必ず数字キー。ここに 'TGC-08-' を足すと存在しないコードになる。
+     - ident_code は 'TGC-08-…' が803件、旧ラベルの 'X-428-RO' 形式が57件（うち在庫33件）。
+       → 打った通りの形と、共通頭を補った形の両方を候補にする。 */
+function identCandidates(raw) {
+  const s = normScanText(raw);
+  if (!s) return [];
+  if (/^\d+$/.test(s)) return [s];              // 数字だけ＝数字キー。頭は足さない
+  const out = [s];
+  if (!s.startsWith('TGC')) out.push('TGC-08-' + s);   // 短縮コードに共通頭を補う
+  return out;
+}
+
+// 表示・個体台帳(label_id)の照合に使うフル桁。'M134-PF2' → 'TGC-08-M134-PF2'。
+// 数字キーはコードではないのでそのまま返す（'10000992' に頭を足さない）。
+function normIdent(raw) {
+  const c = identCandidates(raw);
+  return c.length ? c[c.length - 1] : '';
 }
 
 /* スキャン入力から在庫を引くための検索条件を作る。
    ラベルのバーコードは8桁の数字キー(scan_code)。桁数が一定なのでバーが太く、確実に読める。
-   旧ラベル（識別コードを直接印字したもの）や手入力にも従来どおり対応する。 */
+   旧ラベル（識別コードを直接印字したもの）や手入力にも従来どおり対応する。
+   ※ 正規化済みの文字列ではなく、読み取ったそのままの値を渡すこと。
+      先に normIdent を通すと数字キーが 'TGC-08-10000992' になり引けなくなる。 */
 function invScanFilter(raw) {
-  const s = String(raw == null ? '' : raw)
-    .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
-    .replace(/\s+/g, '').trim();
-  if (/^\d{8}$/.test(s)) return 'scan_code=eq.' + s;
-  return 'ident_code=eq.' + encodeURIComponent(normIdent(s));
+  const c = identCandidates(raw);
+  if (!c.length) return 'ident_code=eq.';
+  if (/^\d{8}$/.test(c[0])) return 'scan_code=eq.' + c[0];
+  if (c.length === 1) return 'ident_code=eq.' + encodeURIComponent(c[0]);
+  return 'or=(' + c.map(x => 'ident_code.eq."' + x + '"').join(',') + ')';
 }
 
 // ── ロットコード生成 ──
