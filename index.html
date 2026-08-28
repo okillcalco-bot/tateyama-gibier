@@ -635,9 +635,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 
       <div class="section">
         <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-          <span>&#x1F356; 小分けパック・その他<span style="font-size:12px;color:var(--text3);font-weight:400;">（どの一頭かは特定しない）</span></span>
+          <span>&#x1F356; 小分けパック・加工商品・その他<span style="font-size:12px;color:var(--text3);font-weight:400;">（どの一頭かは特定しない）</span></span>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn btn-sm btn-primary" id="ev-add-lot" onclick="evLotOpen()">＋ 加工品から選ぶ</button>
+            <button class="btn btn-sm btn-primary" id="ev-add-lot" onclick="evLotOpen()">＋ 小分け・加工商品から選ぶ</button>
             <button class="btn btn-sm" id="ev-add-other" onclick="evOtherAdd()">＋ その他の品</button>
           </div>
         </div>
@@ -650,7 +650,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div class="section">
         <div id="ev-d-total" style="font-size:14px;line-height:2;"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
-          <button class="btn btn-primary" onclick="evPrint()">&#x1F5A8; 出店シート（一頭のカード・6個体で1枚）</button>
+          <button class="btn btn-primary" onclick="evPrint()">&#x1F5A8; 出店シート（A4横・QR一覧・6個体で1枚）</button>
           <button class="btn" onclick="evPosterPrint()">&#x1F5A8; 一覧QRのポスター</button>
           <button class="btn" onclick="evReportPrint()">&#x1F4C4; 出店報告書</button>
           <button class="btn btn-danger" style="margin-left:auto;" onclick="evDeleteEvent()">この出店を削除</button>
@@ -2133,7 +2133,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="modal-body">
       <div style="padding:9px 11px;border:1px dashed var(--border);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.8;background:var(--surface2);margin-bottom:10px;">
         まとめて作る商品は、どのパックがどの一頭かを特定しません。
-        <strong>入っている頭</strong>だけを記録し、お客様にもそう見せます。
+        <strong>入っている頭</strong>だけを記録し、お客様にもそう見せます。<br>
+        <strong>加工品の小分け</strong>（ミンチ・スライス）と<strong>加工商品</strong>（味付け肉・つくね串など）の両方が出ます。
       </div>
       <div id="ev-lot-list"></div>
     </div>
@@ -6256,7 +6257,7 @@ function evRenderItems() {
   const lb = document.getElementById('ev-d-lot-body');
   lb.innerHTML = lots.length ? lots.map(i => `<tr>
       <td>${esc2(i.item_name || i.match_key || '-')}
-        <span style="font-size:11px;color:var(--text3);">${i.kind === 'lot' ? '小分け' : 'その他'}</span></td>
+        <span style="font-size:11px;color:var(--text3);">${i.product_id ? '加工商品' : (i.kind === 'lot' ? '小分け' : 'その他')}</span></td>
       <td style="font-size:12px;color:var(--text2);">${(i.member_labels && i.member_labels.length)
         ? `${i.member_labels.length}頭<span style="color:var(--text3);"> ${esc2(i.member_labels.slice(0, 2).join('・'))}${i.member_labels.length > 2 ? ' ほか' : ''}</span>`
         : '<span style="color:var(--text3);">—</span>'}</td>
@@ -6416,17 +6417,16 @@ async function evPickAdd() {
 async function evLotOpen() {
   document.getElementById('ev-lot-modal').classList.add('active');
   const box = document.getElementById('ev-lot-list');
-  box.innerHTML = '<div class="loading"><span class="spin"></span>加工品を読み込み中...</div>';
+  box.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
   try {
+    // ① 加工品の小分け（tier3の在庫）
     const inv = await sb('GET', 'inventory', null,
       `?tier=eq.3&status=eq.${encodeURIComponent('在庫')}&deleted_at=is.null` +
       `&select=id,ident_code,individual_code,part_name,process_type,weight,weight_kg,processed_at&order=processed_at.desc&limit=3000`);
-    if (!inv.length) { box.innerHTML = '<div class="empty-state">加工品の在庫がありません</div>'; return; }
-    // 商品ごとにまとめる（ロットが違っても同じ商品は1行）
     const g = {};
     inv.forEach(x => {
       const key = x.process_type || x.part_name || '加工品';
-      const o = g[key] || (g[key] = { key, qty: 0, kg: 0, batches: new Set() });
+      const o = g[key] || (g[key] = { key, qty: 0, kg: 0, batches: new Set(), src: 'lot' });
       o.qty++; o.kg += evNum(x.weight != null ? x.weight : x.weight_kg);
       if (x.individual_code) o.batches.add(x.individual_code);
     });
@@ -6439,22 +6439,41 @@ async function evLotOpen() {
         `?child_ident_code=in.(${chunk})&individual_id=not.is.null&select=child_ident_code,individual_id&limit=5000`);
       logs.forEach(l => { (members[l.child_ident_code] = members[l.child_ident_code] || new Set()).add(l.individual_id); });
     }
-    const list = Object.values(g).map(o => {
+    const lotList = Object.values(g).map(o => {
       const labels = new Set();
       o.batches.forEach(b => (members[b] || new Set()).forEach(l => labels.add(l)));
       return { ...o, labels: [...labels].sort() };
     }).sort((a, b) => b.qty - a.qty);
-    window.evLotList = list;
-    box.innerHTML = `<div style="overflow-x:auto;max-height:50vh;"><table>
-      <thead><tr><th>商品</th><th>在庫</th><th>入っている頭</th><th>持って行く数</th><th>円/個</th><th></th></tr></thead>
-      <tbody>${list.map((o, n) => `<tr>
-        <td><strong>${esc2(o.key)}</strong></td>
-        <td style="white-space:nowrap;">${o.qty}個<span style="color:var(--text3);font-size:11px;"> ${o.kg.toFixed(2)}kg</span></td>
-        <td style="font-size:12px;color:var(--text2);">${o.labels.length ? `${o.labels.length}頭` : '<span style="color:var(--red);">記録なし</span>'}</td>
-        <td><input class="form-input" type="number" id="ev-lot-q-${n}" style="width:80px;padding:4px 6px;" value="${o.qty}" min="1" max="${o.qty}"></td>
-        <td><input class="form-input" type="number" id="ev-lot-p-${n}" style="width:92px;padding:4px 6px;" placeholder="1200"></td>
+
+    // ② 加工商品（productsマスタ）。味付け肉・つくね串・ジャーキーなど
+    const prods = await sb('GET', 'products', null,
+      '?deleted_at=is.null&select=id,name,category,unit,price,stock_qty&order=category,name');
+    const prodList = prods.map(p => ({
+      key: p.name, qty: evNum(p.stock_qty), kg: 0, labels: [], batches: new Set(),
+      src: 'product', product_id: p.id, price: evNum(p.price), unit: p.unit || '個', category: p.category || ''
+    })).sort((a, b) => b.qty - a.qty);
+
+    window.evLotList = lotList.concat(prodList);
+    const rows = (list, offset) => list.map((o, i) => {
+      const n = offset + i;
+      const zero = o.qty <= 0;
+      return `<tr${zero ? ' style="opacity:.5;"' : ''}>
+        <td><strong>${esc2(o.key)}</strong>${o.category ? `<span style="font-size:11px;color:var(--text3);"> ${esc2(o.category)}</span>` : ''}</td>
+        <td style="white-space:nowrap;">${o.qty}${esc2(o.unit || '個')}${o.kg ? `<span style="color:var(--text3);font-size:11px;"> ${o.kg.toFixed(2)}kg</span>` : ''}</td>
+        <td style="font-size:12px;color:var(--text2);">${o.labels.length ? `${o.labels.length}頭`
+          : (o.src === 'product' ? '<span style="color:var(--text3);">—</span>' : '<span style="color:var(--red);">記録なし</span>')}</td>
+        <td><input class="form-input" type="number" id="ev-lot-q-${n}" style="width:80px;padding:4px 6px;" value="${Math.max(0, o.qty)}" min="0"></td>
+        <td><input class="form-input" type="number" id="ev-lot-p-${n}" style="width:92px;padding:4px 6px;" value="${o.price || ''}" placeholder="1200"></td>
         <td><button class="btn btn-sm btn-primary" style="padding:3px 10px;font-size:12px;" onclick="evLotAdd(${n})">追加</button></td>
-      </tr>`).join('')}</tbody></table></div>`;
+      </tr>`;
+    }).join('');
+    const head = `<thead><tr><th>商品</th><th>在庫</th><th>入っている頭</th><th>持って行く数</th><th>単価(円/個)</th><th></th></tr></thead>`;
+    box.innerHTML = `<div style="overflow-x:auto;max-height:52vh;">
+      <div style="font-size:13px;font-weight:600;margin:4px 0 4px;">小分けパック（精肉を小分けにしたもの）</div>
+      ${lotList.length ? `<table>${head}<tbody>${rows(lotList, 0)}</tbody></table>` : '<div class="empty-state">在庫がありません</div>'}
+      <div style="font-size:13px;font-weight:600;margin:14px 0 4px;">加工商品（味付け肉・つくね串・ジャーキーなど）</div>
+      ${prodList.length ? `<table>${head}<tbody>${rows(prodList, lotList.length)}</tbody></table>` : '<div class="empty-state">商品がありません</div>'}
+    </div>`;
   } catch (e) { box.innerHTML = `<div class="empty-state" style="color:var(--red);">読み込めませんでした：${esc2(e && e.message || e)}</div>`; }
 }
 
@@ -6465,19 +6484,21 @@ async function evLotAdd(n) {
   const qty = parseInt(document.getElementById('ev-lot-q-' + n).value || '0', 10);
   const price = parseInt(document.getElementById('ev-lot-p-' + n).value || '0', 10) || 0;
   if (!(qty > 0)) { alert('持って行く数を入れてください。'); return; }
-  if (qty > o.qty) { alert(`在庫は ${o.qty}個 です。`); return; }
+  if (qty > o.qty && !confirm(`在庫は ${o.qty}${o.unit || '個'} です。${qty}${o.unit || '個'} を持って行くことにしますか？\n（棚卸が合っていない可能性があります）`)) return;
   try {
     await sb('POST', 'sale_event_items', {
       event_id: evCur.id, kind: 'lot', inventory_id: null, ident_code: null, individual_label: null,
       species: null, part_name: null, item_name: o.key, weight_kg: null,
       qty_taken: qty, qty_sold: 0, price_basis: 'unit', unit_price: price,
-      lot_code: [...o.batches][0] || null, match_key: o.key,
-      member_labels: o.labels.length ? o.labels : null, note: null
+      lot_code: o.src === 'lot' ? ([...o.batches][0] || null) : null,
+      match_key: o.src === 'lot' ? o.key : null,
+      product_id: o.src === 'product' ? o.product_id : null,
+      member_labels: o.labels && o.labels.length ? o.labels : null, note: null
     });
     closeModal('ev-lot-modal');
     evItems = await sb('GET', 'sale_event_items', null, `?event_id=eq.${evCur.id}&select=*&order=kind,created_at`);
     evRenderItems();
-    toast(`${o.key} を ${qty}個 追加しました`);
+    toast(`${o.key} を ${qty}${o.unit || '個'} 追加しました`);
   } catch (e) { alert('追加できませんでした：' + (e && e.message || e)); }
 }
 
@@ -6531,6 +6552,13 @@ async function evSettle() {
   try {
     const r = await sb('POST', 'rpc/sale_event_settle', { p_event_id: evCur.id, p_by: evBy() });
     if (await evAfterRpc(r, '売上を確定しました')) {
+      // 加工商品の棚の在庫が減ったので、BASEの在庫も合わせておく
+      for (const it of evItems.filter(x => x.product_id && evNum(x.qty_sold) > 0)) {
+        try {
+          const pr = await sb('GET', 'products', null, `?id=eq.${it.product_id}&select=stock_qty`);
+          if (pr.length) await baseSyncStock(it.product_id, pr[0].stock_qty);
+        } catch (e) { console.warn('BASE同期', e); }
+      }
       if (r.short && r.short.length) {
         alert('次の小分け商品は、在庫が売れた数に足りませんでした。\n在庫の登録を確認してください。\n\n'
           + r.short.map(s => `・${s.item}：売れた ${s.sold}個 / 在庫から落とせた ${s.stock_moved}個`).join('\n'));
@@ -6548,18 +6576,20 @@ async function evReopen() {
 /* ── 印刷: 一頭ごとのカード（A4に6個体） ── */
 function evSheetCss() {
   return `
-    @page { size: A4 portrait; margin: 8mm; }
+    /* 会場では紙コップなどで売るので、お客様が読むQRは商品ではなくこのシートに要る。
+       A4横に一覧として並べ、机の上で見てもらう。 */
+    @page { size: A4 landscape; margin: 8mm; }
     * { box-sizing:border-box; margin:0; padding:0; }
     body { font-family:'Meiryo','Yu Gothic',sans-serif; color:#111; background:#fff; }
-    .pg { width:194mm; height:281mm; display:flex; flex-direction:column; page-break-after:always; }
+    .pg { width:281mm; height:194mm; display:flex; flex-direction:column; page-break-after:always; }
     .pg:last-child { page-break-after:auto; }
     .hd { flex:0 0 13mm; display:flex; align-items:baseline; gap:3mm;
           border-bottom:.6mm solid #8a7648; padding-bottom:1.5mm; }
     .hd .t { font-size:15pt; font-weight:bold; }
     .hd .d { font-size:10pt; color:#444; }
     .hd .p { margin-left:auto; font-size:8.5pt; color:#666; }
-    .gr { flex:1 1 auto; display:grid; grid-template-columns:1fr 1fr;
-          grid-template-rows:repeat(3,1fr); gap:4mm; padding-top:3mm; }
+    .gr { flex:1 1 auto; display:grid; grid-template-columns:repeat(3,1fr);
+          grid-template-rows:repeat(2,1fr); gap:4mm; padding-top:3mm; }
     .cd { border:.4mm solid #8a7648; border-radius:2mm; padding:3.5mm 4mm;
           display:flex; flex-direction:column; overflow:hidden; }
     .cd .no { font-size:9pt; font-weight:bold; font-family:monospace; color:#8a7648; display:flex; white-space:nowrap; }
@@ -6593,7 +6623,7 @@ function evCardHtml(r) {
       ${i.processing_done_at ? `精肉した日　${esc2(evJp(evDateOnly(i.processing_done_at)))}${aging != null ? `（${aging}日ねかせました）` : ''}<br>` : ''}
       ${i.radiation_result ? `放射性物質検査　${esc2(i.radiation_result)}${i.radiation_test_date ? `（${esc2(evJp(i.radiation_test_date))}）` : ''}` : ''}
     </div>
-    <div class="pt"><span class="lb">本日お持ちした部位</span><br>${esc2(parts) || '—'}</div>
+    <div class="pt"><span class="lb">今日つかっているお肉</span><br>${esc2(parts) || '—'}</div>
     <div class="ft">
       <div class="qr">${makeQRSVG(individualStoryUrl(label), 28)}</div>
       <div class="qx"><b>この一頭の記録</b>
@@ -6768,7 +6798,7 @@ function evReportPrint() {
       <thead><tr><th>品名</th><th>種類</th><th>入っている頭</th><th>持参</th><th>売れた</th><th>単価</th><th>金額</th></tr></thead>
       <tbody>${lots.map(i => `<tr>
         <td>${esc2(i.item_name || i.match_key || '-')}</td>
-        <td>${i.kind === 'lot' ? '小分け（個体は特定せず）' : 'その他'}</td>
+        <td>${i.product_id ? '加工商品（個体は特定せず）' : (i.kind === 'lot' ? '小分け（個体は特定せず）' : 'その他')}</td>
         <td>${(i.member_labels && i.member_labels.length) ? i.member_labels.length + '頭' : '—'}</td>
         <td class="n">${evNum(i.qty_taken)}</td>
         <td class="n">${evNum(i.qty_sold)}</td>

@@ -1,5 +1,6 @@
 // 出店シート（お客様に見せる「今日はどの個体を食べられる？」の一覧）
-//   ・A4の実寸で描いて、6個体が枠からはみ出さないこと・QRが文字に重ならないことを実測する
+//   ・A4横の実寸で描いて、6個体が枠からはみ出さないこと・QRが文字に重ならないことを実測する
+//     （会場では紙コップなどで売るので、お客様が読むQRは商品ではなくこのシートに要る）
 //   ・QRの中身をデコードし直して、その個体の物語ページのURLに戻ることを確かめる
 //   ・在庫→個体のまとめ方、選択と枚数、印刷の分割を画面から動かして確かめる
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
@@ -201,16 +202,19 @@ const INDS = [
       }),
       // 見出し
       title: doc.querySelector('.hd .t').textContent,
-      date: doc.querySelector('.hd .d').textContent
+      date: doc.querySelector('.hd .d').textContent,
+      pageRule: (doc.querySelector('style').textContent.match(/@page\s*\{[^}]*\}/) || [''])[0].replace(/\s+/g, ' '),
+      landscape: /size:\s*A4 landscape/.test(doc.querySelector('style').textContent)
     };
     f.remove();
     return out;
   }, ROWS);
 
-  T('用紙が194mm幅', Math.abs(layout.pageWmm - 194) < 0.3, layout.pageWmm.toFixed(1) + 'mm');
-  T('用紙が281mm高', Math.abs(layout.pageHmm - 281) < 0.3, layout.pageHmm.toFixed(1) + 'mm');
+  T('用紙がA4横（281mm幅）', Math.abs(layout.pageWmm - 281) < 0.3, layout.pageWmm.toFixed(1) + 'mm');
+  T('用紙がA4横（194mm高）', Math.abs(layout.pageHmm - 194) < 0.3, layout.pageHmm.toFixed(1) + 'mm');
+  T('印刷指定もA4横', layout.landscape, layout.pageRule);
   T('1枚に6個体', layout.cards === 6, layout.cards);
-  T('2列3段に並ぶ', layout.cols === 2 && layout.rows === 3, `${layout.cols}列${layout.rows}段`);
+  T('3列2段に並ぶ', layout.cols === 3 && layout.rows === 2, `${layout.cols}列${layout.rows}段`);
   T('見出しと日付が出る', layout.title.includes('出店') && layout.date === '8月29日', layout.title + ' / ' + layout.date);
   layout.each.forEach((c, n) => {
     T(`カード${n + 1}: 中身が枠からあふれない`, c.overflow <= 1, c.overflow + 'px');
@@ -293,6 +297,7 @@ const INDS = [
       { kind: 'inventory', individual_label: 'TGC-08-M169', part_name: 'ロース',   weight_kg: 2.10, species: 'イノシシ' },
       { kind: 'inventory', individual_label: 'TGC-08-M168', part_name: '唐揚げ用', weight_kg: 1.62, species: 'イノシシ' },
       { kind: 'lot',   item_name: 'スライス肉（3mm）', qty_taken: 7, member_labels: ['TGC-08-M159', 'TGC-08-M160'] },
+      { kind: 'lot',   item_name: '味付け肉 うま辛 250g', product_id: 'pr1', qty_taken: 20 },
       { kind: 'other', item_name: 'ジビエカレー', qty_taken: 20 }
     ];
     evIndCache = {};
@@ -300,7 +305,7 @@ const INDS = [
     return { n: rows.length, labels: rows.map(r => r.label), packs: rows.map(r => r.packs.length) };
   });
   T('カードは個体ごとに1枚', mixed.n === 2, mixed.labels.join(','));
-  T('小分け・その他はカードにしない', !mixed.labels.some(l => /スライス|カレー/.test(l)), mixed.labels.join(','));
+  T('小分け・加工商品はカードにしない', !mixed.labels.some(l => /スライス|味付け/.test(l)), mixed.labels.join(','));
   T('同じ個体の複数パックは1枚にまとめる', mixed.packs[0] === 2, JSON.stringify(mixed.packs));
 
   T('pageerrorなし', errors.length === 0, errors.join(' / '));

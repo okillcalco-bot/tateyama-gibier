@@ -166,17 +166,17 @@ function renderEvent(){
   }
 
   if(lots.length){
-    h+=`<div class="card"><h2><span class="ic">🍖</span>小分けパック（${lots.length}種）</h2>
+    h+=`<div class="card"><h2><span class="ic">🍖</span>小分けパック・加工商品（${lots.length}種）</h2>
       <div style="font-size:13px;color:var(--ink2);margin:-6px 0 10px;">
-        まとめて作るので、<b>どのパックがどの一頭かは特定できません。</b><br>
-        入っている一頭たちをすべて載せています。
+        まとめて作るので、<b>どの一つがどの一頭かは特定できません。</b><br>
+        分かっているものは、入っている一頭たちをすべて載せています。
       </div>
       ${lots.map(l=>`<div class="lot">
         <div class="lot-h">${esc(l.name||'—')}<span class="lot-q">${esc(l.qty)}個</span></div>
         ${(l.members&&l.members.length)
           ? `<div class="lot-n">この商品に入っている ${l.members.length}頭</div>
              <div class="chips">${l.members.map(m=>`<a class="chip chip-a" href="?i=${encodeURIComponent(m.label)}">${esc(m.place||m.label)}</a>`).join('')}</div>`
-          : '<div class="lot-n">原料の記録は準備中です</div>'}
+          : `<div class="lot-n">${l.kind==='product'?'加工商品':'原料の記録は準備中です'}</div>`}
       </div>`).join('')}
     </div>`;
   }
