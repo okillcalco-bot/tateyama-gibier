@@ -17,12 +17,12 @@ const EVENT = {
       processed_date: '2026/08/27', aging_days: 14, parts: ['唐揚げ用'] }
   ],
   lots: [
-    { name: 'スライス肉（3mm）', qty: 7, members: [
+    { name: 'スライス肉（3mm）', qty: 7, kind: 'lot', members: [
       { label: 'TGC-08-M159', place: '南房総市 白浜町', capture_date: '2026/08/01' },
       { label: 'TGC-08-M160', place: '館山市 神余',     capture_date: '2026/08/02' },
       { label: 'TGC-08-M161', place: '館山市 山本',     capture_date: '2026/08/03' }
     ] },
-    { name: 'ジビエカレー', qty: 20, members: [] }
+    { name: '味付け肉 うま辛 250g', qty: 20, kind: 'product', members: [] }
   ]
 };
 
@@ -93,15 +93,16 @@ async function open(query, reply) {
       links.includes('?i=TGC-08-M169') && links.includes('?i=TGC-08-M168'), links.join(','));
     T('部位も見せる', /唐揚げ用/.test(txt) && /ロース/.test(txt), '');
 
-    T('小分けは別の見出しにする', /小分けパック（2種）/.test(txt), '');
-    T('小分けは特定できないと明記する', /どのパックがどの一頭かは特定できません/.test(txt), '');
+    T('小分けは別の見出しにする', /小分けパック・加工商品（2種）/.test(txt), '');
+    T('小分けは特定できないと明記する', /どの一つがどの一頭かは特定できません/.test(txt), '');
     T('小分けの個数が出る', /スライス肉（3mm）/.test(txt) && /7個/.test(txt), '');
     T('小分けは入っている頭を出す', /この商品に入っている 3頭/.test(txt), '');
     const lotLinks = await page.$$eval('.chip-a', els => els.map(e => e.getAttribute('href')));
     T('小分けの頭もタップで詳細へ飛べる', lotLinks.includes('?i=TGC-08-M159'), lotLinks.join(','));
-    T('原料の記録が無い品はそう書く', /原料の記録は準備中です/.test(txt), '');
+    T('加工商品もその欄に出る', /味付け肉 うま辛 250g/.test(txt) && /20個/.test(txt), '');
+    T('加工商品は原料未記録でも「加工商品」と出す', /加工商品/.test(txt) && !/原料の記録は準備中です/.test(txt), '');
     T('小分けを個体カードに混ぜない',
-      !links.some(h => /スライス|カレー/.test(h)), links.join(','));
+      !links.some(h => /スライス|味付け/.test(h)), links.join(','));
     T('pageerrorなし(1)', errors.length === 0, errors.join(' / '));
     await browser.close();
   }

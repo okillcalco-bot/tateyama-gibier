@@ -19,6 +19,10 @@ const INV3 = [
   { id: 's3', ident_code: 'TGC-SL-20260825-003', individual_code: 'TGC-SLB-20260825-001', part_name: 'スライス用', process_type: 'スライス肉（3mm）', weight: 0.3, processed_at: '2026-08-25T01:43:41+00:00' },
   { id: 'm1', ident_code: 'TGC-MI-20260826-001', individual_code: 'TGC-MIB-20260826-001', part_name: 'ミンチ用', process_type: 'ミンチ肉（粗挽き）', weight: 0.5, processed_at: '2026-08-26T04:53:32+00:00' },
 ];
+const PRODUCTS = [
+  { id: 'pr1', name: '味付け肉 うま辛 250g', category: '小売', unit: '袋', price: 1000, stock_qty: 73 },
+  { id: 'pr2', name: 'イノシシジャーキー スライス 50g', category: '小売', unit: '袋', price: 800, stock_qty: 0 },
+];
 const LOGS = [
   { child_ident_code: 'TGC-SLB-20260825-001', individual_id: 'TGC-08-M159' },
   { child_ident_code: 'TGC-SLB-20260825-001', individual_id: 'TGC-08-M160' },
@@ -130,6 +134,7 @@ const PAST_ITEMS = [
         .split(',').map(x => x.replace(/"/g, ''));
       return J(LOGS.filter(l => want.includes(l.child_ident_code)));
     }
+    if (/\/rest\/v1\/products/.test(u)) return J(PRODUCTS);
     if (/\/rest\/v1\/individuals/.test(u)) {
       const mm = decodeURIComponent(u).match(/label_id=in\.\(([^)]*)\)/);
       if (mm) { const want = mm[1].split(',').map(x => x.replace(/"/g, '')); return J(INDS.filter(i => want.includes(i.label_id))); }
@@ -227,11 +232,37 @@ const PAST_ITEMS = [
   T('小分けは別の表に出る', /スライス肉（3mm）/.test(lotBody) && !/スライス肉（3mm）/.test(await page.$eval('#ev-d-ind-body', el => el.textContent)), '');
   T('小分けの表に「入っている頭」が出る', /3頭/.test(lotBody), lotBody.slice(0, 90));
 
+  // ── 4b) 加工商品（productsマスタ）も同じ欄から選べる ──
+  await page.click('#ev-add-lot');
+  await page.waitForTimeout(700);
+  const lotTxt2 = await page.$eval('#ev-lot-list', el => el.textContent.replace(/\s+/g, ' '));
+  T('加工商品も同じ画面に出る', /味付け肉 うま辛 250g/.test(lotTxt2), lotTxt2.slice(0, 140));
+  T('小分けと加工商品を見出しで分ける',
+    /小分けパック（精肉を小分けにしたもの）/.test(lotTxt2) && /加工商品（味付け肉/.test(lotTxt2), '');
+  T('加工商品は棚の在庫数が出る', /73袋/.test(lotTxt2), lotTxt2.slice(0, 200));
+  T('加工商品は登録された値段が入る',
+    await page.evaluate(() => {
+      const n = (window.evLotList || []).findIndex(o => o.key === '味付け肉 うま辛 250g');
+      return document.getElementById('ev-lot-p-' + n).value === '1000';
+    }), '');
+  await page.evaluate(() => {
+    const n = (window.evLotList || []).findIndex(o => o.key === '味付け肉 うま辛 250g');
+    document.getElementById('ev-lot-q-' + n).value = '20';
+    evLotAdd(n);
+  });
+  await page.waitForTimeout(600);
+  const prodItem = await page.evaluate(() => evItems.find(i => i.product_id));
+  T('加工商品は product_id を持つ', prodItem && prodItem.product_id === 'pr1', prodItem && prodItem.product_id);
+  T('加工商品も個体に紐づけない', prodItem && !prodItem.individual_label && !prodItem.inventory_id, '');
+  T('加工商品は在庫の落とし方が別（match_keyを使わない）', prodItem && !prodItem.match_key, String(prodItem && prodItem.match_key));
+  T('明細に「加工商品」と出る',
+    /加工商品/.test(await page.$eval('#ev-d-lot-body', el => el.textContent)), '');
+
   // ── 5) 持ち出し → 売上 → 取り消し ──
   rpcCalls.length = 0; asked.length = 0;
   await page.click('button[onclick="evTakeout()"]');
   await page.waitForTimeout(700);
-  T('持ち出しの確認に点数を出す', asked.some(a => /一頭もの 3点/.test(a) && /小分け・その他 3個/.test(a)), asked.join(' / ').slice(0, 90));
+  T('持ち出しの確認に点数を出す', asked.some(a => /一頭もの 3点/.test(a) && /小分け・その他 23個/.test(a)), asked.join(' / ').slice(0, 90));
   T('持ち出しRPCを呼ぶ', rpcCalls.some(c => c.fn === 'takeout'), rpcCalls.map(c => c.fn).join(','));
   T('持ち出し後は追加できない', await page.$eval('#ev-add-ind', el => el.disabled), '');
   T('状態が持ち出し済になる', /持ち出し済/.test(await page.$eval('#ev-d-head', el => el.textContent)), '');
@@ -254,7 +285,7 @@ const PAST_ITEMS = [
   await page.waitForTimeout(600);
   const totalTxt = await page.$eval('#ev-d-total', el => el.textContent.replace(/\s+/g, ' '));
   T('金額が計算される（1.31×3000＋1200×2）', /¥6,330/.test(totalTxt), totalTxt.slice(0, 120));
-  T('一頭ものと小分けを別々に数える', /1 \/ 3点/.test(totalTxt) && /2 \/ 3個/.test(totalTxt), totalTxt.slice(0, 120));
+  T('一頭ものと小分けを別々に数える', /1 \/ 3点/.test(totalTxt) && /2 \/ 23個/.test(totalTxt), totalTxt.slice(0, 120));
 
   rpcCalls.length = 0;
   await page.click('button[onclick="evSettle()"]');
