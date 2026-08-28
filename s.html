@@ -56,6 +56,20 @@
   .voice .cm{margin-top:4px;white-space:pre-wrap}
   footer{text-align:center;font-size:11.5px;color:var(--ink3);margin-top:26px;line-height:1.9}
   .center{text-align:center;color:var(--ink2);padding:30px 10px}
+  /* 一覧から一頭へ飛ぶ行 */
+  .lnk{display:flex;align-items:center;gap:10px;padding:11px 2px;border-bottom:1px solid var(--line);
+    text-decoration:none;color:inherit}
+  .lnk:last-of-type{border-bottom:none}
+  .lnk-main{flex:1 1 auto;min-width:0}
+  .lnk-t{font-size:16px;font-weight:700}
+  .lnk-s{font-size:13px;color:var(--ink2);margin-top:2px}
+  .lnk-go{flex:0 0 auto;color:var(--ink3);font-size:20px;line-height:1}
+  .chip-a{text-decoration:none}
+  .lot{border-top:1px solid var(--line);padding:12px 0}
+  .lot:first-of-type{border-top:none}
+  .lot-h{font-size:16px;font-weight:700;display:flex;align-items:baseline;gap:8px}
+  .lot-q{margin-left:auto;font-size:13px;color:var(--ink2);font-weight:400}
+  .lot-n{font-size:12.5px;color:var(--ink3);margin:4px 0 2px}
 </style>
 </head>
 <body>
@@ -86,22 +100,29 @@ async function rpc(fn,args){
 function param(k){ return new URLSearchParams(location.search).get(k)||''; }
 
 let story=null, rating=0;
-// ?c=8桁 … パックのラベルから（お手元のお肉）
-// ?i=個体番号 … 出店シートなど、個体そのものから
+// ?c=8桁     … パックのラベルから（お手元のお肉）
+// ?i=個体番号 … 個体そのものから
+// ?e=出店ID   … 出店の会場に貼る一覧
 const code=param('c').replace(/[^0-9]/g,'');
 const label=param('i').replace(/[^0-9A-Za-z\-぀-ヿ一-鿿]/g,'').slice(0,40);
-const byIndividual=!code && !!label;
+const eventId=param('e').replace(/[^0-9a-fA-F-]/g,'').slice(0,36);
+const mode = eventId ? 'event' : (code ? 'pack' : (label ? 'individual' : 'none'));
+const byIndividual = mode==='individual';
 
 function fetchStory(){
-  return byIndividual ? rpc('story_get_individual',{p_label:label})
-                      : rpc('story_get',{p_code:code});
+  if(mode==='event')      return rpc('story_get_event',{p_event_id:eventId});
+  if(mode==='individual') return rpc('story_get_individual',{p_label:label});
+  return rpc('story_get',{p_code:code});
 }
 
 async function load(){
   const box=document.getElementById('main');
-  if(!code && !label){ box.innerHTML='<div class="center">お肉のラベルのQRコードから開いてください。</div>'; return; }
-  if(byIndividual){
-    document.querySelector('header .sub').textContent='この一頭が、どこで生まれてどう届いたか';
+  const sub=document.querySelector('header .sub');
+  if(mode==='none'){ box.innerHTML='<div class="center">お肉のラベルのQRコードから開いてください。</div>'; return; }
+  if(mode==='individual') sub.textContent='この一頭が、どこで生まれてどう届いたか';
+  if(mode==='event'){
+    document.querySelector('header h1').textContent='本日のジビエ';
+    sub.textContent='いま並んでいるお肉が、どこで獲れた一頭か';
   }
   try{
     story=await fetchStory();
@@ -109,16 +130,70 @@ async function load(){
     box.innerHTML='<div class="center">うまく読み込めませんでした。時間をおいてお試しください。</div>'; return;
   }
   if(!story){
-    box.innerHTML=byIndividual
+    box.innerHTML= mode==='event'
+      ? '<div class="center">この出店の一覧が見つかりませんでした。</div>'
+      : mode==='individual'
       ? '<div class="center">この個体番号が見つかりませんでした。<br>番号をご確認ください。</div>'
       : '<div class="center">この番号のお肉が見つかりませんでした。<br>ラベルの数字をご確認ください。</div>';
     return;
   }
-  render();
+  if(mode==='event') renderEvent(); else render();
+}
+
+/* 出店の一覧。
+   個体が分かるお肉と、小分けパックは分けて出す。
+   小分けは「300個のうちのどれか」なので、どの一頭かは言えない。入っている頭たちだけ並べる。 */
+function renderEvent(){
+  const ev=story.event||{}, inds=story.individuals||[], lots=story.lots||[];
+  let h='';
+  h+=`<div class="card prod">
+    <div class="nm">${esc(ev.venue||'')}</div>
+    <div class="kg">${esc(ev.date||'')}${ev.end_date&&ev.end_date!==ev.date?` 〜 ${esc(ev.end_date)}`:''}</div>
+    ${ev.title?`<div class="cd">${esc(ev.title)}</div>`:''}
+  </div>`;
+
+  if(inds.length){
+    h+=`<div class="card"><h2><span class="ic">🌿</span>一頭ずつ分かるお肉（${inds.length}頭）</h2>
+      <div style="font-size:13px;color:var(--ink2);margin:-6px 0 10px;">タップすると、その一頭の記録が開きます。</div>
+      ${inds.map(i=>`<a class="lnk" href="?i=${encodeURIComponent(i.label)}">
+        <div class="lnk-main">
+          <div class="lnk-t">${esc(i.place||'—')}</div>
+          <div class="lnk-s">${esc(i.species||'')}${i.sex?`（${esc(i.sex)}）`:''}${i.weight_total?` ${esc(i.weight_total)}kg`:''}
+            ${i.capture_date?` ・ ${esc(i.capture_date)}獲れ`:''}</div>
+          ${(i.parts&&i.parts.length)?`<div class="chips">${i.parts.map(p=>`<span class="chip">${esc(p)}</span>`).join('')}</div>`:''}
+        </div><span class="lnk-go">›</span></a>`).join('')}
+    </div>`;
+  }
+
+  if(lots.length){
+    h+=`<div class="card"><h2><span class="ic">🍖</span>小分けパック（${lots.length}種）</h2>
+      <div style="font-size:13px;color:var(--ink2);margin:-6px 0 10px;">
+        まとめて作るので、<b>どのパックがどの一頭かは特定できません。</b><br>
+        入っている一頭たちをすべて載せています。
+      </div>
+      ${lots.map(l=>`<div class="lot">
+        <div class="lot-h">${esc(l.name||'—')}<span class="lot-q">${esc(l.qty)}個</span></div>
+        ${(l.members&&l.members.length)
+          ? `<div class="lot-n">この商品に入っている ${l.members.length}頭</div>
+             <div class="chips">${l.members.map(m=>`<a class="chip chip-a" href="?i=${encodeURIComponent(m.label)}">${esc(m.place||m.label)}</a>`).join('')}</div>`
+          : '<div class="lot-n">原料の記録は準備中です</div>'}
+      </div>`).join('')}
+    </div>`;
+  }
+
+  if(!inds.length && !lots.length){
+    h+='<div class="center">この出店に持ってきたお肉は、まだ登録されていません。</div>';
+  }
+
+  h+=`<div class="card" style="text-align:center;font-size:13.5px;color:var(--ink2);">
+    お買い上げのお肉は、ラベルのQRから<br>その一頭の記録と感想欄が開きます。
+  </div>`;
+  document.getElementById('main').innerHTML=h;
 }
 
 function render(){
   const p=story.product||{}, i=story.individual, parts=story.parts||[], voices=story.voices||[];
+  const blend=story.blend||null;      // 複数頭を混ぜた小分けパックのとき、入っている頭たち
   let h='';
 
   if(p && p.name){
@@ -133,6 +208,23 @@ function render(){
       <div class="nm">${esc(i.place||'—')} の一頭</div>
       <div class="kg">${esc(i.species||'')}${i.sex?`（${esc(i.sex)}）`:''}${i.weight_total?` ${esc(i.weight_total)} kg`:''}</div>
       <div class="cd">${esc(i.label||'')}</div>
+    </div>`;
+  }
+
+  // まとめて作る商品は、どのパックがどの一頭かを言えない。入っている頭を全部載せる。
+  if(blend && blend.length){
+    h+=`<div class="card"><h2><span class="ic">🍖</span>この商品に入っている ${blend.length}頭</h2>
+      <div style="font-size:13px;color:var(--ink2);margin:-6px 0 10px;">
+        まとめて作っているため、<b>このパックがどの一頭かは特定できません。</b>
+        使った一頭をすべて載せています。タップすると、その一頭の記録が開きます。
+      </div>
+      ${blend.map(b=>`<a class="lnk" href="?i=${encodeURIComponent(b.label)}">
+        <div class="lnk-main">
+          <div class="lnk-t">${esc(b.place||'—')}</div>
+          <div class="lnk-s">${esc(b.species||'')}${b.sex?`（${esc(b.sex)}）`:''}${b.capture_date?` ・ ${esc(b.capture_date)}獲れ`:''}${b.method?` ・ ${esc(b.method)}`:''}</div>
+        </div><span class="lnk-go">›</span></a>`).join('')}
+      ${blend.every(b=>b.radiation_result)
+        ? `<div class="safe" style="margin-top:10px;">放射性物質検査：<b>${blend.length}頭すべて ${esc(blend[0].radiation_result)}</b></div>` : ''}
     </div>`;
   }
 
@@ -163,7 +255,7 @@ function render(){
 
   h+=`<div class="card">
     <h2><span class="ic">💬</span>召し上がった感想をお聞かせください</h2>
-    <div style="font-size:13px;color:var(--ink2);margin-bottom:6px;">いただいた声は、この一頭の記録として残ります。<br>センターで確認したのち、このページに掲載させていただきます。</div>
+    <div style="font-size:13px;color:var(--ink2);margin-bottom:6px;">いただいた声は、${blend?'この商品':'この一頭'}の記録として残ります。<br>センターで確認したのち、このページに掲載させていただきます。</div>
     <label>おいしさ</label>
     <div class="stars" id="stars">${[1,2,3,4,5].map(n=>`<button type="button" data-n="${n}" onclick="setRating(${n})">★</button>`).join('')}</div>
     <label for="dish">どんな料理にしましたか（任意）</label>
@@ -172,12 +264,12 @@ function render(){
     <textarea id="comment" maxlength="1000" placeholder="味わい、驚いたこと、どなたと召し上がったか など"></textarea>
     <label for="nickname">お名前・ニックネーム（任意）</label>
     <input id="nickname" maxlength="60" placeholder="例: 館山の田中">
-    <button class="send" id="send" onclick="send()">この一頭に感想を残す</button>
+    <button class="send" id="send" onclick="send()">${blend?'この商品':'この一頭'}に感想を残す</button>
     <div class="msg" id="msg"></div>
   </div>`;
 
   if(voices.length){
-    h+=`<div class="card"><h2><span class="ic">🍽</span>この一頭を召し上がった方の声</h2>
+    h+=`<div class="card"><h2><span class="ic">🍽</span>${blend?'この商品':'この一頭'}を召し上がった方の声</h2>
       ${voices.map(v=>`<div class="voice">
         <div class="top"><span class="nm">${esc(v.nickname||'名前なし')}</span>
           ${v.rating?`<span style="color:var(--gold)">${'★'.repeat(v.rating)}</span>`:''}
@@ -213,10 +305,11 @@ async function send(){
           p_rating:rating||null, p_dish:document.getElementById('dish').value, p_comment:comment});
     if(r && r.ok){
       msg.style.color='var(--moss)';
-      msg.textContent='ありがとうございました。この一頭の記録に残りました。センターで確認のうえ掲載します。';
+      const thanks='ありがとうございました。'+(story&&story.blend?'この商品':'この一頭')+'の記録に残りました。センターで確認のうえ掲載します。';
+      msg.textContent=thanks;
       story=await fetchStory(); rating=0; render();
       const m2=document.getElementById('msg');
-      if(m2){ m2.style.color='var(--moss)'; m2.textContent='ありがとうございました。この一頭の記録に残りました。センターで確認のうえ掲載します。'; }
+      if(m2){ m2.style.color='var(--moss)'; m2.textContent=thanks; }
     }else{
       msg.style.color='var(--gold)'; msg.textContent=(r&&r.error)||'送信できませんでした。';
       btn.disabled=false;
