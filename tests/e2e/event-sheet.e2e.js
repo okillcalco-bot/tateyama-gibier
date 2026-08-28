@@ -245,69 +245,63 @@ const INDS = [
   T('QRの行き先はパックでなく個体（?i=）',
     /\/s\.html\?i=/.test(mats[0].url) && !/\?c=/.test(mats[0].url), mats[0].url);
 
-  // ── 3) 画面から: 在庫を個体ごとにまとめる ──
-  await page.click('.tab-btn[data-tab="event"]');
-  await page.waitForTimeout(900);
-  const listed = await page.$$eval('#ev-list tbody tr', trs => trs.map(tr => tr.children[1].textContent.trim()));
-  T('個体ごとに1行にまとまる（M167の2パックが1行）', listed.length === 3, listed.join(','));
-  T('最近30日より古い個体は出ない', !listed.includes('TGC-08-T100'), listed.join(','));
-  T('新しく精肉した順に並ぶ', listed[0] === 'TGC-08-M169', listed.join(','));
-  const m167 = await page.$$eval('#ev-list tbody tr', trs => {
-    const tr = trs.find(t => t.children[1].textContent.includes('M167'));
-    return tr ? tr.children[5].textContent.trim() : '';
+  // ── 3) 会場に貼る「一覧QR」のポスター ──
+  const EVID = '3f2a1b6c-1111-4222-8333-444455556666';
+  const poster = await page.evaluate(async id => {
+    const html = evPosterHtml(id, 'テスト会場', '8月29日', 6, 2);
+    const f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;left:-9999px;top:0;border:0;width:210mm;height:297mm;';
+    document.body.appendChild(f);
+    const doc = f.contentDocument; doc.open(); doc.write(html); doc.close();
+    await new Promise(r => setTimeout(r, 200));
+    const probe = doc.createElement('div');
+    probe.style.cssText = 'width:10mm;position:absolute'; doc.body.appendChild(probe);
+    const mm = probe.getBoundingClientRect().width / 10; probe.remove();
+    const po = doc.querySelector('.po').getBoundingClientRect();
+    const qr = doc.querySelector('.qr svg').getBoundingClientRect();
+    const out = {
+      wMm: po.width / mm, hMm: po.height / mm, qrMm: qr.width / mm,
+      overflow: doc.querySelector('.po').scrollHeight - doc.querySelector('.po').clientHeight,
+      text: doc.body.textContent.replace(/\s+/g, ' '),
+      url: eventListUrl(id)
+    };
+    f.remove();
+    return out;
+  }, EVID);
+  T('ポスターがA4に収まる', poster.overflow <= 1 && Math.abs(poster.wMm - 186) < 0.3, `${poster.overflow}px / ${poster.wMm.toFixed(1)}mm`);
+  T('ポスターのQRが96mm', Math.abs(poster.qrMm - 96) < 0.5, poster.qrMm.toFixed(1) + 'mm');
+  T('ポスターは出店の一覧へ飛ぶ', poster.url === 'https://tateyama-gibier.vercel.app/s.html?e=' + EVID, poster.url);
+  T('小分けがあることも書く', /小分けパックは、入っている一頭たちをすべて載せています/.test(poster.text), '');
+  T('会場と日付が出る', poster.text.includes('テスト会場') && poster.text.includes('8月29日'), '');
+
+  const pmat = await page.evaluate(id => {
+    const svg = makeQRSVG(eventListUrl(id), 96);
+    const T2 = +svg.match(/viewBox="0 0 (\d+)/)[1], N = T2 - 8;
+    const g = Array.from({ length: N }, () => new Array(N).fill(0));
+    const re = /<rect x="(\d+)" y="(\d+)" width="1"/g; let m;
+    while ((m = re.exec(svg))) { const x = +m[1] - 4, y = +m[2] - 4; if (x >= 0 && y >= 0 && x < N && y < N) g[y][x] = 1; }
+    return { g, url: eventListUrl(id) };
+  }, EVID);
+  let pok = '';
+  try { pok = decodeQR(pmat.g).text; } catch (e) { pok = 'ERR ' + e.message; }
+  T('ポスターのQRを読み直すと一覧URLに戻る', pok === pmat.url, pok);
+
+  // ── 4) 一頭のカードには小分けを混ぜない ──
+  const mixed = await page.evaluate(() => {
+    evItems = [
+      { kind: 'inventory', individual_label: 'TGC-08-M169', part_name: '唐揚げ用', weight_kg: 1.31, species: 'イノシシ' },
+      { kind: 'inventory', individual_label: 'TGC-08-M169', part_name: 'ロース',   weight_kg: 2.10, species: 'イノシシ' },
+      { kind: 'inventory', individual_label: 'TGC-08-M168', part_name: '唐揚げ用', weight_kg: 1.62, species: 'イノシシ' },
+      { kind: 'lot',   item_name: 'スライス肉（3mm）', qty_taken: 7, member_labels: ['TGC-08-M159', 'TGC-08-M160'] },
+      { kind: 'other', item_name: 'ジビエカレー', qty_taken: 20 }
+    ];
+    evIndCache = {};
+    const rows = evCardRows();
+    return { n: rows.length, labels: rows.map(r => r.label), packs: rows.map(r => r.packs.length) };
   });
-  T('同じ個体の複数パックが1行にまとまる', /1\.18kg/.test(m167) && /1\.39kg/.test(m167), m167);
-  T('獲れた場所が出る',
-    (await page.$$eval('#ev-list tbody tr', trs => trs.map(t => t.children[2].textContent))).some(s => s.includes('珠師ケ谷')), '');
-  T('部位の選択肢が在庫から作られる',
-    (await page.$eval('#ev-part', el => [...el.options].map(o => o.value).join(','))).includes('唐揚げ用'), '');
-
-  // ── 4) 選択と枚数 ──
-  T('はじめは未選択', (await page.$eval('#ev-count', el => el.textContent)) === '0個体を選択中', '');
-  await page.click('#ev-all');
-  await page.waitForTimeout(150);
-  T('全選択すると枚数が出る', /3個体を選択中（A4 1枚）/.test(await page.$eval('#ev-count', el => el.textContent)),
-    await page.$eval('#ev-count', el => el.textContent));
-  const pages7 = await page.evaluate(() => {
-    evRows = Array.from({ length: 7 }, (_, n) => ({ label: 'X' + n, packs: [], ind: null }));
-    evSelected = new Set(evRows.map(r => r.label));
-    evUpdateCount();
-    return document.getElementById('ev-count').textContent;
-  });
-  T('7個体ならA4 2枚', /7個体を選択中（A4 2枚）/.test(pages7), pages7);
-
-  // ── 5) 印刷の分割と、印刷前の確認 ──
-  const split = await page.evaluate(rows => {
-    evRows = rows.slice();
-    evSelected = new Set(rows.map(r => r.label));
-    // 印刷せずに組み立てだけ確かめる
-    const picked = evRows.filter(r => evSelected.has(r.label));
-    const pages = [];
-    for (let i = 0; i < picked.length; i += 6) pages.push(picked.slice(i, i + 6));
-    return { pages: pages.length, first: pages[0].length, last: pages[pages.length - 1].length };
-  }, [...ROWS, ...ROWS.slice(0, 2)]);   // 8個体
-  T('8個体は2枚（6+2）', split.pages === 2 && split.first === 6 && split.last === 2, JSON.stringify(split));
-
-  asked.length = 0;
-  await page.evaluate(() => { evSelected = new Set(); evPrint(); });
-  await page.waitForTimeout(200);
-  T('何も選ばずに印刷したら止める', asked.some(a => /選んでください/.test(a)), asked.join(' / '));
-
-  asked.length = 0;
-  await page.evaluate(rows => {
-    evRows = rows.slice(); evSelected = new Set(['TGC-08-T999']);
-    document.getElementById('ev-title').value = 'テスト';
-    evPrint();
-  }, ROWS);
-  await page.waitForTimeout(200);
-  T('記録が無い個体は印刷前に知らせる',
-    asked.some(a => /捕獲の記録が見つからない/.test(a) && /TGC-08-T999/.test(a)), asked.join(' / '));
-
-  // ── 6) 精肉(tier2)だけを対象にする（ミンチ・スライスは個体が混ざる） ──
-  T('在庫の問い合わせはtier2のみ', seen.inv.length > 0 && seen.inv.every(u => /tier=eq\.2/.test(u)), seen.inv.length + '件');
-  T('在庫ステータスだけを見る', seen.inv.every(u => /status=eq\.(在庫|%E5%9C%A8%E5%BA%AB)/.test(u)), '');
-  T('個体番号が空の在庫は除く', seen.inv.every(u => /individual_id=not\.is\.null/.test(u)), '');
-  T('削除済みは除く', seen.inv.every(u => /deleted_at=is\.null/.test(u)) && seen.ind.every(u => /deleted_at=is\.null/.test(u)), '');
+  T('カードは個体ごとに1枚', mixed.n === 2, mixed.labels.join(','));
+  T('小分け・その他はカードにしない', !mixed.labels.some(l => /スライス|カレー/.test(l)), mixed.labels.join(','));
+  T('同じ個体の複数パックは1枚にまとめる', mixed.packs[0] === 2, JSON.stringify(mixed.packs));
 
   T('pageerrorなし', errors.length === 0, errors.join(' / '));
 

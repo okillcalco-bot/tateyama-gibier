@@ -550,37 +550,115 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     </div>
   </div>
 
-  <!-- 出店シート（お客様に見せる「今日はどの個体を食べられる？」の一覧） -->
+  <!-- 出店（どこに・何を持って行き・いくら売れたかを残す） -->
   <div class="tab-panel" id="panel-event">
-    <div class="section">
-      <div class="section-title">🏪 出店シート</div>
-      <div style="padding:10px 12px;border:1px dashed var(--gold2);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.8;background:var(--surface2);margin-bottom:12px;">
-        出店に持っていくお肉を選ぶと、<strong style="color:var(--gold);">A4・1枚に6個体</strong>の一覧が刷れます。
-        カード1枚が1個体です。QRを読むとお客様のスマホで「この肉の物語」（獲れた場所・獲れた日・放射能検査の結果）が開き、
-        <strong style="color:var(--gold);">その場で感想を残してもらえます</strong>。<br>
-        一覧に出るのは<strong>精肉の在庫</strong>だけです。ミンチ・スライスは複数の個体が混ざるため、個体単位では出せません。
+
+    <!-- 一覧 -->
+    <div id="ev-view-list">
+      <div class="section">
+        <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <span>&#x1F3EA; 出店</span>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-sm" onclick="evVenueOpen()">&#x1F4CD; 出店先の管理</button>
+            <button class="btn btn-primary" onclick="evNewOpen()">＋ 新しい出店</button>
+          </div>
+        </div>
+        <div style="padding:10px 12px;border:1px dashed var(--gold2);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.8;background:var(--surface2);margin-bottom:12px;">
+          出店先と持っていくものを毎回選んで記録します。終わったら売れた数を入れると、
+          <strong style="color:var(--gold);">売上・出店報告書・傾向</strong>が出せます。<br>
+          <strong>一頭ずつ分かるお肉</strong>（精肉のパック）と<strong>小分けパック</strong>（加工品）は分けて扱います。
+          小分けは「◯個のうちのどれか」なので、どの一頭かは特定しません。
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead><tr><th>日付</th><th>出店先</th><th>状態</th><th>一頭もの</th><th>小分け</th><th>売上</th><th></th></tr></thead>
+            <tbody id="ev-list-body"><tr><td colspan="7" class="empty-state">読み込み中...</td></tr></tbody>
+          </table>
+        </div>
       </div>
-      <div class="filter-bar">
-        <div class="form-group"><label>部位</label><select class="form-input" id="ev-part"><option value="">全て</option></select></div>
-        <div class="form-group"><label>精肉した時期</label><select class="form-input" id="ev-days">
-          <option value="14">最近14日</option><option value="30" selected>最近30日</option>
-          <option value="90">最近90日</option><option value="0">全て</option></select></div>
-        <div class="form-group"><button class="btn btn-primary" onclick="loadEventSheet()">絞り込む</button></div>
+      <div class="section">
+        <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <span>&#x1F4C8; 傾向（実績を確定した出店だけ）</span>
+          <select class="form-input" id="ev-trend-range" style="max-width:170px;" onchange="evTrendRender()">
+            <option value="365">最近1年</option><option value="180">最近半年</option>
+            <option value="90">最近3か月</option><option value="0">全部</option>
+          </select>
+        </div>
+        <div id="ev-trend"></div>
       </div>
-      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;">
-        <div class="form-group" style="min-width:220px;"><label>見出し（用紙の上に出ます）</label><input class="form-input" id="ev-title" placeholder="例: 館山ジビエセンター 出店"></div>
-        <div class="form-group"><label>日付</label><input class="form-input" type="date" id="ev-date"></div>
+    </div>
+
+    <!-- 1回の出店 -->
+    <div id="ev-view-detail" style="display:none;">
+      <div class="section">
+        <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <span><button class="btn btn-sm" onclick="evBackToList()">← 出店の一覧</button>
+                <span id="ev-d-head" style="margin-left:10px;"></span></span>
+          <span id="ev-d-actions" style="display:flex;gap:8px;flex-wrap:wrap;"></span>
+        </div>
+        <div id="ev-d-note" style="font-size:12.5px;line-height:1.8;color:var(--text2);margin-bottom:10px;"></div>
+        <div class="form-grid">
+          <div class="form-group"><label>出店先</label>
+            <select class="form-input" id="ev-d-venue" onchange="evDirty()"></select></div>
+          <div class="form-group"><label>開催日</label><input class="form-input" type="date" id="ev-d-date" oninput="evDirty()"></div>
+          <div class="form-group"><label>最終日<span style="color:var(--text3);font-size:11px;">（1日なら空欄）</span></label><input class="form-input" type="date" id="ev-d-end" oninput="evDirty()"></div>
+          <div class="form-group"><label>イベント名</label><input class="form-input" id="ev-d-title" placeholder="例: 館山夜市" oninput="evDirty()"></div>
+          <div class="form-group"><label>時間</label>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <input class="form-input" id="ev-d-start" placeholder="10:00" oninput="evDirty()">
+              <span style="color:var(--text3);">〜</span>
+              <input class="form-input" id="ev-d-endt" placeholder="16:00" oninput="evDirty()"></div></div>
+          <div class="form-group"><label>天候</label><input class="form-input" id="ev-d-weather" list="dl-ev-weather" placeholder="晴れ / 曇り / 雨" oninput="evDirty()"></div>
+          <div class="form-group"><label>担当</label><input class="form-input" id="ev-d-staff" placeholder="出た人" oninput="evDirty()"></div>
+          <div class="form-group"><label>立ち寄り人数<span style="color:var(--text3);font-size:11px;">（分かる範囲）</span></label><input class="form-input" type="number" id="ev-d-visitors" oninput="evDirty()"></div>
+          <div class="form-group"><label>出店料（円）</label><input class="form-input" type="number" id="ev-d-fee" oninput="evDirty()"></div>
+          <div class="form-group"><label>その他の経費（円）</label><input class="form-input" type="number" id="ev-d-cost" oninput="evDirty()"></div>
+          <div class="form-group"><label>実際の入金（円）<span style="color:var(--text3);font-size:11px;">（レジ・現金の合計）</span></label><input class="form-input" type="number" id="ev-d-cash" oninput="evDirty()"></div>
+          <div class="form-group" style="grid-column:1/-1;"><label>所感・気づいたこと</label><textarea class="form-input" id="ev-d-memo" rows="2" placeholder="よく売れたもの、聞かれたこと、次にやること" oninput="evDirty()"></textarea></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="evSaveHead()">概要を保存</button>
+          <span id="ev-d-saved" style="font-size:12px;color:var(--text3);"></span>
+        </div>
       </div>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
-        <label style="font-size:13px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer;">
-          <input type="checkbox" id="ev-all" onchange="evToggleAll(this.checked)"> 全選択
-        </label>
-        <span id="ev-count" style="font-size:13px;color:var(--text3);">0個体を選択中</span>
-        <button class="btn btn-primary" onclick="evPrint()">🖨 A4で印刷（6個体で1枚）</button>
+
+      <div class="section">
+        <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <span>&#x1F33F; 一頭ずつ分かるお肉<span style="font-size:12px;color:var(--text3);font-weight:400;">（精肉のパック・1パック＝1頭）</span></span>
+          <button class="btn btn-sm btn-primary" id="ev-add-ind" onclick="evPickOpen()">＋ 在庫から選ぶ</button>
+        </div>
+        <div style="overflow-x:auto;"><table>
+          <thead><tr><th>個体番号</th><th>獲れた場所</th><th>部位</th><th>重量</th><th>円/kg</th><th>金額</th><th>売れた</th><th></th></tr></thead>
+          <tbody id="ev-d-ind-body"></tbody>
+        </table></div>
       </div>
-      <div id="ev-list"></div>
+
+      <div class="section">
+        <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <span>&#x1F356; 小分けパック・その他<span style="font-size:12px;color:var(--text3);font-weight:400;">（どの一頭かは特定しない）</span></span>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-sm btn-primary" id="ev-add-lot" onclick="evLotOpen()">＋ 加工品から選ぶ</button>
+            <button class="btn btn-sm" id="ev-add-other" onclick="evOtherAdd()">＋ その他の品</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto;"><table>
+          <thead><tr><th>品名</th><th>入っている頭</th><th>持参数</th><th>売れた数</th><th>単価</th><th>金額</th><th></th></tr></thead>
+          <tbody id="ev-d-lot-body"></tbody>
+        </table></div>
+      </div>
+
+      <div class="section">
+        <div id="ev-d-total" style="font-size:14px;line-height:2;"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+          <button class="btn btn-primary" onclick="evPrint()">&#x1F5A8; 出店シート（一頭のカード・6個体で1枚）</button>
+          <button class="btn" onclick="evPosterPrint()">&#x1F5A8; 一覧QRのポスター</button>
+          <button class="btn" onclick="evReportPrint()">&#x1F4C4; 出店報告書</button>
+          <button class="btn btn-danger" style="margin-left:auto;" onclick="evDeleteEvent()">この出店を削除</button>
+        </div>
+      </div>
     </div>
   </div>
+  <datalist id="dl-ev-weather"><option>晴れ</option><option>曇り</option><option>雨</option><option>晴れのち曇り</option><option>雨のち晴れ</option></datalist>
 
   <!-- Processing -->
   <div class="tab-panel" id="panel-processing">
@@ -2020,6 +2098,85 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 
 <!-- Label Print Area (hidden, used for fallback printing) -->
 <div class="pm-label-print-area" id="pmLabelPrintArea" style="display:none;"></div>
+
+<!-- 出店: 在庫から一頭ものを選ぶ -->
+<div class="modal-overlay" id="ev-pick-modal">
+  <div class="modal" style="max-width:820px;">
+    <div class="modal-header"><div class="modal-title">在庫から選ぶ（一頭ずつ分かるお肉）</div>
+      <button class="modal-close" onclick="closeModal('ev-pick-modal')">&times;</button></div>
+    <div class="modal-body">
+      <div class="filter-bar">
+        <div class="form-group"><label>部位</label><select class="form-input" id="ev-pick-part"><option value="">全て</option></select></div>
+        <div class="form-group"><label>精肉した時期</label><select class="form-input" id="ev-pick-days">
+          <option value="14">最近14日</option><option value="30" selected>最近30日</option>
+          <option value="90">最近90日</option><option value="0">全て</option></select></div>
+        <div class="form-group"><button class="btn btn-primary" onclick="evPickLoad()">絞り込む</button></div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+        <label style="font-size:13px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer;">
+          <input type="checkbox" id="ev-pick-all" onchange="evPickToggleAll(this.checked)"> 全選択</label>
+        <span id="ev-pick-count" style="font-size:13px;color:var(--text3);"></span>
+        <span style="font-size:12px;color:var(--text3);">円/kg</span>
+        <input class="form-input" type="number" id="ev-pick-price" style="max-width:110px;" placeholder="3000">
+        <button class="btn btn-primary" style="margin-left:auto;" onclick="evPickAdd()">選んだ在庫を追加</button>
+      </div>
+      <div id="ev-pick-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 出店: 加工品（小分けパック）を選ぶ -->
+<div class="modal-overlay" id="ev-lot-modal">
+  <div class="modal" style="max-width:720px;">
+    <div class="modal-header"><div class="modal-title">加工品から選ぶ（小分けパック）</div>
+      <button class="modal-close" onclick="closeModal('ev-lot-modal')">&times;</button></div>
+    <div class="modal-body">
+      <div style="padding:9px 11px;border:1px dashed var(--border);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.8;background:var(--surface2);margin-bottom:10px;">
+        まとめて作る商品は、どのパックがどの一頭かを特定しません。
+        <strong>入っている頭</strong>だけを記録し、お客様にもそう見せます。
+      </div>
+      <div id="ev-lot-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 出店: 出店先の管理 -->
+<div class="modal-overlay" id="ev-venue-modal">
+  <div class="modal" style="max-width:660px;">
+    <div class="modal-header"><div class="modal-title">出店先</div>
+      <button class="modal-close" onclick="closeModal('ev-venue-modal')">&times;</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label>名前 <span style="color:var(--red);">*</span></label><input class="form-input" id="ev-v-name" placeholder="例: 館山なぎさ食堂前"></div>
+        <div class="form-group"><label>種類</label><input class="form-input" id="ev-v-kind" list="dl-ev-kind" placeholder="マルシェ / イベント / 施設"></div>
+        <div class="form-group" style="grid-column:1/-1;"><label>場所</label><input class="form-input" id="ev-v-address" placeholder="住所・目印"></div>
+        <div class="form-group" style="grid-column:1/-1;"><label>主催・メモ</label><input class="form-input" id="ev-v-memo" placeholder="主催者、出店料の目安、注意点など"></div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:10px;" onclick="evVenueSave()">出店先を追加</button>
+      <div id="ev-venue-list" style="margin-top:16px;"></div>
+    </div>
+  </div>
+</div>
+<datalist id="dl-ev-kind"><option>マルシェ</option><option>イベント</option><option>施設</option><option>直売</option><option>物産展</option></datalist>
+
+<!-- 出店: 新しい出店 -->
+<div class="modal-overlay" id="ev-new-modal">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header"><div class="modal-title">新しい出店</div>
+      <button class="modal-close" onclick="closeModal('ev-new-modal')">&times;</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group" style="grid-column:1/-1;"><label>出店先 <span style="color:var(--red);">*</span></label>
+          <select class="form-input" id="ev-n-venue"></select>
+          <div style="font-size:12px;color:var(--text3);margin-top:4px;">無ければ「出店先の管理」で先に追加してください。</div></div>
+        <div class="form-group"><label>開催日 <span style="color:var(--red);">*</span></label><input class="form-input" type="date" id="ev-n-date"></div>
+        <div class="form-group"><label>最終日<span style="color:var(--text3);font-size:11px;">（1日なら空欄）</span></label><input class="form-input" type="date" id="ev-n-end"></div>
+        <div class="form-group" style="grid-column:1/-1;"><label>イベント名</label><input class="form-input" id="ev-n-title" placeholder="例: 館山夜市"></div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:12px;" onclick="evNewSave()">作る</button>
+    </div>
+  </div>
+</div>
 
 <!-- Detail Modal -->
 <div class="modal-overlay" id="modal-detail">
@@ -5724,16 +5881,23 @@ function individualStoryUrl(labelId) {
   return 'https://tateyama-gibier.vercel.app/s.html?i=' + encodeURIComponent(labelId);
 }
 
-/* ── 出店シート（お客様に見せる「今日はどの個体を食べられる？」の一覧） ── */
-let evRows = [];                 // 個体ごとにまとめた在庫
-let evSelected = new Set();      // 選んだ個体番号
-let evPartsLoaded = false;
+/* ── 出店（どこに・何を持って行き・いくら売れたか） ──
+   一頭ずつ分かるお肉（精肉のパック）と、小分けパック（加工品）は分けて扱う。
+   小分けは「◯個のうちのどれか」なので、どの一頭かは特定しない。 */
+let evVenues = [];      // 出店先マスタ
+let evEvents = [];      // 出店の一覧
+let evCur = null;       // 開いている出店
+let evItems = [];       // その明細
+let evIndCache = {};    // 個体番号 → 個体（獲れた場所など）
+let evPickRows = [];    // 在庫ピッカー（個体ごと）
+let evPickSel = new Set();
+let evPickPartsLoaded = false;
 
 function evDateOnly(ts) {
   if (!ts) return '';
   const d = new Date(ts);
   if (isNaN(d)) return String(ts).slice(0, 10);
-  return d.toLocaleDateString('sv-SE');    // JSTのYYYY-MM-DD
+  return d.toLocaleDateString('sv-SE');
 }
 function evAgingDays(captureDate, processedAt) {
   if (!captureDate || !processedAt) return null;
@@ -5743,41 +5907,451 @@ function evAgingDays(captureDate, processedAt) {
 }
 function evJp(d) {
   if (!d) return '';
-  const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const m = String(d).match(/^(\d{4})[-/](\d{2})[-/](\d{2})/);
   return m ? `${+m[2]}月${+m[3]}日` : String(d);
 }
+function evYen(n) { return '¥' + Number(n || 0).toLocaleString(); }
+function evNum(v) { const n = parseFloat(v); return isFinite(n) ? n : 0; }
+function eventListUrl(id) { return 'https://tateyama-gibier.vercel.app/s.html?e=' + id; }
 
+/* ── 一覧 ── */
 async function loadEventSheet() {
-  const box = document.getElementById('ev-list');
+  const body = document.getElementById('ev-list-body');
+  if (!body) return;
+  body.innerHTML = '<tr><td colspan="7" class="empty-state">読み込み中...</td></tr>';
+  try {
+    evVenues = await sb('GET', 'event_venues', null, '?deleted_at=is.null&select=*&order=sort_order,name');
+    evEvents = await sb('GET', 'sale_events', null,
+      '?deleted_at=is.null&select=*,sale_event_items(kind,qty_taken,qty_sold,amount)&order=event_date.desc&limit=300');
+    evListRender();
+    evTrendRender();
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="7" class="empty-state" style="color:var(--red);">読み込めませんでした：${esc2(e && e.message || e)}</td></tr>`;
+  }
+}
+
+function evStat(ev) {
+  const its = ev.sale_event_items || [];
+  return {
+    ind: its.filter(i => i.kind === 'inventory').length,
+    lot: its.filter(i => i.kind !== 'inventory').reduce((a, i) => a + evNum(i.qty_taken), 0),
+    total: its.reduce((a, i) => a + evNum(i.amount), 0)
+  };
+}
+
+function evListRender() {
+  const body = document.getElementById('ev-list-body');
+  if (!body) return;
+  if (!evEvents.length) {
+    body.innerHTML = '<tr><td colspan="7" class="empty-state">まだ出店の記録がありません。「＋ 新しい出店」から作れます。</td></tr>';
+    return;
+  }
+  const badge = { '準備中': 'gray', '持ち出し済': 'blue', '実績確定': 'green' };
+  body.innerHTML = evEvents.map(ev => {
+    const s = evStat(ev);
+    return `<tr>
+      <td style="white-space:nowrap;">${esc2(ev.event_date)}${ev.end_date && ev.end_date !== ev.event_date ? `<span style="color:var(--text3);font-size:11px;"> 〜${esc2(ev.end_date.slice(5))}</span>` : ''}</td>
+      <td>${esc2(ev.venue_name)}${ev.title ? `<span style="color:var(--text3);font-size:11px;"> ${esc2(ev.title)}</span>` : ''}</td>
+      <td><span class="badge badge-${badge[ev.status] || 'gray'}">${esc2(ev.status)}</span></td>
+      <td>${s.ind ? s.ind + '頭' : '-'}</td>
+      <td>${s.lot ? s.lot + '個' : '-'}</td>
+      <td style="white-space:nowrap;">${ev.status === '実績確定' ? evYen(s.total) : '<span style="color:var(--text3);">—</span>'}</td>
+      <td><button class="btn btn-sm btn-primary" style="padding:3px 10px;font-size:12px;white-space:nowrap;" onclick="evOpen('${ev.id}')">開く</button></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ── 傾向 ── */
+function evTrendRender() {
+  const box = document.getElementById('ev-trend');
   if (!box) return;
-  const dateEl = document.getElementById('ev-date');
-  if (dateEl && !dateEl.value) dateEl.value = new Date().toLocaleDateString('sv-SE');
+  const days = parseInt((document.getElementById('ev-trend-range') || {}).value || '365', 10);
+  const since = days > 0 ? new Date(Date.now() - days * 86400000).toLocaleDateString('sv-SE') : '0000-01-01';
+  const done = evEvents.filter(e => e.status === '実績確定' && e.event_date >= since);
+  if (!done.length) {
+    box.innerHTML = '<div class="empty-state">実績を確定した出店がまだありません。確定すると、ここに会場ごと・商品ごとの傾向が出ます。</div>';
+    return;
+  }
+  const byVenue = {}, byMonth = {};
+  let total = 0, fee = 0, visitors = 0;
+  done.forEach(ev => {
+    const s = evStat(ev);
+    total += s.total; fee += evNum(ev.booth_fee) + evNum(ev.other_cost); visitors += evNum(ev.visitors);
+    const v = byVenue[ev.venue_name] || (byVenue[ev.venue_name] = { n: 0, total: 0, taken: 0, sold: 0 });
+    v.n++; v.total += s.total;
+    (ev.sale_event_items || []).forEach(i => { v.taken += evNum(i.qty_taken); v.sold += evNum(i.qty_sold); });
+    const m = ev.event_date.slice(0, 7);
+    byMonth[m] = (byMonth[m] || 0) + s.total;
+  });
+  const venues = Object.entries(byVenue).sort((a, b) => b[1].total - a[1].total);
+  const months = Object.entries(byMonth).sort((a, b) => a[0] < b[0] ? 1 : -1).slice(0, 12);
+  const rate = v => v.taken ? Math.round(v.sold / v.taken * 100) : 0;
+
+  box.innerHTML = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+      ${[['出店した回数', done.length + '回'], ['売上の合計', evYen(total)],
+         ['1回あたり', evYen(Math.round(total / done.length))],
+         ['経費（出店料ほか）', evYen(fee)],
+         ['差引', evYen(total - fee)],
+         ['立ち寄り', visitors ? visitors + '人' : '—']].map(([k, v]) => `
+        <div style="flex:1 1 130px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);">
+          <div style="font-size:11.5px;color:var(--text3);">${k}</div>
+          <div style="font-size:17px;font-weight:600;color:var(--gold);">${v}</div>
+        </div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;">
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;">出店先ごと</div>
+        <div style="overflow-x:auto;"><table>
+          <thead><tr><th>出店先</th><th>回数</th><th>売上</th><th>1回平均</th><th>売れた率</th></tr></thead>
+          <tbody>${venues.map(([n, v]) => `<tr><td>${esc2(n)}</td><td>${v.n}</td><td>${evYen(v.total)}</td>
+            <td>${evYen(Math.round(v.total / v.n))}</td><td>${rate(v)}%</td></tr>`).join('')}</tbody>
+        </table></div>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;">月ごと</div>
+        <div style="overflow-x:auto;"><table>
+          <thead><tr><th>月</th><th>売上</th></tr></thead>
+          <tbody>${months.map(([m, t]) => `<tr><td>${esc2(m)}</td><td>${evYen(t)}</td></tr>`).join('')}</tbody>
+        </table></div>
+      </div>
+    </div>
+    <div style="margin-top:16px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">商品ごと（持って行った数と売れた数）</div>
+      <div id="ev-trend-items"></div>
+    </div>`;
+  evTrendItems(done);
+}
+
+async function evTrendItems(done) {
+  const box = document.getElementById('ev-trend-items');
+  if (!box) return;
+  const byItem = {};
+  done.forEach(ev => (ev.sale_event_items || []).forEach(i => {
+    // 一覧のselectでは品名まで取れていないので、確定済み明細をまとめて引き直す
+  }));
+  try {
+    const ids = done.map(e => `"${e.id}"`).join(',');
+    if (!ids) { box.innerHTML = ''; return; }
+    const rows = await sb('GET', 'sale_event_items', null,
+      `?event_id=in.(${ids})&select=kind,part_name,item_name,match_key,qty_taken,qty_sold,amount&limit=5000`);
+    rows.forEach(i => {
+      const name = i.kind === 'inventory' ? (i.part_name || '精肉') : (i.item_name || i.match_key || 'その他');
+      const g = byItem[name] || (byItem[name] = { taken: 0, sold: 0, amount: 0, kind: i.kind });
+      g.taken += evNum(i.qty_taken); g.sold += evNum(i.qty_sold); g.amount += evNum(i.amount);
+    });
+    const list = Object.entries(byItem).sort((a, b) => b[1].amount - a[1].amount);
+    box.innerHTML = `<div style="overflow-x:auto;"><table>
+      <thead><tr><th>商品</th><th>種類</th><th>持参</th><th>売れた</th><th>売れた率</th><th>売上</th></tr></thead>
+      <tbody>${list.map(([n, g]) => `<tr>
+        <td>${esc2(n)}</td>
+        <td style="font-size:12px;color:var(--text2);">${g.kind === 'inventory' ? '一頭もの' : '小分け・その他'}</td>
+        <td>${g.taken}</td><td>${g.sold}</td>
+        <td>${g.taken ? Math.round(g.sold / g.taken * 100) : 0}%</td>
+        <td>${evYen(g.amount)}</td></tr>`).join('')}</tbody></table></div>`;
+  } catch (e) { box.innerHTML = `<div class="empty-state">読み込めませんでした</div>`; }
+}
+
+/* ── 出店先マスタ ── */
+function evVenueOpen() {
+  document.getElementById('ev-venue-modal').classList.add('active');
+  evVenueRender();
+}
+function evVenueRender() {
+  const box = document.getElementById('ev-venue-list');
+  if (!box) return;
+  box.innerHTML = evVenues.length
+    ? `<div style="overflow-x:auto;"><table>
+        <thead><tr><th>名前</th><th>種類</th><th>場所</th><th></th></tr></thead>
+        <tbody>${evVenues.map(v => `<tr>
+          <td>${esc2(v.name)}</td><td>${esc2(v.kind || '-')}</td>
+          <td style="font-size:12px;color:var(--text2);">${esc2(v.address || '')}</td>
+          <td><button class="btn btn-sm btn-danger" style="padding:2px 8px;font-size:11px;" onclick="evVenueDelete('${v.id}')">削除</button></td>
+        </tr>`).join('')}</tbody></table></div>`
+    : '<div class="empty-state">まだ出店先がありません</div>';
+}
+async function evVenueSave() {
+  const name = (document.getElementById('ev-v-name').value || '').trim();
+  if (!name) { alert('名前を入れてください。'); return; }
+  try {
+    await sb('POST', 'event_venues', {
+      name, kind: (document.getElementById('ev-v-kind').value || '').trim() || null,
+      address: (document.getElementById('ev-v-address').value || '').trim() || null,
+      memo: (document.getElementById('ev-v-memo').value || '').trim() || null
+    });
+    ['ev-v-name', 'ev-v-kind', 'ev-v-address', 'ev-v-memo'].forEach(id => { document.getElementById(id).value = ''; });
+    evVenues = await sb('GET', 'event_venues', null, '?deleted_at=is.null&select=*&order=sort_order,name');
+    evVenueRender();
+    toast('出店先を追加しました');
+  } catch (e) { alert('追加できませんでした：' + (e && e.message || e)); }
+}
+async function evVenueDelete(id) {
+  if (!confirm('この出店先を一覧から外しますか？（過去の出店記録は残ります）')) return;
+  try {
+    await sb('PATCH', 'event_venues', { deleted_at: new Date().toISOString() }, `?id=eq.${id}`);
+    evVenues = evVenues.filter(v => v.id !== id);
+    evVenueRender();
+  } catch (e) { alert('外せませんでした：' + (e && e.message || e)); }
+}
+
+/* ── 新しい出店 ── */
+function evNewOpen() {
+  const sel = document.getElementById('ev-n-venue');
+  sel.innerHTML = evVenues.map(v => `<option value="${v.id}">${esc2(v.name)}</option>`).join('')
+    || '<option value="">（出店先がありません）</option>';
+  document.getElementById('ev-n-date').value = new Date().toLocaleDateString('sv-SE');
+  document.getElementById('ev-n-end').value = '';
+  document.getElementById('ev-n-title').value = '';
+  document.getElementById('ev-new-modal').classList.add('active');
+}
+async function evNewSave() {
+  const vid = document.getElementById('ev-n-venue').value;
+  const v = evVenues.find(x => x.id === vid);
+  const date = document.getElementById('ev-n-date').value;
+  if (!v) { alert('先に「出店先の管理」で出店先を追加してください。'); return; }
+  if (!date) { alert('開催日を入れてください。'); return; }
+  const end = document.getElementById('ev-n-end').value || null;
+  if (end && end < date) { alert('最終日が開催日より前になっています。'); return; }
+  try {
+    const r = await sb('POST', 'sale_events', {
+      event_date: date, end_date: end, venue_id: v.id, venue_name: v.name,
+      title: (document.getElementById('ev-n-title').value || '').trim() || null
+    });
+    closeModal('ev-new-modal');
+    await loadEventSheet();
+    const id = Array.isArray(r) && r[0] ? r[0].id : null;
+    if (id) evOpen(id); else toast('出店を作りました');
+  } catch (e) { alert('作れませんでした：' + (e && e.message || e)); }
+}
+
+/* ── 1回の出店を開く ── */
+function evBackToList() {
+  document.getElementById('ev-view-detail').style.display = 'none';
+  document.getElementById('ev-view-list').style.display = '';
+  evCur = null;
+  loadEventSheet();
+}
+
+async function evOpen(id) {
+  try {
+    const rows = await sb('GET', 'sale_events', null, `?id=eq.${id}&deleted_at=is.null&select=*`);
+    if (!rows.length) { alert('この出店が見つかりません。'); return; }
+    evCur = rows[0];
+    evItems = await sb('GET', 'sale_event_items', null, `?event_id=eq.${id}&select=*&order=kind,created_at`);
+    await evLoadIndCache();
+    document.getElementById('ev-view-list').style.display = 'none';
+    document.getElementById('ev-view-detail').style.display = '';
+    evFillHead();
+    evRenderItems();
+  } catch (e) { alert('開けませんでした：' + (e && e.message || e)); }
+}
+
+async function evLoadIndCache() {
+  const labels = [...new Set(evItems.filter(i => i.individual_label).map(i => i.individual_label))]
+    .filter(l => !evIndCache[l]);
+  for (let i = 0; i < labels.length; i += 80) {
+    const chunk = labels.slice(i, i + 80).map(l => '"' + encodeURIComponent(String(l).replace(/"/g, '')) + '"').join(',');
+    const got = await sb('GET', 'individuals', null,
+      `?label_id=in.(${chunk})&deleted_at=is.null` +
+      `&select=label_id,species,sex,weight_total,capture_date,capture_city,capture_area,capture_method,radiation_test_date,radiation_result,processing_done_at`);
+    got.forEach(g => { evIndCache[g.label_id] = g; });
+  }
+}
+
+function evFillHead() {
+  const e = evCur;
+  const sel = document.getElementById('ev-d-venue');
+  const opts = evVenues.slice();
+  if (e.venue_id && !opts.some(v => v.id === e.venue_id)) opts.push({ id: e.venue_id, name: e.venue_name });
+  sel.innerHTML = opts.map(v => `<option value="${v.id}" ${v.id === e.venue_id ? 'selected' : ''}>${esc2(v.name)}</option>`).join('');
+  const set = (id, v) => { document.getElementById(id).value = v == null ? '' : v; };
+  set('ev-d-date', e.event_date); set('ev-d-end', e.end_date); set('ev-d-title', e.title);
+  set('ev-d-start', e.start_time); set('ev-d-endt', e.end_time); set('ev-d-weather', e.weather);
+  set('ev-d-staff', e.staff_names); set('ev-d-visitors', e.visitors); set('ev-d-fee', e.booth_fee);
+  set('ev-d-cost', e.other_cost); set('ev-d-cash', e.cash_total); set('ev-d-memo', e.note);
+  const badge = { '準備中': 'gray', '持ち出し済': 'blue', '実績確定': 'green' };
+  document.getElementById('ev-d-head').innerHTML =
+    `<strong>${esc2(e.venue_name)}</strong> <span style="color:var(--text2);">${esc2(e.event_date)}</span>
+     <span class="badge badge-${badge[e.status] || 'gray'}">${esc2(e.status)}</span>`;
+
+  const locked = e.status !== '準備中';
+  ['ev-add-ind', 'ev-add-lot', 'ev-add-other'].forEach(id => {
+    const b = document.getElementById(id); if (b) b.disabled = locked;
+  });
+  const act = document.getElementById('ev-d-actions');
+  act.innerHTML =
+    e.status === '準備中' ? `<button class="btn btn-primary" onclick="evTakeout()">🚚 持ち出しを確定</button>`
+    : e.status === '持ち出し済' ? `<button class="btn btn-primary" onclick="evSettle()">💰 売上を確定</button>
+        <button class="btn" onclick="evReopen()">↩ 準備中に戻す</button>`
+    : `<button class="btn" onclick="evReopen()">↩ 確定を取り消す</button>`;
+  document.getElementById('ev-d-note').innerHTML =
+    e.status === '準備中' ? '持っていくものを選んでから「持ち出しを確定」を押すと、その在庫が<strong>引当済</strong>になり、他所へ二重に出せなくなります。'
+    : e.status === '持ち出し済' ? '帰ってきたら<strong>売れた数</strong>を入れて「売上を確定」。売れたぶんは出荷済、売れ残りは在庫に戻ります。'
+    : '実績を確定しました。直すときは「確定を取り消す」を押してください（在庫も元に戻ります）。';
+}
+
+function evDirty() { document.getElementById('ev-d-saved').textContent = '未保存'; }
+
+async function evSaveHead() {
+  if (!evCur) return;
+  const g = id => (document.getElementById(id).value || '').trim();
+  const n = id => { const v = g(id); return v === '' ? null : parseInt(v, 10); };
+  const date = g('ev-d-date'), end = g('ev-d-end') || null;
+  if (!date) { alert('開催日を入れてください。'); return; }
+  if (end && end < date) { alert('最終日が開催日より前になっています。'); return; }
+  const vid = document.getElementById('ev-d-venue').value;
+  const v = evVenues.find(x => x.id === vid);
+  try {
+    await sb('PATCH', 'sale_events', {
+      event_date: date, end_date: end,
+      venue_id: vid || null, venue_name: v ? v.name : evCur.venue_name,
+      title: g('ev-d-title') || null, start_time: g('ev-d-start') || null, end_time: g('ev-d-endt') || null,
+      weather: g('ev-d-weather') || null, staff_names: g('ev-d-staff') || null,
+      visitors: n('ev-d-visitors'), booth_fee: n('ev-d-fee'), other_cost: n('ev-d-cost'),
+      cash_total: n('ev-d-cash'), note: g('ev-d-memo') || null, updated_at: new Date().toISOString()
+    }, `?id=eq.${evCur.id}`);
+    const rows = await sb('GET', 'sale_events', null, `?id=eq.${evCur.id}&select=*`);
+    evCur = rows[0];
+    evFillHead(); evRenderItems();
+    document.getElementById('ev-d-saved').textContent = '保存しました';
+    toast('保存しました');
+  } catch (e) { alert('保存できませんでした：' + (e && e.message || e)); }
+}
+
+async function evDeleteEvent() {
+  if (!evCur) return;
+  if (evCur.status !== '準備中') { alert('先に「確定を取り消す」で準備中に戻してください（在庫を元に戻すため）。'); return; }
+  if (!confirm(`${evCur.venue_name} ${evCur.event_date} の出店を削除しますか？\n持っていくものの記録も消えます。`)) return;
+  try {
+    await sb('PATCH', 'sale_events', { deleted_at: new Date().toISOString() }, `?id=eq.${evCur.id}`);
+    evBackToList();
+  } catch (e) { alert('削除できませんでした：' + (e && e.message || e)); }
+}
+
+/* ── 明細の表示 ── */
+function evRenderItems() {
+  const locked = !evCur || evCur.status === '実績確定';
+  const sellable = evCur && evCur.status === '持ち出し済';
+  const canEdit = evCur && evCur.status === '準備中';
+
+  const inds = evItems.filter(i => i.kind === 'inventory');
+  const ib = document.getElementById('ev-d-ind-body');
+  ib.innerHTML = inds.length ? inds.map(i => {
+    const ind = evIndCache[i.individual_label] || {};
+    return `<tr>
+      <td style="color:var(--gold);font-weight:600;white-space:nowrap;">${esc2(i.individual_label || '-')}</td>
+      <td style="font-size:12px;">${esc2(((ind.capture_city || '') + ' ' + (ind.capture_area || '')).trim() || '—')}</td>
+      <td>${esc2(i.part_name || '-')}</td>
+      <td style="white-space:nowrap;">${evNum(i.weight_kg).toFixed(2)}kg</td>
+      <td><input class="form-input" type="number" style="width:92px;padding:4px 6px;" value="${i.unit_price || 0}"
+            ${canEdit || sellable ? '' : 'disabled'} onchange="evItemPatch('${i.id}','unit_price',this.value)"></td>
+      <td style="white-space:nowrap;">${evYen(i.amount)}</td>
+      <td style="text-align:center;"><input type="checkbox" ${evNum(i.qty_sold) > 0 ? 'checked' : ''}
+            ${sellable ? '' : 'disabled'} onchange="evItemPatch('${i.id}','qty_sold', this.checked ? ${evNum(i.qty_taken) || 1} : 0)"></td>
+      <td>${canEdit ? `<button class="btn btn-sm btn-danger" style="padding:2px 8px;font-size:11px;" onclick="evItemDelete('${i.id}')">外す</button>` : ''}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="8" class="empty-state">まだありません${canEdit ? '。「＋ 在庫から選ぶ」で追加します。' : ''}</td></tr>`;
+
+  const lots = evItems.filter(i => i.kind !== 'inventory');
+  const lb = document.getElementById('ev-d-lot-body');
+  lb.innerHTML = lots.length ? lots.map(i => `<tr>
+      <td>${esc2(i.item_name || i.match_key || '-')}
+        <span style="font-size:11px;color:var(--text3);">${i.kind === 'lot' ? '小分け' : 'その他'}</span></td>
+      <td style="font-size:12px;color:var(--text2);">${(i.member_labels && i.member_labels.length)
+        ? `${i.member_labels.length}頭<span style="color:var(--text3);"> ${esc2(i.member_labels.slice(0, 2).join('・'))}${i.member_labels.length > 2 ? ' ほか' : ''}</span>`
+        : '<span style="color:var(--text3);">—</span>'}</td>
+      <td><input class="form-input" type="number" step="1" style="width:80px;padding:4px 6px;" value="${evNum(i.qty_taken)}"
+            ${canEdit ? '' : 'disabled'} onchange="evItemPatch('${i.id}','qty_taken',this.value)"></td>
+      <td><input class="form-input" type="number" step="1" style="width:80px;padding:4px 6px;" value="${evNum(i.qty_sold)}"
+            ${sellable ? '' : 'disabled'} onchange="evItemPatch('${i.id}','qty_sold',this.value)"></td>
+      <td><input class="form-input" type="number" style="width:92px;padding:4px 6px;" value="${i.unit_price || 0}"
+            ${canEdit || sellable ? '' : 'disabled'} onchange="evItemPatch('${i.id}','unit_price',this.value)">
+        <span style="font-size:11px;color:var(--text3);">${i.price_basis === 'kg' ? '円/kg' : '円/個'}</span></td>
+      <td style="white-space:nowrap;">${evYen(i.amount)}</td>
+      <td>${canEdit ? `<button class="btn btn-sm btn-danger" style="padding:2px 8px;font-size:11px;" onclick="evItemDelete('${i.id}')">外す</button>` : ''}</td>
+    </tr>`).join('') : `<tr><td colspan="7" class="empty-state">まだありません${canEdit ? '。「＋ 加工品から選ぶ」で追加します。' : ''}</td></tr>`;
+
+  // 合計
+  const total = evItems.reduce((a, i) => a + evNum(i.amount), 0);
+  const takenInd = inds.length, soldInd = inds.filter(i => evNum(i.qty_sold) > 0).length;
+  const takenLot = lots.reduce((a, i) => a + evNum(i.qty_taken), 0);
+  const soldLot = lots.reduce((a, i) => a + evNum(i.qty_sold), 0);
+  const cash = evNum(evCur && evCur.cash_total);
+  const cost = evNum(evCur && evCur.booth_fee) + evNum(evCur && evCur.other_cost);
+  const diff = cash ? cash - total : 0;
+  document.getElementById('ev-d-total').innerHTML = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      ${[['明細の売上', evYen(total)],
+         ['一頭もの', `${soldInd} / ${takenInd}点`],
+         ['小分け', `${soldLot} / ${takenLot}個`],
+         ['経費', evYen(cost)],
+         ['差引', evYen(total - cost)]].map(([k, v]) => `
+        <div style="flex:1 1 120px;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);">
+          <div style="font-size:11.5px;color:var(--text3);">${k}</div>
+          <div style="font-size:16px;font-weight:600;color:var(--gold);">${v}</div></div>`).join('')}
+    </div>
+    ${cash ? `<div style="margin-top:10px;font-size:13px;color:${diff === 0 ? 'var(--text2)' : 'var(--red)'};">
+      実際の入金 ${evYen(cash)} と明細の差 ${evYen(diff)}${diff === 0 ? '（ぴったり）' : '　← どちらかが合っていません'}</div>` : ''}`;
+}
+
+async function evItemPatch(id, field, value) {
+  const it = evItems.find(x => x.id === id);
+  if (!it) return;
+  let v = value;
+  if (field !== 'item_name') { v = evNum(value); if (v < 0) v = 0; }
+  if (field === 'qty_sold' && v > evNum(it.qty_taken)) {
+    alert(`持って行った数（${evNum(it.qty_taken)}）より多くは売れません。`);
+    evRenderItems(); return;
+  }
+  if (field === 'qty_taken' && v < evNum(it.qty_sold)) {
+    alert('売れた数より少なくはできません。先に売れた数を直してください。');
+    evRenderItems(); return;
+  }
+  try {
+    await sb('PATCH', 'sale_event_items', { [field]: v }, `?id=eq.${id}`);
+    const rows = await sb('GET', 'sale_event_items', null, `?id=eq.${id}&select=*`);
+    if (rows.length) Object.assign(it, rows[0]);
+    evRenderItems();
+  } catch (e) { alert('保存できませんでした：' + (e && e.message || e)); evRenderItems(); }
+}
+
+async function evItemDelete(id) {
+  try {
+    await sb('DELETE', 'sale_event_items', null, `?id=eq.${id}`);
+    evItems = evItems.filter(x => x.id !== id);
+    evRenderItems();
+  } catch (e) { alert('外せませんでした：' + (e && e.message || e)); }
+}
+
+/* ── 在庫から一頭ものを選ぶ ── */
+async function evPickOpen() {
+  document.getElementById('ev-pick-modal').classList.add('active');
+  await evPickLoad();
+}
+async function evPickLoad() {
+  const box = document.getElementById('ev-pick-list');
   box.innerHTML = '<div class="loading"><span class="spin"></span>在庫を読み込み中...</div>';
   try {
-    // 個体が特定できるのは精肉(tier2)だけ。ミンチ・スライスは複数個体が混ざるので出さない。
     const inv = await sb('GET', 'inventory', null,
       `?tier=eq.2&status=eq.${encodeURIComponent('在庫')}&deleted_at=is.null&individual_id=not.is.null` +
-      `&select=ident_code,scan_code,individual_id,species,part_name,weight,weight_kg,processed_at,created_at` +
+      `&select=id,ident_code,scan_code,individual_id,species,part_name,weight,weight_kg,processed_at,created_at` +
       `&order=processed_at.desc&limit=3000`);
-
-    // 部位の選択肢は「全在庫」から作る（絞り込んだあとに選択肢が消えないように）
-    const partSel = document.getElementById('ev-part');
-    if (partSel && !evPartsLoaded) {
+    const partSel = document.getElementById('ev-pick-part');
+    if (partSel && !evPickPartsLoaded) {
       const names = [...new Set(inv.map(x => x.part_name).filter(Boolean))].sort();
       partSel.innerHTML = '<option value="">全て</option>' + names.map(n => `<option value="${esc2(n)}">${esc2(n)}</option>`).join('');
-      evPartsLoaded = true;
+      evPickPartsLoaded = true;
     }
     const part = partSel ? partSel.value : '';
-    const days = parseInt((document.getElementById('ev-days') || {}).value || '30', 10);
+    const days = parseInt((document.getElementById('ev-pick-days') || {}).value || '30', 10);
     const since = days > 0 ? Date.now() - days * 86400000 : null;
-
+    const already = new Set(evItems.filter(i => i.inventory_id).map(i => i.inventory_id));
     const hit = inv.filter(x => {
+      if (already.has(x.id)) return false;
       if (part && x.part_name !== part) return false;
       if (since) { const t = new Date(x.processed_at || x.created_at).getTime(); if (!(t >= since)) return false; }
       return true;
     });
-
-    // 個体ごとにまとめる
     const byInd = new Map();
     hit.forEach(x => {
       const g = byInd.get(x.individual_id) || { label: x.individual_id, species: x.species, packs: [], last: 0 };
@@ -5786,70 +6360,192 @@ async function loadEventSheet() {
       if (t > g.last) g.last = t;
       byInd.set(x.individual_id, g);
     });
-    evRows = [...byInd.values()].sort((a, b) => b.last - a.last);
+    evPickRows = [...byInd.values()].sort((a, b) => b.last - a.last);
+    evPickSel = new Set([...evPickSel].filter(id => hit.some(x => x.id === id)));
+    evPickRender();
+  } catch (e) { box.innerHTML = `<div class="empty-state" style="color:var(--red);">読み込めませんでした：${esc2(e && e.message || e)}</div>`; }
+}
+function evPickRender() {
+  const box = document.getElementById('ev-pick-list');
+  if (!evPickRows.length) { box.innerHTML = '<div class="empty-state">条件に合う精肉の在庫がありません</div>'; evPickCount(); return; }
+  box.innerHTML = `<div style="overflow-x:auto;max-height:52vh;"><table>
+    <thead><tr><th style="width:34px;"></th><th>個体番号</th><th>部位</th><th>重量</th><th>精肉日</th></tr></thead>
+    <tbody>${evPickRows.map(r => r.packs.map(p => `<tr>
+      <td><input type="checkbox" data-evp="${p.id}" ${evPickSel.has(p.id) ? 'checked' : ''} onchange="evPickToggle('${p.id}',this.checked)"></td>
+      <td style="color:var(--gold);font-weight:600;white-space:nowrap;">${esc2(r.label)}</td>
+      <td>${esc2(p.part_name || '-')}</td>
+      <td style="white-space:nowrap;">${evNum(p.weight != null ? p.weight : p.weight_kg).toFixed(2)}kg</td>
+      <td style="white-space:nowrap;">${esc2(evDateOnly(p.processed_at) || '-')}</td>
+    </tr>`).join('')).join('')}</tbody></table></div>`;
+  evPickCount();
+}
+function evPickToggle(id, on) { if (on) evPickSel.add(id); else evPickSel.delete(id); evPickCount(); }
+function evPickToggleAll(on) {
+  evPickRows.forEach(r => r.packs.forEach(p => { if (on) evPickSel.add(p.id); else evPickSel.delete(p.id); }));
+  document.querySelectorAll('#ev-pick-list input[data-evp]').forEach(c => { c.checked = on; });
+  evPickCount();
+}
+function evPickCount() {
+  const el = document.getElementById('ev-pick-count');
+  if (el) el.textContent = evPickSel.size ? `${evPickSel.size}点を選択中` : '選択なし';
+}
+async function evPickAdd() {
+  if (!evCur) return;
+  if (!evPickSel.size) { alert('追加する在庫を選んでください。'); return; }
+  const price = parseInt(document.getElementById('ev-pick-price').value || '0', 10) || 0;
+  const all = [];
+  evPickRows.forEach(r => r.packs.forEach(p => { if (evPickSel.has(p.id)) all.push({ r, p }); }));
+  try {
+    await sb('POST', 'sale_event_items', all.map(({ r, p }) => ({
+      event_id: evCur.id, kind: 'inventory', inventory_id: p.id, ident_code: p.ident_code,
+      individual_label: r.label, species: p.species, part_name: p.part_name, item_name: null,
+      weight_kg: evNum(p.weight != null ? p.weight : p.weight_kg),
+      qty_taken: 1, qty_sold: 0, price_basis: 'kg', unit_price: price,
+      lot_code: null, match_key: null, member_labels: null, note: null
+    })));
+    closeModal('ev-pick-modal');
+    evPickSel = new Set();
+    evItems = await sb('GET', 'sale_event_items', null, `?event_id=eq.${evCur.id}&select=*&order=kind,created_at`);
+    await evLoadIndCache();
+    evRenderItems();
+    toast(`${all.length}点を追加しました`);
+  } catch (e) { alert('追加できませんでした：' + (e && e.message || e)); }
+}
 
-    // 個体の詳細（獲れた場所・検査結果）をまとめて引く
-    const labels = evRows.map(r => r.label);
-    const inds = {};
-    for (let i = 0; i < labels.length; i += 80) {
-      // 区切りのカンマ・引用符はそのまま、中身だけエスケープする（シカ等の全角番号対策）
-      const chunk = labels.slice(i, i + 80).map(l => '"' + encodeURIComponent(String(l).replace(/"/g, '')) + '"').join(',');
-      const got = await sb('GET', 'individuals', null,
-        `?label_id=in.(${chunk})&deleted_at=is.null` +
-        `&select=label_id,species,sex,weight_total,capture_date,capture_city,capture_area,capture_method,capture_koaza,radiation_test_date,radiation_result,processing_done_at`);
-      got.forEach(g => { inds[g.label_id] = g; });
+/* ── 加工品（小分けパック）を選ぶ ── */
+async function evLotOpen() {
+  document.getElementById('ev-lot-modal').classList.add('active');
+  const box = document.getElementById('ev-lot-list');
+  box.innerHTML = '<div class="loading"><span class="spin"></span>加工品を読み込み中...</div>';
+  try {
+    const inv = await sb('GET', 'inventory', null,
+      `?tier=eq.3&status=eq.${encodeURIComponent('在庫')}&deleted_at=is.null` +
+      `&select=id,ident_code,individual_code,part_name,process_type,weight,weight_kg,processed_at&order=processed_at.desc&limit=3000`);
+    if (!inv.length) { box.innerHTML = '<div class="empty-state">加工品の在庫がありません</div>'; return; }
+    // 商品ごとにまとめる（ロットが違っても同じ商品は1行）
+    const g = {};
+    inv.forEach(x => {
+      const key = x.process_type || x.part_name || '加工品';
+      const o = g[key] || (g[key] = { key, qty: 0, kg: 0, batches: new Set() });
+      o.qty++; o.kg += evNum(x.weight != null ? x.weight : x.weight_kg);
+      if (x.individual_code) o.batches.add(x.individual_code);
+    });
+    // 各商品に入っている個体をまとめて引く
+    const batches = [...new Set(inv.map(x => x.individual_code).filter(Boolean))];
+    const members = {};
+    for (let i = 0; i < batches.length; i += 60) {
+      const chunk = batches.slice(i, i + 60).map(b => '"' + encodeURIComponent(b) + '"').join(',');
+      const logs = await sb('GET', 'processing_log', null,
+        `?child_ident_code=in.(${chunk})&individual_id=not.is.null&select=child_ident_code,individual_id&limit=5000`);
+      logs.forEach(l => { (members[l.child_ident_code] = members[l.child_ident_code] || new Set()).add(l.individual_id); });
     }
-    evRows.forEach(r => { r.ind = inds[r.label] || null; });
+    const list = Object.values(g).map(o => {
+      const labels = new Set();
+      o.batches.forEach(b => (members[b] || new Set()).forEach(l => labels.add(l)));
+      return { ...o, labels: [...labels].sort() };
+    }).sort((a, b) => b.qty - a.qty);
+    window.evLotList = list;
+    box.innerHTML = `<div style="overflow-x:auto;max-height:50vh;"><table>
+      <thead><tr><th>商品</th><th>在庫</th><th>入っている頭</th><th>持って行く数</th><th>円/個</th><th></th></tr></thead>
+      <tbody>${list.map((o, n) => `<tr>
+        <td><strong>${esc2(o.key)}</strong></td>
+        <td style="white-space:nowrap;">${o.qty}個<span style="color:var(--text3);font-size:11px;"> ${o.kg.toFixed(2)}kg</span></td>
+        <td style="font-size:12px;color:var(--text2);">${o.labels.length ? `${o.labels.length}頭` : '<span style="color:var(--red);">記録なし</span>'}</td>
+        <td><input class="form-input" type="number" id="ev-lot-q-${n}" style="width:80px;padding:4px 6px;" value="${o.qty}" min="1" max="${o.qty}"></td>
+        <td><input class="form-input" type="number" id="ev-lot-p-${n}" style="width:92px;padding:4px 6px;" placeholder="1200"></td>
+        <td><button class="btn btn-sm btn-primary" style="padding:3px 10px;font-size:12px;" onclick="evLotAdd(${n})">追加</button></td>
+      </tr>`).join('')}</tbody></table></div>`;
+  } catch (e) { box.innerHTML = `<div class="empty-state" style="color:var(--red);">読み込めませんでした：${esc2(e && e.message || e)}</div>`; }
+}
 
-    evSelected = new Set([...evSelected].filter(l => byInd.has(l)));
-    evRender();
-  } catch (e) {
-    box.innerHTML = `<div class="empty-state" style="color:var(--red);">在庫を読み込めませんでした：${esc2(e && e.message || e)}</div>`;
+async function evLotAdd(n) {
+  if (!evCur) return;
+  const o = (window.evLotList || [])[n];
+  if (!o) return;
+  const qty = parseInt(document.getElementById('ev-lot-q-' + n).value || '0', 10);
+  const price = parseInt(document.getElementById('ev-lot-p-' + n).value || '0', 10) || 0;
+  if (!(qty > 0)) { alert('持って行く数を入れてください。'); return; }
+  if (qty > o.qty) { alert(`在庫は ${o.qty}個 です。`); return; }
+  try {
+    await sb('POST', 'sale_event_items', {
+      event_id: evCur.id, kind: 'lot', inventory_id: null, ident_code: null, individual_label: null,
+      species: null, part_name: null, item_name: o.key, weight_kg: null,
+      qty_taken: qty, qty_sold: 0, price_basis: 'unit', unit_price: price,
+      lot_code: [...o.batches][0] || null, match_key: o.key,
+      member_labels: o.labels.length ? o.labels : null, note: null
+    });
+    closeModal('ev-lot-modal');
+    evItems = await sb('GET', 'sale_event_items', null, `?event_id=eq.${evCur.id}&select=*&order=kind,created_at`);
+    evRenderItems();
+    toast(`${o.key} を ${qty}個 追加しました`);
+  } catch (e) { alert('追加できませんでした：' + (e && e.message || e)); }
+}
+
+async function evOtherAdd() {
+  if (!evCur) return;
+  const name = (prompt('品名（うちの在庫でないもの）\n例: ジビエカレー、ドッグフード、革小物') || '').trim();
+  if (!name) return;
+  const qty = parseInt(prompt('持って行く数', '10') || '0', 10);
+  if (!(qty > 0)) { alert('数を入れてください。'); return; }
+  const price = parseInt(prompt('1個あたりの値段（円）', '800') || '0', 10) || 0;
+  try {
+    await sb('POST', 'sale_event_items', {
+      event_id: evCur.id, kind: 'other', inventory_id: null, ident_code: null, individual_label: null,
+      species: null, part_name: null, item_name: name, weight_kg: null,
+      qty_taken: qty, qty_sold: 0, price_basis: 'unit', unit_price: price,
+      lot_code: null, match_key: null, member_labels: null, note: null
+    });
+    evItems = await sb('GET', 'sale_event_items', null, `?event_id=eq.${evCur.id}&select=*&order=kind,created_at`);
+    evRenderItems();
+  } catch (e) { alert('追加できませんでした：' + (e && e.message || e)); }
+}
+
+/* ── 状態を進める ── */
+function evBy() { return (document.getElementById('ev-d-staff').value || '').trim() || null; }
+async function evAfterRpc(r, okMsg) {
+  if (!r || r.ok !== true) {
+    let m = (r && r.error) || 'うまくいきませんでした';
+    if (r && r.blocked) m += '\n\n' + JSON.stringify(r.blocked);
+    alert(m); return false;
   }
+  const rows = await sb('GET', 'sale_events', null, `?id=eq.${evCur.id}&select=*`);
+  evCur = rows[0];
+  evItems = await sb('GET', 'sale_event_items', null, `?event_id=eq.${evCur.id}&select=*&order=kind,created_at`);
+  evFillHead(); evRenderItems();
+  toast(okMsg);
+  return true;
+}
+async function evTakeout() {
+  if (!evCur) return;
+  const inds = evItems.filter(i => i.kind === 'inventory').length;
+  const lots = evItems.filter(i => i.kind !== 'inventory').reduce((a, i) => a + evNum(i.qty_taken), 0);
+  if (!inds && !lots) { alert('持っていくものを先に選んでください。'); return; }
+  if (!confirm(`持ち出しを確定します。\n一頭もの ${inds}点 / 小分け・その他 ${lots}個\n\n一頭もののパックは「引当済」になり、他所へ出せなくなります。`)) return;
+  try { await evAfterRpc(await sb('POST', 'rpc/sale_event_takeout', { p_event_id: evCur.id, p_by: evBy() }), '持ち出しを確定しました'); }
+  catch (e) { alert('確定できませんでした：' + (e && e.message || e)); }
+}
+async function evSettle() {
+  if (!evCur) return;
+  const total = evItems.reduce((a, i) => a + evNum(i.amount), 0);
+  if (!confirm(`売上を確定します。\n明細の売上 ${evYen(total)}\n\n売れたぶんは出荷済、売れ残りは在庫に戻ります。`)) return;
+  try {
+    const r = await sb('POST', 'rpc/sale_event_settle', { p_event_id: evCur.id, p_by: evBy() });
+    if (await evAfterRpc(r, '売上を確定しました')) {
+      if (r.short && r.short.length) {
+        alert('次の小分け商品は、在庫が売れた数に足りませんでした。\n在庫の登録を確認してください。\n\n'
+          + r.short.map(s => `・${s.item}：売れた ${s.sold}個 / 在庫から落とせた ${s.stock_moved}個`).join('\n'));
+      }
+    }
+  } catch (e) { alert('確定できませんでした：' + (e && e.message || e)); }
+}
+async function evReopen() {
+  if (!evCur) return;
+  if (!confirm('確定を取り消して準備中に戻します。\n在庫はすべて「在庫」に戻ります。よろしいですか？')) return;
+  try { await evAfterRpc(await sb('POST', 'rpc/sale_event_reopen', { p_event_id: evCur.id, p_by: evBy() }), '準備中に戻しました'); }
+  catch (e) { alert('戻せませんでした：' + (e && e.message || e)); }
 }
 
-function evRender() {
-  const box = document.getElementById('ev-list');
-  if (!box) return;
-  if (!evRows.length) {
-    box.innerHTML = '<div class="empty-state">条件に合う精肉の在庫がありません</div>';
-    evUpdateCount(); return;
-  }
-  box.innerHTML = `<div style="overflow-x:auto;"><table>
-    <thead><tr><th style="width:34px;"></th><th>個体番号</th><th>獲れた場所</th><th>捕獲日</th><th>精肉日</th><th>持っていける部位</th></tr></thead>
-    <tbody>${evRows.map(r => {
-      const i = r.ind || {};
-      const miss = !r.ind;
-      const parts = r.packs.map(p => `${p.part_name} ${Number(p.weight != null ? p.weight : p.weight_kg).toFixed(2)}kg`).join(' ／ ');
-      return `<tr>
-        <td><input type="checkbox" data-ev="${esc2(r.label)}" ${evSelected.has(r.label) ? 'checked' : ''} onchange="evToggle('${esc2(r.label)}',this.checked)"></td>
-        <td style="color:var(--gold);font-weight:600;white-space:nowrap;">${esc2(r.label)}</td>
-        <td>${miss ? '<span style="color:var(--red);">個体の記録が見つかりません</span>' : esc2((i.capture_city || '') + ' ' + (i.capture_area || ''))}</td>
-        <td style="white-space:nowrap;">${esc2(i.capture_date || '-')}</td>
-        <td style="white-space:nowrap;">${esc2(evDateOnly(i.processing_done_at) || '-')}</td>
-        <td style="font-size:12px;color:var(--text2);">${esc2(parts)}</td>
-      </tr>`;
-    }).join('')}</tbody></table></div>`;
-  evUpdateCount();
-}
-
-function evToggle(label, on) {
-  if (on) evSelected.add(label); else evSelected.delete(label);
-  evUpdateCount();
-}
-function evToggleAll(on) {
-  evRows.forEach(r => { if (on) evSelected.add(r.label); else evSelected.delete(r.label); });
-  document.querySelectorAll('#ev-list input[data-ev]').forEach(c => { c.checked = on; });
-  evUpdateCount();
-}
-function evUpdateCount() {
-  const el = document.getElementById('ev-count');
-  if (!el) return;
-  const n = evSelected.size;
-  const pages = Math.ceil(n / 6);
-  el.textContent = n ? `${n}個体を選択中（A4 ${pages}枚）` : '0個体を選択中';
-}
-
+/* ── 印刷: 一頭ごとのカード（A4に6個体） ── */
 function evSheetCss() {
   return `
     @page { size: A4 portrait; margin: 8mm; }
@@ -5871,7 +6567,6 @@ function evSheetCss() {
     .cd .pl { font-size:15pt; font-weight:bold; line-height:1.25; margin-top:1.5mm; }
     .cd .dt { font-size:10.5pt; margin-top:.8mm; }
     .cd .fa { font-size:8.5pt; color:#333; line-height:1.6; margin-top:1.8mm; }
-    /* 部位とQRはひとかたまりでカードの下半分に置く（間が抜けて見えないように） */
     .cd .pt { font-size:9pt; margin-top:auto; line-height:1.5; }
     .cd .pt .lb { color:#666; font-size:8pt; }
     .cd .ft { display:flex; align-items:center; gap:3mm; margin-top:2.5mm;
@@ -5880,7 +6575,6 @@ function evSheetCss() {
     .cd .qr svg { display:block; width:28mm !important; height:28mm !important; }
     .cd .qx { flex:1 1 auto; min-width:0; font-size:9pt; line-height:1.6; }
     .cd .qx b { font-size:10pt; display:block; }
-    /* 案内文は途中で折り返さない長さにしてある。折れたら読みづらいので必ず1行 */
     .cd .qx small { display:block; font-size:8pt; color:#555; white-space:nowrap; }
   `;
 }
@@ -5889,7 +6583,7 @@ function evCardHtml(r) {
   const i = r.ind || {};
   const label = i.label_id || r.label;
   const aging = evAgingDays(i.capture_date, i.processing_done_at);
-  const parts = r.packs.map(p => `${p.part_name} ${Number(p.weight != null ? p.weight : p.weight_kg).toFixed(2)}kg`).join(' ／ ');
+  const parts = r.packs.map(p => `${p.part_name} ${evNum(p.weight != null ? p.weight : p.weight_kg).toFixed(2)}kg`).join(' ／ ');
   const place = ((i.capture_city || '') + ' ' + (i.capture_area || '')).trim();
   return `<div class="cd">
     <div class="no">${esc2(label)}<span class="sp">${esc2(i.species || r.species || '')}${i.sex ? '・' + esc2(i.sex) : ''}${i.weight_total ? ' ' + esc2(i.weight_total) + 'kg' : ''}</span></div>
@@ -5910,15 +6604,39 @@ function evCardHtml(r) {
   </div>`;
 }
 
+// 出店の明細から「一頭ごと」の並びを作る（小分けはここに混ぜない）
+function evCardRows() {
+  const byInd = new Map();
+  evItems.filter(i => i.kind === 'inventory' && i.individual_label).forEach(i => {
+    const g = byInd.get(i.individual_label) ||
+      { label: i.individual_label, species: i.species, packs: [], ind: evIndCache[i.individual_label] || null };
+    g.packs.push({ part_name: i.part_name, weight: i.weight_kg });
+    byInd.set(i.individual_label, g);
+  });
+  return [...byInd.values()];
+}
+
+function evPrintDoc(css, body) {
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;border:none;opacity:0;';
+  document.body.appendChild(iframe);
+  const doc = iframe.contentDocument || iframe.contentWindow.document;
+  doc.open();
+  doc.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${css}</style></head><body>${body}</body></html>`);
+  doc.close();
+  iframe.contentWindow.focus();
+  iframe.contentWindow.print();
+  window.addEventListener('afterprint', () => { try { iframe.remove(); } catch (_) {} }, { once: true });
+  setTimeout(() => { try { iframe.remove(); } catch (_) {} }, 8000);
+}
+
 function evPrint() {
-  const picked = evRows.filter(r => evSelected.has(r.label));
-  if (!picked.length) { alert('印刷する個体を選んでください。'); return; }
+  const picked = evCardRows();
+  if (!picked.length) { alert('一頭ずつ分かるお肉がまだありません。\n（小分けパックは個体を特定できないので、このシートには出ません）'); return; }
   const missing = picked.filter(r => !r.ind).map(r => r.label);
   if (missing.length && !confirm(`次の個体は捕獲の記録が見つからないため、場所や検査結果が空欄になります。\n${missing.join('・')}\n\nこのまま印刷しますか？`)) return;
-
-  const title = (document.getElementById('ev-title').value || '').trim() || '本日のジビエ';
-  const dv = document.getElementById('ev-date').value;
-  const dateStr = dv ? evJp(dv) : '';
+  const title = (evCur && (evCur.title || evCur.venue_name)) || '本日のジビエ';
+  const dateStr = evCur ? evJp(evCur.event_date) : '';
   const pages = [];
   for (let i = 0; i < picked.length; i += 6) pages.push(picked.slice(i, i + 6));
   const body = pages.map((pg, n) => `<div class="pg">
@@ -5926,18 +6644,142 @@ function evPrint() {
       <span class="p">館山ジビエセンター（合同会社アルコ）${pages.length > 1 ? ` ${n + 1}/${pages.length}` : ''}</span></div>
     <div class="gr">${pg.map(evCardHtml).join('')}</div>
   </div>`).join('');
+  evPrintDoc(evSheetCss(), body);
+}
 
-  const iframe = document.createElement('iframe');
-  iframe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;border:none;opacity:0;';
-  document.body.appendChild(iframe);
-  const doc = iframe.contentDocument || iframe.contentWindow.document;
-  doc.open();
-  doc.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${evSheetCss()}</style></head><body>${body}</body></html>`);
-  doc.close();
-  iframe.contentWindow.focus();
-  iframe.contentWindow.print();
-  window.addEventListener('afterprint', () => { try { iframe.remove(); } catch (_) {} }, { once: true });
-  setTimeout(() => { try { iframe.remove(); } catch (_) {} }, 8000);
+/* ── 印刷: 会場に貼る「一覧QR」のポスター ── */
+function evPosterCss() {
+  return `
+    @page { size: A4 portrait; margin: 12mm; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Meiryo','Yu Gothic',sans-serif; color:#111; background:#fff; }
+    .po { width:186mm; height:273mm; display:flex; flex-direction:column; align-items:center;
+          text-align:center; border:.6mm solid #8a7648; border-radius:4mm; padding:14mm 10mm; }
+    .po .eb { font-size:11pt; letter-spacing:.25em; color:#8a7648; }
+    .po h1 { font-size:34pt; margin-top:5mm; line-height:1.2; }
+    .po .vn { font-size:16pt; margin-top:4mm; }
+    .po .dt { font-size:13pt; color:#444; margin-top:2mm; }
+    .po .qr { margin-top:10mm; }
+    .po .qr svg { display:block; width:96mm !important; height:96mm !important; }
+    .po .cta { font-size:17pt; font-weight:bold; margin-top:8mm; line-height:1.6; }
+    .po .sub { font-size:11.5pt; color:#444; margin-top:4mm; line-height:1.9; }
+    .po .ct { margin-top:auto; font-size:10pt; color:#666; line-height:1.7; }
+  `;
+}
+function evPosterPrint() {
+  if (!evCur) return;
+  const inds = evCardRows().length;
+  const lots = evItems.filter(i => i.kind !== 'inventory').length;
+  if (!inds && !lots) { alert('持っていくものを先に選んでください。'); return; }
+  const body = `<div class="po">
+    <div class="eb">館山ジビエセンター</div>
+    <h1>今日のジビエは<br>どこの一頭？</h1>
+    <div class="vn">${esc2(evCur.venue_name)}</div>
+    <div class="dt">${esc2(evJp(evCur.event_date))}${evCur.end_date && evCur.end_date !== evCur.event_date ? ` 〜 ${esc2(evJp(evCur.end_date))}` : ''}</div>
+    <div class="qr">${makeQRSVG(eventListUrl(evCur.id), 96)}</div>
+    <div class="cta">スマホのカメラを向けてください</div>
+    <div class="sub">
+      今日並んでいるお肉が、いつ・どこで獲れた一頭か${inds ? `（${inds}頭）` : ''}<br>
+      ${lots ? '小分けパックは、入っている一頭たちをすべて載せています<br>' : ''}
+      放射性物質検査の結果もご覧いただけます
+    </div>
+    <div class="ct">館山ジビエセンター（合同会社アルコ）<br>千葉県館山市西長田1163-5</div>
+  </div>`;
+  evPrintDoc(evPosterCss(), body);
+}
+
+/* ── 印刷: 出店報告書 ── */
+function evReportCss() {
+  return `
+    @page { size: A4 portrait; margin: 14mm; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Meiryo','Yu Gothic',sans-serif; color:#111; background:#fff; font-size:9.5pt; line-height:1.7; }
+    h1 { font-size:16pt; border-bottom:.6mm solid #8a7648; padding-bottom:2mm; }
+    .sub { font-size:11pt; margin-top:3mm; font-weight:bold; }
+    h2 { font-size:11pt; margin-top:7mm; padding-left:2mm; border-left:1.2mm solid #8a7648; }
+    table { width:100%; border-collapse:collapse; margin-top:2.5mm; font-size:9pt; }
+    th, td { border:.25mm solid #999; padding:1.4mm 2mm; text-align:left; }
+    th { background:#f2ede1; font-weight:bold; }
+    td.n { text-align:right; white-space:nowrap; }
+    .kv { display:flex; flex-wrap:wrap; gap:0 8mm; margin-top:2mm; }
+    .kv div { flex:0 0 auto; }
+    .kv b { display:inline-block; min-width:24mm; color:#555; font-weight:normal; }
+    .box { border:.3mm solid #999; padding:3mm; margin-top:2.5mm; min-height:18mm; white-space:pre-wrap; }
+    .ft { margin-top:8mm; font-size:8pt; color:#666; text-align:right; }
+  `;
+}
+function evReportPrint() {
+  if (!evCur) return;
+  const e = evCur;
+  const inds = evItems.filter(i => i.kind === 'inventory');
+  const lots = evItems.filter(i => i.kind !== 'inventory');
+  const total = evItems.reduce((a, i) => a + evNum(i.amount), 0);
+  const cost = evNum(e.booth_fee) + evNum(e.other_cost);
+  const takenKg = inds.reduce((a, i) => a + evNum(i.weight_kg), 0);
+  const soldKg = inds.filter(i => evNum(i.qty_sold) > 0).reduce((a, i) => a + evNum(i.weight_kg), 0);
+  const soldInd = inds.filter(i => evNum(i.qty_sold) > 0).length;
+  const takenLot = lots.reduce((a, i) => a + evNum(i.qty_taken), 0);
+  const soldLot = lots.reduce((a, i) => a + evNum(i.qty_sold), 0);
+  const cash = evNum(e.cash_total);
+  const per = evNum(e.visitors) ? Math.round(total / evNum(e.visitors)) : null;
+
+  const body = `
+    <h1>出店報告書</h1>
+    <div class="sub">${esc2(e.venue_name)}${e.title ? `　${esc2(e.title)}` : ''}</div>
+    <div class="kv">
+      <div><b>開催日</b>${esc2(e.event_date)}${e.end_date && e.end_date !== e.event_date ? ` 〜 ${esc2(e.end_date)}` : ''}</div>
+      <div><b>時間</b>${esc2(e.start_time || '—')} 〜 ${esc2(e.end_time || '—')}</div>
+      <div><b>天候</b>${esc2(e.weather || '—')}</div>
+      <div><b>担当</b>${esc2(e.staff_names || '—')}</div>
+      <div><b>状態</b>${esc2(e.status)}</div>
+    </div>
+
+    <h2>売上</h2>
+    <table>
+      <tr><th>明細の売上</th><td class="n">${evYen(total)}</td>
+          <th>実際の入金</th><td class="n">${cash ? evYen(cash) : '—'}</td>
+          <th>差</th><td class="n">${cash ? evYen(cash - total) : '—'}</td></tr>
+      <tr><th>出店料</th><td class="n">${evYen(e.booth_fee)}</td>
+          <th>その他の経費</th><td class="n">${evYen(e.other_cost)}</td>
+          <th>差引</th><td class="n">${evYen(total - cost)}</td></tr>
+      <tr><th>立ち寄り</th><td class="n">${e.visitors ? e.visitors + '人' : '—'}</td>
+          <th>立ち寄り1人あたり</th><td class="n">${per != null ? evYen(per) : '—'}</td>
+          <th></th><td class="n"></td></tr>
+    </table>
+
+    <h2>一頭ずつ分かるお肉（${soldInd} / ${inds.length}点、${soldKg.toFixed(2)} / ${takenKg.toFixed(2)}kg）</h2>
+    ${inds.length ? `<table>
+      <thead><tr><th>個体番号</th><th>獲れた場所</th><th>獲れた日</th><th>部位</th><th>重量</th><th>円/kg</th><th>結果</th><th>金額</th></tr></thead>
+      <tbody>${inds.map(i => {
+        const d = evIndCache[i.individual_label] || {};
+        return `<tr>
+          <td>${esc2(i.individual_label || '-')}</td>
+          <td>${esc2(((d.capture_city || '') + ' ' + (d.capture_area || '')).trim() || '—')}</td>
+          <td>${esc2(d.capture_date || '—')}</td>
+          <td>${esc2(i.part_name || '-')}</td>
+          <td class="n">${evNum(i.weight_kg).toFixed(2)}kg</td>
+          <td class="n">${evNum(i.unit_price).toLocaleString()}</td>
+          <td>${evNum(i.qty_sold) > 0 ? '売れた' : '持ち帰り'}</td>
+          <td class="n">${evYen(i.amount)}</td></tr>`;
+      }).join('')}</tbody></table>` : '<div class="box">なし</div>'}
+
+    <h2>小分けパック・その他（${soldLot} / ${takenLot}個）</h2>
+    ${lots.length ? `<table>
+      <thead><tr><th>品名</th><th>種類</th><th>入っている頭</th><th>持参</th><th>売れた</th><th>単価</th><th>金額</th></tr></thead>
+      <tbody>${lots.map(i => `<tr>
+        <td>${esc2(i.item_name || i.match_key || '-')}</td>
+        <td>${i.kind === 'lot' ? '小分け（個体は特定せず）' : 'その他'}</td>
+        <td>${(i.member_labels && i.member_labels.length) ? i.member_labels.length + '頭' : '—'}</td>
+        <td class="n">${evNum(i.qty_taken)}</td>
+        <td class="n">${evNum(i.qty_sold)}</td>
+        <td class="n">${evNum(i.unit_price).toLocaleString()}${i.price_basis === 'kg' ? '/kg' : '/個'}</td>
+        <td class="n">${evYen(i.amount)}</td></tr>`).join('')}</tbody></table>` : '<div class="box">なし</div>'}
+
+    <h2>所感・気づいたこと</h2>
+    <div class="box">${esc2(e.note || '')}</div>
+
+    <div class="ft">館山ジビエセンター（合同会社アルコ）　作成 ${new Date().toLocaleDateString('ja-JP')}</div>`;
+  evPrintDoc(evReportCss(), body);
 }
 
 // レイアウト実測用（1ページぶんの完全なHTML）
@@ -5948,6 +6790,23 @@ function evSheetHtml(rows, title, dateStr) {
     <div class="gr">${rows.map(evCardHtml).join('')}</div>
   </div>`;
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${evSheetCss()}</style></head><body>${body}</body></html>`;
+}
+function evPosterHtml(id, venue, dateStr, inds, lots) {
+  const body = `<div class="po">
+    <div class="eb">館山ジビエセンター</div>
+    <h1>今日のジビエは<br>どこの一頭？</h1>
+    <div class="vn">${esc2(venue || '')}</div>
+    <div class="dt">${esc2(dateStr || '')}</div>
+    <div class="qr">${makeQRSVG(eventListUrl(id), 96)}</div>
+    <div class="cta">スマホのカメラを向けてください</div>
+    <div class="sub">
+      今日並んでいるお肉が、いつ・どこで獲れた一頭か${inds ? `（${inds}頭）` : ''}<br>
+      ${lots ? '小分けパックは、入っている一頭たちをすべて載せています<br>' : ''}
+      放射性物質検査の結果もご覧いただけます
+    </div>
+    <div class="ct">館山ジビエセンター（合同会社アルコ）<br>千葉県館山市西長田1163-5</div>
+  </div>`;
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${evPosterCss()}</style></head><body>${body}</body></html>`;
 }
 
 /* ── ラベル用の数字キー（scan_code）の先取り確保 ──
