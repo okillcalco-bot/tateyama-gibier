@@ -437,6 +437,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <button class="tab-btn" data-tab="kakou">&#x1F356; 加工処理<span class="nav-badge" id="nav-badge-kakou"></span></button>
   <button class="tab-btn" data-tab="products">&#x1F6CD; 加工調理<span class="nav-badge" id="nav-badge-products"></span></button>
   <button class="tab-btn" data-tab="inventory">&#x1F4E6; 在庫一覧</button>
+  <button class="tab-btn" data-tab="event">&#x1F3EA; 出店シート</button>
   <button class="tab-btn" data-tab="shipping">&#x1F4E4; 出荷処理<span class="nav-badge" id="nav-badge-shipping"></span></button>
   <button class="tab-btn" data-tab="trace">&#x1F50D; トレーサビリティ</button>
   <button class="tab-btn" data-tab="voices">&#x1F4AC; 食べた人の声<span class="nav-badge" id="nav-badge-voices"></span></button>
@@ -546,6 +547,38 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <tbody id="inv-trash-body"><tr><td colspan="6" style="text-align:center;color:var(--text3);">読み込み中...</td></tr></tbody>
         </table>
       </div>
+    </div>
+  </div>
+
+  <!-- 出店シート（お客様に見せる「今日はどの個体を食べられる？」の一覧） -->
+  <div class="tab-panel" id="panel-event">
+    <div class="section">
+      <div class="section-title">🏪 出店シート</div>
+      <div style="padding:10px 12px;border:1px dashed var(--gold2);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.8;background:var(--surface2);margin-bottom:12px;">
+        出店に持っていくお肉を選ぶと、<strong style="color:var(--gold);">A4・1枚に6個体</strong>の一覧が刷れます。
+        カード1枚が1個体です。QRを読むとお客様のスマホで「この肉の物語」（獲れた場所・獲れた日・放射能検査の結果）が開き、
+        <strong style="color:var(--gold);">その場で感想を残してもらえます</strong>。<br>
+        一覧に出るのは<strong>精肉の在庫</strong>だけです。ミンチ・スライスは複数の個体が混ざるため、個体単位では出せません。
+      </div>
+      <div class="filter-bar">
+        <div class="form-group"><label>部位</label><select class="form-input" id="ev-part"><option value="">全て</option></select></div>
+        <div class="form-group"><label>精肉した時期</label><select class="form-input" id="ev-days">
+          <option value="14">最近14日</option><option value="30" selected>最近30日</option>
+          <option value="90">最近90日</option><option value="0">全て</option></select></div>
+        <div class="form-group"><button class="btn btn-primary" onclick="loadEventSheet()">絞り込む</button></div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;">
+        <div class="form-group" style="min-width:220px;"><label>見出し（用紙の上に出ます）</label><input class="form-input" id="ev-title" placeholder="例: 館山ジビエセンター 出店"></div>
+        <div class="form-group"><label>日付</label><input class="form-input" type="date" id="ev-date"></div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+        <label style="font-size:13px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer;">
+          <input type="checkbox" id="ev-all" onchange="evToggleAll(this.checked)"> 全選択
+        </label>
+        <span id="ev-count" style="font-size:13px;color:var(--text3);">0個体を選択中</span>
+        <button class="btn btn-primary" onclick="evPrint()">🖨 A4で印刷（6個体で1枚）</button>
+      </div>
+      <div id="ev-list"></div>
     </div>
   </div>
 
@@ -2214,6 +2247,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'shifts') loadShiftBoard();
     if (btn.dataset.tab === 'board') loadBoard();
     if (btn.dataset.tab === 'voices') loadVoices();
+    if (btn.dataset.tab === 'event') loadEventSheet();
   });
 });
 
@@ -5685,6 +5719,236 @@ function makeQRSVG(text, sizeMm) {
 
 // ラベルQRの行き先（「この肉の物語」公開ページ）
 function storyUrl(scanCode) { return 'https://tateyama-gibier.vercel.app/s.html?c=' + scanCode; }
+// 出店シートのQRは「パック」ではなく「一頭」へ飛ばす（会場ではまだパックが決まっていないため）
+function individualStoryUrl(labelId) {
+  return 'https://tateyama-gibier.vercel.app/s.html?i=' + encodeURIComponent(labelId);
+}
+
+/* ── 出店シート（お客様に見せる「今日はどの個体を食べられる？」の一覧） ── */
+let evRows = [];                 // 個体ごとにまとめた在庫
+let evSelected = new Set();      // 選んだ個体番号
+let evPartsLoaded = false;
+
+function evDateOnly(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (isNaN(d)) return String(ts).slice(0, 10);
+  return d.toLocaleDateString('sv-SE');    // JSTのYYYY-MM-DD
+}
+function evAgingDays(captureDate, processedAt) {
+  if (!captureDate || !processedAt) return null;
+  const a = new Date(captureDate + 'T00:00:00'), b = new Date(evDateOnly(processedAt) + 'T00:00:00');
+  if (isNaN(a) || isNaN(b)) return null;
+  return Math.round((b - a) / 86400000);
+}
+function evJp(d) {
+  if (!d) return '';
+  const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${+m[2]}月${+m[3]}日` : String(d);
+}
+
+async function loadEventSheet() {
+  const box = document.getElementById('ev-list');
+  if (!box) return;
+  const dateEl = document.getElementById('ev-date');
+  if (dateEl && !dateEl.value) dateEl.value = new Date().toLocaleDateString('sv-SE');
+  box.innerHTML = '<div class="loading"><span class="spin"></span>在庫を読み込み中...</div>';
+  try {
+    // 個体が特定できるのは精肉(tier2)だけ。ミンチ・スライスは複数個体が混ざるので出さない。
+    const inv = await sb('GET', 'inventory', null,
+      `?tier=eq.2&status=eq.${encodeURIComponent('在庫')}&deleted_at=is.null&individual_id=not.is.null` +
+      `&select=ident_code,scan_code,individual_id,species,part_name,weight,weight_kg,processed_at,created_at` +
+      `&order=processed_at.desc&limit=3000`);
+
+    // 部位の選択肢は「全在庫」から作る（絞り込んだあとに選択肢が消えないように）
+    const partSel = document.getElementById('ev-part');
+    if (partSel && !evPartsLoaded) {
+      const names = [...new Set(inv.map(x => x.part_name).filter(Boolean))].sort();
+      partSel.innerHTML = '<option value="">全て</option>' + names.map(n => `<option value="${esc2(n)}">${esc2(n)}</option>`).join('');
+      evPartsLoaded = true;
+    }
+    const part = partSel ? partSel.value : '';
+    const days = parseInt((document.getElementById('ev-days') || {}).value || '30', 10);
+    const since = days > 0 ? Date.now() - days * 86400000 : null;
+
+    const hit = inv.filter(x => {
+      if (part && x.part_name !== part) return false;
+      if (since) { const t = new Date(x.processed_at || x.created_at).getTime(); if (!(t >= since)) return false; }
+      return true;
+    });
+
+    // 個体ごとにまとめる
+    const byInd = new Map();
+    hit.forEach(x => {
+      const g = byInd.get(x.individual_id) || { label: x.individual_id, species: x.species, packs: [], last: 0 };
+      g.packs.push(x);
+      const t = new Date(x.processed_at || x.created_at).getTime();
+      if (t > g.last) g.last = t;
+      byInd.set(x.individual_id, g);
+    });
+    evRows = [...byInd.values()].sort((a, b) => b.last - a.last);
+
+    // 個体の詳細（獲れた場所・検査結果）をまとめて引く
+    const labels = evRows.map(r => r.label);
+    const inds = {};
+    for (let i = 0; i < labels.length; i += 80) {
+      // 区切りのカンマ・引用符はそのまま、中身だけエスケープする（シカ等の全角番号対策）
+      const chunk = labels.slice(i, i + 80).map(l => '"' + encodeURIComponent(String(l).replace(/"/g, '')) + '"').join(',');
+      const got = await sb('GET', 'individuals', null,
+        `?label_id=in.(${chunk})&deleted_at=is.null` +
+        `&select=label_id,species,sex,weight_total,capture_date,capture_city,capture_area,capture_method,capture_koaza,radiation_test_date,radiation_result,processing_done_at`);
+      got.forEach(g => { inds[g.label_id] = g; });
+    }
+    evRows.forEach(r => { r.ind = inds[r.label] || null; });
+
+    evSelected = new Set([...evSelected].filter(l => byInd.has(l)));
+    evRender();
+  } catch (e) {
+    box.innerHTML = `<div class="empty-state" style="color:var(--red);">在庫を読み込めませんでした：${esc2(e && e.message || e)}</div>`;
+  }
+}
+
+function evRender() {
+  const box = document.getElementById('ev-list');
+  if (!box) return;
+  if (!evRows.length) {
+    box.innerHTML = '<div class="empty-state">条件に合う精肉の在庫がありません</div>';
+    evUpdateCount(); return;
+  }
+  box.innerHTML = `<div style="overflow-x:auto;"><table>
+    <thead><tr><th style="width:34px;"></th><th>個体番号</th><th>獲れた場所</th><th>捕獲日</th><th>精肉日</th><th>持っていける部位</th></tr></thead>
+    <tbody>${evRows.map(r => {
+      const i = r.ind || {};
+      const miss = !r.ind;
+      const parts = r.packs.map(p => `${p.part_name} ${Number(p.weight != null ? p.weight : p.weight_kg).toFixed(2)}kg`).join(' ／ ');
+      return `<tr>
+        <td><input type="checkbox" data-ev="${esc2(r.label)}" ${evSelected.has(r.label) ? 'checked' : ''} onchange="evToggle('${esc2(r.label)}',this.checked)"></td>
+        <td style="color:var(--gold);font-weight:600;white-space:nowrap;">${esc2(r.label)}</td>
+        <td>${miss ? '<span style="color:var(--red);">個体の記録が見つかりません</span>' : esc2((i.capture_city || '') + ' ' + (i.capture_area || ''))}</td>
+        <td style="white-space:nowrap;">${esc2(i.capture_date || '-')}</td>
+        <td style="white-space:nowrap;">${esc2(evDateOnly(i.processing_done_at) || '-')}</td>
+        <td style="font-size:12px;color:var(--text2);">${esc2(parts)}</td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
+  evUpdateCount();
+}
+
+function evToggle(label, on) {
+  if (on) evSelected.add(label); else evSelected.delete(label);
+  evUpdateCount();
+}
+function evToggleAll(on) {
+  evRows.forEach(r => { if (on) evSelected.add(r.label); else evSelected.delete(r.label); });
+  document.querySelectorAll('#ev-list input[data-ev]').forEach(c => { c.checked = on; });
+  evUpdateCount();
+}
+function evUpdateCount() {
+  const el = document.getElementById('ev-count');
+  if (!el) return;
+  const n = evSelected.size;
+  const pages = Math.ceil(n / 6);
+  el.textContent = n ? `${n}個体を選択中（A4 ${pages}枚）` : '0個体を選択中';
+}
+
+function evSheetCss() {
+  return `
+    @page { size: A4 portrait; margin: 8mm; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Meiryo','Yu Gothic',sans-serif; color:#111; background:#fff; }
+    .pg { width:194mm; height:281mm; display:flex; flex-direction:column; page-break-after:always; }
+    .pg:last-child { page-break-after:auto; }
+    .hd { flex:0 0 13mm; display:flex; align-items:baseline; gap:3mm;
+          border-bottom:.6mm solid #8a7648; padding-bottom:1.5mm; }
+    .hd .t { font-size:15pt; font-weight:bold; }
+    .hd .d { font-size:10pt; color:#444; }
+    .hd .p { margin-left:auto; font-size:8.5pt; color:#666; }
+    .gr { flex:1 1 auto; display:grid; grid-template-columns:1fr 1fr;
+          grid-template-rows:repeat(3,1fr); gap:4mm; padding-top:3mm; }
+    .cd { border:.4mm solid #8a7648; border-radius:2mm; padding:3.5mm 4mm;
+          display:flex; flex-direction:column; overflow:hidden; }
+    .cd .no { font-size:9pt; font-weight:bold; font-family:monospace; color:#8a7648; display:flex; white-space:nowrap; }
+    .cd .no .sp { margin-left:auto; font-family:'Meiryo',sans-serif; color:#111; }
+    .cd .pl { font-size:15pt; font-weight:bold; line-height:1.25; margin-top:1.5mm; }
+    .cd .dt { font-size:10.5pt; margin-top:.8mm; }
+    .cd .fa { font-size:8.5pt; color:#333; line-height:1.6; margin-top:1.8mm; }
+    /* 部位とQRはひとかたまりでカードの下半分に置く（間が抜けて見えないように） */
+    .cd .pt { font-size:9pt; margin-top:auto; line-height:1.5; }
+    .cd .pt .lb { color:#666; font-size:8pt; }
+    .cd .ft { display:flex; align-items:center; gap:3mm; margin-top:2.5mm;
+              padding-top:2.5mm; border-top:.3mm dashed #cbbf9c; }
+    .cd .qr { flex:0 0 28mm; }
+    .cd .qr svg { display:block; width:28mm !important; height:28mm !important; }
+    .cd .qx { flex:1 1 auto; min-width:0; font-size:9pt; line-height:1.6; }
+    .cd .qx b { font-size:10pt; display:block; }
+    /* 案内文は途中で折り返さない長さにしてある。折れたら読みづらいので必ず1行 */
+    .cd .qx small { display:block; font-size:8pt; color:#555; white-space:nowrap; }
+  `;
+}
+
+function evCardHtml(r) {
+  const i = r.ind || {};
+  const label = i.label_id || r.label;
+  const aging = evAgingDays(i.capture_date, i.processing_done_at);
+  const parts = r.packs.map(p => `${p.part_name} ${Number(p.weight != null ? p.weight : p.weight_kg).toFixed(2)}kg`).join(' ／ ');
+  const place = ((i.capture_city || '') + ' ' + (i.capture_area || '')).trim();
+  return `<div class="cd">
+    <div class="no">${esc2(label)}<span class="sp">${esc2(i.species || r.species || '')}${i.sex ? '・' + esc2(i.sex) : ''}${i.weight_total ? ' ' + esc2(i.weight_total) + 'kg' : ''}</span></div>
+    <div class="pl">${esc2(place || '（場所の記録なし）')}</div>
+    <div class="dt">${i.capture_date ? esc2(evJp(i.capture_date)) + 'に' : ''}${esc2(i.capture_method || '')}でつかまえた一頭です</div>
+    <div class="fa">
+      ${i.processing_done_at ? `精肉した日　${esc2(evJp(evDateOnly(i.processing_done_at)))}${aging != null ? `（${aging}日ねかせました）` : ''}<br>` : ''}
+      ${i.radiation_result ? `放射性物質検査　${esc2(i.radiation_result)}${i.radiation_test_date ? `（${esc2(evJp(i.radiation_test_date))}）` : ''}` : ''}
+    </div>
+    <div class="pt"><span class="lb">本日お持ちした部位</span><br>${esc2(parts) || '—'}</div>
+    <div class="ft">
+      <div class="qr">${makeQRSVG(individualStoryUrl(label), 28)}</div>
+      <div class="qx"><b>この一頭の記録</b>
+        <small>スマホのカメラを向けてください</small>
+        <small>ご感想もこちらから</small>
+      </div>
+    </div>
+  </div>`;
+}
+
+function evPrint() {
+  const picked = evRows.filter(r => evSelected.has(r.label));
+  if (!picked.length) { alert('印刷する個体を選んでください。'); return; }
+  const missing = picked.filter(r => !r.ind).map(r => r.label);
+  if (missing.length && !confirm(`次の個体は捕獲の記録が見つからないため、場所や検査結果が空欄になります。\n${missing.join('・')}\n\nこのまま印刷しますか？`)) return;
+
+  const title = (document.getElementById('ev-title').value || '').trim() || '本日のジビエ';
+  const dv = document.getElementById('ev-date').value;
+  const dateStr = dv ? evJp(dv) : '';
+  const pages = [];
+  for (let i = 0; i < picked.length; i += 6) pages.push(picked.slice(i, i + 6));
+  const body = pages.map((pg, n) => `<div class="pg">
+    <div class="hd"><span class="t">${esc2(title)}</span><span class="d">${esc2(dateStr)}</span>
+      <span class="p">館山ジビエセンター（合同会社アルコ）${pages.length > 1 ? ` ${n + 1}/${pages.length}` : ''}</span></div>
+    <div class="gr">${pg.map(evCardHtml).join('')}</div>
+  </div>`).join('');
+
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;border:none;opacity:0;';
+  document.body.appendChild(iframe);
+  const doc = iframe.contentDocument || iframe.contentWindow.document;
+  doc.open();
+  doc.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${evSheetCss()}</style></head><body>${body}</body></html>`);
+  doc.close();
+  iframe.contentWindow.focus();
+  iframe.contentWindow.print();
+  window.addEventListener('afterprint', () => { try { iframe.remove(); } catch (_) {} }, { once: true });
+  setTimeout(() => { try { iframe.remove(); } catch (_) {} }, 8000);
+}
+
+// レイアウト実測用（1ページぶんの完全なHTML）
+function evSheetHtml(rows, title, dateStr) {
+  const body = `<div class="pg">
+    <div class="hd"><span class="t">${esc2(title || '本日のジビエ')}</span><span class="d">${esc2(dateStr || '')}</span>
+      <span class="p">館山ジビエセンター（合同会社アルコ）</span></div>
+    <div class="gr">${rows.map(evCardHtml).join('')}</div>
+  </div>`;
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${evSheetCss()}</style></head><body>${body}</body></html>`;
+}
 
 /* ── ラベル用の数字キー（scan_code）の先取り確保 ──
    ラベル印刷は保存より先に走ることがあるため、8桁キーをあらかじめ確保しておく。

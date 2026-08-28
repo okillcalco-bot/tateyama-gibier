@@ -86,17 +86,34 @@ async function rpc(fn,args){
 function param(k){ return new URLSearchParams(location.search).get(k)||''; }
 
 let story=null, rating=0;
+// ?c=8桁 … パックのラベルから（お手元のお肉）
+// ?i=個体番号 … 出店シートなど、個体そのものから
 const code=param('c').replace(/[^0-9]/g,'');
+const label=param('i').replace(/[^0-9A-Za-z\-぀-ヿ一-鿿]/g,'').slice(0,40);
+const byIndividual=!code && !!label;
+
+function fetchStory(){
+  return byIndividual ? rpc('story_get_individual',{p_label:label})
+                      : rpc('story_get',{p_code:code});
+}
 
 async function load(){
   const box=document.getElementById('main');
-  if(!code){ box.innerHTML='<div class="center">お肉のラベルのQRコードから開いてください。</div>'; return; }
+  if(!code && !label){ box.innerHTML='<div class="center">お肉のラベルのQRコードから開いてください。</div>'; return; }
+  if(byIndividual){
+    document.querySelector('header .sub').textContent='この一頭が、どこで生まれてどう届いたか';
+  }
   try{
-    story=await rpc('story_get',{p_code:code});
+    story=await fetchStory();
   }catch(e){
     box.innerHTML='<div class="center">うまく読み込めませんでした。時間をおいてお試しください。</div>'; return;
   }
-  if(!story){ box.innerHTML='<div class="center">この番号のお肉が見つかりませんでした。<br>ラベルの数字をご確認ください。</div>'; return; }
+  if(!story){
+    box.innerHTML=byIndividual
+      ? '<div class="center">この個体番号が見つかりませんでした。<br>番号をご確認ください。</div>'
+      : '<div class="center">この番号のお肉が見つかりませんでした。<br>ラベルの数字をご確認ください。</div>';
+    return;
+  }
   render();
 }
 
@@ -104,11 +121,20 @@ function render(){
   const p=story.product||{}, i=story.individual, parts=story.parts||[], voices=story.voices||[];
   let h='';
 
-  h+=`<div class="card prod">
-    <div class="nm">${esc(p.name||'ジビエ肉')}</div>
-    ${p.kg?`<div class="kg">${Number(p.kg).toFixed(3)} kg</div>`:''}
-    ${p.ident?`<div class="cd">${esc(p.ident)}</div>`:''}
-  </div>`;
+  if(p && p.name){
+    h+=`<div class="card prod">
+      <div class="nm">${esc(p.name)}</div>
+      ${p.kg?`<div class="kg">${Number(p.kg).toFixed(3)} kg</div>`:''}
+      ${p.ident?`<div class="cd">${esc(p.ident)}</div>`:''}
+    </div>`;
+  }else if(i){
+    // 個体から開いたとき（出店シートのQRなど）。パックではなく一頭を見出しにする
+    h+=`<div class="card prod">
+      <div class="nm">${esc(i.place||'—')} の一頭</div>
+      <div class="kg">${esc(i.species||'')}${i.sex?`（${esc(i.sex)}）`:''}${i.weight_total?` ${esc(i.weight_total)} kg`:''}</div>
+      <div class="cd">${esc(i.label||'')}</div>
+    </div>`;
+  }
 
   if(i){
     h+=`<div class="card">
@@ -118,6 +144,7 @@ function render(){
       ${i.method?`<div class="row"><span class="k">捕獲方法</span><span class="v">${esc(i.method)}</span></div>`:''}
       ${i.species?`<div class="row"><span class="k">鳥獣種</span><span class="v">${esc(i.species)}${i.sex?'（'+esc(i.sex)+'）':''}</span></div>`:''}
       ${i.weight_total?`<div class="row"><span class="k">体重</span><span class="v">${esc(i.weight_total)} kg</span></div>`:''}
+      ${i.processed_date?`<div class="row"><span class="k">精肉した日</span><span class="v">${esc(i.processed_date)}${i.aging_days!=null?`<span style="font-weight:400;color:var(--ink2);font-size:13px;">（${esc(i.aging_days)}日ねかせて）</span>`:''}</span></div>`:''}
       <div class="row"><span class="k">個体番号</span><span class="v">${esc(i.label||'—')}</span></div>
     </div>`;
 
@@ -177,13 +204,17 @@ async function send(){
   if(!rating && !comment){ msg.style.color='var(--gold)'; msg.textContent='星か感想のどちらかを入れてください。'; return; }
   btn.disabled=true; msg.style.color='var(--ink2)'; msg.textContent='送信しています…';
   try{
-    const r=await rpc('story_add_voice',{
-      p_code:code, p_nickname:document.getElementById('nickname').value,
-      p_rating:rating||null, p_dish:document.getElementById('dish').value, p_comment:comment});
+    const r=byIndividual
+      ? await rpc('story_add_voice_individual',{
+          p_label:label, p_nickname:document.getElementById('nickname').value,
+          p_rating:rating||null, p_dish:document.getElementById('dish').value, p_comment:comment})
+      : await rpc('story_add_voice',{
+          p_code:code, p_nickname:document.getElementById('nickname').value,
+          p_rating:rating||null, p_dish:document.getElementById('dish').value, p_comment:comment});
     if(r && r.ok){
       msg.style.color='var(--moss)';
       msg.textContent='ありがとうございました。この一頭の記録に残りました。センターで確認のうえ掲載します。';
-      story=await rpc('story_get',{p_code:code}); rating=0; render();
+      story=await fetchStory(); rating=0; render();
       const m2=document.getElementById('msg');
       if(m2){ m2.style.color='var(--moss)'; m2.textContent='ありがとうございました。この一頭の記録に残りました。センターで確認のうえ掲載します。'; }
     }else{
