@@ -71,13 +71,19 @@ const path = require('path');
     numFull: invScanFilter('２００００００１'),   // 全角でも通る
     ident: invScanFilter('M167-MU-2'),
     identFull: invScanFilter('TGC-08-M167-MU-2'),
-    short: invScanFilter('1234')                  // 8桁でない数字は識別コード扱い
+    short: invScanFilter('1234'),                 // 8桁でない数字は識別コード扱い
+    legacy: invScanFilter('X-428-RO')             // 旧ラベル（TGC頭が無い実在の識別コード）
   }));
   results.push(['8桁数字→scan_code', f.num === 'scan_code=eq.20000001', f.num]);
   results.push(['全角数字も正規化', f.numFull === 'scan_code=eq.20000001', f.numFull]);
-  results.push(['短縮コード→ident_code(頭補完)', /ident_code=eq\..*M167-MU-2/.test(f.ident) && /TGC-08-/.test(decodeURIComponent(f.ident)), decodeURIComponent(f.ident)]);
+  results.push(['短縮コードは頭を補った形で引く', /TGC-08-M167-MU-2/.test(decodeURIComponent(f.ident)), decodeURIComponent(f.ident)]);
+  results.push(['短縮コードは打った通りの形でも引く（旧ラベル対応）',
+    /"M167-MU-2"/.test(decodeURIComponent(f.ident)), decodeURIComponent(f.ident)]);
   results.push(['フルコードもident_code', /TGC-08-M167-MU-2/.test(decodeURIComponent(f.identFull)), decodeURIComponent(f.identFull)]);
+  results.push(['フルコードは候補を増やさない', /^ident_code=eq\./.test(f.identFull), decodeURIComponent(f.identFull)]);
   results.push(['8桁でない数字はident_code扱い', /ident_code=eq\./.test(f.short), decodeURIComponent(f.short)]);
+  results.push(['旧ラベルX-428-ROが打った通りで引ける',
+    /"X-428-RO"/.test(decodeURIComponent(f.legacy)), decodeURIComponent(f.legacy)]);
 
   // 5) 実際のスキャン動線（加工処理）で数字キーが使われる
   await page.evaluate(async () => {
@@ -99,7 +105,7 @@ const path = require('path');
   });
   await page.waitForTimeout(300);
   const lastQ2 = queries[queries.length - 1] || '';
-  results.push(['旧ラベルはident_codeで引く', /ident_code=eq\./.test(lastQ2), lastQ2.slice(0, 60)]);
+  results.push(['旧ラベルはident_codeで引く', /ident_code\.?=?eq\.?/.test(lastQ2) && !/scan_code/.test(lastQ2), lastQ2.slice(0, 80)]);
 
   results.push(['pageerrorなし', errors.length === 0, errors.join(' / ')]);
 
