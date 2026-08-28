@@ -429,6 +429,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <button class="tab-btn" data-tab="board">&#x1F4E3; 掲示板<span class="nav-badge" id="nav-badge-board"></span></button>
   <button class="tab-btn" data-tab="punch">&#x23F1; 出退勤打刻</button>
   <button class="tab-btn" data-tab="cleaning">&#x1F9F9; 清掃記録(HACCP)<span class="nav-badge" id="nav-badge-cleaning"></span></button>
+  <button class="tab-btn" data-tab="waste">&#x1F5D1; 産廃搬出</button>
   <button class="tab-btn" data-tab="radiation">&#x1F52C; 放射能検査<span class="nav-badge" id="nav-badge-radiation"></span></button>
   <a class="tab-btn" href="capture-form.html">&#x1F4DD; 捕獲票入力</a>
   <button class="tab-btn" data-tab="individuals">&#x1FAA4; 捕獲受入・個体<span class="nav-badge" id="nav-badge-intake"></span></button>
@@ -549,6 +550,73 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
     </div>
   </div>
+
+  <!-- 産廃搬出（計量票） -->
+  <div class="tab-panel" id="panel-waste">
+    <div class="section">
+      <div class="section-title">&#x1F5D1; 産廃搬出（計量票）</div>
+      <div style="padding:10px 12px;border:1px dashed var(--gold2);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.8;background:var(--surface2);margin-bottom:12px;">
+        処理業者からもらう<strong>計量票</strong>を1枚ずつ入れます。<strong style="color:var(--gold);">総重と風袋を入れれば正味は自動</strong>で出ます
+        （票の正味と合わない＝どこかの打ち間違い）。<br>
+        同じ票を二度入れそうになったら止めます。続けて入れられるよう、保存すると日付以外は前の内容が残ります。
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label>搬出日 <span style="color:var(--red);">*</span></label>
+          <input class="form-input" type="date" id="wst-date" oninput="wstWareki()">
+          <div id="wst-wareki" style="font-size:12px;color:var(--text3);margin-top:4px;"></div></div>
+        <div class="form-group"><label>時刻</label><input class="form-input" id="wst-time" placeholder="13:43"></div>
+        <div class="form-group"><label>車番</label><input class="form-input" id="wst-vehicle" placeholder="709"></div>
+        <div class="form-group"><label>回数</label><input class="form-input" type="number" id="wst-trip" placeholder="41"></div>
+        <div class="form-group"><label>総重（kg） <span style="color:var(--red);">*</span></label>
+          <input class="form-input" type="number" step="10" id="wst-gross" placeholder="1270" oninput="wstNet()"></div>
+        <div class="form-group"><label>風袋（kg） <span style="color:var(--red);">*</span></label>
+          <input class="form-input" type="number" step="10" id="wst-tare" placeholder="810" oninput="wstNet()"></div>
+        <div class="form-group"><label>正味（kg）<span style="color:var(--text3);font-size:11px;">（自動）</span></label>
+          <div id="wst-net" style="font-size:26px;font-weight:700;color:var(--gold);line-height:1.5;">—</div>
+          <div id="wst-net-warn" style="font-size:12px;color:var(--red);"></div></div>
+        <div class="form-group"><label>種類</label>
+          <input class="form-input" id="wst-type" list="dl-wst-type" value="動植物性残さ"></div>
+        <div class="form-group"><label>マニフェスト番号</label><input class="form-input" id="wst-manifest" placeholder="票の番号（分かれば）"></div>
+        <div class="form-group"><label>処理業者</label><input class="form-input" id="wst-vendor" list="dl-wst-vendor"></div>
+        <div class="form-group"><label>搬入先</label><input class="form-input" id="wst-site" list="dl-wst-site"></div>
+        <div class="form-group"><label>記録した人</label><input class="form-input" id="wst-by" list="dl-recorder"></div>
+        <div class="form-group" style="grid-column:1/-1;"><label>メモ</label><input class="form-input" id="wst-note" placeholder="気づいたこと"></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;">
+        <button class="btn btn-primary" onclick="wstSave()">この計量票を記録する</button>
+        <button class="btn" onclick="wstClear()">入力を消す</button>
+        <span id="wst-msg" style="font-size:12.5px;color:var(--text3);"></span>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>&#x1F4C8; 搬出量</span>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <select class="form-input" id="wst-range" style="max-width:180px;" onchange="loadWaste()">
+            <option value="year">今年度（4月〜）</option>
+            <option value="all" selected>全部</option>
+            <option value="90">最近3か月</option>
+          </select>
+          <button class="btn btn-sm" onclick="wstCsv()">&#x1F4C4; CSVで書き出す</button>
+        </div>
+      </div>
+      <div id="wst-summary"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">記録した計量票</div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>搬出日</th><th>時刻</th><th>車番</th><th>回数</th><th>総重</th><th>風袋</th><th>正味</th><th>種類</th><th>搬入先</th><th></th></tr></thead>
+          <tbody id="wst-body"><tr><td colspan="10" class="empty-state">読み込み中...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <datalist id="dl-wst-type"><option>動植物性残さ</option><option>汚泥</option><option>廃プラスチック類</option><option>紙くず</option><option>木くず</option></datalist>
+  <datalist id="dl-wst-vendor"><option>杉田建材株式会社 環境事業本部</option></datalist>
+  <datalist id="dl-wst-site"><option>市原サーマルセンター</option></datalist>
 
   <!-- 出店（どこに・何を持って行き・いくら売れたかを残す） -->
   <div class="tab-panel" id="panel-event">
@@ -2406,6 +2474,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'board') loadBoard();
     if (btn.dataset.tab === 'voices') loadVoices();
     if (btn.dataset.tab === 'event') loadEventSheet();
+    if (btn.dataset.tab === 'waste') loadWaste();
   });
 });
 
@@ -5880,6 +5949,215 @@ function storyUrl(scanCode) { return 'https://tateyama-gibier.vercel.app/s.html?
 // 出店シートのQRは「パック」ではなく「一頭」へ飛ばす（会場ではまだパックが決まっていないため）
 function individualStoryUrl(labelId) {
   return 'https://tateyama-gibier.vercel.app/s.html?i=' + encodeURIComponent(labelId);
+}
+
+/* ── 産廃搬出（計量票） ──
+   総重 − 風袋 = 正味。正味はDB側の計算列なので、手で入れた数字とずれることが構造的に起きない。
+   まだ紙が溜まっているので、続けて入れやすさを優先する。 */
+let wstRows = [];
+
+function wstWareki() {
+  const el = document.getElementById('wst-wareki');
+  const v = (document.getElementById('wst-date').value || '').trim();
+  if (!el) return;
+  if (!v) { el.textContent = ''; return; }
+  const m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) { el.textContent = ''; return; }
+  const y = +m[1], mo = +m[2], d = +m[3];
+  // 令和は2019年5月1日から。令和1年=2019年
+  const r = y - 2018;
+  el.textContent = r >= 1 ? `令和${r}年${mo}月${d}日` : '';
+}
+
+function wstNet() {
+  const g = parseFloat(document.getElementById('wst-gross').value);
+  const t = parseFloat(document.getElementById('wst-tare').value);
+  const box = document.getElementById('wst-net');
+  const warn = document.getElementById('wst-net-warn');
+  if (!isFinite(g) || !isFinite(t)) { box.textContent = '—'; warn.textContent = ''; return null; }
+  const n = g - t;
+  box.textContent = n.toLocaleString() + ' kg';
+  warn.textContent = n < 0 ? '風袋が総重より重くなっています' : (n === 0 ? '正味が0kgです' : '');
+  return n;
+}
+
+function wstClear(keepContext) {
+  ['wst-time', 'wst-vehicle', 'wst-trip', 'wst-gross', 'wst-tare', 'wst-manifest', 'wst-note']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  if (!keepContext) {
+    document.getElementById('wst-date').value = '';
+    ['wst-vendor', 'wst-site', 'wst-by'].forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('wst-type').value = '動植物性残さ';
+  }
+  wstNet(); wstWareki();
+}
+
+async function loadWaste() {
+  const body = document.getElementById('wst-body');
+  if (!body) return;
+  const d = document.getElementById('wst-date');
+  if (d && !d.value) { d.value = new Date().toLocaleDateString('sv-SE'); wstWareki(); }
+  // 前に入れた処理業者・搬入先を覚えておく（毎回打ち直さない）
+  try {
+    const last = JSON.parse(localStorage.getItem('tg_wst_last') || '{}');
+    ['vendor', 'site', 'by', 'type'].forEach(k => {
+      const el = document.getElementById('wst-' + k);
+      if (el && !el.value && last[k]) el.value = last[k];
+    });
+  } catch (e) {}
+  body.innerHTML = '<tr><td colspan="10" class="empty-state">読み込み中...</td></tr>';
+  try {
+    const range = (document.getElementById('wst-range') || {}).value || 'all';
+    let q = '?deleted_at=is.null&select=*&order=weighed_on.desc,weighed_time.desc&limit=2000';
+    if (range === 'year') {
+      const now = new Date();
+      const y = now.getMonth() + 1 >= 4 ? now.getFullYear() : now.getFullYear() - 1;
+      q += `&weighed_on=gte.${y}-04-01`;
+    } else if (range === '90') {
+      q += `&weighed_on=gte.${new Date(Date.now() - 90 * 86400000).toLocaleDateString('sv-SE')}`;
+    }
+    wstRows = await sb('GET', 'waste_weighings', null, q);
+    wstRender();
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="10" class="empty-state" style="color:var(--red);">読み込めませんでした：${esc2(e && e.message || e)}</td></tr>`;
+  }
+}
+
+function wstRender() {
+  const body = document.getElementById('wst-body');
+  const sum = document.getElementById('wst-summary');
+  if (!wstRows.length) {
+    body.innerHTML = '<tr><td colspan="10" class="empty-state">まだ記録がありません</td></tr>';
+    sum.innerHTML = '<div class="empty-state">計量票を入れると、月ごと・年度ごとの搬出量が出ます</div>';
+    return;
+  }
+  body.innerHTML = wstRows.map(r => `<tr>
+    <td style="white-space:nowrap;">${esc2(r.weighed_on)}</td>
+    <td style="white-space:nowrap;">${esc2(r.weighed_time || '-')}</td>
+    <td>${esc2(r.vehicle_no || '-')}</td>
+    <td>${r.trip_no != null ? r.trip_no : '-'}</td>
+    <td style="text-align:right;white-space:nowrap;">${Number(r.gross_kg).toLocaleString()}</td>
+    <td style="text-align:right;white-space:nowrap;">${Number(r.tare_kg).toLocaleString()}</td>
+    <td style="text-align:right;white-space:nowrap;font-weight:700;color:var(--gold);">${Number(r.net_kg).toLocaleString()}</td>
+    <td style="font-size:12px;">${esc2(r.waste_type || '-')}</td>
+    <td style="font-size:12px;color:var(--text2);">${esc2(r.site_name || '-')}</td>
+    <td><button class="btn btn-sm btn-danger" style="padding:2px 8px;font-size:11px;" onclick="wstDelete('${r.id}')">削除</button></td>
+  </tr>`).join('');
+
+  // 月ごと・年度ごと（画面に出ている分で集計する）
+  const byMonth = {}, byYear = {};
+  let total = 0;
+  wstRows.forEach(r => {
+    const n = Number(r.net_kg) || 0;
+    total += n;
+    const m = String(r.weighed_on).slice(0, 7);
+    byMonth[m] = (byMonth[m] || { n: 0, kg: 0 });
+    byMonth[m].n++; byMonth[m].kg += n;
+    const dt = new Date(r.weighed_on + 'T00:00:00');
+    const fy = dt.getMonth() + 1 >= 4 ? dt.getFullYear() : dt.getFullYear() - 1;
+    byYear[fy] = (byYear[fy] || { n: 0, kg: 0 });
+    byYear[fy].n++; byYear[fy].kg += n;
+  });
+  const months = Object.entries(byMonth).sort((a, b) => a[0] < b[0] ? 1 : -1);
+  const years = Object.entries(byYear).sort((a, b) => b[0] - a[0]);
+  const kg = v => Number(v).toLocaleString() + ' kg';
+  sum.innerHTML = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+      ${[['計量票', wstRows.length + '枚'], ['搬出した量', kg(total)],
+         ['1回あたり', kg(Math.round(total / wstRows.length))],
+         ['いちばん古い記録', wstRows[wstRows.length - 1].weighed_on]].map(([k, v]) => `
+        <div style="flex:1 1 140px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);">
+          <div style="font-size:11.5px;color:var(--text3);">${k}</div>
+          <div style="font-size:17px;font-weight:600;color:var(--gold);">${v}</div></div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;">
+      <div><div style="font-size:13px;font-weight:600;margin-bottom:6px;">月ごと</div>
+        <div style="overflow-x:auto;"><table><thead><tr><th>月</th><th>枚数</th><th>正味</th></tr></thead>
+        <tbody>${months.map(([m, v]) => `<tr><td>${esc2(m)}</td><td>${v.n}</td><td style="text-align:right;">${kg(v.kg)}</td></tr>`).join('')}</tbody></table></div></div>
+      <div><div style="font-size:13px;font-weight:600;margin-bottom:6px;">年度ごと（4月はじまり）</div>
+        <div style="overflow-x:auto;"><table><thead><tr><th>年度</th><th>枚数</th><th>正味</th></tr></thead>
+        <tbody>${years.map(([y, v]) => `<tr><td>令和${(+y) - 2018}年度（${y}）</td><td>${v.n}</td><td style="text-align:right;">${kg(v.kg)}</td></tr>`).join('')}</tbody></table></div></div>
+    </div>`;
+}
+
+async function wstSave() {
+  const g = id => (document.getElementById(id).value || '').trim();
+  const date = g('wst-date');
+  const gross = parseFloat(g('wst-gross'));
+  const tare = parseFloat(g('wst-tare'));
+  const msg = document.getElementById('wst-msg');
+  if (!date) { alert('搬出日を入れてください。'); return; }
+  if (!isFinite(gross) || !isFinite(tare)) { alert('総重と風袋を入れてください。'); return; }
+  if (gross < tare) { alert('風袋が総重より重くなっています。打ち間違いを確認してください。'); return; }
+  const net = gross - tare;
+  if (net === 0 && !confirm('正味が0kgになります。このまま記録しますか？')) return;
+
+  const time = g('wst-time'), vehicle = g('wst-vehicle'), manifest = g('wst-manifest');
+  // 同じ票をもう一度入れようとしていないか、投げる前に見る
+  try {
+    if (manifest) {
+      const dup = await sb('GET', 'waste_weighings', null,
+        `?manifest_no=eq.${encodeURIComponent(manifest)}&deleted_at=is.null&select=weighed_on&limit=1`);
+      if (dup.length) { alert(`マニフェスト番号 ${manifest} は ${dup[0].weighed_on} の票で既に入っています。`); return; }
+    }
+    if (time && vehicle) {
+      const dup = await sb('GET', 'waste_weighings', null,
+        `?weighed_on=eq.${date}&weighed_time=eq.${encodeURIComponent(time)}&vehicle_no=eq.${encodeURIComponent(vehicle)}` +
+        `&deleted_at=is.null&select=net_kg&limit=1`);
+      if (dup.length) { alert(`${date} ${time} 車番${vehicle} の票は既に入っています（正味 ${dup[0].net_kg}kg）。`); return; }
+    }
+  } catch (e) { /* 確認できなければDBの一意制約で止まる */ }
+
+  try {
+    await sb('POST', 'waste_weighings', {
+      weighed_on: date, weighed_time: time || null, vehicle_no: vehicle || null,
+      trip_no: g('wst-trip') === '' ? null : parseInt(g('wst-trip'), 10),
+      gross_kg: gross, tare_kg: tare,
+      waste_type: g('wst-type') || '動植物性残さ',
+      manifest_no: manifest || null,
+      vendor_name: g('wst-vendor') || null, site_name: g('wst-site') || null,
+      recorded_by: g('wst-by') || null, note: g('wst-note') || null
+    });
+    try {
+      localStorage.setItem('tg_wst_last', JSON.stringify({
+        vendor: g('wst-vendor'), site: g('wst-site'), by: g('wst-by'), type: g('wst-type')
+      }));
+    } catch (e) {}
+    msg.style.color = 'var(--green)';
+    msg.textContent = `${date} の ${net.toLocaleString()}kg を記録しました。続けてどうぞ。`;
+    wstClear(true);
+    await loadWaste();
+    document.getElementById('wst-gross').focus();
+  } catch (e) {
+    const m = String(e && e.message || e);
+    alert(/duplicate|unique/i.test(m) ? 'この票はすでに入っています。' : '記録できませんでした：' + m);
+  }
+}
+
+async function wstDelete(id) {
+  const r = wstRows.find(x => x.id === id);
+  if (!r) return;
+  if (!confirm(`${r.weighed_on} ${r.weighed_time || ''} 正味${Number(r.net_kg).toLocaleString()}kg の記録を削除しますか？`)) return;
+  try {
+    await sb('PATCH', 'waste_weighings', { deleted_at: new Date().toISOString() }, `?id=eq.${id}`);
+    await loadWaste();
+  } catch (e) { alert('削除できませんでした：' + (e && e.message || e)); }
+}
+
+function wstCsv() {
+  if (!wstRows.length) { alert('書き出す記録がありません。'); return; }
+  const head = ['搬出日', '時刻', '車番', '回数', '総重kg', '風袋kg', '正味kg', '種類', 'マニフェスト番号', '処理業者', '搬入先', '記録者', 'メモ'];
+  const esc = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+  const lines = [head.join(',')].concat(wstRows.map(r => [
+    r.weighed_on, r.weighed_time, r.vehicle_no, r.trip_no, r.gross_kg, r.tare_kg, r.net_kg,
+    r.waste_type, r.manifest_no, r.vendor_name, r.site_name, r.recorded_by, r.note
+  ].map(esc).join(',')));
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `産廃搬出_${new Date().toLocaleDateString('sv-SE')}.csv`;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 
 /* ── 出店（どこに・何を持って行き・いくら売れたか） ──
