@@ -681,7 +681,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <div class="form-group"><label>立ち寄り人数<span style="color:var(--text3);font-size:11px;">（分かる範囲）</span></label><input class="form-input" type="number" id="ev-d-visitors" oninput="evDirty()"></div>
           <div class="form-group"><label>出店料（円）</label><input class="form-input" type="number" id="ev-d-fee" oninput="evDirty()"></div>
           <div class="form-group"><label>その他の経費（円）</label><input class="form-input" type="number" id="ev-d-cost" oninput="evDirty()"></div>
-          <div class="form-group"><label>実際の入金（円）<span style="color:var(--text3);font-size:11px;">（レジ・現金の合計）</span></label><input class="form-input" type="number" id="ev-d-cash" oninput="evDirty()"></div>
+          <div class="form-group"><label>現金（円）<span style="color:var(--text3);font-size:11px;">（レジ締めの現金）</span></label><input class="form-input" type="number" id="ev-d-cash" oninput="evDirty()"></div>
+          <div class="form-group"><label>キャッシュレス（円）<span style="color:var(--text3);font-size:11px;">（PayPay等・後日入金）</span></label><input class="form-input" type="number" id="ev-d-cashless" oninput="evDirty()"></div>
           <div class="form-group" style="grid-column:1/-1;"><label>所感・気づいたこと</label><textarea class="form-input" id="ev-d-memo" rows="2" placeholder="よく売れたもの、聞かれたこと、次にやること" oninput="evDirty()"></textarea></div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
@@ -6570,7 +6571,8 @@ function evFillHead() {
   set('ev-d-date', e.event_date); set('ev-d-end', e.end_date); set('ev-d-title', e.title);
   set('ev-d-start', e.start_time); set('ev-d-endt', e.end_time); set('ev-d-weather', e.weather);
   set('ev-d-staff', e.staff_names); set('ev-d-visitors', e.visitors); set('ev-d-fee', e.booth_fee);
-  set('ev-d-cost', e.other_cost); set('ev-d-cash', e.cash_total); set('ev-d-memo', e.note);
+  set('ev-d-cost', e.other_cost); set('ev-d-cash', e.cash_total);
+  set('ev-d-cashless', e.cashless_total); set('ev-d-memo', e.note);
   const badge = { '準備中': 'gray', '持ち出し済': 'blue', '実績確定': 'green' };
   document.getElementById('ev-d-head').innerHTML =
     `<strong>${esc2(e.venue_name)}</strong> <span style="color:var(--text2);">${esc2(e.event_date)}</span>
@@ -6610,7 +6612,8 @@ async function evSaveHead() {
       title: g('ev-d-title') || null, start_time: g('ev-d-start') || null, end_time: g('ev-d-endt') || null,
       weather: g('ev-d-weather') || null, staff_names: g('ev-d-staff') || null,
       visitors: n('ev-d-visitors'), booth_fee: n('ev-d-fee'), other_cost: n('ev-d-cost'),
-      cash_total: n('ev-d-cash'), note: g('ev-d-memo') || null, updated_at: new Date().toISOString()
+      cash_total: n('ev-d-cash'), cashless_total: n('ev-d-cashless'),
+      note: g('ev-d-memo') || null, updated_at: new Date().toISOString()
     }, `?id=eq.${evCur.id}`);
     const rows = await sb('GET', 'sale_events', null, `?id=eq.${evCur.id}&select=*`);
     evCur = rows[0];
@@ -6678,9 +6681,12 @@ function evRenderItems() {
   const takenInd = inds.length, soldInd = inds.filter(i => evNum(i.qty_sold) > 0).length;
   const takenLot = lots.reduce((a, i) => a + evNum(i.qty_taken), 0);
   const soldLot = lots.reduce((a, i) => a + evNum(i.qty_sold), 0);
-  const cash = evNum(evCur && evCur.cash_total);
+  // 入金は現金とキャッシュレス（PayPay等）の合計。どちらか片方でも入っていれば突き合わせる
+  const cashY = evNum(evCur && evCur.cash_total), lessY = evNum(evCur && evCur.cashless_total);
+  const cash = cashY + lessY;
+  const hasCash = (evCur && (evCur.cash_total != null || evCur.cashless_total != null)) ? cash : 0;
   const cost = evNum(evCur && evCur.booth_fee) + evNum(evCur && evCur.other_cost);
-  const diff = cash ? cash - total : 0;
+  const diff = hasCash ? cash - total : 0;
   document.getElementById('ev-d-total').innerHTML = `
     <div style="display:flex;gap:10px;flex-wrap:wrap;">
       ${[['明細の売上', evYen(total)],
@@ -6692,8 +6698,8 @@ function evRenderItems() {
           <div style="font-size:11.5px;color:var(--text3);">${k}</div>
           <div style="font-size:16px;font-weight:600;color:var(--gold);">${v}</div></div>`).join('')}
     </div>
-    ${cash ? `<div style="margin-top:10px;font-size:13px;color:${diff === 0 ? 'var(--text2)' : 'var(--red)'};">
-      実際の入金 ${evYen(cash)} と明細の差 ${evYen(diff)}${diff === 0 ? '（ぴったり）' : '　← どちらかが合っていません'}</div>` : ''}`;
+    ${hasCash ? `<div style="margin-top:10px;font-size:13px;color:${diff === 0 ? 'var(--text2)' : 'var(--red)'};">
+      入金 ${evYen(cash)}（現金 ${evYen(cashY)} ＋ キャッシュレス ${evYen(lessY)}）と明細の差 ${evYen(diff)}${diff === 0 ? '（ぴったり）' : '　← どちらかが合っていません'}</div>` : ''}`;
 }
 
 async function evItemPatch(id, field, value) {
@@ -7151,7 +7157,9 @@ function evReportPrint() {
   const soldInd = inds.filter(i => evNum(i.qty_sold) > 0).length;
   const takenLot = lots.reduce((a, i) => a + evNum(i.qty_taken), 0);
   const soldLot = lots.reduce((a, i) => a + evNum(i.qty_sold), 0);
-  const cash = evNum(e.cash_total);
+  const cashY = evNum(e.cash_total), lessY = evNum(e.cashless_total);
+  const cash = cashY + lessY;
+  const hasCash = e.cash_total != null || e.cashless_total != null;
   const per = evNum(e.visitors) ? Math.round(total / evNum(e.visitors)) : null;
 
   const body = `
@@ -7168,8 +7176,11 @@ function evReportPrint() {
     <h2>売上</h2>
     <table>
       <tr><th>明細の売上</th><td class="n">${evYen(total)}</td>
-          <th>実際の入金</th><td class="n">${cash ? evYen(cash) : '—'}</td>
-          <th>差</th><td class="n">${cash ? evYen(cash - total) : '—'}</td></tr>
+          <th>入金の合計</th><td class="n">${hasCash ? evYen(cash) : '—'}</td>
+          <th>差</th><td class="n">${hasCash ? evYen(cash - total) : '—'}</td></tr>
+      <tr><th>うち現金</th><td class="n">${hasCash ? evYen(cashY) : '—'}</td>
+          <th>うちキャッシュレス</th><td class="n">${hasCash ? evYen(lessY) : '—'}</td>
+          <th></th><td class="n"></td></tr>
       <tr><th>出店料</th><td class="n">${evYen(e.booth_fee)}</td>
           <th>その他の経費</th><td class="n">${evYen(e.other_cost)}</td>
           <th>差引</th><td class="n">${evYen(total - cost)}</td></tr>
