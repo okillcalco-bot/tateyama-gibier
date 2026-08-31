@@ -5677,8 +5677,9 @@ async function pmOnWeightReceived(weight_kg, plan) {
     // 万一番号が重なっても、ラベルだけ出て在庫が無い状態にはしない。
     // ずらして必ず登録し、番号が変わったことは下で必ず知らせる。
     let renumberedFrom = null;
+    let created = null;
     for (let attempt = 0; ; attempt++) {
-      try { await sb('POST', 'inventory', record); break; }
+      try { created = await sb('POST', 'inventory', record); break; }
       catch (e) {
         if (attempt >= 5 || !/duplicate|unique|23505/i.test(String(e && e.message || e))) throw e;
         pmUsedIdents.add(record.ident_code);
@@ -5691,6 +5692,23 @@ async function pmOnWeightReceived(weight_kg, plan) {
       }
     }
     pmUsedIdents.add(identCode);
+
+    // 数字キーを確保できないまま刷ったラベルは、識別コードをバーコード化していて細く読めない。
+    // 保存するとDB側（trigger tgc_assign_scan_code）が必ず数字キーを付けるので、
+    // それを受け取って読めるラベルを刷り直す。黙って読めないラベルを現場に出さない。
+    const assigned = (Array.isArray(created) && created[0] && created[0].scan_code) || null;
+    if (!scanCode && assigned) {
+      scanCode = assigned;
+      pmScanCodeFor[identCode] = assigned;
+      pmLastPrintInfo = { weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode };
+      if (pmLastLabelPrinted && !labelBarcodeReadable(shortIdent(identCode))) {
+        alert('先に出たラベルのバーコードは細くて読み取れません。\n'
+            + `（${shortIdent(identCode)} は約${labelBarcodeMm(shortIdent(identCode)).toFixed(2)}mm・読み取りには${LABEL_BARCODE_MIN_MM}mm必要）\n\n`
+            + `番号 ${assigned} で刷り直します。先のラベルは捨ててください。`);
+        try { pmPrintLabel(weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode); } catch (e) {}
+      }
+    }
+
     await sb('POST', 'processing_log', {
       parent_ident_code: pmIndividual.label_id,
       individual_id: pmIndividual.label_id,
@@ -7256,6 +7274,24 @@ function evPosterHtml(id, venue, dateStr, inds, lots) {
    確保できなかったときは従来どおり識別コードをバーコード化する（動作は止めない）。 */
 let pmScanPool = [];
 let pmScanCodeFor = {};   // identCode → scan_code（印刷と保存で必ず同じ番号を使う）
+
+/* ラベルのバーコードは38mm幅に収める。モジュール数が増えるほどバーが細くなり、
+   細すぎるとスキャナが読めない。実測（2026-08-31 SHIPへの出荷で2件が読めなかった）:
+
+     8桁の数字キー '10001013'   79モジュール → 0.481mm  読める
+     識別コード    'T278-MU'   112モジュール → 0.339mm  読めない
+     識別コード    'T268-MU-2' 134モジュール → 0.284mm  読めない
+
+   数字キーを確保できないと識別コードで印字する作りになっていたため、
+   「印刷はできたが読めないラベル」が黙って出ていた。下限を決めて判定する。 */
+const LABEL_BARCODE_MIN_MM = 0.40;
+const LABEL_BARCODE_WIDTH_MM = 38;
+function labelBarcodeMm(code) {
+  const m = /viewBox="0 0 (\d+)/.exec(makeCode128SVG(code));
+  const mods = m ? parseInt(m[1], 10) : 0;
+  return mods ? LABEL_BARCODE_WIDTH_MM / mods : 0;
+}
+function labelBarcodeReadable(code) { return labelBarcodeMm(code) >= LABEL_BARCODE_MIN_MM; }
 async function pmEnsureScanCodes(min) {
   if (pmScanPool.length >= (min || 5)) return;
   try {
@@ -7319,6 +7355,7 @@ function pmLabelHtml(d) {
     .bc { flex:0 0 12.5mm; height:12.5mm; display:flex; align-items:center; justify-content:center; }
     .bc svg { display:block; width:38mm !important; height:12mm !important; shape-rendering:crispEdges; }
     .bct{ font-size:6pt; font-weight:bold; text-align:center; font-family:monospace; letter-spacing:.3px; }
+    .bcw{ font-size:5pt; font-weight:bold; text-align:center; border:.5pt solid #000; margin-top:.3mm; padding:.2mm; }
     .mk { font-size:4pt; color:#444; margin-top:.2mm; }
     .ad { font-size:4pt; color:#444; }
     .wn { font-size:4pt; color:#555; margin-top:.3mm; line-height:1.2; }
@@ -7334,6 +7371,7 @@ function pmLabelHtml(d) {
     <div class="tmp">保存温度　-18℃以下</div>
     <div class="bc">${d.barcodeSvg}</div>
     <div class="bct">${d.identCode}</div>
+    ${d.barcodeThin ? '<div class="bcw">※このバーコードは細く読めません。刷り直してください</div>' : ''}
     <div class="mk">館山ジビエセンター</div>
     <div class="ad">千葉県館山市西長田1163-5</div>
   ${LABEL_FIT_SCRIPT}</body></html>`;
@@ -7357,11 +7395,14 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight, scan
   // ── バーコードSVG生成（自前エンコーダー・外部依存なし）──
   // バーコードは8桁の数字キー（Code128-C・2桁=1シンボル）。桁数が一定なのでバーが太く、確実に読める。
   // キーが確保できていない場合のみ、従来どおり短縮した識別コードを入れる。
-  const barcodeSection = makeCode128SVG(scanCode || shortIdent(identCode));
+  // その場合はバーが細く読めないことがあるので、ラベル自体に印を出す（黙って出さない）。
+  const barcodeCode = scanCode || shortIdent(identCode);
+  const barcodeSection = makeCode128SVG(barcodeCode);
+  const barcodeThin = !labelBarcodeReadable(barcodeCode);
 
   const html = pmLabelHtml({
     origin, speciesName, labelId: pmIndividual.label_id, partName,
-    labelWeight, expiryStr, identCode, barcodeSvg: barcodeSection
+    labelWeight, expiryStr, identCode, barcodeSvg: barcodeSection, barcodeThin
   });
 
   // ── iframe に書き込んで印刷 ──
