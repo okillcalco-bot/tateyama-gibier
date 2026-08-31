@@ -113,6 +113,8 @@ h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600;
 .fix-form textarea { width: 100%; font-size: 15px; }
 .fix-alert { border: 2px solid var(--red); background: rgba(185,61,61,.08); color: var(--red); border-radius: var(--radius); padding: 12px 14px; margin-top: 12px; font-size: 15px; font-weight: 700; line-height: 1.7; }
 .fix-alert .sub { display: block; font-weight: 400; font-size: 13.5px; color: var(--text2); margin-top: 2px; }
+.fix-alert .fix-now { display: block; width: 100%; margin-top: 10px; padding: 13px; border: none; border-radius: var(--radius);
+  background: var(--red); color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -642,6 +644,8 @@ const FIX_DAYS = 14;          // さかのぼって直せる日数
 let fixRows = [];             // 自分の直近の勤怠
 let fixTarget = null;         // いま直している日 { date, rec }
 
+function yesterdayYmd() { const d = new Date(); d.setDate(d.getDate() - 1); return ymd(d); }
+
 function fixDateList() {
   const list = [];
   const base = new Date();
@@ -662,7 +666,17 @@ async function loadFixDays() {
 
   // 打刻の抜けがある日（今日はまだ作業中なので数えない）
   const missing = fixRows.filter(r => r.work_date !== ymd(new Date()) && (!r.clock_in || !r.clock_out));
-  if (missing.length) {
+  // 昨日の抜けは名指しで出す。日をまたぐと本人しか時刻を思い出せないので、
+  // 翌朝いちばんに気づいてもらうのがいちばん確実。
+  // （2026年8月の実測: 打ち忘れ10件はすべて退勤。月末まで誰も気づいていなかった）
+  const yRec = fixRows.find(r => r.work_date === yesterdayYmd());
+  if (yRec && yRec.clock_in && !yRec.clock_out) {
+    alert.style.display = 'block';
+    alert.innerHTML = `⚠️ 昨日（${yesterdayYmd().slice(5).replace('-', '/')}）の<u>退勤</u>が入っていません`
+      + `<span class="sub">出勤 ${esc(yRec.clock_in)} のままです。このままだと昨日の勤務時間が0時間になり、給与に反映されません。</span>`
+      + `<button class="fix-now" onclick="fixOpen('${yesterdayYmd()}')">昨日の退勤を入れる</button>`
+      + (missing.length > 1 ? `<span class="sub">ほかにも抜けている日が ${missing.length - 1}日 あります。</span>` : '');
+  } else if (missing.length) {
     alert.style.display = 'block';
     alert.innerHTML = `⚠️ 打刻が抜けている日が ${missing.length}日 あります（${missing.slice(0, 3).map(r => r.work_date.slice(5).replace('-', '/')).join('・')}${missing.length > 3 ? ' ほか' : ''}）`
       + `<span class="sub">下の「⏰ 押し忘れを直す」から、ご自分で直せます。</span>`;
@@ -705,6 +719,14 @@ function fixToggle() {
 function fixOpen(date) {
   const rec = fixRows.find(r => r.work_date === date) || null;
   fixTarget = { date: date, rec: rec };
+  // 直す欄は「押し忘れを直す」の中にある。閉じたまま値だけ入れても何も見えないので、
+  // ここから開いたときは必ず開けておく（お知らせのボタンから直接来るため）
+  const box = document.getElementById('fix-box');
+  if (box && box.style.display === 'none') {
+    box.style.display = 'block';
+    const btn = document.getElementById('fix-open-btn');
+    if (btn) btn.textContent = '⏰ 直すのをやめる';
+  }
   const def = (selected && selected.default_break_min != null) ? selected.default_break_min : 60;
   document.getElementById('fix-form-title').textContent = `${date} の記録を直す`;
   document.getElementById('fix-in').value = (rec && rec.clock_in) || '';
@@ -825,6 +847,21 @@ async function punchIn() {
   if (busy) return;
   if (todayRec && todayRec.clock_in && !todayRec.clock_out) { showToast(`すでに ${todayRec.clock_in} に出勤済みです。帰るときは右の赤い「退勤」を押してください。`); return; }
   if (todayRec && todayRec.clock_out) { showToast('この日はすでに退勤まで記録されています。'); return; }
+  // 昨日の退勤が空なら、出勤の前に一度だけ止めて知らせる。
+  // 画面のお知らせは見落とされるが、出勤は必ず押すのでここなら必ず目に入る。
+  if (isToday()) {
+    const yRec = (fixRows || []).find(r => r.work_date === yesterdayYmd());
+    if (yRec && yRec.clock_in && !yRec.clock_out) {
+      if (!confirm(`昨日（${yesterdayYmd().slice(5).replace('-', '/')}）の退勤が入っていません。\n`
+        + `出勤 ${yRec.clock_in} のままです。このままだと昨日の勤務時間が0時間になり、給与に反映されません。\n\n`
+        + `「OK」で昨日の退勤を入れる画面を開きます。\n「キャンセル」でこのまま今日の出勤を押します（あとから直せます）。`)) {
+        // キャンセル＝今日の出勤をそのまま続ける
+      } else {
+        fixOpen(yesterdayYmd());
+        return;
+      }
+    }
+  }
   busy = true;
   const t = (adminMode && !isToday()) ? (document.getElementById('admin-in').value || '09:00') : nowTime();
   const hv = healthValue();
