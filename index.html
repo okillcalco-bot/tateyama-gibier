@@ -11738,6 +11738,52 @@ const CUST_FIELDS = ['name', 'kana', 'honorific', 'phone', 'address', 'building'
 const CUST_RANK_LABEL = { standard: 'スタンダード', local: 'ローカル', startmember: 'スタートメンバー' };
 function custRankLabel(r) { return CUST_RANK_LABEL[r] || 'スタンダード'; }
 
+/* ── 古い版のまま動いていることに気づけるようにする ──
+   この画面はタブを開きっぱなしで何日も使う。デプロイしても再読み込みしなければ
+   古いJavaScriptが動き続け、直したはずの不具合がそのまま出る。
+   （2026-08-31 Oobanburumaiの出荷でバーコードが全部読めなかった件。
+     出荷スキャンの修正は8/28に入っていたが、端末が更新されていなかった）
+   サーバのindex.htmlのETagを見て、読み込んだときと変わっていたら知らせる。 */
+let appEtagAtLoad = null;
+let appUpdateShown = false;
+
+async function appFetchEtag() {
+  try {
+    // HEADはService Workerを素通りする（sw.jsはGETだけ扱う）ので、必ずサーバの値が返る
+    const r = await fetch(location.pathname, { method: 'HEAD', cache: 'no-store' });
+    return r.headers.get('etag') || r.headers.get('last-modified') || '';
+  } catch (e) { return ''; }
+}
+
+function appShowUpdateBanner() {
+  if (appUpdateShown) return;
+  appUpdateShown = true;
+  const bar = document.createElement('div');
+  bar.id = 'app-update-bar';
+  bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99999;padding:12px 14px;'
+    + 'background:#7a1f1f;color:#fff;font-size:14px;font-weight:600;display:flex;gap:12px;'
+    + 'align-items:center;justify-content:center;flex-wrap:wrap;box-shadow:0 -2px 12px rgba(0,0,0,.4);';
+  bar.innerHTML = '⚠️ このアプリは古い版のまま動いています。'
+    + '<span style="font-weight:400;">直っているはずの不具合が出ることがあります。</span>'
+    + '<button type="button" id="app-update-btn" style="padding:7px 16px;border-radius:8px;border:none;'
+    + 'background:#fff;color:#7a1f1f;font-weight:700;cursor:pointer;">今すぐ更新する</button>';
+  document.body.appendChild(bar);
+  document.getElementById('app-update-btn').onclick = () => location.reload();
+}
+
+async function appVersionCheck() {
+  const tag = await appFetchEtag();
+  if (!tag) return;                      // 取れない環境では何もしない（邪魔をしない）
+  if (appEtagAtLoad === null) { appEtagAtLoad = tag; return; }
+  if (tag !== appEtagAtLoad) appShowUpdateBanner();
+}
+
+appVersionCheck();                                   // 読み込み時の値を控える
+setInterval(appVersionCheck, 10 * 60 * 1000);        // 10分ごと
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') appVersionCheck();
+});
+
 /* 顧客台帳は受発注管理の「顧客管理」と同じデータ。別画面で編集された可能性があるので、
    この画面に戻ってきたら読み直して表示のずれを防ぐ */
 document.addEventListener('visibilitychange', () => {
