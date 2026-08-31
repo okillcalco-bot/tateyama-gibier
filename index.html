@@ -711,7 +711,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           </div>
         </div>
         <div style="overflow-x:auto;"><table>
-          <thead><tr><th>品名</th><th>入っている頭</th><th>持参数</th><th>売れた数</th><th>単価</th><th>金額</th><th></th></tr></thead>
+          <thead><tr><th>品名</th><th>入っている頭</th><th>持参数</th><th>売れた数</th><th>試食</th><th>残り</th><th>単価</th><th>金額</th><th></th></tr></thead>
           <tbody id="ev-d-lot-body"></tbody>
         </table></div>
       </div>
@@ -6333,6 +6333,11 @@ function evJp(d) {
 }
 function evYen(n) { return '¥' + Number(n || 0).toLocaleString(); }
 function evNum(v) { const n = parseFloat(v); return isFinite(n) ? n : 0; }
+
+/* 残り＝持って行った数 −（売れた数 ＋ 試食に出した数）。
+   試食を引かないと、完売したのに売れ残っているように見える
+   （2026-08-29 ニイチク直売会: ミニバーグは10持って3を試食に出し、残り0で完売）。 */
+function evLeft(i) { return evNum(i.qty_taken) - evNum(i.qty_sold) - evNum(i.qty_sample); }
 function eventListUrl(id) { return 'https://tateyama-gibier.vercel.app/s.html?e=' + id; }
 
 /* ── 一覧 ── */
@@ -6343,7 +6348,7 @@ async function loadEventSheet() {
   try {
     evVenues = await sb('GET', 'event_venues', null, '?deleted_at=is.null&select=*&order=sort_order,name');
     evEvents = await sb('GET', 'sale_events', null,
-      '?deleted_at=is.null&select=*,sale_event_items(kind,qty_taken,qty_sold,amount)&order=event_date.desc&limit=300');
+      '?deleted_at=is.null&select=*,sale_event_items(kind,qty_taken,qty_sold,qty_sample,amount)&order=event_date.desc&limit=300');
     evListRender();
     evTrendRender();
   } catch (e) {
@@ -6455,20 +6460,21 @@ async function evTrendItems(done) {
     const ids = done.map(e => `"${e.id}"`).join(',');
     if (!ids) { box.innerHTML = ''; return; }
     const rows = await sb('GET', 'sale_event_items', null,
-      `?event_id=in.(${ids})&select=kind,part_name,item_name,match_key,qty_taken,qty_sold,amount&limit=5000`);
+      `?event_id=in.(${ids})&select=kind,part_name,item_name,match_key,qty_taken,qty_sold,qty_sample,amount&limit=5000`);
     rows.forEach(i => {
       const name = i.kind === 'inventory' ? (i.part_name || '精肉') : (i.item_name || i.match_key || 'その他');
-      const g = byItem[name] || (byItem[name] = { taken: 0, sold: 0, amount: 0, kind: i.kind });
-      g.taken += evNum(i.qty_taken); g.sold += evNum(i.qty_sold); g.amount += evNum(i.amount);
+      const g = byItem[name] || (byItem[name] = { taken: 0, sold: 0, sample: 0, amount: 0, kind: i.kind });
+      g.taken += evNum(i.qty_taken); g.sold += evNum(i.qty_sold);
+      g.sample += evNum(i.qty_sample); g.amount += evNum(i.amount);
     });
     const list = Object.entries(byItem).sort((a, b) => b[1].amount - a[1].amount);
     box.innerHTML = `<div style="overflow-x:auto;"><table>
-      <thead><tr><th>商品</th><th>種類</th><th>持参</th><th>売れた</th><th>売れた率</th><th>売上</th></tr></thead>
+      <thead><tr><th>商品</th><th>種類</th><th>持参</th><th>売れた</th><th>試食</th><th>売れた率</th><th>売上</th></tr></thead>
       <tbody>${list.map(([n, g]) => `<tr>
         <td>${esc2(n)}</td>
         <td style="font-size:12px;color:var(--text2);">${g.kind === 'inventory' ? '一頭もの' : '小分け・その他'}</td>
-        <td>${g.taken}</td><td>${g.sold}</td>
-        <td>${g.taken ? Math.round(g.sold / g.taken * 100) : 0}%</td>
+        <td>${g.taken}</td><td>${g.sold}</td><td>${g.sample || ''}</td>
+        <td>${(g.taken - g.sample) ? Math.round(g.sold / (g.taken - g.sample) * 100) : 0}%</td>
         <td>${evYen(g.amount)}</td></tr>`).join('')}</tbody></table></div>`;
   } catch (e) { box.innerHTML = `<div class="empty-state">読み込めませんでした</div>`; }
 }
@@ -6687,12 +6693,15 @@ function evRenderItems() {
             ${canEdit ? '' : 'disabled'} onchange="evItemPatch('${i.id}','qty_taken',this.value)"></td>
       <td><input class="form-input" type="number" step="1" style="width:80px;padding:4px 6px;" value="${evNum(i.qty_sold)}"
             ${sellable ? '' : 'disabled'} onchange="evItemPatch('${i.id}','qty_sold',this.value)"></td>
+      <td><input class="form-input" type="number" step="1" style="width:70px;padding:4px 6px;" value="${evNum(i.qty_sample)}"
+            ${sellable ? '' : 'disabled'} onchange="evItemPatch('${i.id}','qty_sample',this.value)"></td>
+      <td style="text-align:right;white-space:nowrap;">${evLeft(i)}${evLeft(i) === 0 ? '<span style="color:var(--gold);font-size:11px;"> 完売</span>' : ''}</td>
       <td><input class="form-input" type="number" style="width:92px;padding:4px 6px;" value="${i.unit_price || 0}"
             ${canEdit || sellable ? '' : 'disabled'} onchange="evItemPatch('${i.id}','unit_price',this.value)">
         <span style="font-size:11px;color:var(--text3);">${i.price_basis === 'kg' ? '円/kg' : '円/個'}</span></td>
       <td style="white-space:nowrap;">${evYen(i.amount)}</td>
       <td>${canEdit ? `<button class="btn btn-sm btn-danger" style="padding:2px 8px;font-size:11px;" onclick="evItemDelete('${i.id}')">外す</button>` : ''}</td>
-    </tr>`).join('') : `<tr><td colspan="7" class="empty-state">まだありません${canEdit ? '。「＋ 加工品から選ぶ」で追加します。' : ''}</td></tr>`;
+    </tr>`).join('') : `<tr><td colspan="9" class="empty-state">まだありません${canEdit ? '。「＋ 加工品から選ぶ」で追加します。' : ''}</td></tr>`;
 
   // 合計
   const total = evItems.reduce((a, i) => a + evNum(i.amount), 0);
@@ -6725,12 +6734,21 @@ async function evItemPatch(id, field, value) {
   if (!it) return;
   let v = value;
   if (field !== 'item_name') { v = evNum(value); if (v < 0) v = 0; }
-  if (field === 'qty_sold' && v > evNum(it.qty_taken)) {
-    alert(`持って行った数（${evNum(it.qty_taken)}）より多くは売れません。`);
+  // 売れた数と試食の合計は、持って行った数を超えられない
+  if (field === 'qty_sold' && v + evNum(it.qty_sample) > evNum(it.qty_taken)) {
+    alert(evNum(it.qty_sample)
+      ? `持って行った数（${evNum(it.qty_taken)}）を超えます。`
+        + `試食に${evNum(it.qty_sample)}出しているので、売れた数は${evNum(it.qty_taken) - evNum(it.qty_sample)}までです。`
+      : `持って行った数（${evNum(it.qty_taken)}）より多くは売れません。`);
     evRenderItems(); return;
   }
-  if (field === 'qty_taken' && v < evNum(it.qty_sold)) {
-    alert('売れた数より少なくはできません。先に売れた数を直してください。');
+  if (field === 'qty_sample' && v + evNum(it.qty_sold) > evNum(it.qty_taken)) {
+    alert(`持って行った数（${evNum(it.qty_taken)}）を超えます。`
+        + `${evNum(it.qty_sold)}売れているので、試食は${evNum(it.qty_taken) - evNum(it.qty_sold)}までです。`);
+    evRenderItems(); return;
+  }
+  if (field === 'qty_taken' && v < evNum(it.qty_sold) + evNum(it.qty_sample)) {
+    alert('売れた数と試食の合計より少なくはできません。先にそちらを直してください。');
     evRenderItems(); return;
   }
   try {
@@ -7225,13 +7243,15 @@ function evReportPrint() {
 
     <h2>小分けパック・その他（${soldLot} / ${takenLot}個）</h2>
     ${lots.length ? `<table>
-      <thead><tr><th>品名</th><th>種類</th><th>入っている頭</th><th>持参</th><th>売れた</th><th>単価</th><th>金額</th></tr></thead>
+      <thead><tr><th>品名</th><th>種類</th><th>入っている頭</th><th>持参</th><th>売れた</th><th>試食</th><th>残り</th><th>単価</th><th>金額</th></tr></thead>
       <tbody>${lots.map(i => `<tr>
         <td>${esc2(i.item_name || i.match_key || '-')}</td>
         <td>${i.product_id ? '加工商品（個体は特定せず）' : (i.kind === 'lot' ? '小分け（個体は特定せず）' : 'その他')}</td>
         <td>${(i.member_labels && i.member_labels.length) ? i.member_labels.length + '頭' : '—'}</td>
         <td class="n">${evNum(i.qty_taken)}</td>
         <td class="n">${evNum(i.qty_sold)}</td>
+        <td class="n">${evNum(i.qty_sample) || '—'}</td>
+        <td class="n">${evLeft(i)}</td>
         <td class="n">${evNum(i.unit_price).toLocaleString()}${i.price_basis === 'kg' ? '/kg' : '/個'}</td>
         <td class="n">${evYen(i.amount)}</td></tr>`).join('')}</tbody></table>` : '<div class="box">なし</div>'}
 
