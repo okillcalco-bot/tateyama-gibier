@@ -27,6 +27,8 @@ const path = require('path');
       if (/limit=1/.test(u)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ species: 'イノシシ', part_name: 'ミンチ肉（粗挽き）', process_type: 'ミンチ肉（粗挽き）', weight: '0.25', weight_kg: '0.250', parent_inventory_id: 'P-1', location_code: 'F1' }]) });
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ weight: '0.25', weight_kg: '0.250' }, { weight: '0.25', weight_kg: '0.250' }, { weight: '1', weight_kg: '1.000' }]) });
     }
+    // スタッフ名簿は公開VIEW経由（P0-2）。作業者選択の元になる
+    if (m === 'GET' && /\/staff_public/.test(u)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 's1', name: '沖浩志', is_active: true, default_break_min: 60 }]) });
     // 連番採番（今日の最大＝003）
     if (m === 'GET' && /\/inventory/.test(u) && /ident_code=like\./.test(u)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ ident_code: 'TGC-MI-99999999-003' }]) });
     // その他GET（processing_log等）

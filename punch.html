@@ -389,7 +389,8 @@ function isToday() { return workDate === ymd(new Date()); }
 
 async function loadNames() {
   try {
-    staffList = await sb('GET', 'staff', null, '?select=id,name,default_break_min&deleted_at=is.null&is_active=eq.true&order=name.asc');
+    // 公開VIEW（最小列のみ・給与等は含まない）から読む。本体staffはstaff-key必須（P0-2）
+    staffList = await sb('GET', 'staff_public', null, '?select=id,name,default_break_min&is_active=eq.true&order=name.asc');
   } catch (e) { showToast('スタッフの読み込みに失敗しました。通信を確認してください。'); staffList = []; }
   document.getElementById('names').innerHTML = staffList.map(s =>
     `<button class="name-btn" onclick="select('${s.id}')">${esc(s.name)}</button>`).join('');
@@ -821,7 +822,8 @@ async function saveDefaultBreak() {
   const v = parseInt(document.getElementById('brk-default').value);
   if (isNaN(v) || v < 0) { showToast('休憩の初期値（分）を正しく入れてください'); return; }
   try {
-    await sb('PATCH', 'staff', { default_break_min: v }, `?id=eq.${selected.id}`);
+    // 休憩初期値だけを更新する列固定RPC（本体staffはstaff-key必須のため・P0-2）
+    await sb('POST', 'rpc/staff_set_break_default', { p_staff_id: selected.id, p_minutes: v });
     selected.default_break_min = v;
     const s = staffList.find(x => String(x.id) === String(selected.id)); if (s) s.default_break_min = v;
     showToast(`${selected.name}さんの休憩の初期値を ${v}分 に保存しました`);
@@ -902,7 +904,7 @@ async function punchOut() {
       work_types: works || null, stopkill_count: stopkillValue(), updated_at: new Date().toISOString(),
     }, `?id=eq.${todayRec.id}`);
     if (document.getElementById('brk-set-default').checked) {
-      try { await sb('PATCH', 'staff', { default_break_min: brk }, `?id=eq.${selected.id}`); selected.default_break_min = brk; } catch (_e) {}
+      try { await sb('POST', 'rpc/staff_set_break_default', { p_staff_id: selected.id, p_minutes: brk }); selected.default_break_min = brk; } catch (_e) {}
     }
     let cleanMsg = '';
     try {
@@ -984,7 +986,7 @@ keepAwake();
     const y=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
     const [shifts,staff]=await Promise.all([
       sb('GET','shifts',null,`?date=eq.${y}&select=staff_id,shift_type`),
-      sb('GET','staff',null,'?select=id,name&deleted_at=is.null&is_active=eq.true')
+      sb('GET','staff_public',null,'?select=id,name&is_active=eq.true')
     ]);
     if(!shifts.length) return;
     const nm={}; staff.forEach(s=>nm[s.id]=s.name);

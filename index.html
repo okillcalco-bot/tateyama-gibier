@@ -4229,13 +4229,13 @@ async function shipOrderConfirmed(orderId, dropdownAssignments) {
 }
 
 /* ===== Processing Mode (精肉モード) ===== */
-let PM_OPERATORS = ['沖浩志','田口和利','白石秀一','大和田薫','渡邊恵','相川武士','川島幸子','大橋直人','石橋早奈恵','黒川珠絵','今泉貴雄','吉田友美']; // 正式名簿（DB読込前のフォールバック）
+let PM_OPERATORS = []; // 実名の直書きはP0-5で除去。作業者名は loadStaffNames() が staff_public(DB) から取得する
 let STAFF_MASTER = []; // {id, name} スタッフマスタ（作業者選択はここから）
 
 /* 作業頻度の高い人を前に出すためのチーム分け（名前はスタッフマスタと一致させる）
    ここに載っていない人は自動的に「その他」として区切り線の後ろに回る */
-const TEAM_SEIKA  = ['田口和利', '白石秀一', '渡邊恵', '吉田友美', '石橋早奈恵'];           // 精肉
-const TEAM_KAITAI = ['沖浩志', '大和田薫', '今泉貴雄', '川島幸子', '大橋直人', '相川武士']; // 解体
+const TEAM_SEIKA  = [];  // 実名の直書きはP0-5で除去（精肉チームの並び優先はDBのteam列化=P1）
+const TEAM_KAITAI = [];  // 実名の直書きはP0-5で除去（解体チームの並び優先はDBのteam列化=P1）
 
 // 指定チームを前に、それ以外を後ろに分ける（在籍者＝PM_OPERATORS のみ）
 function staffSplitByTeam(team) {
@@ -4248,7 +4248,7 @@ function staffSplitByTeam(team) {
 // 作業者はスタッフマスタ（staffテーブル）から必ず選択する
 async function loadStaffNames() {
   try {
-    const rows = await sb('GET', 'staff', null, '?select=id,name&deleted_at=is.null&is_active=eq.true&order=name.asc');
+    const rows = await sb('GET', 'staff_public', null, '?select=id,name&is_active=eq.true&order=name.asc');
     const seen = new Set();
     STAFF_MASTER = rows.filter(r => r.name && !seen.has(r.name) && seen.add(r.name));
     if (STAFF_MASTER.length) PM_OPERATORS = STAFF_MASTER.map(s => s.name);
@@ -6996,6 +6996,7 @@ async function evTakeout() {
   const lots = evItems.filter(i => i.kind !== 'inventory').reduce((a, i) => a + evNum(i.qty_taken), 0);
   if (!inds && !lots) { alert('持っていくものを先に選んでください。'); return; }
   if (!confirm(`持ち出しを確定します。\n一頭もの ${inds}点 / 小分け・その他 ${lots}個\n\n一頭もののパックは「引当済」になり、他所へ出せなくなります。`)) return;
+  await staffKeyEnsure();  // staff-key必須（P0-1/P0-2）
   try { await evAfterRpc(await sb('POST', 'rpc/sale_event_takeout', { p_event_id: evCur.id, p_by: evBy() }), '持ち出しを確定しました'); }
   catch (e) { alert('確定できませんでした：' + (e && e.message || e)); }
 }
@@ -7004,6 +7005,7 @@ async function evSettle() {
   const total = evItems.reduce((a, i) => a + evNum(i.amount), 0);
   if (!confirm(`売上を確定します。\n明細の売上 ${evYen(total)}\n\n売れたぶんは出荷済、売れ残りは在庫に戻ります。`)) return;
   try {
+    await staffKeyEnsure();  // staff-key必須（P0-1/P0-2）
     const r = await sb('POST', 'rpc/sale_event_settle', { p_event_id: evCur.id, p_by: evBy() });
     if (await evAfterRpc(r, '売上を確定しました')) {
       // 加工商品の棚の在庫が減ったので、BASEの在庫も合わせておく
@@ -7023,6 +7025,7 @@ async function evSettle() {
 async function evReopen() {
   if (!evCur) return;
   if (!confirm('確定を取り消して準備中に戻します。\n在庫はすべて「在庫」に戻ります。よろしいですか？')) return;
+  await staffKeyEnsure();  // staff-key必須（P0-1/P0-2）
   try { await evAfterRpc(await sb('POST', 'rpc/sale_event_reopen', { p_event_id: evCur.id, p_by: evBy() }), '準備中に戻しました'); }
   catch (e) { alert('戻せませんでした：' + (e && e.message || e)); }
 }
@@ -8504,6 +8507,7 @@ async function loadHunters() {
   const body = document.getElementById('hunters-body');
   body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
   try {
+    await staffKeyEnsure();  // 機微列を含む読み取りはstaff-key必須（P0-2）
     huntersData = await sb('GET', 'hunters', null, '?select=*&deleted_at=is.null&order=name.asc');
     // 捕獲実績（個体台帳の捕獲者名で集計）
     let countMap = {};
@@ -8556,6 +8560,7 @@ function hunterEdit(id) {
 async function hunterSave() {
   const payload = {};
   HUNTER_FIELDS.forEach(f => payload[f] = document.getElementById('hun-f-' + f).value.trim() || null);
+  await staffKeyEnsure();  // staff-key必須（P0-1/P0-2）
   if (!payload.name) { toast('氏名は必須です', 'error'); return; }
   try {
     if (hunterEditId) {
@@ -8696,6 +8701,7 @@ async function loadStaffPanel() {
   const body = document.getElementById('staff-body');
   body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
   try {
+    await staffKeyEnsure();  // 機微列を含む読み取りはstaff-key必須（P0-2）
     staffData = await sb('GET', 'staff', null, '?select=*&deleted_at=is.null&order=name.asc');
     if (!staffData.length) {
       body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text3);">スタッフが未登録です。「＋新規登録」から追加してください。</td></tr>';
@@ -8745,6 +8751,7 @@ async function staffSave() {
     if (f === 'hourly_wage' || f === 'monthly_salary') v = v ? parseFloat(v) : null;
     payload[f] = v === '' ? null : v;
   });
+  await staffKeyEnsure();  // staff-key必須（P0-1/P0-2）
   if (!payload.name) { toast('氏名は必須です', 'error'); return; }
   try {
     if (staffEditId) { await sb('PATCH', 'staff', payload, '?id=eq.' + staffEditId); toast(`スタッフ「${payload.name}」を更新しました`); }
@@ -9296,7 +9303,7 @@ async function runDataChecks() {
       sb('GET', 'inventory', null, '?select=id,ident_code,individual_id,weight,status&deleted_at=is.null&limit=2000'),
       sb('GET', 'orders', null, '?select=id,order_code,status&limit=1000'),
       sb('GET', 'order_items', null, '?select=id,order_id,inventory_id,part_name&limit=2000'),
-      sb('GET', 'hunters', null, '?select=name&deleted_at=is.null&limit=1000'),
+      sb('GET', 'hunters_public', null, '?select=name&limit=1000'),
     ]);
     // 1. 個体番号の重複
     const seen = new Set();
@@ -9847,6 +9854,7 @@ async function loadVoices() {
   const opEl = document.getElementById('vc-operator');
   if (opEl && !opEl.value) { try { opEl.value = localStorage.getItem('tg_vc_operator') || ''; } catch (e) {} }
   try {
+    await staffKeyEnsure();  // staff-key必須（P0-1/P0-2）
     vcRows = await sb('POST', 'rpc/staff_voices_list', { p_status: vcStatus, p_limit: 500 }) || [];
   } catch (e) {
     box.innerHTML = `<div class="section" style="color:var(--red);">感想を読み込めませんでした: ${esc2(sbSafeMsg(e))}</div>`;
@@ -9898,6 +9906,7 @@ async function vcModerate(id, action) {
   if (action === 'publish' && !confirm('この感想を「この肉の物語」ページに公開します。よろしいですか？')) return;
   if (action === 'reject' && !confirm('この感想を却下します。お客様には表示されません。よろしいですか？')) return;
   try {
+    await staffKeyEnsure();  // staff-key必須（P0-1/P0-2）
     await sb('POST', 'rpc/staff_voice_moderate', { p_id: id, p_action: action, p_by: vcOperator() || null });
     toast(label + 'しました');
     await loadVoices();
@@ -10299,7 +10308,7 @@ function outletMoveOpen(type) {
   document.getElementById('om-date').value = new Date().toISOString().slice(0, 10);
   const staffSel = document.getElementById('om-staff');
   staffSel.innerHTML = '<option value="">選択...</option>';
-  sb('GET', 'staff', null, '?is_active=eq.true&deleted_at=is.null&select=name&order=name.asc')
+  sb('GET', 'staff_public', null, '?is_active=eq.true&select=name&order=name.asc')
     .then(list => { staffSel.innerHTML = '<option value="">選択...</option>' + list.map(s => `<option>${esc2(s.name)}</option>`).join(''); })
     .catch(() => {});
   document.getElementById('om-products').innerHTML = outletRetailProducts.map(p =>
@@ -10537,6 +10546,7 @@ const DOC_DEFS = [
     } },
   { key: 'wage_ledger', cat: '労務・社労士', title: '賃金台帳（参考計算）', gen: async (m) => {
       const [d1, d2] = docMonthRange(m);
+      await staffKeyEnsure();  // 機微列を含む読み取りはstaff-key必須（P0-2）
       const [sts, atts] = await Promise.all([
         sb('GET', 'staff', null, '?select=*&deleted_at=is.null&is_active=eq.true'),
         sb('GET', 'attendance', null, `?work_date=gte.${d1}&work_date=lte.${d2}&select=*&limit=1000`),
@@ -10551,6 +10561,7 @@ const DOC_DEFS = [
         note: '※参考計算です。控除額・割増賃金等は社労士確認のうえ確定してください。' };
     } },
   { key: 'worker_roster', cat: '労務・社労士', title: '労働者名簿', gen: async () => {
+      await staffKeyEnsure();  // 機微列を含む読み取りはstaff-key必須（P0-2）
       const sts = await sb('GET', 'staff', null, '?select=*&deleted_at=is.null&order=name.asc');
       return { columns: ['氏名', '役割', '雇用区分', '入社日', '電話', '社会保険', '雇用保険', '備考'],
         rows: sts.map(s => [s.name, s.role || '', s.employment_type || '', s.hire_date || '', s.phone || '', s.social_insurance || '未設定', s.employment_insurance || '未設定', s.memo || '']),
@@ -10570,6 +10581,7 @@ const DOC_DEFS = [
         note: '有給の付与・取得管理は今後の勤怠データ蓄積後に自動化予定。当面は本様式に記入してください。' };
     } },
   { key: 'insurance_status', cat: '労務・社労士', title: '社会保険・雇用保険加入状況一覧', gen: async () => {
+      await staffKeyEnsure();  // 機微列を含む読み取りはstaff-key必須（P0-2）
       const sts = await sb('GET', 'staff', null, '?select=*&deleted_at=is.null&order=name.asc');
       return { columns: ['氏名', '雇用区分', '社会保険', '雇用保険', '入社日'],
         rows: sts.map(s => [s.name, s.employment_type || '', s.social_insurance || '未設定', s.employment_insurance || '未設定', s.hire_date || '']) };
@@ -10647,6 +10659,7 @@ const DOC_DEFS = [
     } },
   // ── 認証・監査対応 ──
   { key: 'hunter_registry', cat: '認証・監査対応', title: '捕獲者台帳（国産ジビエ認証様式）', gen: async () => {
+      await staffKeyEnsure();  // 機微列を含む読み取りはstaff-key必須（P0-2）
       const hs = await sb('GET', 'hunters', null, '?select=*&deleted_at=is.null&order=registry_number.asc.nullslast&limit=500');
       return { columns: ['番号', '登録年月日', '捕獲者氏名', '捕獲見込み場所', '住所', '連絡先', '確認書類', '銃', '備考'],
         rows: hs.map(h => [h.registry_number || '-', h.registered_on || '', h.name, h.trap_area || '', h.address || '', h.phone || '', h.document_type || '', h.has_gun ? '○' : '', h.memo || '']) };
@@ -11574,7 +11587,7 @@ async function loadShiftBoard() {
     `<th style="text-align:center;${i >= 5 ? 'color:var(--red);' : ''}${ymdLocal(d) === todayStr ? 'background:rgba(200,164,90,.12);' : ''}">${d.getMonth() + 1}/${d.getDate()}<br>${youbi[i]}</th>`).join('') + '</tr>';
   try {
     const [staff, shifts] = await Promise.all([
-      sb('GET', 'staff', null, '?is_active=eq.true&deleted_at=is.null&select=id,name&order=name.asc'),
+      sb('GET', 'staff_public', null, '?is_active=eq.true&select=id,name&order=name.asc'),
       sb('GET', 'shifts', null, `?date=gte.${ymdLocal(days[0])}&date=lte.${ymdLocal(days[6])}&select=id,staff_id,date,shift_type`)
     ]);
     shiftStaffList = staff;
@@ -11641,7 +11654,7 @@ function shiftExportICS() {
 /* ───────── スタッフ掲示板 ───────── */
 async function loadBoard() {
   try {
-    const staff = await sb('GET', 'staff', null, '?is_active=eq.true&deleted_at=is.null&select=name&order=name.asc');
+    const staff = await sb('GET', 'staff_public', null, '?is_active=eq.true&select=name&order=name.asc');
     const sel = document.getElementById('board-author');
     if (sel && sel.options.length <= 1) sel.innerHTML = '<option value="">選択...</option>' + staff.map(s => `<option>${s.name}</option>`).join('');
   } catch (e) {}
@@ -12028,8 +12041,8 @@ function waybillPrint() {
 /* ───────── マスタdatalist（捕獲者台帳・地区マスタから動的取得） ───────── */
 async function loadMasterDatalists() {
   try {
-    const hs = await sb('GET', 'hunters', null, '?select=name,memo&deleted_at=is.null&order=name.asc&limit=500');
-    const active = hs.filter(h => !['逝去', '返納'].includes(h.memo)).map(h => h.name);
+    const hs = await sb('GET', 'hunters_public', null, '?select=name,is_retired&order=name.asc&limit=500');
+    const active = hs.filter(h => !h.is_retired).map(h => h.name);
     if (active.length) document.getElementById('dl-hunter').innerHTML = [...new Set(active)].map(n => `<option>${esc2(n)}</option>`).join('');
   } catch (e) {}
   try {
@@ -12094,6 +12107,7 @@ async function refreshNavBadges() {
   } catch (e) { setCard('dc-aging', '-'); }
   // 承認待ちの「食べた人の声」（お客様を待たせないよう、気づける場所に出す）
   try {
+    await staffKeyEnsure();  // staff-key必須（P0-1/P0-2）
     const v = await sb('POST', 'rpc/staff_voices_list', { p_status: 'pending', p_limit: 1000 });
     setBadge('nav-badge-voices', (v || []).length, true);
   } catch (e) {}
