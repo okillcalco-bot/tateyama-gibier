@@ -65,11 +65,11 @@ function isBaseGet(u, table) {
   t('capture-form: base hunters を読まない', !capReqs.some(u => isBaseGet(u, 'hunters')), capReqs.filter(u => isBaseGet(u, 'hunters'))[0] || '');
   t('capture-form: base staff を読まない', !capReqs.some(u => isBaseGet(u, 'staff')), capReqs.filter(u => isBaseGet(u, 'staff'))[0] || '');
 
-  // 4. punch: 休憩初期値の保存はRPC経由（source上の確認）
+  // 4. punch: staff への書き込みが一切ない（P0-1: 無認証writeの廃止）
   const fs = require('fs');
   const punchSrc = fs.readFileSync(path.resolve(__dirname, '../../punch.html'), 'utf8');
-  t('punch: 休憩初期値保存は rpc/staff_set_break_default を使う', punchSrc.includes("rpc/staff_set_break_default"), '');
   t('punch: staffへの直接PATCHが無い', !/sb\('PATCH', 'staff'/.test(punchSrc), '');
+  t('punch: staff_set_break_default RPCを使わない（無認証write廃止）', !punchSrc.includes('staff_set_break_default'), '');
   // capture-form: 仮登録はRPC経由
   const capSrc = fs.readFileSync(path.resolve(__dirname, '../../capture-form.html'), 'utf8');
   t('capture-form: 仮登録は rpc/public_hunter_provisional を使う', capSrc.includes("rpc/public_hunter_provisional"), '');

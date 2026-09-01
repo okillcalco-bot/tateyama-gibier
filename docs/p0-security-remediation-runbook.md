@@ -22,7 +22,8 @@
 各ファイルに対の rollback を `migrations/rollback/` に用意。
 
 ### client（HTML）
-- `punch.html` `outlet.html` `capture-form.html`: 氏名等の最小列は `staff_public`/`hunters_public` を読む。punch の休憩既定保存は `staff_set_break_default` RPC、capture-form の仮登録は `public_hunter_provisional` RPC 経由に。capture-form の市役所調査票の**電話欄は空になる**（電話は公開VIEWに含めない）。
+- `punch.html` `outlet.html` `capture-form.html`: 氏名等の最小列は `staff_public`/`hunters_public` を読む。**punch は staff テーブルへ一切書き込まない**（休憩既定の変更は管理アプリ=スタッフ台帳側のみ。Codexレビュー反映で無認証write を廃止）。capture-form の仮登録は `public_hunter_provisional` RPC 経由（入力制約＋重複排除＋レート制限つき）。capture-form の市役所調査票の**電話欄は空になる**（電話は公開VIEWに含めない）。
+- **公開VIEWの列（Codexレビュー反映）**: `hunters_public` は id/name/furigana/is_retired のみ（**city/trap_area は含めない**＝氏名＋活動地域を anon に出さない）。`staff_public` は id/name/color/is_active/default_break_min のみ。氏名が anon 公開VIEWに残るのは、認証を持たない現場端末（punch/outlet/capture-form）の名前ピッカー/氏名補完に必要なため。これを無くすには punch/outlet/capture-form へキオスク/スタッフキー認可を入れる必要があり、**P1**（§8x）。
 - `index.html`: 名前ボタン系は公開VIEW。給与台帳・捕獲者台帳・市役所様式・賃金台帳など**全列が要る画面と保存**の前に `staffKeyEnsure()` を呼ぶ（初回だけスタッフキー入力を促す）。状態変更RPC（sale_event_*/voice）呼び出し前にも `staffKeyEnsure()`。ソース直書きの実名（捕獲者90名の地区対応表・datalist192名・スタッフ12名配列）を除去。
 
 ## 2. 修正対象 finding（監査 §C との対応）
@@ -100,7 +101,7 @@ select public from storage.buckets where id='capture-photos';       -- f
 
 ## 10. frontend smoke test（client配信後・step3適用後の両方で）
 スタッフキーを1回入力した端末で:
-1. **punch.html**: 名前ボタンが出る（staff_public）／出退勤できる／休憩初期値を保存できる（staff_set_break_default）。
+1. **punch.html**: 名前ボタンが出る（staff_public）／出退勤できる。※休憩初期値の変更はこの端末からはできない（管理アプリのスタッフ台帳で行う）ことを確認。
 2. **capture-form.html**: 捕獲者名の予測候補が出る（hunters_public）／新規名の仮登録ができる（public_hunter_provisional）／捕獲票を保存できる。
 3. **index.html 精肉モード**: 作業者名が出る／精肉登録・出荷ができる。
 4. **index.html スタッフ台帳/捕獲者台帳/賃金台帳/市役所様式**: 初回にスタッフキーを聞かれ、入力後に全項目が表示される。
@@ -133,3 +134,10 @@ select public from storage.buckets where id='capture-photos';       -- f
 - **IDOR/mass assignment 全般（write CHECK=true のテーブル群）**: 認証なし公開画面の直接テーブル書き込み（individuals/attendance/cleaning_logs/products/product_movements 等）をRPC化する必要があり、これは書き込み経路の作り直し（P1）。
 - **record-list.html の旧 anon キー**: 棚卸し対象（P1）。role=anon のため秘密漏洩ではないが、個体台帳が認証なしで編集可能な導線ごとP1で扱う。
 - **エラー本文の素通し / OS通知の顧客名**: 本P0では未対応（別途）。
+- **公開VIEWに残る氏名（staff_public の氏名/id、hunters_public の氏名/ふりがな）**: 認証を持たない現場端末（punch/outlet/capture-form）の名前ピッカー・氏名補完に必要なため anon に残す。完全に無くすには punch/outlet/capture-form へキオスク認可（施設のスタッフキーを各端末に配布し、公開VIEWを廃止して staff-key RPC 経由に寄せる）を入れる必要があり P1。あわせて、捕獲者名の一括列挙を避けるための前方一致サジェストRPC（rate-limit つき）化も P1 候補。※本改修で city/trap_area は既に hunters_public から除去済み（氏名＋活動地域は出さない）。
+
+## 9x. Codexレビュー（PR #243）反映メモ
+- **#1 staff_set_break_default（無認証write）を撤去**: 休憩初期値の変更は管理アプリ（スタッフ台帳・staff-key保護）のみに。punch は staff へ書き込まない。
+- **#2 public_hunter_provisional のハードニング**: 入力制約（長さ2〜30・文字必須・制御文字拒否・空白正規化）＋重複排除＋施設全体レート制限（`_rl_hit('hunter_provisional',3600,20)`）。仮登録は memo='仮登録' で識別でき管理者が是正可能（正式な承認待ちキュー分離は P1）。
+- **#3 hunters_public から city/trap_area を削除**（氏名＋活動地域を anon に出さない）。残る氏名は §8x のとおり P1 でキオスク認可へ。
+- **DB内部依存の再確認**: rename+wrapper 化した5関数（sale_event_settle/reopen/takeout・staff_voice_moderate・staff_voices_list）を **DB内部の function / trigger / cron が旧名で呼んでいないことを実測確認済み**（該当0件）。内部呼び出しが wrapper 経由になって staff-key を要求する事故はない。
