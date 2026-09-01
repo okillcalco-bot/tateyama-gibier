@@ -10,6 +10,12 @@
 --   （staff_key_header_ok は x-staff-key ヘッダのSHA256照合。customers を守って
 --    いる実績パターン: migrations/20260809_rls_tighten.sql）
 --
+-- ★ Codexレビュー反映(2026-09): revoke は **PUBLIC も含めて**剥奪する。
+--   PostgreSQLは関数作成時に既定でPUBLICへEXECUTEを付与する（実測: proaclに =X/postgres）。
+--   `revoke ... from anon` だけでは anon が PUBLIC 経由で *_impl を直接呼べ、ラッパーの
+--   staff-keyガードをバイパスできてしまう。よって *_impl は from public, anon, authenticated、
+--   未使用RPCは from anon, public で剥奪する（authenticated の明示付与は残るので alco-os 影響なし）。
+--
 -- ★ production へは Claude Code から適用しない（runbook参照）。
 --
 -- --- 分類 ---
@@ -36,7 +42,7 @@ begin;
 -- ---------- B: 使用中の状態変更RPCに staff-key ガードを付与 ----------
 -- sale_event_settle（出店/直売の精算：在庫を確定・戻す）
 alter function public.sale_event_settle(uuid, text) rename to sale_event_settle_impl;
-revoke all on function public.sale_event_settle_impl(uuid, text) from anon, authenticated;
+revoke all on function public.sale_event_settle_impl(uuid, text) from public, anon, authenticated;
 create or replace function public.sale_event_settle(p_event_id uuid, p_by text default null)
 returns jsonb language plpgsql volatile security definer set search_path to 'public' as $fn$
 begin
@@ -49,7 +55,7 @@ grant execute on function public.sale_event_settle(uuid, text) to anon;
 
 -- sale_event_reopen（精算の取消：在庫を戻す）
 alter function public.sale_event_reopen(uuid, text) rename to sale_event_reopen_impl;
-revoke all on function public.sale_event_reopen_impl(uuid, text) from anon, authenticated;
+revoke all on function public.sale_event_reopen_impl(uuid, text) from public, anon, authenticated;
 create or replace function public.sale_event_reopen(p_event_id uuid, p_by text default null)
 returns jsonb language plpgsql volatile security definer set search_path to 'public' as $fn$
 begin
@@ -62,7 +68,7 @@ grant execute on function public.sale_event_reopen(uuid, text) to anon;
 
 -- sale_event_takeout（持ち出し：在庫を引当）
 alter function public.sale_event_takeout(uuid, text) rename to sale_event_takeout_impl;
-revoke all on function public.sale_event_takeout_impl(uuid, text) from anon, authenticated;
+revoke all on function public.sale_event_takeout_impl(uuid, text) from public, anon, authenticated;
 create or replace function public.sale_event_takeout(p_event_id uuid, p_by text default null)
 returns jsonb language plpgsql volatile security definer set search_path to 'public' as $fn$
 begin
@@ -75,7 +81,7 @@ grant execute on function public.sale_event_takeout(uuid, text) to anon;
 
 -- staff_voice_moderate（消費者の声の公開/却下/復元）
 alter function public.staff_voice_moderate(uuid, text, text) rename to staff_voice_moderate_impl;
-revoke all on function public.staff_voice_moderate_impl(uuid, text, text) from anon, authenticated;
+revoke all on function public.staff_voice_moderate_impl(uuid, text, text) from public, anon, authenticated;
 create or replace function public.staff_voice_moderate(p_id uuid, p_action text, p_by text default null)
 returns jsonb language plpgsql volatile security definer set search_path to 'public' as $fn$
 begin
@@ -88,7 +94,7 @@ grant execute on function public.staff_voice_moderate(uuid, text, text) to anon;
 
 -- staff_voices_list（未公開の声の下書き閲覧＝モデレーション一覧）
 alter function public.staff_voices_list(text, integer) rename to staff_voices_list_impl;
-revoke all on function public.staff_voices_list_impl(text, integer) from anon, authenticated;
+revoke all on function public.staff_voices_list_impl(text, integer) from public, anon, authenticated;
 create or replace function public.staff_voices_list(p_status text default 'pending', p_limit integer default 200)
 returns jsonb language plpgsql stable security definer set search_path to 'public' as $fn$
 begin
@@ -101,23 +107,23 @@ grant execute on function public.staff_voices_list(text, integer) to anon;
 
 -- ---------- D/E: frontend未使用（cron/トリガ/内部/alco-os）→ anon 剥奪 ----------
 -- cron 専用（pg_cron は postgres 権限で実行するので anon 剥奪の影響なし）
-revoke execute on function public.apply_fixed_schedule(date, date)      from anon;
-revoke execute on function public.apply_fixed_schedule_prev_month()      from anon;
+revoke execute on function public.apply_fixed_schedule(date, date)      from anon, public;
+revoke execute on function public.apply_fixed_schedule_prev_month()      from anon, public;
 -- トリガ関数（トリガ発火はEXECUTE権限に依存しないので anon 剥奪しても発火する）
-revoke execute on function public.tgc_assign_scan_code()                 from anon;
-revoke execute on function public.tgc_assign_individual_number()         from anon;
+revoke execute on function public.tgc_assign_scan_code()                 from anon, public;
+revoke execute on function public.tgc_assign_individual_number()         from anon, public;
 -- 集計read・frontend未使用
-revoke execute on function public.waste_summary(date, date)             from anon;
+revoke execute on function public.waste_summary(date, date)             from anon, public;
 -- 内部レート制限（他RPCがdefiner権限で内部呼び出し。anon直呼び不要）
-revoke execute on function public._rl_hit(text, integer, integer)        from anon;
+revoke execute on function public._rl_hit(text, integer, integer)        from anon, public;
 -- alco-os 用の判定関数（Supabase Auth の authenticated が使う。anon は不要）
-revoke execute on function public.can_approve()                          from anon;
-revoke execute on function public.has_role(text)                         from anon;
-revoke execute on function public.current_organization_id()              from anon;
-revoke execute on function public.provision_profile(text)                from anon;
+revoke execute on function public.can_approve()                          from anon, public;
+revoke execute on function public.has_role(text)                         from anon, public;
+revoke execute on function public.current_organization_id()              from anon, public;
+revoke execute on function public.provision_profile(text)                from anon, public;
 -- サーバ/cron専用（定義は本リポ外・frontend未使用）
-revoke execute on function public.mail_import_outlet_day(text, date, timestamp with time zone, jsonb) from anon;
-revoke execute on function public.security_retention_purge()             from anon;
-revoke execute on function public.get_capture_form_by_token(text)        from anon;
+revoke execute on function public.mail_import_outlet_day(text, date, timestamp with time zone, jsonb) from anon, public;
+revoke execute on function public.security_retention_purge()             from anon, public;
+revoke execute on function public.get_capture_form_by_token(text)        from anon, public;
 
 commit;

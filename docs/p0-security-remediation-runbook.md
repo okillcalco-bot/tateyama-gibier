@@ -88,6 +88,11 @@ set role anon; select count(*) staff_anon from staff; select count(*) hunters_an
               select count(*) sp from staff_public; select count(*) hp from hunters_public; reset role;
 --   期待: staff_anon=0, hunters_anon=0, sp>0, hp>0
 -- p0_rpc: ガード関数が42501（psql: set role anon; select sale_event_settle('...uuid...'); → ERROR 42501）
+-- p0_rpc: anon は *_impl を直接呼べない（PUBLICバイパス封鎖の確認）
+select proname, has_function_privilege('anon', oid, 'EXECUTE') as anon_exec
+ from pg_proc where pronamespace='public'::regnamespace and proname like '%\_impl' escape '\'
+   and proname in ('sale_event_settle_impl','sale_event_reopen_impl','sale_event_takeout_impl','staff_voice_moderate_impl','staff_voices_list_impl');
+--   期待: 全て anon_exec=false
 -- p0_write: anon の書き込み権限が消えている
 select table_name, privilege_type from information_schema.role_table_grants
  where grantee='anon' and table_name in ('customer_prices','public_holidays','staff_fixed_schedule')
@@ -136,7 +141,18 @@ select public from storage.buckets where id='capture-photos';       -- f
 - **エラー本文の素通し / OS通知の顧客名**: 本P0では未対応（別途）。
 - **公開VIEWに残る氏名（staff_public の氏名/id、hunters_public の氏名/ふりがな）**: 認証を持たない現場端末（punch/outlet/capture-form）の名前ピッカー・氏名補完に必要なため anon に残す。完全に無くすには punch/outlet/capture-form へキオスク認可（施設のスタッフキーを各端末に配布し、公開VIEWを廃止して staff-key RPC 経由に寄せる）を入れる必要があり P1。あわせて、捕獲者名の一括列挙を避けるための前方一致サジェストRPC（rate-limit つき）化も P1 候補。※本改修で city/trap_area は既に hunters_public から除去済み（氏名＋活動地域は出さない）。
 
+## 自動CI / テスト状況
+- **本リポジトリに GitHub Actions 等の自動CIは存在しない**（`.github/workflows/` なし）。よって PR #243 の head では workflow run が0件であり、「CI green」ではない。
+- 検証は**手動**で実施した: ① DBテスト `tests/db/p0_security.test.sql` を本番に対しロールバック安全に実行（ALL PASS。副作用なし）② E2E（`p0-pii-client` 12/12、既存回帰は新規failなし）③ 権限の実測（proacl・`has_function_privilege`）。
+- 本番反映時は runbook §9/§10 のSQL・smoke test を人間が手動で流して確認すること。
+
 ## 9x. Codexレビュー（PR #243）反映メモ
+### 2巡目（PUBLIC EXECUTE バイパス）
+- **`*_impl` の PUBLIC 剥奪**: PostgreSQLは関数作成時に既定でPUBLICへEXECUTEを付与する（実測: proaclに `=X/postgres`）。`revoke ... from anon, authenticated` だけでは anon が **PUBLIC 経由で `*_impl` を直接呼べ**、ラッパーのstaff-keyガードをバイパスできた。対策として5関数すべての impl を `revoke all ... from public, anon, authenticated` に変更。未使用RPCの剥奪も `from anon, public` に統一（PUBLIC付きは `from anon` だけでは無効だった）。authenticated は明示付与が残るため alco-os への影響なし。
+- **negative test 追加**: `tests/db/p0_security.test.sql` に、sale_event_settle/reopen/takeout・staff_voice_moderate・staff_voices_list の**5 impl すべてについて anon が EXECUTE 権限を持たない**こと、および anon ロールで impl を直接呼ぶと insufficient_privilege になることを固定（ALL PASS 実測）。
+- 仮登録の「施設全体20件/時」は、攻撃者が20件消費すると正規利用も一時的に止まるDoS余地が残るが、機密漏洩・改ざんほど重大でないため **P1**（per-端末/IPのレート制限やキオスク認可で解消）。
+
+### 1巡目
 - **#1 staff_set_break_default（無認証write）を撤去**: 休憩初期値の変更は管理アプリ（スタッフ台帳・staff-key保護）のみに。punch は staff へ書き込まない。
 - **#2 public_hunter_provisional のハードニング**: 入力制約（長さ2〜30・文字必須・制御文字拒否・空白正規化）＋重複排除＋施設全体レート制限（`_rl_hit('hunter_provisional',3600,20)`）。仮登録は memo='仮登録' で識別でき管理者が是正可能（正式な承認待ちキュー分離は P1）。
 - **#3 hunters_public から city/trap_area を削除**（氏名＋活動地域を anon に出さない）。残る氏名は §8x のとおり P1 でキオスク認可へ。
