@@ -25,6 +25,11 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
       capture_anomalies: '脱毛', organ_anomalies: '', sex: 'オス', weight_total: '4.1', age_estimate: 2, bleed_time: '07:40',
       gutting: '無', cooling_method: null, transport_start: '08:00', receive_time: '08:19', quality: '良', recorder: '沖浩志',
       butcher_staff: null, memo: 'テスト備考', special_notes: null, stomach_note: null },
+    // 除外されるべき：テストデータ・仮登録（番号未確定）
+    { label_id: 'TGC-TEST-02', serial_number: null, species: 'シカ', capture_date: '2026-09-04', capture_time: '08:00',
+      hunter_name: 'テスト捕獲者', capture_city: '南房総市', capture_area: '和田町黒岩', species_dummy: 1 },
+    { label_id: '仮-MRW1ZV1D', serial_number: null, species: 'シカ', capture_date: '2026-09-06', capture_time: '10:00',
+      hunter_name: '沖浩志', capture_city: '館山市', capture_area: '江田' },
   ];
 
   const ctx = await b.newContext({ viewport: { width: 1000, height: 900 } });
@@ -68,6 +73,12 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   // 取得クエリが「イノシシ以外」で期間指定
   ck('クエリがspecies!=イノシシ', /species=neq\.イノシシ/.test(lastQuery), lastQuery.slice(0, 200));
   ck('クエリが期間gte/lte', /capture_date=gte\./.test(lastQuery) && /capture_date=lte\./.test(lastQuery), lastQuery.slice(0, 200));
+  ck('クエリでTEST・仮を除外', /label_id=not\.like\.TGC-TEST/.test(lastQuery) && /label_id=not\.like\.(仮|%E4)/.test(lastQuery), lastQuery.slice(0, 400));
+
+  // テスト・仮登録・番号未確定は一覧にも様式2にも出さない（クライアント側の安全網）
+  const allText = await p.evaluate(() => document.getElementById('sheets').textContent + '||' + document.getElementById('list').textContent);
+  ck('テストデータを表示しない', !allText.includes('テスト捕獲者') && !allText.includes('TGC-TEST'), allText.slice(0, 80));
+  ck('仮登録を表示しない', !allText.includes('仮-'), allText.slice(0, 80));
 
   // --- ③ 様式2の中身 ---
   const sheet0 = await p.evaluate(() => document.querySelectorAll('#sheets .sheet')[0].textContent);
