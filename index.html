@@ -3572,10 +3572,28 @@ async function loadProcessingSetup() {
   } catch(e) { toast('個体一覧読み込みエラー: ' + e.message, 'error'); }
 }
 
+/* 肉ランクの既定。肉ランクはイノシシのみ（他獣種は付けない＝null）。
+   イノシシで未選択（上・極上でもない）なら「並」。上・極上は精肉時に手入力する運用。 */
+function defaultMeatRank(species, labelId, current) {
+  const isBoar = species === 'イノシシ' || /^TGC-\d{2}-[TM]/.test(labelId || '');
+  if (!isBoar) return null;
+  return current || '並';
+}
+
+/* 精肉完了にしたイノシシで肉ランクが未記入のものへ、既定の「並」を入れる。
+   種類=イノシシ・肉ランク空欄に絞るので、他獣種や既に上/極上/並の個体は変えない。 */
+async function procDefaultBoarRank(filter) {
+  try {
+    await sb('PATCH', 'individuals', { meat_rank: '並' },
+      `?${filter}&species=eq.イノシシ&meat_rank=is.null&deleted_at=is.null`);
+  } catch (e) { toast('肉ランクの既定（並）設定に失敗しました。個体編集で確認してください', 'error'); }
+}
+
 async function procMarkDone(labelId) {
   if (!confirm(`${labelId} を「精肉完了」にしますか？\n（部位の登録なしで完了扱いになり、未処理一覧から消えます。「完了済み」タブからいつでも戻せます）`)) return;
   try {
     await sb('PATCH', 'individuals', { processing_done_at: new Date().toISOString() }, `?label_id=eq.${encodeURIComponent(labelId)}`);
+    await procDefaultBoarRank(`label_id=eq.${encodeURIComponent(labelId)}`);
     toast(`${labelId} を精肉完了にしました`);
     loadProcessingSetup();
   } catch(e) { toast('更新に失敗しました: ' + e.message, 'error'); }
@@ -3599,6 +3617,7 @@ async function procBulkDone() {
     if (!targets.length) { toast('対象の個体はありませんでした'); return; }
     if (!confirm(`${d} より前に捕獲された ${targets.length}頭 を「精肉完了」にします。よろしいですか？`)) return;
     await sb('PATCH', 'individuals', { processing_done_at: new Date().toISOString() }, `?capture_date=lt.${d.trim()}&processing_done_at=is.null&deleted_at=is.null`);
+    await procDefaultBoarRank(`capture_date=lt.${d.trim()}`);
     toast(`${targets.length}頭を精肉完了にしました`);
     loadProcessingSetup();
   } catch(e) { toast('一括更新に失敗しました: ' + e.message, 'error'); }
@@ -7519,18 +7538,20 @@ async function pmFinishIndividual() {
     };
     if (yieldNum != null) patch.yield_rate = yieldNum;
     // 精肉時に選んだ肉ランク・止めさし引取を保存し、買取価格を自動算出（積算）
-    if (pmIndividual.meat_rank) patch.meat_rank = pmIndividual.meat_rank;
+    // 肉ランクはイノシシのみ。未選択でも既定「並」を入れる（上・極上は精肉時に選ぶ運用）。
+    const effRank = defaultMeatRank(pmIndividual.species, pmIndividual.label_id, pmIndividual.meat_rank);
+    if (effRank) patch.meat_rank = effRank;
     patch.stopkill_pickup = !!pmIndividual.stopkill_pickup;
-    if (pmIndividual.meat_rank && yieldNum != null) {
-      const bb = calcBuyback(indW, pmIndividual.meat_rank, yieldNum, !!pmIndividual.stopkill_pickup);
+    if (effRank && yieldNum != null) {
+      const bb = calcBuyback(indW, effRank, yieldNum, !!pmIndividual.stopkill_pickup);
       if (bb != null) patch.buyback_amount = bb;
     }
     await sb('PATCH', 'individuals', patch, `?label_id=eq.${encodeURIComponent(pmIndividual.label_id)}`);
 
     const yieldPct = yieldNum != null ? yieldNum : '-';
-    const bbMsg = (pmIndividual.meat_rank && yieldNum != null)
-      ? `／ ${pmIndividual.meat_rank}・買取¥${(calcBuyback(indW, pmIndividual.meat_rank, yieldNum, !!pmIndividual.stopkill_pickup) || 0).toLocaleString()}`
-      : '（肉ランク未選択→個体編集で確定すると買取が出ます）';
+    const bbMsg = (effRank && yieldNum != null)
+      ? `／ ${effRank}・買取¥${(calcBuyback(indW, effRank, yieldNum, !!pmIndividual.stopkill_pickup) || 0).toLocaleString()}`
+      : (effRank ? '（買取は歩留まり算出後に確定）' : '');
     toast(`${pmIndividual.label_id} 精肉完了（${pmCompletedParts.length}部位, 歩留まり${yieldPct}% ${bbMsg}）`);
     // 完了した個体は進行中セッション・一時保管から取り除く
     if (pmCurrentOperator) delete pmSessions[pmCurrentOperator];
