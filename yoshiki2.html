@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>捕獲個体管理台帳（様式2）ダウンロード｜館山ジビエセンター</title>
+<style>
+  :root{ --ink:#111; --line:#000; --red:#c0392b; --muted:#555; --bg:#f0f0f0; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; }
+  body{ font-family:"Noto Sans JP","Hiragino Sans","Yu Gothic",sans-serif; color:var(--ink); background:var(--bg); }
+  /* ---- 画面UI ---- */
+  .bar{ position:sticky; top:0; z-index:5; background:#1f3a2e; color:#fff; padding:12px 16px; box-shadow:0 2px 6px rgba(0,0,0,.2); }
+  .bar h1{ font-size:16px; margin:0 0 2px; font-weight:700; }
+  .bar .sub{ font-size:12px; opacity:.85; }
+  .wrap{ max-width:920px; margin:0 auto; padding:16px; }
+  .panel{ background:#fff; border:1px solid #ccc; border-radius:8px; padding:14px 16px; margin-bottom:16px; }
+  .row{ display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
+  label.fld{ font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:4px; }
+  select, input[type=date]{ font-size:15px; padding:6px 8px; border:1px solid #bbb; border-radius:6px; min-width:120px; }
+  button{ font-size:14px; padding:9px 16px; border:0; border-radius:6px; cursor:pointer; }
+  .btn-main{ background:#1f3a2e; color:#fff; font-weight:700; }
+  .btn-print{ background:var(--red); color:#fff; font-weight:700; }
+  .btn-ghost{ background:#eee; color:#333; }
+  button:disabled{ opacity:.5; cursor:default; }
+  .count{ font-size:13px; color:var(--muted); margin:10px 0 0; }
+  .status{ font-size:13px; color:var(--muted); }
+  .err{ color:var(--red); }
+  .list{ list-style:none; margin:12px 0 0; padding:0; }
+  .list li{ display:flex; align-items:center; gap:10px; padding:7px 6px; border-bottom:1px solid #eee; font-size:13px; }
+  .list li .sp{ display:inline-block; min-width:64px; font-weight:700; }
+  .list li .id{ color:#666; min-width:120px; }
+  .list li .nm{ color:#333; }
+  .toolbar{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:6px 0 0; }
+  /* ---- 様式2 用紙 ---- */
+  .sheets{ }
+  .sheet{ background:#fff; width:210mm; min-height:297mm; margin:0 auto 16px; padding:10mm 9mm; box-shadow:0 1px 5px rgba(0,0,0,.25); position:relative; }
+  .sheet .exclude{ position:absolute; top:6px; right:8px; font-size:11px; color:var(--muted); }
+  .sheet.excluded{ opacity:.35; }
+  .f-no{ text-align:right; font-size:11px; margin-bottom:2px; }
+  .f-h1{ text-align:center; font-size:16px; letter-spacing:.3em; margin:0 0 6px; font-weight:700; }
+  .f-tbl{ border-collapse:collapse; width:100%; table-layout:fixed; font-size:10px; }
+  .f-tbl td{ border:1px solid var(--line); padding:2px 4px; vertical-align:middle; line-height:1.45; }
+  .grp{ writing-mode:vertical-rl; text-align:center; font-weight:700; width:20px; letter-spacing:.15em; background:#f4f4f4; }
+  .lbl{ background:#fafafa; font-weight:600; }
+  .sel{ display:inline-block; border:1.4px solid var(--red); border-radius:40%/60%; padding:0 4px; font-weight:700; }
+  u.fill{ font-weight:700; padding:0 3px; text-decoration:none; border-bottom:1px solid var(--ink); }
+  .mini{ font-size:8.5px; color:#333; }
+  .note{ font-size:8.5px; color:#333; }
+  .ck-row td{ padding:1px 4px; }
+  .ck-box{ width:56px; text-align:center; }
+  .foot{ font-size:8.5px; color:#333; margin-top:4px; }
+  /* ---- 印刷 ---- */
+  @page{ size:A4 portrait; margin:10mm 9mm; }
+  @media print{
+    body{ background:#fff; }
+    .no-print{ display:none !important; }
+    .sheet{ width:auto; min-height:auto; margin:0; padding:0; box-shadow:none; page-break-after:always; }
+    .sheet:last-child{ page-break-after:auto; }
+    .sheet.excluded{ display:none !important; }
+    .sheet .exclude{ display:none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="gate" class="wrap" style="display:none">
+  <div class="panel">
+    <h2 style="margin:0 0 8px;font-size:16px;">アクセスできません</h2>
+    <p class="status">このページは館山ジビエセンターから配布されたリンク（合言葉つき）からのみご利用いただけます。お手元のリンクをご確認ください。</p>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+  <div class="bar no-print">
+    <h1>捕獲個体管理台帳（様式2）</h1>
+    <div class="sub">館山ジビエセンター ／ イノシシ以外の捕獲個体</div>
+  </div>
+  <div class="wrap no-print">
+    <div class="panel">
+      <div class="row">
+        <label class="fld">対象月
+          <select id="month"></select>
+        </label>
+        <label class="fld">または期間（開始）
+          <input type="date" id="from">
+        </label>
+        <label class="fld">期間（終了）
+          <input type="date" id="to">
+        </label>
+        <button class="btn-main" id="load">表示する</button>
+      </div>
+      <div class="count" id="count"></div>
+      <div class="toolbar" id="tools" style="display:none">
+        <button class="btn-print" id="print">🖨 印刷 / PDF保存</button>
+        <span class="status">※ 印刷ダイアログで「PDFに保存」を選ぶとPDFで保存できます。1個体＝1ページです。</span>
+      </div>
+      <ul class="list" id="list"></ul>
+    </div>
+  </div>
+  <div class="sheets" id="sheets"></div>
+</div>
+
+<script>
+const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+const ACCESS_TOKEN = '918fwmnzbi';
+const DOW = ['日','月','火','水','木','金','土'];
+const ANOMALY_ITEMS = [
+  '足取りがおぼつかないもの',
+  '神経症状を呈し、挙動に異常があるもの',
+  '顔面その他に異常な形（奇形・腫瘍等）を有するもの',
+  'ダニ類等の外部寄生虫の寄生が著しいもの',
+  '脱毛が著しいもの',
+  '痩せている度合いが著しいもの',
+  '大きな外傷が見られるもの',
+  '皮下に膿を含むもの（膿瘍）が多くの部位で認められるもの',
+  '口腔、口唇、舌、乳房、ひづめ等に水ぶくれ（水疱）やただれ（びらん、潰瘍）等が多く見られるもの',
+  '下痢を呈し尻周辺が著しく汚れているもの',
+  'その他、外見上明らかな異常が見られるもの',
+];
+// capture-form 側の異常語彙 → 官製11項目のindex
+const ANOMALY_MAP = [
+  [['足取り','ふらつき'], 0],
+  [['神経','挙動','異常行動'], 1],
+  [['奇形','腫瘍','腫れ','形'], 2],
+  [['寄生虫','ダニ'], 3],
+  [['脱毛'], 4],
+  [['やせ','痩せ'], 5],
+  [['外傷','傷'], 6],
+  [['膿','膿瘍'], 7],
+  [['ただれ','びらん','潰瘍','水疱','水ぶくれ'], 8],
+  [['下痢'], 9],
+];
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function pad(n){ return String(n).padStart(2,'0'); }
+function reiwa(y){ return y - 2018; }
+function jTime(hm){ // "09:35" -> {ap,h,m}
+  if(!hm) return null;
+  const p = String(hm).split(':'); const H = parseInt(p[0],10); const M = parseInt(p[1]||'0',10);
+  if(isNaN(H)) return null;
+  return { ap: H < 12 ? '午前' : '午後', h: (H % 12), m: M };
+}
+function timeCell(hm){
+  const t = jTime(hm);
+  if(!t) return '<span>午前</span>・午後　<u class="fill">　</u>時　<u class="fill">　</u>分';
+  const am = t.ap==='午前' ? '<span class="sel">午前</span>・午後' : '午前・<span class="sel">午後</span>';
+  return am + '　<u class="fill">'+t.h+'</u>時　<u class="fill">'+pad(t.m)+'</u>分';
+}
+function pick(val, options){ // returns options joined with the matched one wrapped in .sel
+  return options.map(o => (o.match && o.match(val)) ? '<span class="sel">'+esc(o.label)+'</span>' : esc(o.label)).join('　・　');
+}
+function anomalyRows(capText){
+  const txt = String(capText||'');
+  const hits = new Set();
+  let hasOther = false;
+  if(txt.trim()){
+    let matchedAny = false;
+    ANOMALY_MAP.forEach(([kws, idx]) => { if(kws.some(k => txt.includes(k))){ hits.add(idx); matchedAny=true; } });
+    if(!matchedAny) hasOther = true; // 語彙に当てはまらない記載 → その他へ
+  }
+  const rows = ANOMALY_ITEMS.map((name,i) => {
+    const on = hits.has(i) || (i===10 && hasOther);
+    const box = on ? '☑' : '☐';
+    return '<tr class="ck-row"><td class="ck-name" style="border:0;">'+esc(name)+'</td>'+
+      '<td class="ck-box" style="border:0;border-left:1px solid #000;'+(on?'color:var(--red);font-weight:700;':'')+'">'+box+'</td></tr>';
+  }).join('');
+  return rows;
+}
+function speciesCell(sp){
+  const isSika = sp==='シカ';
+  const other = (sp && sp!=='イノシシ' && sp!=='シカ') ? sp : '';
+  return 'イノシシ　・　'+(isSika?'<span class="sel">シカ</span>':'シカ')+'　・　その他（'+(other?'<span class="sel">'+esc(other)+'</span>':'　　')+'）';
+}
+function methodCell(m){
+  const map = { 'くくり罠':'くくりわな', '箱罠':'はこわな', '銃':'銃' };
+  const norm = map[m] || null;
+  const opts = ['銃','はこわな','くくりわな'];
+  let html = opts.map(o => o===norm ? '<span class="sel">'+o+'</span>' : o).join('　・　');
+  const other = norm ? '' : (m ? '<span class="sel">'+esc(m)+'</span>' : '　　');
+  return html + '　・　その他（'+other+'）';
+}
+function finishCell(fm){
+  const opts = ['銃','ナイフ','電気'];
+  const norm = opts.includes(fm) ? fm : null;
+  const has = !!fm;
+  const arm = has ? '<span class="sel">有</span>' : '有';
+  const inner = opts.map(o => o===norm ? '<span class="sel">'+o+'</span>' : o).join('・');
+  const noArm = has ? '無' : '<span class="sel">無</span>';
+  return arm+'（方法：'+inner+'等の失神はナイフにチェック・その他（　））・　'+noArm;
+}
+function guttingCell(g){
+  const yes = g && !/^(無|なし|no)$/i.test(String(g));
+  const box = yes ? '<span class="sel">□</span>' : '□';
+  const method = yes ? esc(g) : '';
+  const no = yes ? '無' : '<span class="sel">無</span>';
+  return box+'（有の場合）方法（'+method+'）　<span class="mini">※裏面に内臓摘出後の異常の有無を記入すること</span>　／　'+no;
+}
+function coolCell(c){
+  const yes = !!(c && String(c).trim());
+  const box = yes ? '<span class="sel">□</span>' : '□';
+  const method = yes ? esc(c) : '';
+  const no = yes ? '無' : '<span class="sel">無</span>';
+  return box+'（有の場合）方法（'+method+'）　／　'+no+'（未記入）';
+}
+function bleedHumu(bt){ return bt ? '<span class="sel">有</span>　・　無' : '有　・　<span class="sel">無</span>'; }
+function healthCell(ok, issues){
+  const noAbn = ok !== false && !String(issues||'').trim();
+  const mu = noAbn ? '異常　<span class="sel">無</span>　・　有（発熱・下痢・嘔吐・風邪症状）' :
+    '異常　無　・　<span class="sel">有</span>（発熱・下痢・嘔吐・風邪症状）'+(issues?'　'+esc(issues):'');
+  return mu + '　<span class="mini">※捕獲者と異なる場合は氏名を記載</span>';
+}
+function cityCell(city, area){
+  const t = city==='館山市' ? '<span class="sel">館山市</span>　・　南房総市' :
+            city==='南房総市' ? '館山市　・　<span class="sel">南房総市</span>' :
+            '館山市　・　南房総市';
+  return t + '　<u class="fill">'+esc(area||'')+'</u>';
+}
+function weatherCell(w){
+  const opt = (label) => (w && String(w).startsWith(label.charAt(0))) ;
+  const c = (label) => (w===label || (w && w.indexOf(label.replace('り',''))===0)) ? '<span class="sel">'+label+'</span>' : label;
+  // 晴/曇り/雨/その他
+  const s = w==='晴' ? '<span class="sel">晴</span>' : '晴';
+  const k = (w==='曇'||w==='曇り') ? '<span class="sel">曇り</span>' : '曇り';
+  const a = w==='雨' ? '<span class="sel">雨</span>' : '雨';
+  const others = (w && !['晴','曇','曇り','雨'].includes(w)) ? '<span class="sel">'+esc(w)+'</span>' : '　　';
+  return '天候：'+s+'・'+k+'・'+a+'・その他（'+others+'）';
+}
+function qualityCell(q){
+  if(q==='良') return '<span class="sel">良</span>　・　不良（理由：　　　　）';
+  if(q && q!=='良') return '良　・　<span class="sel">不良</span>（理由：'+esc(q==='不良'?'':q)+'）';
+  return '良　・　不良（理由：　　　　）';
+}
+function sexCell(s){
+  const o = s==='オス' ? '<span class="sel">オス</span>' : 'オス';
+  const m = s==='メス' ? '<span class="sel">メス</span>' : 'メス';
+  return '性別：'+o+'・'+m;
+}
+function trapPartCell(tp){
+  if(tp && String(tp).trim()) return '<span class="sel">□</span>（部位：<u class="fill">'+esc(tp)+'</u>）';
+  return '□（部位：　　　　）';
+}
+
+function renderSheet(r, idx){
+  const d = r.capture_date ? new Date(r.capture_date + 'T00:00:00') : null;
+  const y = d ? d.getFullYear() : 2026;
+  const mo = d ? d.getMonth()+1 : '';
+  const day = d ? d.getDate() : '';
+  const dow = d ? DOW[d.getDay()] : '';
+  const initDate = '令和'+reiwa(y)+'年　<u class="fill">'+mo+'</u>月　<u class="fill">'+day+'</u>日（'+dow+'）　'+ timeCell(r.capture_time);
+  const age = (r.age_estimate!=null && r.age_estimate!=='') ? esc(r.age_estimate) : '　　';
+  const wt  = (r.weight_total!=null && r.weight_total!=='') ? esc(r.weight_total) : '　　';
+  const bikou = [r.memo, r.stomach_note, r.special_notes].filter(x => x && String(x).trim()).map(esc).join(' ／ ');
+  const kakariName = r.recorder || r.butcher_staff || '';
+
+  return ''+
+  '<div class="sheet" data-i="'+idx+'">'+
+    '<div class="exclude no-print"><label><input type="checkbox" class="exq" data-i="'+idx+'"> この個体を除外</label></div>'+
+    '<div class="f-no">様式2</div>'+
+    '<div class="f-h1">捕獲個体管理台帳</div>'+
+    '<table class="f-tbl"><colgroup><col style="width:22px"><col style="width:150px"><col></colgroup>'+
+    // 捕獲者
+    '<tr><td class="grp" rowspan="3">捕 獲 者</td><td class="lbl">氏名</td><td><u class="fill">'+esc(r.hunter_name||'')+'</u></td></tr>'+
+    '<tr><td class="lbl">健康状態</td><td>'+healthCell(r.hunter_health_ok, r.hunter_health_issues)+'</td></tr>'+
+    '<tr><td class="lbl">買取料金支払い</td><td>□</td></tr>'+
+    // 捕獲方法等
+    '<tr><td class="grp" rowspan="8">捕 獲 方 法 等</td><td class="lbl">初認日時</td><td>'+initDate+'</td></tr>'+
+    '<tr><td class="lbl">天候等</td><td>'+weatherCell(r.weather)+'</td></tr>'+
+    '<tr><td class="lbl">場所（大字まで）</td><td>'+cityCell(r.capture_city, r.capture_area)+'</td></tr>'+
+    '<tr><td class="lbl">捕獲の方法</td><td>'+methodCell(r.capture_method)+'</td></tr>'+
+    '<tr><td class="lbl">止めさしの有無</td><td>'+finishCell(r.finishing_method)+'</td></tr>'+
+    '<tr><td class="lbl">被弾・止めさし部位</td><td>頭部・頸部・胸部（心臓）・腹部・その他（'+(r.hit_location?'<span class="sel">'+esc(r.hit_location)+'</span>':'　　')+'）　／　右前肢・左前肢・右後肢・左後肢・鼻</td></tr>'+
+    '<tr><td class="lbl">くくりわなのかかり部位の有無</td><td>'+trapPartCell(r.trap_part)+'</td></tr>'+
+    '<tr><td class="lbl">損傷の有無</td><td>有（部位：　　　　）　・　無</td></tr>'+
+    // 捕獲個体の情報
+    '<tr><td class="grp" rowspan="4">捕 獲 個 体 の 情 報</td><td class="lbl">種類</td><td>'+speciesCell(r.species)+'</td></tr>'+
+    '<tr><td class="lbl">推定年齢・性別及び体重</td><td>年齢：<u class="fill">'+age+'</u>歳　　'+sexCell(r.sex)+'　　体重：<u class="fill">'+wt+'</u> kg</td></tr>'+
+    '<tr><td class="lbl">異常確認の結果<br><span class="mini">（確認すべき異常）</span></td><td style="padding:0;">'+
+      '<table style="border:0;width:100%;"><colgroup><col><col style="width:60px"></colgroup>'+
+      '<tr class="ck-row"><td style="border:0;border-bottom:1px solid #000;font-weight:600;">確認すべき異常</td><td class="ck-box" style="border:0;border-bottom:1px solid #000;border-left:1px solid #000;font-weight:600;">該当の有無</td></tr>'+
+      anomalyRows(r.capture_anomalies)+
+      '</table></td></tr>'+
+    '<tr><td colspan="2" class="note">※一つでも該当する場合は、食用としないこと</td></tr>'+
+    // 放血等
+    '<tr><td class="grp" rowspan="2">放血等<br>（屋外）</td><td class="lbl">放血の有無</td><td>'+bleedHumu(r.bleed_time)+'</td></tr>'+
+    '<tr><td class="lbl">放血時刻</td><td>'+timeCell(r.bleed_time)+'</td></tr>'+
+    // 運搬
+    '<tr><td class="grp" rowspan="4">運 搬</td><td class="lbl">内臓摘出の有無</td><td>'+guttingCell(r.gutting)+'</td></tr>'+
+    '<tr><td class="lbl">冷却の有無</td><td>'+coolCell(r.cooling_method)+'</td></tr>'+
+    '<tr><td class="lbl">運搬開始時刻</td><td>'+timeCell(r.transport_start)+'</td></tr>'+
+    '<tr><td class="lbl">受入時刻</td><td>'+timeCell(r.receive_time)+'</td></tr>'+
+    // 施設受入
+    '<tr><td class="grp" rowspan="3">施 設 受 入</td><td class="lbl">通し番号・個体管理番号</td><td>通し番号（<u class="fill">'+esc(r.serial_number!=null?r.serial_number:'')+'</u>）　／　個体管理番号：<u class="fill">'+esc(r.label_id||'')+'</u></td></tr>'+
+    '<tr><td class="lbl">品質・鮮度</td><td>'+qualityCell(r.quality)+'</td></tr>'+
+    '<tr><td class="lbl">異常確認者氏名</td><td><u class="fill">'+esc(kakariName)+'</u>　<span class="mini">※裏面に異常の有無と判定結果を記入すること</span></td></tr>'+
+    // 備考
+    '<tr><td class="grp">備考</td><td class="lbl">受入不可・廃棄理由／胃内容物・脱肛の有無等</td><td style="height:44px;">'+esc(bikou)+'</td></tr>'+
+    '</table>'+
+    '<div class="foot">館山ジビエセンター 発行 ／ 出力日：'+new Date().toISOString().slice(0,10)+' ／ ※本票は捕獲個体管理システムの記録から自動生成</div>'+
+  '</div>';
+}
+
+// ---- データ取得 ----
+async function fetchIndividuals(fromD, toD){
+  const params = new URLSearchParams();
+  params.set('select', 'label_id,serial_number,species,capture_date,capture_time,weather,capture_city,capture_area,hunter_name,hunter_health_ok,hunter_health_issues,capture_method,trap_part,finishing_method,hit_location,capture_anomalies,organ_anomalies,sex,weight_total,age_estimate,bleed_time,gutting,cooling_method,transport_start,receive_time,quality,recorder,butcher_staff,memo,special_notes,stomach_note');
+  params.append('species', 'neq.イノシシ');
+  params.append('capture_date', 'gte.'+fromD);
+  params.append('capture_date', 'lte.'+toD);
+  params.append('order', 'capture_date.asc,serial_number.asc');
+  const res = await fetch(SB_URL + '/rest/v1/individuals?' + params.toString(), {
+    headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+  });
+  if(!res.ok) throw new Error('取得失敗 (' + res.status + ')');
+  return res.json();
+}
+
+let CURRENT = [];
+function render(list){
+  CURRENT = list;
+  const sheets = document.getElementById('sheets');
+  const ul = document.getElementById('list');
+  const tools = document.getElementById('tools');
+  document.getElementById('count').textContent = '該当：' + list.length + ' 頭';
+  if(!list.length){
+    sheets.innerHTML = ''; ul.innerHTML = '<li>この期間に対象の個体はありません。</li>'; tools.style.display='none';
+    return;
+  }
+  tools.style.display = 'flex';
+  ul.innerHTML = list.map((r,i) =>
+    '<li><span class="sp">'+esc(r.species||'')+'</span>'+
+    '<span class="id">'+esc(r.label_id||'')+'</span>'+
+    '<span class="nm">'+esc(r.capture_date||'')+'　'+esc(r.hunter_name||'')+'　'+esc((r.capture_city||'')+(r.capture_area||''))+'</span></li>'
+  ).join('');
+  sheets.innerHTML = list.map((r,i) => renderSheet(r,i)).join('');
+  // 除外トグル
+  sheets.querySelectorAll('.exq').forEach(cb => cb.addEventListener('change', e => {
+    const el = e.target.closest('.sheet');
+    if(e.target.checked) el.classList.add('excluded'); else el.classList.remove('excluded');
+  }));
+}
+
+function monthRange(ym){ // "2026-09" -> [from,to]
+  const [y,m] = ym.split('-').map(Number);
+  const from = y+'-'+pad(m)+'-01';
+  const last = new Date(y, m, 0).getDate();
+  const to = y+'-'+pad(m)+'-'+pad(last);
+  return [from,to];
+}
+
+async function doLoad(){
+  const status = document.getElementById('count');
+  const fromEl = document.getElementById('from'), toEl = document.getElementById('to');
+  let from, to;
+  if(fromEl.value && toEl.value){ from = fromEl.value; to = toEl.value; }
+  else { [from,to] = monthRange(document.getElementById('month').value); }
+  status.textContent = '読み込み中…';
+  document.getElementById('load').disabled = true;
+  try{
+    const data = await fetchIndividuals(from, to);
+    render(data);
+  }catch(err){
+    status.innerHTML = '<span class="err">読み込みに失敗しました：'+esc(err.message)+'</span>';
+    document.getElementById('sheets').innerHTML = '';
+  }finally{
+    document.getElementById('load').disabled = false;
+  }
+}
+
+function initMonths(){
+  const sel = document.getElementById('month');
+  const now = new Date();
+  const opts = [];
+  for(let i=0;i<18;i++){
+    const dt = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    const ym = dt.getFullYear()+'-'+pad(dt.getMonth()+1);
+    opts.push('<option value="'+ym+'">'+dt.getFullYear()+'年'+(dt.getMonth()+1)+'月</option>');
+  }
+  sel.innerHTML = opts.join('');
+}
+
+(function main(){
+  const k = new URLSearchParams(location.search).get('k');
+  if(k !== ACCESS_TOKEN){
+    document.getElementById('gate').style.display = 'block';
+    return;
+  }
+  document.getElementById('app').style.display = 'block';
+  initMonths();
+  document.getElementById('load').addEventListener('click', doLoad);
+  document.getElementById('print').addEventListener('click', () => window.print());
+  // 月を選んだら期間入力はクリア（どちらか一方）
+  document.getElementById('month').addEventListener('change', () => {
+    document.getElementById('from').value=''; document.getElementById('to').value='';
+  });
+  doLoad();
+})();
+</script>
+</body>
+</html>
