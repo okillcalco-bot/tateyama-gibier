@@ -784,6 +784,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <label style="font-size:13px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer;">
           <input type="checkbox" id="indSelectAll" onchange="indToggleAll(this.checked)"> 全選択
         </label>
+        <label style="font-size:13px;color:var(--text2);display:flex;align-items:center;gap:4px;cursor:pointer;" title="止めさし→搬入が1時間超、または未記入がある記録だけを表示">
+          <input type="checkbox" id="indIssuesOnly" onchange="indRender()"> ⚠ 要確認のみ
+        </label>
+        <span id="ind-issue-count" style="font-size:12.5px;font-weight:600;"></span>
       </div>
       <!-- アクティブ一覧 -->
       <div id="ind-active-section" style="overflow-x:auto;">
@@ -798,9 +802,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
             <th onclick="indSort('capture_date')" style="cursor:pointer;">捕獲日 <span id="indSortIcon-capture_date">▼</span></th>
             <th>捕獲場所</th>
             <th onclick="indSort('hunter_name')" style="cursor:pointer;">捕獲者 <span id="indSortIcon-hunter_name"></span></th>
-            <th>品質</th><th>操作</th>
+            <th>品質</th><th>要確認</th><th>操作</th>
           </tr></thead>
-          <tbody id="ind-body"><tr><td colspan="11" style="text-align:center;color:var(--text3);">読み込み中...</td></tr></tbody>
+          <tbody id="ind-body"><tr><td colspan="12" style="text-align:center;color:var(--text3);">読み込み中...</td></tr></tbody>
         </table>
       </div>
       <!-- 削除履歴 -->
@@ -7580,6 +7584,38 @@ function indSerialDisplay(i) {
   return m ? `<span style="color:var(--text3);" title="ラベルの番号（通し番号は未設定）">${m[1]}</span>` : '-';
 }
 
+/* ── 記入チェック（個体単位）──
+   見るポイント: ①止めさし(放血)→搬入(受入)が1時間超 ②台帳に必要な欄の未記入。
+   解体担当者は「未記載でも記録者でOK」なので未記入チェックに含めない。
+   ルールは保存時の indCollectWarnings と揃えている。 */
+const IND_NEED = [['capture_city','市名'],['capture_area','地区'],['capture_time','捕獲時刻'],
+  ['capture_method','捕獲方法'],['hunter_name','捕獲者'],['finishing_method','止め刺し方法'],
+  ['bleed_time','放血時刻'],['sex','性別'],['weight_total','体重'],
+  ['receive_time','受入時刻'],['process_time','処理時刻'],['recorder','記録者']];
+
+// 1個体の「気になる点」を配列で返す。空配列なら問題なし。
+// 解体担当者(butcher_staff)は IND_NEED に含めない＝未記載でも記録者(recorder)で足りるため不問。
+function indRecordIssues(i) {
+  if (!i) return [];
+  if (/^(TGC-TEST|仮-)/i.test(i.label_id || '')) return [];   // テスト・引取仮番は対象外
+  if (i.intake_status === '搬入待ち') return [];               // 受入前の仮登録は対象外
+  const out = [];
+  const toMin = v => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || '').trim()); return m ? +m[1] * 60 + +m[2] : null; };
+  const b = toMin(i.bleed_time), r = toMin(i.receive_time);
+  if (b !== null && r !== null) {
+    const mins = ((r - b) % 1440 + 1440) % 1440;   // 日跨ぎも吸収
+    if (mins > 60) out.push(`止めさし→搬入 ${mins}分（1時間超）`);
+  }
+  const isBlank = f => {
+    const v = i[f];
+    if (f === 'weight_total') return v == null || Number(v) === 0;   // 0kgは未記入扱い
+    return String(v ?? '').trim() === '';
+  };
+  const miss = IND_NEED.filter(([f]) => isBlank(f)).map(([, l]) => l);
+  if (miss.length) out.push('未記入: ' + miss.join('・'));
+  return out;
+}
+
 function indRender() {
   const body = document.getElementById('ind-body');
   if (!body) return;
@@ -7594,11 +7630,25 @@ function indRender() {
     va = String(va); vb = String(vb);
     return indSortAsc ? va.localeCompare(vb, 'ja') : vb.localeCompare(va, 'ja');
   });
+  // 各記録のチェック結果と全体件数
+  const issueMap = new Map();
+  indAllData.forEach(i => { const is = indRecordIssues(i); if (is.length) issueMap.set(i.label_id, is); });
+  const cntEl = document.getElementById('ind-issue-count');
+  if (cntEl) cntEl.innerHTML = issueMap.size
+    ? `<span style="color:var(--red);">⚠ 要確認 ${issueMap.size}件</span>`
+    : `<span style="color:var(--green);">✅ 要確認なし</span>`;
+  const only = document.getElementById('indIssuesOnly')?.checked;
+  if (only) data = data.filter(i => issueMap.has(i.label_id));
   if (!data.length) {
-    body.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text3);">該当なし</td></tr>';
+    body.innerHTML = `<tr><td colspan="12" style="text-align:center;color:var(--text3);">${only ? '要確認の記録はありません' : '該当なし'}</td></tr>`;
     return;
   }
-  body.innerHTML = data.map(i => `<tr>
+  body.innerHTML = data.map(i => {
+    const issues = issueMap.get(i.label_id) || [];
+    const badge = issues.length
+      ? `<span title="${esc2(issues.join(' / '))}" style="display:inline-block;background:rgba(198,74,60,.14);color:var(--red);border:1px solid var(--red);border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:700;white-space:nowrap;cursor:help;">⚠ ${issues.length}</span>`
+      : `<span style="color:var(--green);" title="問題なし">✓</span>`;
+    return `<tr${issues.length ? ' style="background:rgba(198,74,60,.05);"' : ''}>
     <td><input type="checkbox" class="ind-chk" data-id="${i.label_id}" onchange="indUpdateBulkBtn()"></td>
     <td style="text-align:center;">${indSerialDisplay(i)}</td>
     <td style="color:var(--gold);font-weight:700;">${i.label_id}</td>
@@ -7609,12 +7659,13 @@ function indRender() {
     <td>${[i.capture_city, i.capture_area].filter(Boolean).join(' ') || '-'}</td>
     <td>${i.hunter_name || '-'}</td>
     <td>${i.quality || '-'}</td>
+    <td style="text-align:center;">${badge}</td>
     <td style="white-space:nowrap;">
       <button class="btn btn-sm" style="color:var(--green);border:1px solid var(--green);" onclick="indLifeOpen('${i.label_id}')">🌿 一生</button>
       <button class="btn btn-sm" onclick="indOpenEdit('${i.label_id}')">編集</button>
       <button class="btn btn-sm btn-danger" onclick="indDelete('${i.label_id}')">削除</button>
     </td>
-  </tr>`).join('');
+  </tr>`; }).join('');
 }
 
 /* ── 個体の一生：捕獲(いのち) → 精肉 → 加工 → とどけた先 を1枚でたどる ── */
@@ -7904,7 +7955,7 @@ async function indLoad() {
   const sp = document.getElementById('ind-filter-species')?.value || '';
   const body = document.getElementById('ind-body');
   if (!body) return;
-  body.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
+  body.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
   try {
     // 新しい順で取得する。古い順＋件数制限だと、増えたときに最新分が切れて表示されないため
     const ORDER = '&order=capture_date.desc.nullslast,serial_number.desc.nullslast&limit=3000';
@@ -7922,7 +7973,7 @@ async function indLoad() {
       const mx = indAllData.reduce((m, i) => Math.max(m, i.serial_number || 0), 0);
       cnt.textContent = `${indAllData.length}件を表示中${mx ? `（通し番号 最大 ${mx}）` : ''}`;
     }
-  } catch(e) { body.innerHTML = '<tr><td colspan="11" style="color:var(--red);">読み込みエラー: ' + e.message + '</td></tr>'; }
+  } catch(e) { body.innerHTML = '<tr><td colspan="12" style="color:var(--red);">読み込みエラー: ' + e.message + '</td></tr>'; }
 }
 
 function indUpdateBulkBtn() {
