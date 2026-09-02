@@ -7645,8 +7645,10 @@ function indRender() {
   }
   body.innerHTML = data.map(i => {
     const issues = issueMap.get(i.label_id) || [];
+    // 何が要確認かを画面にそのまま出す（ホバーだけだとスマホで読めないため）
     const badge = issues.length
-      ? `<span title="${esc2(issues.join(' / '))}" style="display:inline-block;background:rgba(198,74,60,.14);color:var(--red);border:1px solid var(--red);border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:700;white-space:nowrap;cursor:help;">⚠ ${issues.length}</span>`
+      ? `<span style="display:inline-block;background:rgba(198,74,60,.14);color:var(--red);border:1px solid var(--red);border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;white-space:nowrap;">⚠ 要確認</span>`
+        + `<div style="font-size:11px;color:var(--red);margin-top:3px;line-height:1.4;">${issues.map(x => '・' + esc2(x)).join('<br>')}</div>`
       : `<span style="color:var(--green);" title="問題なし">✓</span>`;
     return `<tr${issues.length ? ' style="background:rgba(198,74,60,.05);"' : ''}>
     <td><input type="checkbox" class="ind-chk" data-id="${i.label_id}" onchange="indUpdateBulkBtn()"></td>
@@ -7659,7 +7661,7 @@ function indRender() {
     <td>${[i.capture_city, i.capture_area].filter(Boolean).join(' ') || '-'}</td>
     <td>${i.hunter_name || '-'}</td>
     <td>${i.quality || '-'}</td>
-    <td style="text-align:center;">${badge}</td>
+    <td style="vertical-align:top;min-width:150px;">${badge}</td>
     <td style="white-space:nowrap;">
       <button class="btn btn-sm" style="color:var(--green);border:1px solid var(--green);" onclick="indLifeOpen('${i.label_id}')">🌿 一生</button>
       <button class="btn btn-sm" onclick="indOpenEdit('${i.label_id}')">編集</button>

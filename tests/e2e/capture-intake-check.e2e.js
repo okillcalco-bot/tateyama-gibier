@@ -75,13 +75,16 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
     indRender();
     const rowsOnly = document.querySelectorAll('#ind-body tr').length;
     const labelsOnly = [...document.querySelectorAll('#ind-body tr td:nth-child(3)')].map(td => td.textContent.trim());
-    return { countHtml, badgeAll, warnBadges, rowsOnly, labelsOnly };
+    const bodyText = document.getElementById('ind-body').textContent;
+    return { countHtml, badgeAll, warnBadges, rowsOnly, labelsOnly, bodyText };
   }, base);
   ck('件数表示に「要確認 2件」', render.countHtml.includes('要確認 2件'), render.countHtml);
   ck('全4行を描画', render.badgeAll === 4, String(render.badgeAll));
   ck('⚠バッジは2件', render.warnBadges === 2, String(render.warnBadges));
   ck('要確認のみ絞り込みで2行', render.rowsOnly === 2, String(render.rowsOnly));
   ck('絞り込み結果はT002・T003', render.labelsOnly.join(',') === 'TGC-08-T002,TGC-08-T003', render.labelsOnly.join(','));
+  ck('要確認の内容が画面に見える(止めさし→搬入)', render.bodyText.includes('止めさし→搬入'), render.bodyText.slice(0, 120));
+  ck('要確認の内容が画面に見える(未記入)', render.bodyText.includes('未記入'), render.bodyText.slice(0, 120));
 
   ck('新機能でJSエラーなし', !errs.some(e => /indRecordIssues|indRender|IND_NEED/.test(e)), errs.join(' / '));
   console.log(out.join('\n'));
