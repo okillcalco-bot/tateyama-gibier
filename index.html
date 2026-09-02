@@ -8252,10 +8252,12 @@ function indFillNext(serial, labelId) {
 
 /* 個体管理番号・通し番号の検証（手入力なので保存前に必ず確認する）
    ・形式ちがい: 獣種の記号が抜けている（TGC-08-243 のような番号）を弾く
-   ・重複: すでに同じ番号・同じ通し番号が登録されていないか調べ、分かる言葉で知らせる */
+   ・重複: すでに同じ番号・同じ通し番号が登録されていないか調べ、分かる言葉で知らせる
+   ・通し番号は獣種ごとに独立して数える（イノシシだけ館山Tと南房総Mで共通）。
+     搬入登録（capture-form）の採番規則に合わせ、重複チェックも同じ範囲で見る。 */
 function numValRaw(id) { const el = document.getElementById('ind-f-' + id); const n = parseInt(el && el.value, 10); return isNaN(n) ? null : n; }
 let indRestoredLabel = null;   // 削除済みから復元した個体管理番号（保存を上書きに切り替えるため）
-async function indValidateNumbers(labelId, serial, editingId) {
+async function indValidateNumbers(labelId, serial, editingId, species) {
   // 例: TGC-08-T243 / TGC-08-M141 / TGC-08-Tシ001 / 仮-xxxx
   if (!/^仮-/.test(labelId) && !/^TGC-\d{2}-[A-Zア-ンー]+\d{1,4}$/.test(labelId)) {
     return `個体管理番号「${labelId}」の形式が正しくありません。\n\n`
@@ -8293,13 +8295,26 @@ async function indValidateNumbers(labelId, serial, editingId) {
         + `この個体の内容を直したい場合は、一覧から「編集」で開いてください。`;
     }
     if (serial != null) {
+      // 通し番号の重複は「獣種ごと」に見る。イノシシは館山T・南房総Mで共通、
+      // その他は年度＋獣種（＝個体管理番号の記号）ごとに独立して数える。
+      const isBoar = (species === 'イノシシ') || /^TGC-\d{2}-[TM]/.test(labelId);
+      const scope = isBoar
+        ? '&species=eq.イノシシ'
+        : `&label_id=like.${encodeURIComponent(labelId.replace(/\d+$/, ''))}*`;
       const ds = await sb('GET', 'individuals', null,
-        `?serial_number=eq.${serial}&deleted_at=is.null&select=label_id,capture_date,hunter_name&limit=1`);
+        `?serial_number=eq.${serial}${scope}&deleted_at=is.null&select=label_id,capture_date,hunter_name&limit=1`);
       if (ds.length && ds[0].label_id !== (editingId || labelId)) {
         const d = ds[0];
+        let nextHint = '';
+        try {
+          const mx = await sb('GET', 'individuals', null,
+            `?select=serial_number&serial_number=not.is.null${scope}&deleted_at=is.null&order=serial_number.desc&limit=1`);
+          const next = ((mx[0] && mx[0].serial_number) || 0) + 1;
+          nextHint = `\n\n続きは ${next} 番です。`;
+        } catch (_) {}
         return `通し番号 ${serial} は すでに ${d.label_id} で使われています。\n\n`
           + `　捕獲日 ${d.capture_date || '-'} ／ 捕獲者 ${d.hunter_name || '-'}\n\n`
-          + `続きの番号で登録してください（同じ通し番号を2件作らないため）。`;
+          + `通し番号は${isBoar ? 'イノシシ全体' : 'この獣種'}で数えます。同じ番号を2件作らないよう、続きの番号で登録してください。${nextHint}`;
       }
     }
   } catch (e) { /* 通信できないときは検証を飛ばして保存を優先する */ }
@@ -8364,7 +8379,7 @@ async function indSave() {
     const label_id = (document.getElementById('ind-f-label_id').value || '').trim();
     if (!label_id) { toast('個体管理番号は必須です', 'error'); btn.disabled=false; btn.textContent='保存'; return; }
     // 手入力なので、形式ちがい（例: TGC-08-243 とTが抜ける）と重複を保存前に止める
-    const vErr = await indValidateNumbers(label_id, numValRaw('serial_number'), indEditId);
+    const vErr = await indValidateNumbers(label_id, numValRaw('serial_number'), indEditId, indGetVal('species'));
     if (vErr) { alert(vErr); btn.disabled = false; btn.textContent = '保存'; return; }
     // 台帳で見られるところ（地区名・放血→受入1時間・未記載）を保存前に知らせる
     const warns = indCollectWarnings();
