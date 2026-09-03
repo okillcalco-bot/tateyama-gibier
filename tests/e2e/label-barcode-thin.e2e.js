@@ -7,7 +7,8 @@
 //
 //   ラベルは保存より先に出る。数字キーの先取り確保(tgc_reserve_scan_codes)が
 //   失敗すると識別コードで印字する作りだったため、読めないラベルが黙って出ていた。
-//   保存すればDBのトリガが必ず数字キーを付けるので、それで刷り直す。
+//   対策: 8桁の数字キーが無い時は「先刷りしない」。保存直後にDBのトリガが必ず付ける
+//   8桁で1枚だけ刷る。＝読めない識別コードのバーコードは一切出さない（より強い保証）。
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
 
@@ -93,7 +94,8 @@ const IND = { label_id: 'TGC-08-T278', species: 'イノシシ', weight_total: 45
   });
   await page.waitForTimeout(400);
 
-  // ── 2) 数字キーが取れないまま登録（事故の再現） ──
+  // ── 2) 数字キーが取れないまま登録：denseラベルを一切出さず、DBの8桁で1枚だけ刷る ──
+  //   （旧: 先にdenseで刷って後で刷り直す → 新: 先刷りせず保存後の8桁で刷る＝より強い保証）
   asked.length = 0;
   await page.evaluate(() => { window.__labels = []; });
   await page.evaluate(() => pmRequestRegister(1.44));
@@ -103,19 +105,15 @@ const IND = { label_id: 'TGC-08-T278', species: 'イノシシ', weight_total: 45
   T('在庫には入る', db.rows.length === 1 && db.rows[0].ident_code === 'TGC-08-T278-MU',
     db.rows.map(r => r.ident_code).join(','));
   T('DB側が数字キーを必ず付ける', !!db.rows[0].scan_code, db.rows[0] && db.rows[0].scan_code);
-  T('1枚目は識別コードのバーコードだった（事故の姿）',
-    labels.length >= 1 && labels[0].barcodeCode === 'T278-MU' && labels[0].thin === true,
+  T('読めない識別コードのバーコードは一切出さない',
+    labels.every(l => l.barcodeCode !== 'T278-MU' && l.thin !== true),
+    labels.map(l => `${l.barcodeCode}/${l.thin}`).join(',') || '(0枚)');
+  T('印刷は1枚だけ（先刷りしないので刷り直しも無い）', labels.length === 1, `${labels.length}枚`);
+  T('その1枚はDBの読める8桁',
+    labels.length === 1 && labels[0].barcodeCode === db.rows[0].scan_code && labels[0].thin === false,
     labels[0] && `${labels[0].barcodeCode} thin=${labels[0].thin}`);
-
-  T('読めないまま終わらせず、必ず知らせる',
-    asked.some(a => /細くて読み取れません/.test(a)), asked.join(' / ').slice(0, 80));
-  T('刷り直す番号を伝える',
-    asked.some(a => new RegExp(db.rows[0].scan_code).test(a)), asked.join(' / ').slice(0, 100));
-  T('前のラベルを捨てるよう書く', asked.some(a => /捨てて/.test(a)), '');
-  T('数字キーで刷り直す',
-    labels.length >= 2 && labels[labels.length - 1].barcodeCode === db.rows[0].scan_code
-      && labels[labels.length - 1].thin === false,
-    labels.length >= 2 ? `${labels[labels.length - 1].barcodeCode} thin=${labels[labels.length - 1].thin}` : `${labels.length}枚`);
+  T('読めないラベルを出していないので確認アラートも出さない',
+    !asked.some(a => /読み取れません/.test(a)), asked.join(' / ').slice(0, 80));
 
   // ── 3) 数字キーが取れているときは、余計なことをしない ──
   reserveWorks = true;
