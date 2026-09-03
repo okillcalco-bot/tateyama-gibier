@@ -2938,52 +2938,16 @@ async function shipDirectConfirm() {
   const btn = document.getElementById('ship-direct-confirm');
   btn.disabled = true;
   try {
-    // 顧客台帳に完全一致があれば紐付ける（キー不要のRPC: 名前が一意のときだけidが返る）
-    let customerId = null;
-    try {
-      customerId = await sb('POST', 'rpc/staff_lookup_customer_id', { p_name: custName }) || null;
-    } catch(e) {}
-
-    const now = new Date();
-    const orderCode = 'DIR-' + now.toISOString().slice(0,10).replace(/-/g,'') + '-' + now.toTimeString().slice(0,8).replace(/:/g,'');
-    const orderBody = {
-      order_code: orderCode,
-      customer_name: custName,
-      delivery_name: custName,
-      order_date: now.toISOString().slice(0,10),
-      delivery_date: now.toISOString().slice(0,10),
-      status: '発送済',
-      channel: '直販（注文なし）',
-      notes: [memo, operator ? `担当:${operator}` : ''].filter(Boolean).join(' / ') || null
-    };
-    if (customerId) orderBody.customer_id = customerId;
-    const created = await sb('POST', 'orders', orderBody);
-    const orderId = created[0].id;
-
-    await sb('POST', 'order_items', shipDirectItems.map(i => ({
-      order_id: orderId,
-      inventory_id: i.id,
-      part_name: i.part_name || '-',
-      species: i.species || null,
-      weight: parseFloat(i.weight) || null,
-      weight_kg: parseFloat(i.weight) || null
-    })));
-
-    const shipBody = { order_id: orderId, shipment_date: now.toISOString().slice(0,10), status: '出荷済', notes: `直販（注文なし） ${custName}${operator ? ' 担当:'+operator : ''}` };
-    if (customerId) shipBody.customer_id = customerId;
     // 受け渡し方法と送料（請求書・納品書の送料欄はここから作られる）
+    const delivery = {};
     if (document.getElementById('ship-direct-method')?.value === '発送') {
-      shipBody.carrier = document.getElementById('ship-direct-carrier').value;
-      shipBody.size_code = parseInt(document.getElementById('ship-direct-size').value, 10);
-      shipBody.is_cool = document.getElementById('ship-direct-cool').checked;
+      delivery.carrier = document.getElementById('ship-direct-carrier').value;
+      delivery.size_code = parseInt(document.getElementById('ship-direct-size').value, 10);
+      delivery.is_cool = document.getElementById('ship-direct-cool').checked;
       const fv = parseInt(document.getElementById('ship-direct-freight').value, 10);
-      if (isFinite(fv) && fv >= 0) shipBody.freight = fv;
+      if (isFinite(fv) && fv >= 0) delivery.freight = fv;
     }
-    await sb('POST', 'shipments', shipBody);
-
-    for (const i of shipDirectItems) {
-      await sb('PATCH', 'inventory', { status: '出荷済', updated_at: now.toISOString() }, `?id=eq.${i.id}`);
-    }
+    const { orderCode } = await recordDirectShipment(shipDirectItems, custName, { memo, operator, delivery });
 
     playFeedbackSound(true);
     toast(`直販出荷を記録しました: ${custName} へ ${shipDirectItems.length}点（${orderCode}）`);
@@ -3510,14 +3474,76 @@ async function showDetailModal(item) {
   m.classList.add('active');
 }
 
+/* 注文なし出荷の記録を1か所にまとめる。直販確定と、在庫の手動「出荷済」化の両方から使う。
+   出荷先の無い「出荷済」を作らない（どこへ届いたかが消え、一頭の線が販売で切れるため）。
+   orders（DIR-…/発送済/直販）→ order_items（在庫IDで紐付け）→ shipments → 在庫を出荷済。 */
+async function recordDirectShipment(items, custName, opts) {
+  opts = opts || {};
+  if (!items || !items.length) throw new Error('出荷する在庫がありません');
+  if (!custName || !String(custName).trim()) throw new Error('出荷先が必要です');
+  // 顧客台帳に完全一致があれば紐付ける（キー不要のRPC: 名前が一意のときだけidが返る）
+  let customerId = null;
+  try { customerId = await sb('POST', 'rpc/staff_lookup_customer_id', { p_name: custName }) || null; } catch(e) {}
+
+  const now = new Date();
+  const orderCode = 'DIR-' + now.toISOString().slice(0,10).replace(/-/g,'') + '-' + now.toTimeString().slice(0,8).replace(/:/g,'');
+  const orderBody = {
+    order_code: orderCode,
+    customer_name: custName,
+    delivery_name: custName,
+    order_date: now.toISOString().slice(0,10),
+    delivery_date: now.toISOString().slice(0,10),
+    status: '発送済',
+    channel: '直販（注文なし）',
+    notes: [opts.memo, opts.operator ? `担当:${opts.operator}` : ''].filter(Boolean).join(' / ') || null
+  };
+  if (customerId) orderBody.customer_id = customerId;
+  const created = await sb('POST', 'orders', orderBody);
+  const orderId = created[0].id;
+
+  await sb('POST', 'order_items', items.map(i => ({
+    order_id: orderId,
+    inventory_id: i.id,
+    part_name: i.part_name || '-',
+    species: i.species || null,
+    weight: parseFloat(i.weight) || null,
+    weight_kg: parseFloat(i.weight) || null
+  })));
+
+  const shipBody = { order_id: orderId, shipment_date: now.toISOString().slice(0,10), status: '出荷済',
+    notes: `直販（注文なし） ${custName}${opts.operator ? ' 担当:'+opts.operator : ''}` };
+  if (customerId) shipBody.customer_id = customerId;
+  if (opts.delivery) Object.assign(shipBody, opts.delivery);
+  await sb('POST', 'shipments', shipBody);
+
+  for (const i of items) {
+    await sb('PATCH', 'inventory', { status: '出荷済', updated_at: now.toISOString() }, `?id=eq.${i.id}`);
+  }
+  return { orderId, orderCode };
+}
+
 async function changeStatus(id, code) {
   if (!requireAdmin('在庫ステータスの手動変更')) return;
   const statuses = ['在庫', '引当済', '出荷済', '加工済', '廃棄'];
   const newStatus = prompt(`${code} のステータスを変更:\n${statuses.join(' / ')}`);
   if (!newStatus || !statuses.includes(newStatus)) return;
   try {
-    await sb('PATCH', 'inventory', { status: newStatus, updated_at: new Date().toISOString() }, `?id=eq.${id}`);
-    toast(`${code} を ${newStatus} に変更しました`);
+    if (newStatus === '出荷済') {
+      // 出荷先の無い「出荷済」は作らない。直販確定と同じ注文・出荷・紐付けをここで作る。
+      const custName = (prompt(`${code} の出荷先（お店名・施設名など）を入力してください。\n※出荷先が無いと「出荷済」にはできません（どこへ届いたかが消えるため）`) || '').trim();
+      if (!custName) { toast('出荷先が無いため、出荷済にはしませんでした', 'error'); return; }
+      const rows = await sb('GET', 'inventory', null, `?id=eq.${id}&select=id,ident_code,part_name,species,weight,weight_kg,status`);
+      const inv = rows && rows[0];
+      if (!inv) { toast('在庫が見つかりません', 'error'); return; }
+      if (inv.status === '出荷済') { toast('すでに出荷済です', 'error'); return; }
+      const item = { id: inv.id, ident_code: inv.ident_code, part_name: inv.part_name, species: inv.species,
+                     weight: inv.weight != null ? inv.weight : inv.weight_kg };
+      const { orderCode } = await recordDirectShipment([item], custName, { memo: '在庫画面から出荷済に変更' });
+      toast(`${code} を ${custName} へ出荷済にしました（${orderCode}）`);
+    } else {
+      await sb('PATCH', 'inventory', { status: newStatus, updated_at: new Date().toISOString() }, `?id=eq.${id}`);
+      toast(`${code} を ${newStatus} に変更しました`);
+    }
     loadInventory();
   } catch (err) {
     toast('変更エラー: ' + err.message, 'error');
@@ -7403,7 +7429,7 @@ function pmLabelHtml(d) {
     @page { size: 40mm 60mm; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { width:40mm; height:60mm; font-family:'Meiryo','Yu Gothic',sans-serif;
-           padding:2.5mm 1mm 2mm; display:flex; flex-direction:column; overflow:hidden; }
+           padding:1.8mm 1mm 1.5mm; display:flex; flex-direction:column; overflow:hidden; }
     /* 文字ブロックは縮ませない。バーコードは下の .bc で領域を確保する */
     body > div { flex:none; }
     .o  { font-size:8.5pt; font-weight:bold; border-bottom:.5pt solid #000; padding-bottom:.4mm; white-space:nowrap; }
@@ -7414,14 +7440,19 @@ function pmLabelHtml(d) {
     .ex { font-size:7pt; font-weight:bold; margin-top:.5mm; }
     .tmp{ font-size:5.5pt; color:#333; }
     /* flex-basisで高さを確保し、縮小も禁止（0にすると中のSVGが上下にはみ出して文字に重なる） */
-    .bc { flex:0 0 12.5mm; height:12.5mm; display:flex; align-items:center; justify-content:center; }
-    .bc svg { display:block; width:38mm !important; height:12mm !important; shape-rendering:crispEdges; }
+    .bc { flex:0 0 10mm; height:10mm; display:flex; align-items:center; justify-content:center; }
+    .bc svg { display:block; width:38mm !important; height:9.5mm !important; shape-rendering:crispEdges; }
+    /* バーコードの下：左に「この肉の物語」QR、右に手打ち用8桁と識別コード */
+    .cap { display:flex; align-items:center; gap:1mm; margin-top:.2mm; }
+    .cap .qr svg { display:block; width:9.5mm !important; height:9.5mm !important; }
+    .cap .txt { flex:1; min-width:0; }
     .bct{ font-size:9pt; font-weight:bold; text-align:center; font-family:monospace; letter-spacing:.6px; }
     .id2{ font-size:5pt; color:#333; text-align:center; font-family:monospace; letter-spacing:.2px; margin-top:.1mm; }
+    .qt { font-size:3.8pt; color:#333; text-align:center; line-height:1.15; margin-top:.2mm; }
     .bcw{ font-size:5pt; font-weight:bold; text-align:center; border:.5pt solid #000; margin-top:.3mm; padding:.2mm; }
     .mk { font-size:4pt; color:#444; margin-top:.2mm; }
     .ad { font-size:4pt; color:#444; }
-    .wn { font-size:4pt; color:#555; margin-top:.3mm; line-height:1.2; }
+    .wn { font-size:3.6pt; color:#555; margin-top:.2mm; line-height:1.15; }
   `;
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${css}
 </style></head><body>
@@ -7434,7 +7465,7 @@ function pmLabelHtml(d) {
     <div class="tmp">保存温度　-18℃以下</div>
     <div class="bc">${d.barcodeSvg}</div>
     ${d.scanCode
-      ? `<div class="bct">${d.scanCode}</div><div class="id2">${d.identCode}</div>`
+      ? `<div class="cap">${d.qrSvg ? `<div class="qr">${d.qrSvg}</div>` : ''}<div class="txt"><div class="bct">${d.scanCode}</div><div class="id2">${d.identCode}</div>${d.qrSvg ? '<div class="qt">QRで「この肉の物語」・ご感想もどうぞ</div>' : ''}</div></div>`
       : `<div class="bct">${d.identCode}</div>`}
     ${d.barcodeThin ? '<div class="bcw">※このバーコードは細く読めません。刷り直してください</div>' : ''}
     <div class="mk">館山ジビエセンター</div>
@@ -7470,7 +7501,9 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight, scan
     labelWeight, expiryStr, identCode, barcodeSvg: barcodeSection, barcodeThin,
     // バーコードに焼いた8桁の数字キーを、読めない時に手打ちできるよう大きく表示する。
     // （数字キーが無く識別コードを焼いた時は従来どおり識別コードだけ表示）
-    scanCode: (scanCode && /^\d{8}$/.test(String(scanCode))) ? scanCode : null
+    scanCode: (scanCode && /^\d{8}$/.test(String(scanCode))) ? scanCode : null,
+    // 8桁が確定している時だけ「この肉の物語」QRを載せる（受け取った人が一頭の記録を見て感想を残せる入口）
+    qrSvg: (scanCode && /^\d{8}$/.test(String(scanCode))) ? makeQRSVG(storyUrl(scanCode), 9.5) : null
   });
 
   // ── iframe に書き込んで印刷 ──
@@ -7723,7 +7756,7 @@ async function indLifeOpen(labelId) {
     }
     if (!ind) { body.innerHTML = '<div class="empty-state">個体が見つかりません</div>'; return; }
 
-    const parts = await sb('GET', 'inventory', null, `?individual_id=eq.${enc}&deleted_at=is.null&select=id,ident_code,part_name,weight,weight_kg,status,tier,process_type,processed_at,created_at,location_code&order=created_at.asc`) || [];
+    const parts = await sb('GET', 'inventory', null, `?individual_id=eq.${enc}&deleted_at=is.null&select=id,ident_code,scan_code,part_name,weight,weight_kg,status,tier,process_type,processed_at,created_at,location_code&order=created_at.asc`) || [];
 
     let logs = [];
     try { logs = await sb('GET', 'processing_log', null, `?individual_id=eq.${enc}&select=parent_ident_code,child_ident_code,weight,process_type,operator,created_at`) || []; } catch (e) {}
@@ -7748,7 +7781,16 @@ async function indLifeOpen(labelId) {
       try { custs = await sb('GET', 'customers', null, `?id=in.(${custIds.join(',')})&select=id,name,code`) || []; } catch (e) {}
     }
 
-    indLifeData = { ind, parts, logs, batchCodes, packs, items, orders, custs };
+    // ⑥ 食べた人の声：ラベルQR（8桁）か個体番号で紐付いたものを集める
+    let voices = [];
+    try {
+      const codes = parts.map(p => p.scan_code).filter(c => /^\d{8}$/.test(String(c || '')));
+      const ors = [`individual_label.eq."${labelId}"`];
+      if (codes.length) ors.push(`scan_code.in.(${codes.join(',')})`);
+      voices = await sb('GET', 'meal_voices', null, `?or=(${ors.join(',')})&deleted_at=is.null&select=id,scan_code,individual_label,nickname,rating,dish,comment,created_at,published_at&order=created_at.desc`) || [];
+    } catch (e) {}
+
+    indLifeData = { ind, parts, logs, batchCodes, packs, items, orders, custs, voices };
     indLifeRender();
   } catch (e) {
     body.innerHTML = `<div class="empty-state">読み込みエラー: ${esc2(sbSafeMsg(e))}</div>`;
@@ -7799,7 +7841,7 @@ function indLifeRender() {
     ${indLifeStage(meat.length > 0, '🔪', '精肉', meat.length ? meat.length + '部位' : '—')}
     ${indLifeStage(d.packs.length > 0, '⚙️', '加工', d.packs.length ? d.packs.length + 'パック' : '—')}
     ${indLifeStage(d.items.length > 0, '🚚', 'とどけた', custNames.length ? custNames.length + '件' : '—')}
-    ${indLifeStage(false, '💬', 'こえ', '準備中')}
+    ${indLifeStage((d.voices || []).length > 0, '💬', 'こえ', (d.voices || []).length ? d.voices.length + '件' : '—')}
   </div>`;
 
   const sec = (color, icon, title, right, inner) => `<div style="border-left:3px solid ${color};padding:0 0 0 14px;margin-bottom:22px;">
@@ -7889,10 +7931,20 @@ function indLifeRender() {
         }).join('')}</tbody></table></div>`
     : '<div style="font-size:12.5px;color:var(--text3);">まだ販売の記録がひも付いていません。</div>';
 
-  const voice = `<div style="font-size:12.5px;color:var(--text2);line-height:1.75;">
-    食べた人の感想・反応を記録する場所です。<br>
-    <span style="color:var(--text3);">パックのラベルにQRを載せて、受け取った人がこの個体の物語を見て、そのまま感想を残せる仕組みを準備中です。</span>
-  </div>`;
+  // ⑥ 食べた人の声（ラベルQR→この肉の物語→投稿）。未公開も含めて全部出す（公開の可否は「声」タブで）
+  const vs = d.voices || [];
+  const voice = vs.length
+    ? vs.map(v => `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">
+        <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;">
+          <span style="font-weight:700;">${esc2(v.nickname || '名前なし')}</span>
+          ${v.rating ? `<span style="color:var(--gold);">${'★'.repeat(Math.max(0, Math.min(5, v.rating)))}</span>` : ''}
+          ${v.dish ? `<span style="color:var(--text2);">${esc2(v.dish)}</span>` : ''}
+          <span style="margin-left:auto;font-size:11.5px;color:var(--text3);">${fmt(v.created_at)}${v.published_at ? '・公開中' : '・未公開'}</span>
+        </div>
+        ${v.comment ? `<div style="margin-top:3px;white-space:pre-wrap;">${esc2(v.comment)}</div>` : ''}
+      </div>`).join('')
+    : `<div style="font-size:12.5px;color:var(--text3);line-height:1.75;">まだ声は届いていません。<br>
+       パックのラベルのQRから、食べた人がこの一頭の物語を見て、そのまま感想を残せます。</div>`;
 
   document.getElementById('ind-life-body').innerHTML = stages
     + sec('var(--green)', '🌿', 'いのち（捕獲・生態）', '', life)
@@ -7900,7 +7952,7 @@ function indLifeRender() {
     + sec('var(--gold)', '🔪', '精肉', meat.length ? `合計 ${meatKg.toFixed(2)}kg${yieldPct != null ? `・体重比 ${yieldPct}%` : ''}` : '', meatBody)
     + sec('#b58bd0', '⚙️', '加工', d.packs.length ? `合計 ${packKg.toFixed(2)}kg` : '', procBody)
     + sec('#e0a45a', '🚚', 'とどけた先', custNames.length ? esc2(custNames.join('・')) : '', saleBody)
-    + sec('var(--border)', '💬', 'とどいた先の声', '準備中', voice);
+    + sec(vs.length ? '#6fb3a0' : 'var(--border)', '💬', 'とどいた先の声', vs.length ? `${vs.length}件` : '', voice);
 }
 
 function indLifePrint() {
