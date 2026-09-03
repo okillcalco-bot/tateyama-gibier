@@ -5587,8 +5587,13 @@ function pmDoPrint(plan) {
   if (!pmSelectedPart || !pmIndividual || !plan) return;
   pmLastPrintInfo = { weight_kg: plan.weight_kg, lotCode: plan.lotCode, identCode: plan.identCode,
                       fullPartName: plan.fullPartName, labelWeight: plan.labelWeight, scanCode: plan.scanCode };
-  pmLastLabelPrinted = true; // 直前登録カードの「ラベル印刷済み」判定に使用
-  pmPrintLabel(plan.weight_kg, plan.lotCode, plan.identCode, plan.fullPartName, plan.labelWeight, plan.scanCode);
+  // 8桁の数字キーが用意できている時だけ「先に」印刷する。
+  // 無い時に先に刷ると長い識別コードを焼いて読めないラベルになるので、ここでは刷らず、
+  // 保存直後にDBが必ず付ける数字キー（trigger）で印刷する（数百ms後・確実に読める）。
+  if (plan.scanCode && /^\d{8}$/.test(String(plan.scanCode))) {
+    pmLastLabelPrinted = true; // 直前登録カードの「ラベル印刷済み」判定に使用
+    pmPrintLabel(plan.weight_kg, plan.lotCode, plan.identCode, plan.fullPartName, plan.labelWeight, plan.scanCode);
+  }
 }
 
 // ── 登録・印刷（確認をはさまず直接実行）──
@@ -5730,15 +5735,18 @@ async function pmOnWeightReceived(weight_kg, plan) {
     // 数字キーを確保できないまま刷ったラベルは、識別コードをバーコード化していて細く読めない。
     // 保存するとDB側（trigger tgc_assign_scan_code）が必ず数字キーを付けるので、
     // それを受け取って読めるラベルを刷り直す。黙って読めないラベルを現場に出さない。
+    // ラベルのバーコードは必ず読める8桁の数字キーにする。手元のキーが8桁でなければ
+    // （プール枯渇などで採れていない）、DBが必ず付ける数字キー(assigned)に置き換える。
+    const scanOk = c => !!c && /^\d{8}$/.test(String(c));
     const assigned = (Array.isArray(created) && created[0] && created[0].scan_code) || null;
-    if (!scanCode && assigned) {
+    if (!scanOk(scanCode) && scanOk(assigned)) {
+      const alreadyPrintedUnreadable = pmLastLabelPrinted && !scanOk(scanCode);
       scanCode = assigned;
       pmScanCodeFor[identCode] = assigned;
       pmLastPrintInfo = { weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode };
-      if (pmLastLabelPrinted && !labelBarcodeReadable(shortIdent(identCode))) {
-        alert('先に出たラベルのバーコードは細くて読み取れません。\n'
-            + `（${shortIdent(identCode)} は約${labelBarcodeMm(shortIdent(identCode)).toFixed(2)}mm・読み取りには${LABEL_BARCODE_MIN_MM}mm必要）\n\n`
-            + `番号 ${assigned} で刷り直します。先のラベルは捨ててください。`);
+      // すでに読めないラベルを刷ってしまっていた場合だけ、読めるキーで刷り直す（通常はここに来ない）。
+      if (alreadyPrintedUnreadable) {
+        alert(`先に出たラベルのバーコードは読み取れません。\n番号 ${assigned} で刷り直します。先のラベルは捨ててください。`);
         try { pmPrintLabel(weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode); } catch (e) {}
       }
     }
