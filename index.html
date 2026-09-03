@@ -1970,8 +1970,15 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         </div>
         <div id="ship-direct-delivery" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;flex:1;">
           <div class="form-group" style="margin:0;min-width:120px;"><label>運送会社</label>
-            <select class="form-input" id="ship-direct-carrier" onchange="shipDirectFreightAuto(true)">
+            <select class="form-input" id="ship-direct-carrier" onchange="shipDirectCarrierChange()">
               <option value="ヤマト">ヤマト運輸</option><option value="佐川">佐川急便</option>
+            </select>
+          </div>
+          <!-- 届け先の地域。住所が分かれば自動で選ばれ、分からなければ関東（館山近郊）を仮置きして送料を出す。
+               ＝「住所不明→送料が空のまま保存」を無くす（出荷35件中0件が送料入りだった） -->
+          <div class="form-group" style="margin:0;min-width:110px;"><label>届け先の地域</label>
+            <select class="form-input" id="ship-direct-area" onchange="shipDirectFreightAuto(true)">
+              <option value="関東" selected>関東</option>
             </select>
           </div>
           <div class="form-group" style="margin:0;min-width:95px;"><label>サイズ</label>
@@ -2558,17 +2565,20 @@ async function loadBaseOrders() {
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
           <input class="input" id="base-track-${o.unique_key}" placeholder="送り状番号（任意）" style="flex:1;min-width:170px;max-width:260px;">
-          <select class="input" id="base-carrier-${o.unique_key}" style="max-width:120px;"><option value="ヤマト">ヤマト</option><option value="佐川">佐川</option></select>
-          <select class="input" id="base-size-${o.unique_key}" style="max-width:80px;"><option value="60">60</option><option value="80">80</option><option value="100" selected>100</option><option value="140">140</option><option value="160">160</option></select>
-          <label style="display:flex;align-items:center;gap:5px;font-size:13px;white-space:nowrap;"><input type="checkbox" id="base-cool-${o.unique_key}" checked> クール</label>
+          <select class="input" id="base-carrier-${o.unique_key}" style="max-width:120px;" onchange="baseFreightAuto('${o.unique_key}', true)"><option value="ヤマト">ヤマト</option><option value="佐川">佐川</option></select>
+          <select class="input" id="base-size-${o.unique_key}" style="max-width:80px;" onchange="baseFreightAuto('${o.unique_key}', true)"><option value="60">60</option><option value="80">80</option><option value="100" selected>100</option><option value="140">140</option><option value="160">160</option></select>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;white-space:nowrap;"><input type="checkbox" id="base-cool-${o.unique_key}" checked onchange="baseFreightAuto('${o.unique_key}', true)"> クール</label>
           <input class="input" id="base-freight-${o.unique_key}" type="number" min="0" step="1" inputmode="numeric" placeholder="送料(税抜)" style="max-width:110px;">
           <button class="btn btn-primary btn-sm" onclick="baseOrderShip('${o.unique_key}')">📦 発送処理（在庫を引く）</button>
         </div>
+        <div id="base-freight-note-${o.unique_key}" style="font-size:12px;color:var(--text3);margin-top:4px;"></div>
       </div>`;
       shown++;
     }
     if (!shown) { box.innerHTML = '<div class="empty-state">未発送のBASE注文はありません 🎉（革製品のみの注文は管轄外のため表示していません）</div>'; return; }
     box.innerHTML = html;
+    // 届け先の都道府県（BASEの注文情報）から送料を先に入れておく。空のまま発送処理されるのを防ぐ
+    Object.keys(baseOrderCache).forEach(k => { if (document.getElementById('base-freight-' + k)) baseFreightAuto(k, false); });
   } catch (e) {
     box.innerHTML = `<div class="empty-state" style="font-size:13px;">BASE注文の取得に失敗しました。BASEアプリの権限に「注文情報を見る」が入っているか確認してください（${esc2(String(e.message).slice(0, 120))}）</div>`;
   }
@@ -2582,7 +2592,9 @@ async function baseOrderShip(key) {
   const trackEl = document.getElementById('base-track-' + key);
   const trackNo = trackEl ? trackEl.value.trim() : '';
   const _fEl = document.getElementById('base-freight-' + key);
-  const _fv = _fEl ? parseInt(_fEl.value, 10) : NaN;
+  let _fv = _fEl ? parseInt(_fEl.value, 10) : NaN;
+  // 空なら発送処理の直前にもう一度だけ自動計算（購入者の都道府県から）。それでも出なければ従来どおり記録だけ進める
+  if (!(isFinite(_fv) && _fv >= 0)) { await baseFreightAuto(key, true); _fv = _fEl ? parseInt(_fEl.value, 10) : NaN; }
   const _fTxt = isFinite(_fv) && _fv >= 0 ? `¥${_fv.toLocaleString()}（税抜）` : '未入力（請求書に送料が載りません）';
   if (!confirm(`BASE注文の発送処理をしますか？\n\n購入者: ${buyer}\n${items.map(i => `・${i.title} × ${i.amount}`).join('\n')}\n送り状番号: ${trackNo || '（未入力）'}\n送料: ${_fTxt}\n\n・センター在庫から自動で差し引きます\n・BASE側も「発送済み」に更新します（購入者に発送メールが届きます）`)) return;
   try {
@@ -2667,7 +2679,95 @@ function shipDirectMethodChange() {
   shipActiveSave();
 }
 
-// 出荷先の住所から送料を自動計算して入れる。住所が分からないときは手入力できる。
+/* ── 料金表（shipping_rates / shipping_areas）を端末に一度だけ読む ──
+   住所が分からない出荷先でも「届け先の地域」から送料を出せるようにするため。
+   （出荷35件中、送料が入っていたのは0件。原因の大半は「住所が分からない→空欄のまま保存」だった） */
+let shipRatesCache = null;      // [{carrier, area, size_code, base_fee, cool_surcharge}]
+let shipAreasCache = null;      // [{carrier, pref, area}]
+const SHIP_DEFAULT_AREA = '関東';   // 館山近郊のお客様が大半。住所不明時の仮置き（画面で明示する）
+async function shipLoadRates() {
+  if (shipRatesCache) return shipRatesCache;
+  try {
+    const [rates, areas] = await Promise.all([
+      sb('GET', 'shipping_rates', null, '?select=carrier,area,size_code,base_fee,cool_surcharge&limit=500'),
+      sb('GET', 'shipping_areas', null, '?select=carrier,pref,area&limit=200')
+    ]);
+    shipRatesCache = Array.isArray(rates) ? rates : [];
+    shipAreasCache = Array.isArray(areas) ? areas : [];
+  } catch (e) {
+    shipRatesCache = []; shipAreasCache = [];
+  }
+  return shipRatesCache;
+}
+// 住所文字列 → 都道府県（DB側 tgc_addr_pref と同じ規則）
+function shipAddrPref(addr) {
+  const m = String(addr || '').match(/(東京都|北海道|京都府|大阪府|[一-龠]{2,3}県)/);
+  return m ? m[1] : '';
+}
+// 運送会社ごとの地域一覧（料金表にある順）。読み込み前は関東だけ
+function shipAreasFor(carrier) {
+  const seen = new Set(), out = [];
+  (shipRatesCache || []).forEach(r => { if (r.carrier === carrier && !seen.has(r.area)) { seen.add(r.area); out.push(r.area); } });
+  return out.length ? out : [SHIP_DEFAULT_AREA];
+}
+// 住所から地域を引く（その運送会社の区分で）。分からなければ ''
+function shipAreaFromAddress(addr, carrier) {
+  const pref = shipAddrPref(addr);
+  if (!pref) return '';
+  const hit = (shipAreasCache || []).find(a => a.carrier === carrier && a.pref === pref);
+  return hit ? hit.area : '';
+}
+// 料金表から送料（税抜）。無ければ null。クール便で追加料金が無いサイズ（140以上）は null＝要手入力
+function shipRateFromTable(carrier, area, size, cool) {
+  const r = (shipRatesCache || []).find(x => x.carrier === carrier && x.area === area && Number(x.size_code) === Number(size));
+  if (!r) return null;
+  if (cool) return r.cool_surcharge == null ? null : Number(r.base_fee) + Number(r.cool_surcharge);
+  return Number(r.base_fee);
+}
+// 「届け先の地域」の選択肢を運送会社に合わせて作り直す（選択中の地域はできるだけ残す）
+function shipDirectFillAreaOptions(keepArea) {
+  const sel = document.getElementById('ship-direct-area');
+  if (!sel) return;
+  const carrier = document.getElementById('ship-direct-carrier')?.value || 'ヤマト';
+  const areas = shipAreasFor(carrier);
+  const want = keepArea || sel.value || SHIP_DEFAULT_AREA;
+  sel.innerHTML = areas.map(a => `<option value="${esc2(a)}">${esc2(a)}</option>`).join('');
+  sel.value = areas.includes(want) ? want : (areas.includes(SHIP_DEFAULT_AREA) ? SHIP_DEFAULT_AREA : areas[0]);
+}
+function shipDirectCarrierChange() {
+  shipDirectFillAreaOptions();
+  shipDirectFreightAuto(true);
+}
+
+// BASE注文の送料: 購入者の都道府県（BASEの注文情報 prefecture）→ 地域 → 料金表。
+// 都道府県が取れなければ関東を仮置きし、その旨を表示する。手入力済みなら触らない（force=false）
+async function baseFreightAuto(key, force) {
+  const fEl = document.getElementById('base-freight-' + key);
+  const note = document.getElementById('base-freight-note-' + key);
+  if (!fEl) return null;
+  if (!force && fEl.value) return parseInt(fEl.value, 10);
+  const od = baseOrderCache[key] || {};
+  const carrier = document.getElementById('base-carrier-' + key)?.value || 'ヤマト';
+  const size = parseInt(document.getElementById('base-size-' + key)?.value || '100', 10);
+  const cool = !!document.getElementById('base-cool-' + key)?.checked;
+  await shipLoadRates();
+  const pref = shipAddrPref(od.prefecture || od.address || '');
+  const areaFromPref = pref ? shipAreaFromAddress(pref, carrier) : '';
+  const area = areaFromPref || SHIP_DEFAULT_AREA;
+  const v = shipRateFromTable(carrier, area, size, cool);
+  if (v == null) {
+    fEl.value = '';
+    if (note) note.innerHTML = `<span style="color:var(--gold)">${esc2(carrier)} ${size}サイズ${cool ? '・クール' : ''}は料金表にありません。送料を直接入力してください。</span>`;
+    return null;
+  }
+  fEl.value = v;
+  if (note) note.innerHTML = areaFromPref
+    ? `届け先 ${esc2(pref)}（${esc2(area)}）→ <b style="color:var(--gold)">¥${v.toLocaleString()}</b>（税抜・${esc2(carrier)} ${size}${cool ? '・クール' : ''}）`
+    : `<span style="color:var(--gold)">届け先の都道府県が取れないため、関東で算出 ¥${v.toLocaleString()}（税抜）。違えば送料を直してください。</span>`;
+  return v;
+}
+
+// 出荷先の住所（分かれば）→ 届け先の地域 → 送料。住所が無くても地域から必ず金額を出す。
 async function shipDirectFreightAuto(force) {
   const note = document.getElementById('ship-direct-freight-note');
   const fEl = document.getElementById('ship-direct-freight');
@@ -2675,10 +2775,6 @@ async function shipDirectFreightAuto(force) {
   if (!force && fEl.value) return;              // 手入力済みは尊重する
   const name = (document.getElementById('ship-direct-cust')?.value || '').trim();
   const addr = shipCustAddrMap[name] || '';
-  if (!addr) {
-    if (note) note.innerHTML = '<span style="color:var(--gold)">住所が分からないため自動計算できません。送料を直接入力してください。</span>';
-    return;
-  }
   const opts = {
     carrier: document.getElementById('ship-direct-carrier').value,
     size: parseInt(document.getElementById('ship-direct-size').value, 10),
@@ -2686,15 +2782,37 @@ async function shipDirectFreightAuto(force) {
   };
   const seq = ++shipFreightSeq;
   if (note) note.textContent = '計算中…';
-  const v = await shipComputeFreight(addr, opts);
-  // 計算中に手入力・条件変更があったら、古い結果で上書きしない
+  await shipLoadRates();
+  if (seq !== shipFreightSeq) return;
+  shipDirectFillAreaOptions();
+  const areaSel = document.getElementById('ship-direct-area');
+
+  // ① 住所が分かる → 住所の都道府県から地域を決め、DBの料金計算（tgc_compute_freight）を正とする
+  let v = null, basis = '';
+  if (addr) {
+    const area = shipAreaFromAddress(addr, opts.carrier);
+    if (area && areaSel) shipDirectFillAreaOptions(area);
+    v = await shipComputeFreight(addr, opts);
+    if (seq !== shipFreightSeq) return;
+    if (v == null && area) v = shipRateFromTable(opts.carrier, area, opts.size, opts.cool);
+    basis = `${esc2(name)} の住所（${esc2(shipAddrPref(addr) || '都道府県不明')}）から算出`;
+  }
+  // ② 住所が分からない／料金表で引けない → 画面の「届け先の地域」で計算する（既定は関東）
+  if (v == null) {
+    const area = areaSel ? areaSel.value : SHIP_DEFAULT_AREA;
+    v = shipRateFromTable(opts.carrier, area, opts.size, opts.cool);
+    basis = addr
+      ? `届け先の地域「${esc2(area)}」で算出`
+      : `<span style="color:var(--gold)">住所が分からないため、届け先の地域「${esc2(area)}」で算出しました。違う地域なら選び直してください。</span>`;
+  }
   if (seq !== shipFreightSeq) return;
   if (v == null) {
-    if (note) note.innerHTML = '<span style="color:var(--gold)">この地域・サイズは料金表にありません。送料を直接入力してください。</span>';
+    fEl.value = '';
+    if (note) note.innerHTML = `<span style="color:var(--gold)">${esc2(opts.carrier)} ${opts.size}サイズ${opts.cool ? '・クール' : ''}は料金表にありません（クール便は120サイズまで）。送料を直接入力してください。</span>`;
     return;
   }
   fEl.value = v;
-  if (note) note.innerHTML = `${esc2(name)} の住所から算出: <b style="color:var(--gold)">¥${v.toLocaleString()}</b>（税抜・${esc2(opts.carrier)} ${opts.size}サイズ${opts.cool ? '・クール' : ''}）`;
+  if (note) note.innerHTML = `${basis} → <b style="color:var(--gold)">¥${v.toLocaleString()}</b>（税抜・${esc2(opts.carrier)} ${opts.size}サイズ${opts.cool ? '・クール' : ''}）`;
 }
 
 function shipDirectUpdateConfirm() {
@@ -2926,12 +3044,24 @@ async function shipDirectConfirm() {
   const _dm = document.getElementById('ship-direct-method')?.value || '手渡し';
   let _dl = '受け渡し: 手渡し・持ち帰り（送料なし）';
   if (_dm === '発送') {
-    const _fv = parseInt(document.getElementById('ship-direct-freight').value, 10);
+    // 送料が空なら、確定の直前にもう一度だけ自動計算する（住所不明でも地域から出る）。
+    // それでも空なら確定しない＝「送料なしの発送」を黙って記録しない
+    // （送料が空のまま保存された出荷が35件中35件。書類の送料欄が全部空になっていた）
+    let _fv = parseInt(document.getElementById('ship-direct-freight').value, 10);
+    if (!(isFinite(_fv) && _fv >= 0)) {
+      await shipDirectFreightAuto(true);
+      _fv = parseInt(document.getElementById('ship-direct-freight').value, 10);
+    }
+    if (!(isFinite(_fv) && _fv >= 0)) {
+      toast('送料が空です。「届け先の地域」を選ぶか送料を入力してください（着払いなら 0、送料が無い受け渡しなら「手渡し・持ち帰り」を選択）', 'error');
+      document.getElementById('ship-direct-freight')?.focus();
+      return;
+    }
     const _cr = document.getElementById('ship-direct-carrier').value;
     const _sz = document.getElementById('ship-direct-size').value;
     const _cl = document.getElementById('ship-direct-cool').checked ? '・クール' : '';
-    _dl = `受け渡し: 発送（${_cr} ${_sz}サイズ${_cl}）\n送料: ` +
-      (isFinite(_fv) && _fv >= 0 ? `¥${_fv.toLocaleString()}（税抜）` : '未入力（あとで請求書に反映されません）');
+    const _ar = document.getElementById('ship-direct-area')?.value || '';
+    _dl = `受け渡し: 発送（${_cr} ${_sz}サイズ${_cl}${_ar ? '・' + _ar : ''}）\n送料: ¥${_fv.toLocaleString()}（税抜）`;
   }
   if (!confirm(`注文なし出荷を確定しますか？\n\n出荷先: ${custName}\n${_dl}\n商品: ${shipDirectItems.length}点 / ${totalW.toFixed(2)}kg\n${shipDirectItems.map(i=>`・${i.ident_code}（${i.part_name||'-'}）`).join('\n')}\n\n在庫が「出荷済」になります。`)) return;
 
@@ -7781,16 +7911,29 @@ async function indLifeOpen(labelId) {
       try { custs = await sb('GET', 'customers', null, `?id=in.(${custIds.join(',')})&select=id,name,code`) || []; } catch (e) {}
     }
 
-    // ⑥ 食べた人の声：ラベルQR（8桁）か個体番号で紐付いたものを集める
-    let voices = [];
+    // 出店・直売会で売れた分（注文を通らない販売）。この個体が単独で載った品と、ブレンド品の一員として載った品
+    let eventItems = [], events = [];
     try {
-      const codes = parts.map(p => p.scan_code).filter(c => /^\d{8}$/.test(String(c || '')));
-      const ors = [`individual_label.eq."${labelId}"`];
-      if (codes.length) ors.push(`scan_code.in.(${codes.join(',')})`);
-      voices = await sb('GET', 'meal_voices', null, `?or=(${ors.join(',')})&deleted_at=is.null&select=id,scan_code,individual_label,nickname,rating,dish,comment,created_at,published_at&order=created_at.desc`) || [];
+      eventItems = await sb('GET', 'sale_event_items', null,
+        `?or=(individual_label.eq.${enc},member_labels.cs.{${enc}})&select=id,event_id,kind,item_name,part_name,qty_taken,qty_sold,qty_sample,amount,member_labels&order=created_at.asc`) || [];
+      const evIds = [...new Set(eventItems.map(x => x.event_id).filter(Boolean))];
+      if (evIds.length) {
+        events = await sb('GET', 'sale_events', null, `?id=in.(${evIds.join(',')})&deleted_at=is.null&select=id,event_date,venue_name,title,status`) || [];
+      }
     } catch (e) {}
 
-    indLifeData = { ind, parts, logs, batchCodes, packs, items, orders, custs, voices };
+    // 食べた人の声。公開済みは物語ページと同じRPC（story_get_individual）、承認待ちは職員用RPCから件数だけ
+    let voices = [], pendingVoices = 0;
+    try {
+      const story = await sb('POST', 'rpc/story_get_individual', { p_label: labelId });
+      voices = (story && Array.isArray(story.voices)) ? story.voices : [];
+    } catch (e) {}
+    try {
+      const pend = await sb('POST', 'rpc/staff_voices_list', { p_status: 'pending', p_limit: 500 }) || [];
+      pendingVoices = pend.filter(v => v.individual_label === labelId).length;
+    } catch (e) {}
+
+    indLifeData = { ind, parts, logs, batchCodes, packs, items, orders, custs, eventItems, events, voices, pendingVoices };
     indLifeRender();
   } catch (e) {
     body.innerHTML = `<div class="empty-state">読み込みエラー: ${esc2(sbSafeMsg(e))}</div>`;
@@ -7835,13 +7978,23 @@ function indLifeRender() {
     return (c && c.name) || o.customer_name || o.delivery_name || '';
   }).filter(Boolean))];
 
+  const evItems = d.eventItems || [], voices = d.voices || [], pendingVoices = d.pendingVoices || 0;
+  const evNames = [...new Set(evItems.map(x => {
+    const e = (d.events || []).find(y => String(y.id) === String(x.event_id));
+    return e ? (e.venue_name || e.title || '') : '';
+  }).filter(Boolean))];
+  const delivered = d.items.length > 0 || evItems.length > 0;
+  const deliveredSub = [custNames.length ? custNames.length + '件' : '', evNames.length ? '出店' + evNames.length + '回' : ''].filter(Boolean).join('・') || '—';
+  const voiceSub = voices.length ? voices.length + '件' + (pendingVoices ? '（待ち' + pendingVoices + '）' : '')
+                 : pendingVoices ? '承認待ち' + pendingVoices : '—';
+
   const stages = `<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:20px;">
     ${indLifeStage(true, '🌿', 'いのち', fmt(i.capture_date) || '—')}
     ${indLifeStage(!!i.radiation_test_date, '🔬', '検査', i.radiation_test_date ? '実施済' : '—')}
     ${indLifeStage(meat.length > 0, '🔪', '精肉', meat.length ? meat.length + '部位' : '—')}
     ${indLifeStage(d.packs.length > 0, '⚙️', '加工', d.packs.length ? d.packs.length + 'パック' : '—')}
-    ${indLifeStage(d.items.length > 0, '🚚', 'とどけた', custNames.length ? custNames.length + '件' : '—')}
-    ${indLifeStage((d.voices || []).length > 0, '💬', 'こえ', (d.voices || []).length ? d.voices.length + '件' : '—')}
+    ${indLifeStage(delivered, '🚚', 'とどけた', deliveredSub)}
+    ${indLifeStage(voices.length > 0, '💬', 'こえ', voiceSub)}
   </div>`;
 
   const sec = (color, icon, title, right, inner) => `<div style="border-left:3px solid ${color};padding:0 0 0 14px;margin-bottom:22px;">
@@ -7914,45 +8067,76 @@ function indLifeRender() {
     : (d.logs.length ? '<div style="font-size:12.5px;color:var(--text3);">加工の記録はありますが、完成パックが見つかりません。</div>'
                      : '<div style="font-size:12.5px;color:var(--text3);">この個体はまだ加工処理されていません。</div>');
 
-  // ⑤ とどけた先
-  const saleBody = d.items.length
+  // ⑤ とどけた先（注文・直販 ＋ 出店・直売会）
+  const saleRows = d.items.map(it => {
+    const o = d.orders.find(x => String(x.id) === String(it.order_id));
+    const c = o && d.custs.find(x => String(x.id) === String(o.customer_id));
+    const who = (c && c.name) || (o && (o.customer_name || o.delivery_name)) || '（顧客未設定）';
+    const qty = parseFloat(it.weight_kg != null ? it.weight_kg : it.weight);
+    return `<tr>
+      <td style="font-weight:600;">${esc2(who)}</td>
+      <td>${esc2(it.product_name || it.part_name || '-')}</td>
+      <td style="text-align:right;">${qty ? qty.toFixed(2) + 'kg' : '-'}</td>
+      <td>${o ? fmt(o.order_date) : '-'}</td></tr>`;
+  }).concat(evItems.map(x => {
+    const e = (d.events || []).find(y => String(y.id) === String(x.event_id));
+    const where = e ? (e.venue_name || e.title || '出店') : '出店';
+    const members = Array.isArray(x.member_labels) ? x.member_labels.length : 0;
+    const blend = members > 1 ? `<span style="color:var(--text3);font-size:11px;">（${members}頭のブレンド）</span>` : '';
+    const sold = x.qty_sold != null ? Number(x.qty_sold) : null;
+    const taken = x.qty_taken != null ? Number(x.qty_taken) : null;
+    const qtyTxt = sold != null ? `${sold}${taken != null ? '/' + taken : ''}個` : (taken != null ? `持出${taken}` : '-');
+    return `<tr>
+      <td style="font-weight:600;">🏕 ${esc2(where)}</td>
+      <td>${esc2(x.item_name || x.part_name || '-')} ${blend}</td>
+      <td style="text-align:right;">${qtyTxt}</td>
+      <td>${e ? fmt(e.event_date) : '-'}</td></tr>`;
+  }));
+  const saleBody = saleRows.length
     ? `<div style="overflow-x:auto;"><table style="width:100%;font-size:12.5px;min-width:440px;">
         <thead><tr><th style="text-align:left;">とどけた先</th><th style="text-align:left;">品名</th><th style="text-align:right;">数量</th><th style="text-align:left;">日付</th></tr></thead>
-        <tbody>${d.items.map(it => {
-          const o = d.orders.find(x => String(x.id) === String(it.order_id));
-          const c = o && d.custs.find(x => String(x.id) === String(o.customer_id));
-          const who = (c && c.name) || (o && (o.customer_name || o.delivery_name)) || '（顧客未設定）';
-          const qty = parseFloat(it.weight_kg != null ? it.weight_kg : it.weight);
-          return `<tr>
-            <td style="font-weight:600;">${esc2(who)}</td>
-            <td>${esc2(it.product_name || it.part_name || '-')}</td>
-            <td style="text-align:right;">${qty ? qty.toFixed(2) + 'kg' : '-'}</td>
-            <td>${o ? fmt(o.order_date) : '-'}</td></tr>`;
-        }).join('')}</tbody></table></div>`
+        <tbody>${saleRows.join('')}</tbody></table></div>`
     : '<div style="font-size:12.5px;color:var(--text3);">まだ販売の記録がひも付いていません。</div>';
 
-  // ⑥ 食べた人の声（ラベルQR→この肉の物語→投稿）。未公開も含めて全部出す（公開の可否は「声」タブで）
-  const vs = d.voices || [];
-  const voice = vs.length
-    ? vs.map(v => `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">
-        <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;">
-          <span style="font-weight:700;">${esc2(v.nickname || '名前なし')}</span>
-          ${v.rating ? `<span style="color:var(--gold);">${'★'.repeat(Math.max(0, Math.min(5, v.rating)))}</span>` : ''}
-          ${v.dish ? `<span style="color:var(--text2);">${esc2(v.dish)}</span>` : ''}
-          <span style="margin-left:auto;font-size:11.5px;color:var(--text3);">${fmt(v.created_at)}${v.published_at ? '・公開中' : '・未公開'}</span>
-        </div>
-        ${v.comment ? `<div style="margin-top:3px;white-space:pre-wrap;">${esc2(v.comment)}</div>` : ''}
-      </div>`).join('')
-    : `<div style="font-size:12.5px;color:var(--text3);line-height:1.75;">まだ声は届いていません。<br>
-       パックのラベルのQRから、食べた人がこの一頭の物語を見て、そのまま感想を残せます。</div>`;
+  // ⑥ とどいた先の声（公開済み＝物語ページに出ているもの。承認待ちは件数と行き先だけ）
+  const voiceList = voices.map(v => {
+    const stars = v.rating ? '★'.repeat(Math.max(0, Math.min(5, v.rating))) + '☆'.repeat(5 - Math.max(0, Math.min(5, v.rating))) : '';
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--border);">
+      <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-size:12px;color:var(--text3);">
+        <strong style="font-size:13.5px;color:var(--text);">${esc2(v.nickname || '名前なし')}</strong>
+        ${stars ? `<span style="color:var(--gold);letter-spacing:1px;">${stars}</span>` : ''}
+        ${v.dish ? `<span>${esc2(v.dish)}</span>` : ''}
+        <span style="margin-left:auto;">${esc2(v.at || '')}</span>
+      </div>
+      ${v.comment ? `<div style="margin-top:4px;font-size:13px;line-height:1.7;white-space:pre-wrap;">${esc2(v.comment)}</div>` : ''}
+    </div>`;
+  }).join('');
+  const pendingNote = pendingVoices
+    ? `<div style="margin-top:8px;font-size:12.5px;color:var(--gold);">承認待ちの感想が ${pendingVoices}件 あります。
+        <button class="btn btn-sm" onclick="indLifeGoVoices()" style="margin-left:6px;">💬 食べた人の声で確認する</button></div>`
+    : '';
+  const voice = voices.length
+    ? voiceList + pendingNote
+    : `<div style="font-size:12.5px;color:var(--text2);line-height:1.75;">
+        まだ公開された感想はありません。<br>
+        <span style="color:var(--text3);">パックのラベルや出店シートのQRから「この肉の物語」を開いた人が感想を残せます。届いた感想は「💬 食べた人の声」で公開するとここに出ます。</span>
+      </div>` + pendingNote;
 
   document.getElementById('ind-life-body').innerHTML = stages
     + sec('var(--green)', '🌿', 'いのち（捕獲・生態）', '', life)
     + sec('#7aa9d8', '🔬', '検査', '', insp)
     + sec('var(--gold)', '🔪', '精肉', meat.length ? `合計 ${meatKg.toFixed(2)}kg${yieldPct != null ? `・体重比 ${yieldPct}%` : ''}` : '', meatBody)
     + sec('#b58bd0', '⚙️', '加工', d.packs.length ? `合計 ${packKg.toFixed(2)}kg` : '', procBody)
-    + sec('#e0a45a', '🚚', 'とどけた先', custNames.length ? esc2(custNames.join('・')) : '', saleBody)
-    + sec(vs.length ? '#6fb3a0' : 'var(--border)', '💬', 'とどいた先の声', vs.length ? `${vs.length}件` : '', voice);
+    + sec('#e0a45a', '🚚', 'とどけた先', [...custNames, ...evNames.map(n => '🏕 ' + n)].length ? esc2([...custNames, ...evNames.map(n => '🏕 ' + n)].join('・')) : '', saleBody)
+    + sec(voices.length ? '#5aa9a0' : 'var(--border)', '💬', 'とどいた先の声', voices.length ? `${voices.length}件` : (pendingVoices ? `承認待ち ${pendingVoices}件` : ''), voice);
+}
+
+// 一生ビューから「食べた人の声」タブ（承認待ち）へ
+function indLifeGoVoices() {
+  const modal = document.getElementById('indLifeModal');
+  if (modal) modal.style.display = 'none';
+  const btn = document.querySelector('.tab-btn[data-tab="voices"]');
+  if (btn) btn.click();
 }
 
 function indLifePrint() {
