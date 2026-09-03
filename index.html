@@ -7408,7 +7408,8 @@ function pmLabelHtml(d) {
     /* flex-basisで高さを確保し、縮小も禁止（0にすると中のSVGが上下にはみ出して文字に重なる） */
     .bc { flex:0 0 12.5mm; height:12.5mm; display:flex; align-items:center; justify-content:center; }
     .bc svg { display:block; width:38mm !important; height:12mm !important; shape-rendering:crispEdges; }
-    .bct{ font-size:6pt; font-weight:bold; text-align:center; font-family:monospace; letter-spacing:.3px; }
+    .bct{ font-size:9pt; font-weight:bold; text-align:center; font-family:monospace; letter-spacing:.6px; }
+    .id2{ font-size:5pt; color:#333; text-align:center; font-family:monospace; letter-spacing:.2px; margin-top:.1mm; }
     .bcw{ font-size:5pt; font-weight:bold; text-align:center; border:.5pt solid #000; margin-top:.3mm; padding:.2mm; }
     .mk { font-size:4pt; color:#444; margin-top:.2mm; }
     .ad { font-size:4pt; color:#444; }
@@ -7424,7 +7425,9 @@ function pmLabelHtml(d) {
     <div class="ex">消費期限　${d.expiryStr}</div>
     <div class="tmp">保存温度　-18℃以下</div>
     <div class="bc">${d.barcodeSvg}</div>
-    <div class="bct">${d.identCode}</div>
+    ${d.scanCode
+      ? `<div class="bct">${d.scanCode}</div><div class="id2">${d.identCode}</div>`
+      : `<div class="bct">${d.identCode}</div>`}
     ${d.barcodeThin ? '<div class="bcw">※このバーコードは細く読めません。刷り直してください</div>' : ''}
     <div class="mk">館山ジビエセンター</div>
     <div class="ad">千葉県館山市西長田1163-5</div>
@@ -7456,7 +7459,10 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight, scan
 
   const html = pmLabelHtml({
     origin, speciesName, labelId: pmIndividual.label_id, partName,
-    labelWeight, expiryStr, identCode, barcodeSvg: barcodeSection, barcodeThin
+    labelWeight, expiryStr, identCode, barcodeSvg: barcodeSection, barcodeThin,
+    // バーコードに焼いた8桁の数字キーを、読めない時に手打ちできるよう大きく表示する。
+    // （数字キーが無く識別コードを焼いた時は従来どおり識別コードだけ表示）
+    scanCode: (scanCode && /^\d{8}$/.test(String(scanCode))) ? scanCode : null
   });
 
   // ── iframe に書き込んで印刷 ──
