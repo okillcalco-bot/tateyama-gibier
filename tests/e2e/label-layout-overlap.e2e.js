@@ -63,8 +63,9 @@ const path = require('path');
     results.push([`${label}: 消費期限の行が潰れていない`, m.ex.h >= 1.5 * m.mmPx, `${mm(m.ex.h).toFixed(1)}mm`]);
     // 6) 読み取りに効くバー幅は維持（38mm幅）
     results.push([`${label}: バーコード幅38mmを維持`, Math.abs(mm(m.svg.w) - 38) < 1.5, `${mm(m.svg.w).toFixed(1)}mm`]);
-    // 7) バーコード高さは12mm確保（読み取りの狙いやすさ）
-    results.push([`${label}: バーコード高さ12mm`, mm(m.svg.h) >= 11.5, `${mm(m.svg.h).toFixed(1)}mm`]);
+    // 7) バーコード高さは9.5mm確保（「この肉の物語」QRの場所を作るため12→9.5mmに。
+    //    読み取りに効くのはバー幅＝8桁の数字キーで担保しており、高さは狙いやすさの範囲）
+    results.push([`${label}: バーコード高さ9.5mm`, mm(m.svg.h) >= 9.0, `${mm(m.svg.h).toFixed(1)}mm`]);
   };
 
   // 写真と同じ条件（長い部位名・ペットフード用）と、長い識別コードの両方
