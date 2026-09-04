@@ -722,6 +722,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <button class="btn btn-primary" onclick="evPrint()">&#x1F5A8; 出店シート（A4横・QR一覧・6個体で1枚）</button>
           <button class="btn" onclick="evPosterPrint()">&#x1F5A8; 一覧QRのポスター</button>
           <button class="btn" onclick="evReportPrint()">&#x1F4C4; 出店報告書</button>
+          <button class="btn" onclick="evCityReportCopy()">&#x1F4CB; 市役所へメール報告（コピー）</button>
           <button class="btn btn-danger" style="margin-left:auto;" onclick="evDeleteEvent()">この出店を削除</button>
         </div>
       </div>
@@ -2243,6 +2244,21 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   </div>
 </div>
 <datalist id="dl-ev-kind"><option>マルシェ</option><option>イベント</option><option>施設</option><option>直売</option><option>物産展</option></datalist>
+
+<!-- 出店: 市役所へのメール報告文（コピー用） -->
+<div class="modal-overlay" id="ev-city-report-modal">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header"><div class="modal-title">市役所への報告文</div>
+      <button class="modal-close" onclick="closeModal('ev-city-report-modal')">&times;</button></div>
+    <div class="modal-body">
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:8px;">自動でコピーできなかったため、下の文面を選択してコピーしてください。</div>
+      <textarea id="ev-city-report-text" class="form-input" readonly
+        style="width:100%;min-height:320px;font-family:ui-monospace,monospace;font-size:12.5px;white-space:pre-wrap;"
+        onclick="this.select()"></textarea>
+      <button class="btn btn-primary" style="margin-top:10px;" onclick="document.getElementById('ev-city-report-text').select();document.execCommand('copy');toast('コピーしました');">この文面をコピー</button>
+    </div>
+  </div>
+</div>
 
 <!-- 出店: 新しい出店 -->
 <div class="modal-overlay" id="ev-new-modal">
@@ -7328,6 +7344,75 @@ function evReportPrint() {
 
     <div class="ft">館山ジビエセンター（合同会社アルコ）　作成 ${new Date().toLocaleDateString('ja-JP')}</div>`;
   evPrintDoc(evReportCss(), body);
+}
+
+/* 出店ごとに市役所へメールで報告するための平文（コピー用）。
+   個体まで分かるもの＝種類ごとに頭数・重量を集計。小分け・加工品は個体を特定できないため
+   点数の合算のみ（個体単位の内訳は既存の「出店報告書」PDFを参照）。 */
+function evCityReportText(e, items) {
+  if (!e) return '';
+  const inds = (items || []).filter(i => i.kind === 'inventory');
+  const lots = (items || []).filter(i => i.kind !== 'inventory');
+  const dow = d => { const m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? '日月火水木金土'[new Date(+m[1], +m[2] - 1, +m[3]).getDay()] : ''; };
+  const dateJp = d => { const m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${+m[1]}年${+m[2]}月${+m[3]}日（${dow(d)}）` : (d || '—'); };
+
+  const bySpecies = {};
+  inds.forEach(i => {
+    const sp = i.species || '種類不明';
+    const g = bySpecies[sp] || (bySpecies[sp] = { labels: new Set(), sold: new Set(), kgTaken: 0, kgSold: 0 });
+    if (i.individual_label) g.labels.add(i.individual_label);
+    g.kgTaken += evNum(i.weight_kg);
+    if (evNum(i.qty_sold) > 0) {
+      g.kgSold += evNum(i.weight_kg);
+      if (i.individual_label) g.sold.add(i.individual_label);
+    }
+  });
+  const speciesLines = Object.keys(bySpecies).sort().map(sp => {
+    const g = bySpecies[sp];
+    return `${sp}: ${g.labels.size}頭（合計${g.kgTaken.toFixed(2)}kg）／うち販売 ${g.sold.size}頭（${g.kgSold.toFixed(2)}kg）`;
+  });
+
+  const lotTaken = lots.reduce((a, i) => a + evNum(i.qty_taken), 0);
+  const lotSold = lots.reduce((a, i) => a + evNum(i.qty_sold), 0);
+  const total = (items || []).reduce((a, i) => a + evNum(i.amount), 0);
+
+  const lines = [];
+  lines.push(`件名: 出店報告（${e.event_date || ''} ${e.venue_name || ''}）`);
+  lines.push('');
+  lines.push('館山ジビエセンター（合同会社アルコ）です。');
+  lines.push('下記のとおり出店の報告をいたします。');
+  lines.push('');
+  lines.push('■ 開催概要');
+  lines.push(`日時: ${dateJp(e.event_date)}${e.end_date && e.end_date !== e.event_date ? ` 〜 ${dateJp(e.end_date)}` : ''}${e.start_time ? `　${e.start_time}〜${e.end_time || ''}` : ''}`);
+  lines.push(`場所: ${e.venue_name || '—'}`);
+  if (e.weather) lines.push(`天候: ${e.weather}`);
+  if (e.staff_names) lines.push(`担当: ${e.staff_names}`);
+  lines.push('');
+  lines.push('■ 取り扱った鳥獣（一頭ずつ分かるもの）');
+  lines.push(...(speciesLines.length ? speciesLines : ['なし']));
+  lines.push('');
+  lines.push('■ 小分けパック・加工品（個体は特定せず合算）');
+  lines.push(`持参 ${lotTaken}点／販売 ${lotSold}点`);
+  lines.push('');
+  lines.push('■ 売上');
+  lines.push(`売上合計: ${evYen(total)}`);
+  lines.push('');
+  lines.push('以上、よろしくお願いいたします。');
+  lines.push('');
+  lines.push('館山ジビエセンター（合同会社アルコ）');
+  return lines.join('\n');
+}
+
+async function evCityReportCopy() {
+  if (!evCur) { toast('出店を開いてから押してください', 'error'); return; }
+  const text = evCityReportText(evCur, evItems);
+  let ok = false;
+  try {
+    if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); ok = true; }
+  } catch (e) { /* クリップボード権限が無ければ下のモーダルにフォールバック */ }
+  if (ok) { toast('報告文をコピーしました。メールに貼り付けてください'); return; }
+  document.getElementById('ev-city-report-text').value = text;
+  document.getElementById('ev-city-report-modal').classList.add('active');
 }
 
 // レイアウト実測用（1ページぶんの完全なHTML）
