@@ -19,6 +19,8 @@
     --amber:  #D4921E;
     --blue:   #1A3550;
     --blue2:  #2171C1;
+    --red:    #A5372C;
+    --red2:   #7E2B22;
     --bg:     #F5F5F0;
     --white:  #ffffff;
     --gray:   #F0F0EA;
@@ -55,6 +57,7 @@
     flex-shrink: 0;
   }
   .app-header.blue { background: var(--blue); }
+  .app-header.red  { background: var(--red); }
   .header-inner {
     display: flex; align-items: center; gap: 10px;
     padding-bottom: 14px;
@@ -79,6 +82,7 @@
   }
   .tab-bar::-webkit-scrollbar { display: none; }
   .tab-bar.blue { background: var(--blue2); }
+  .tab-bar.red  { background: var(--red2); }
   .tab-btn {
     flex: 1; min-width: 80px;
     padding: 10px 6px 8px;
@@ -136,6 +140,7 @@
     font-size: 17px; font-weight: 700; flex-shrink: 0;
   }
   .step-num.blue { background: var(--blue); }
+  .step-num.red  { background: var(--red); color: white; }
   .step-title {
     font-size: 16px; font-weight: 700;
     color: var(--text); line-height: 1.4;
@@ -197,6 +202,7 @@
   }
   .home-card .card-icon.green { background: #EBF5EB; }
   .home-card .card-icon.blue  { background: #EBF3FF; }
+  .home-card .card-icon.red   { background: #FBEAE8; }
   .home-card .card-text h2 { font-size: 18px; font-weight: 700; margin-bottom: 3px; color: var(--text); }
   .home-card .card-text p  { font-size: 13px; color: var(--text2); line-height: 1.4; }
   .home-card .card-arrow { margin-left: auto; color: var(--border); font-size: 20px; }
@@ -266,6 +272,14 @@
         <div class="card-text">
           <h2>管理者・PC設定用</h2>
           <p>セットアップ・Supabase・b-PAC・トラブル対処</p>
+        </div>
+        <div class="card-arrow">›</div>
+      </button>
+      <button class="home-card" onclick="showScreen('rules')">
+        <div class="card-icon red">⚠️</div>
+        <div class="card-text">
+          <h2>現場ルール・改善履歴</h2>
+          <p>過去のトラブル・お客様指摘から生まれた決まりごと</p>
         </div>
         <div class="card-arrow">›</div>
       </button>
@@ -809,6 +823,256 @@
 
   </div><!-- /content -->
 </div><!-- /admin -->
+
+<!-- ══════════════════════════════════════
+     RULES SCREEN（現場ルール・改善履歴）
+══════════════════════════════════════ -->
+<div id="rules" class="screen">
+  <div class="app-header red">
+    <div class="header-inner">
+      <button class="back-btn" onclick="showScreen('home')">‹ ホーム</button>
+      <span class="header-title">現場ルール・改善履歴</span>
+    </div>
+    <div class="header-sub">過去のトラブル・お客様からのご指摘をもとに決まったルール。LINEグループのやり取りから2026-09-04にまとめました。</div>
+  </div>
+  <div class="tab-bar red" id="rulesTabs">
+    <button class="tab-btn active" onclick="showTab('rules',0)">衛生・安全</button>
+    <button class="tab-btn" onclick="showTab('rules',1)">品質管理</button>
+    <button class="tab-btn" onclick="showTab('rules',2)">個体管理・データ</button>
+    <button class="tab-btn" onclick="showTab('rules',3)">シフト・配送・その他</button>
+  </div>
+  <div class="content">
+
+    <!-- TAB 0: 衛生・安全 -->
+    <div class="tab-panel active" id="rules-0">
+      <div class="page-intro">何かあってからルールが増えています。「なぜこの決まりがあるのか」の背景も残してあるので、新しく入った人はここを読めば同じ説明を繰り返さずに済みます。</div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">1</div><div class="step-title">マダニ媒介感染症に注意（日本紅斑熱など）</div></div>
+        <div class="step-body">
+          <div class="step-line sub">実際に発熱した例あり（2024/05・2024/12・2026/08）。潜伏2〜8日で40℃弱の発熱・頭痛・関節痛→発疹。</div>
+          <div class="step-line warn"><span class="icon">!</span> 山・解体作業では白い衛生服＋虫除けスプレー。噛まれた／原因不明の発熱は早めに<strong>専門医のいる病院（例：亀田の救急）</strong>へ。医療センター救急外来は専門医不在のため不向き。受診時は必ず「野生動物を扱う仕事」と伝える。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">2</div><div class="step-title">帽子・マスクの着用を徹底</div></div>
+        <div class="step-body">
+          <div class="step-line sub">2023年に市の衛生指導で「ガイドラインが疎かになっている」と指摘を受けた。</div>
+          <div class="step-line warn"><span class="icon">!</span> 解体・精肉作業中は帽子・マスクを必ず着用。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">3</div><div class="step-title">食道・肛門の結紮手順</div></div>
+        <div class="step-body">
+          <div class="step-line">舌の根元で気管と食道を切断 → ビニール袋を被せてタイラップ2箇所で止める（舌・心臓・肝臓をセットで取る場合は不要）。</div>
+          <div class="step-line">肛門周辺は丁寧に洗浄してから処理する。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">4</div><div class="step-title">毛皮付き個体の保管</div></div>
+        <div class="step-body">
+          <div class="step-line">皮剥きが日をまたぐ場合は「洗浄→消毒→洗浄」した上でビニール袋に入れ、懸吊室で保管する。毛皮付きのまま裸で置かない。</div>
+        </div>
+      </div>
+
+      <div class="info-box warn">
+        <div class="info-label">⚠ 出店時のルール（2025年・E型肝炎の調査を受けて）</div>
+        千葉県内の発症者が、沖さんのセミナー出店（塊肉を焼いて試食提供・持ち帰り配布）で食べていたと保健所が調査した事例あり。
+        <div class="step-line warn" style="margin-top:6px"><span class="icon">!</span> <strong>塊肉の提供は禁止</strong>（スライス済み・カット済みのみ）</div>
+        <div class="step-line warn"><span class="icon">!</span> <strong>焼いた肉の持ち帰りは一切禁止</strong></div>
+        <div class="step-line warn"><span class="icon">!</span> 出店で使った個体番号・使用量を記録表に必ず記録</div>
+        <div class="step-line warn"><span class="icon">!</span> クーラーボックスに温度計を設置し、定期的に温度を確認・記録</div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">5</div><div class="step-title">放射能検査：検体容器の扱い（2026/09/01・市役所から指摘）</div></div>
+        <div class="step-body">
+          <div class="step-line warn"><span class="icon">!</span> 容器は国からの借り物で破損済も複数あるため雑に扱わない。</div>
+          <div class="step-line warn"><span class="icon">!</span> 他個体の肉片が容器<strong>外側</strong>に付着すると結果に影響するため、肉片を外側に散らさない。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">6</div><div class="step-title">放射能検査：検体は600g、解体時（熟成前）に採取</div></div>
+        <div class="step-body">
+          <div class="step-line sub">2023年、8検体中3検体が500g未満（最少435g）で発覚。精肉時に採取していたため、陽性が出た場合は精肉作業自体が無駄になる構造だった。</div>
+          <div class="step-line warn"><span class="icon">!</span> 解体時に<strong>約600g</strong>を、主に頬肉・首周りから採取。25kg未満など小さい個体で足りない場合はくくり罠側の肩甲骨まわりからも追加してよい。</div>
+          <div class="step-line sub">検体袋は提出前に外側の汚れを拭き取る（2023年、袋の外側の肉付着を指摘された）。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">7</div><div class="step-title">受入不可個体の基準</div></div>
+        <div class="step-body">
+          <div class="step-line">①体重25kg未満は基本受け入れない（脂乗りが良ければ腹を割いて状態確認→良ければ解体、ダメなら焼却）。</div>
+          <div class="step-line">②止めさし処置が不適（特に銃で背骨・大腸等を貫通した個体）は受入不可＝焼却。</div>
+          <div class="step-line sub">2022〜2023年に不適切個体の持ち込みが繰り返し発生し、「ジビエセンターは焼却施設ではない」と現場から強い指摘があった。捕獲者への基準周知が引き続き課題。</div>
+        </div>
+      </div>
+
+      <div class="info-box warn">
+        <div class="info-label">⚠ 那珂川町からの品質クレーム（2026/08/25）を受けた3段階チェック</div>
+        血だまり洗浄不足・毛混入・肉の熱入り白濁の指摘があった。
+        <div class="step-line" style="margin-top:6px">・解体室：洗浄の徹底（特に腹回り・ヒレ周りは洗い切れないので入念に）。毛付きの皮や手足はビニール袋をしっかり締めて汚れで濡らさない。</div>
+        <div class="step-line">・精肉室：洗浄しづらい部分の傷みチェック（ダニの潜伏含む）、色味の青み・酸味臭の有無チェック。</div>
+        <div class="step-line">・スライス・ミンチ加工：品質チェック（冷凍後、解凍時に傷みに気づくこともあるため要注意）。</div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">8</div><div class="step-title">ハエ混入で返品（2026/07/10・鹿島興産向け枝肉）</div></div>
+        <div class="step-body">
+          <div class="step-line warn"><span class="icon">!</span> シャッターを開けての作業をしない。封入前に十分チェックする。搬入頭数が多い（9〜10頭）忙しい日ほど要注意。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">9</div><div class="step-title">冷蔵・冷凍庫の異常サインを放置しない</div></div>
+        <div class="step-body">
+          <div class="step-line sub">過去にエラー表示での故障・結露/水漏れが複数回発生（2022/2023）。</div>
+          <div class="step-line">冷凍庫使用時は都度の温度チェックを習慣にする。異常サインに気づいたらすぐ報告。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">10</div><div class="step-title">銃の携行に注意（2026/03・テレビ再放送で指摘）</div></div>
+        <div class="step-body">
+          <div class="step-line warn"><span class="icon">!</span> 銃をケースなど無しで裸のまま持たない。敷地内でも違法は違法。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">11</div><div class="step-title">施設閉鎖時の手順</div></div>
+        <div class="step-body">
+          <div class="step-line">最後に帰る人は玄関の鍵とカーテンを閉め、解体室側（シャッター側）から退出する。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 1: 品質管理 -->
+    <div class="tab-panel" id="rules-1">
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">1</div><div class="step-title">ペットフード脱酸素剤は開封後すぐ使い切る</div></div>
+        <div class="step-body">
+          <div class="step-line sub">一度開封した脱酸素剤は機能しないと判明（2022年）。</div>
+          <div class="step-line">100個入りパックに切り替え、開封後は毎日使い切る運用。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">2</div><div class="step-title">在庫の廃棄・整理基準</div></div>
+        <div class="step-body">
+          <div class="step-line sub">2023年、販売できない在庫が冷凍・冷蔵庫を占有し他の在庫が入らない状態が問題化した。</div>
+          <div class="step-line">品質保持期限を超えた在庫・販売できない在庫は廃棄してからスペースを確保する。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">3</div><div class="step-title">搬入時の血だれ対策</div></div>
+        <div class="step-body">
+          <div class="step-line sub">捕獲者の車から荷下ろし待機中に血が垂れ、先方から指摘を受けた（2023年）。</div>
+          <div class="step-line">広めのブルーシートを常備し、養生してから搬入する。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">4</div><div class="step-title">卸売と小売の区分ルール</div></div>
+        <div class="step-body">
+          <div class="step-line">卸売の肉は重さ1kg超えを基準とする。1kg未満は小売・サンプル用に確保。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">5</div><div class="step-title">30kg以上のメス・脂乗り良好個体の扱い</div></div>
+        <div class="step-body">
+          <div class="step-line">30kg以上のメスは鹿島興産（枝肉卸）へ。脂乗りの良い個体はセンターで確保。</div>
+          <div class="step-line warn"><span class="icon">!</span> 沖さん不在時は、脂乗り良好な個体を送る前に必ず写真か連絡をもらってから判断する。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: 個体管理・データ -->
+    <div class="tab-panel" id="rules-2">
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">1</div><div class="step-title">通し番号の重複・ズレに注意</div></div>
+        <div class="step-body">
+          <div class="step-line sub">2026/06、市役所の指摘で通し番号の重複（T143）が発覚しリナンバー。2026/06にはT109〜T116が1つズレていたのを手動修正。</div>
+          <div class="step-line warn"><span class="icon">!</span> ラベルを貼る前に、直近の通し番号と重複していないか確認する。イノシシ以外（キョン等）は現状「都度連番」の口頭ルールのみなので特に注意。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">2</div><div class="step-title">捕獲票と放射能検査記録は必ず一致させる</div></div>
+        <div class="step-body">
+          <div class="step-line sub">2026/06、市役所から捕獲票と検査記録の不一致を厳しく指摘された。</div>
+          <div class="step-line">台帳とDBの二重管理で食い違いが起きやすいので、入力後は台帳側の数字と見比べて確認する。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">3</div><div class="step-title">バーコードが読めない場合はその場で登録依頼</div></div>
+        <div class="step-body">
+          <div class="step-line sub">ラベルのバーコードシールが大きすぎて印刷が切れるトラブルが実際に発生（2026/08/29）。</div>
+          <div class="step-line">読み取れないラベルを見つけたら、そのまま出荷・保管せず、写真を撮って管理者に登録を依頼する。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">4</div><div class="step-title">個体マーキング・撮影の手順</div></div>
+        <div class="step-body">
+          <div class="step-line">頭を右向きにして、白スプレーで通し番号＋日付を側面に記入。</div>
+          <div class="step-line">同日複数捕獲は枝番（-1, -2）を付ける。</div>
+          <div class="step-line">看板（捕獲者名）を添えて、尻尾を切る前・切った後の写真を撮影する。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: シフト・配送・その他 -->
+    <div class="tab-panel" id="rules-3">
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">1</div><div class="step-title">シフト確認は原則 punch.html／TimeTree</div></div>
+        <div class="step-body">
+          <div class="step-line sub">Googleスプレッドシート→TimeTree→HRMOS勤怠→punch.htmlと管理方法が変遷。LINEでのシフト連絡と併用が続いている。</div>
+          <div class="step-line">出退勤の実績は punch.html、当番の割り振りはLINE・TimeTreeで確認する。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">2</div><div class="step-title">卸売の優先順位</div></div>
+        <div class="step-body">
+          <div class="step-line">基本的に個人飲食店からの注文を優先する。仲卸（大口）は在庫に余裕がある時のみ対応。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">3</div><div class="step-title">送料は必ず記録する</div></div>
+        <div class="step-body">
+          <div class="step-line sub">これまで送料の金額を記録する流れがなく、書類の送料欄が空欄になりがちだった。</div>
+          <div class="step-line warn"><span class="icon">!</span> 発送時は送り状の送料も控えて、注文の記録に残す。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">4</div><div class="step-title">重量物は2人で運ぶ</div></div>
+        <div class="step-body">
+          <div class="step-line sub">2026/07、スタッフが上腕二頭筋を痛め手術に至った事例があった。</div>
+          <div class="step-line">枝肉など重量物は1人で無理せず、2人で運ぶ。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num red">5</div><div class="step-title">倉庫整理・現金管理</div></div>
+        <div class="step-body">
+          <div class="step-line">届いた段ボールは放置せずサイズ別の置き場所へ。搬入が少ない日は倉庫整理を心がける。段ボール到着時は置き場所を確認してから収納する。</div>
+          <div class="step-line warn"><span class="icon">!</span> 現金の出し入れはお客様から見えない場所で行う。</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /rules -->
 
 <script>
 // ── Screen navigation ──────────────────────
