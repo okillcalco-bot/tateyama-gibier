@@ -58,6 +58,7 @@
   }
   .app-header.blue { background: var(--blue); }
   .app-header.red  { background: var(--red); }
+  .app-header.amber{ background: var(--amber); }
   .header-inner {
     display: flex; align-items: center; gap: 10px;
     padding-bottom: 14px;
@@ -203,6 +204,7 @@
   .home-card .card-icon.green { background: #EBF5EB; }
   .home-card .card-icon.blue  { background: #EBF3FF; }
   .home-card .card-icon.red   { background: #FBEAE8; }
+  .home-card .card-icon.amber { background: #FBF0DC; }
   .home-card .card-text h2 { font-size: 18px; font-weight: 700; margin-bottom: 3px; color: var(--text); }
   .home-card .card-text p  { font-size: 13px; color: var(--text2); line-height: 1.4; }
   .home-card .card-arrow { margin-left: auto; color: var(--border); font-size: 20px; }
@@ -280,6 +282,14 @@
         <div class="card-text">
           <h2>現場ルール・改善履歴</h2>
           <p>過去のトラブル・お客様指摘から生まれた決まりごと</p>
+        </div>
+        <div class="card-arrow">›</div>
+      </button>
+      <button class="home-card" onclick="showScreen('bento')">
+        <div class="card-icon amber">🍱</div>
+        <div class="card-text">
+          <h2>ジビエ弁当づくり</h2>
+          <p>学校・団体弁当の仕込みタイムライン・ごはんの計算・メニュー</p>
         </div>
         <div class="card-arrow">›</div>
       </button>
@@ -1073,6 +1083,77 @@
 
   </div><!-- /content -->
 </div><!-- /rules -->
+
+<!-- ══════════════════════════════════════
+     BENTO SCREEN（ジビエ弁当づくり）
+══════════════════════════════════════ -->
+<div id="bento" class="screen">
+  <div class="app-header amber">
+    <div class="header-inner">
+      <button class="back-btn" onclick="showScreen('home')">‹ ホーム</button>
+      <span class="header-title">ジビエ弁当づくり</span>
+    </div>
+    <div class="header-sub">2026/9/3〜4 東京高校お弁当の記録を元にまとめました。次に同じような団体弁当を作るときの目安にしてください。</div>
+  </div>
+  <div class="content">
+
+    <div class="sec-head">仕込みタイムライン</div>
+    <div class="step-card">
+      <div class="step-header"><div class="step-num" style="background:var(--amber);color:#5a3d00">1</div><div class="step-title">前々日：材料の買い出し</div></div>
+      <div class="step-body"><div class="step-line sub">担当者（この回は吉田さん）に材料を買い出ししてもらう。</div></div>
+    </div>
+    <div class="step-card">
+      <div class="step-header"><div class="step-num" style="background:var(--amber);color:#5a3d00">2</div><div class="step-title">前日午後：仕込み</div></div>
+      <div class="step-body">
+        <div class="step-line">煮物・浅漬けなどを作る。</div>
+        <div class="step-line warn"><span class="icon">!</span> 唐揚げ・猪串は冷凍庫から出して常温に戻しておき、帰る前に冷凍庫へ戻す。</div>
+      </div>
+    </div>
+    <div class="step-card">
+      <div class="step-header"><div class="step-num" style="background:var(--amber);color:#5a3d00">3</div><div class="step-title">当日：ごはんを炊いて盛り付け</div></div>
+      <div class="step-body"><div class="step-line sub">下の「ごはんの計算」を参照。</div></div>
+    </div>
+
+    <div class="info-box tip">
+      <div class="info-label">📦 今回の食数</div>
+      9/3：41食／9/4：45食＋2食
+    </div>
+
+    <div class="sec-head" style="margin-top:18px">ごはんの計算</div>
+    <table class="mtable">
+      <tr><th>目安</th><th>数値</th></tr>
+      <tr><td>米の量</td><td>1合＝150g</td></tr>
+      <tr><td>水の量</td><td>米1合に対して180ml</td></tr>
+      <tr><td>盛り付け量</td><td>1食あたり200〜210g</td></tr>
+      <tr><td>炊飯器</td><td>3升炊き（MAXの3升まで）を強火で炊く</td></tr>
+      <tr><td>下準備の目安</td><td>3人前＝米2合で計算</td></tr>
+    </table>
+    <div class="page-intro">米は沖さんに10kg用意してもらう。シリコンの布を釜に敷いて炊くと、米がこびりつかず後片付けがラク。</div>
+
+    <div class="info-box warn">
+      <div class="info-label">⚠ 9/3：柔らかくなりすぎた失敗</div>
+      1合150gで計算し2回に分けて炊飯。洗米したあと<strong>水に浸してから</strong>規定量の水で炊いたら、柔らかくなりすぎてしまった。かなり余った。
+    </div>
+    <div class="info-box ok">
+      <div class="info-label">✅ 9/4：改善して成功</div>
+      洗米したら<strong>ザルに上げていったん水を切り</strong>、それから規定量の水で浸水して炊く。3升を1回で炊いた。約200gで盛り付けて、45食ぴったりになった。
+    </div>
+
+    <div class="sec-head" style="margin-top:18px">メニュー</div>
+    <div class="step-card">
+      <div class="step-body">
+        <div class="step-line">・猪唐揚げ　2個</div>
+        <div class="step-line">・猪スティック（ソース＆ケチャップなどで味付け）　半分にしたもの3個</div>
+        <div class="step-line">・煮物（筍・人参・かぼちゃ）</div>
+        <div class="step-line">・キャベツとキュウリの浅漬け</div>
+        <div class="step-line">・オクラ、ミニトマト</div>
+        <div class="step-line">・スパゲッティとキャベツ千切り</div>
+        <div class="step-line">・ごはんにごま塩</div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /bento -->
 
 <script>
 // ── Screen navigation ──────────────────────
