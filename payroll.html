@@ -53,7 +53,7 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
 <body>
 <header>
   <h1>💴 給与計算</h1>
-  <span class="sub">勤務時間×時給 ＋ 止めさし手当 ＋ 通勤費（往復km×20円×回数）− 控除。どの欄も後から編集できます</span>
+  <span class="sub">勤務時間×時給 ＋ 止めさし搬入手当 ＋ 通勤費（往復km×20円×回数）− 控除。どの欄も後から編集できます</span>
   <span style="flex:1"></span>
   <button class="btn btn-sm no-print" onclick="window.print()">🖨 印刷</button>
   <a class="btn btn-sm no-print" href="index.html" style="text-decoration:none">← 業務アプリ</a>
@@ -73,7 +73,7 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
   <table>
     <thead><tr>
       <th>氏名</th><th>時給</th><th>日数</th><th>時間</th><th>基本給</th>
-      <th>止め<br>(回)</th><th>止めさし<br>手当</th>
+      <th>止め搬入<br>(回)</th><th>止めさし搬入<br>手当</th>
       <th>往復<br>km</th><th>通勤<br>回数</th><th>通勤費</th>
       <th>他手当</th><th>支給合計</th>
       <th>健康保険</th><th>厚生年金</th><th>雇用保険</th><th>所得税</th><th>住民税</th><th>他控除</th>
@@ -85,13 +85,13 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
   </table>
 </div>
 <div class="hint">
-  ・<b>青字は自動計算</b>（基本給＝時給×時間、止めさし手当＝3000円×回数、通勤費＝往復km×20円×回数）。入力欄はどれも手で直せます<br>
+  ・<b>青字は自動計算</b>（基本給＝時給×時間、止めさし搬入手当＝3000円×回数、通勤費＝往復km×20円×回数）。入力欄はどれも手で直せます<br>
   ・「勤怠から取込」は打刻記録（<a href="punch.html">punch.html</a>／業務アプリの勤怠）から日数・時間を計算して入れます。通勤回数は日数と同じ値が入ります<br>
   ・🚚ボタンで<b>行き先別の移動費</b>（産廃処理・アワコネ・資材購入など）を人ごとに追加できます。センター以外へ行った日は「通勤回数」を1回減らしてください<br>
   ・📄ボタンで<b>その人の給与明細書</b>を発行できます（印刷・PDF保存→LINEやメールで送付）。明細の発行はこの画面に統一しています<br>
   ・「📄 明細をまとめて印刷」は<b>全員分を1人1ページ</b>で一度に開きます。月の支払い確定時にPDF保存しておくと賃金台帳の控えになります<br>
   ・🔗ボタンで<b>本人専用の恒久リンク</b>を発行できます。毎月同じリンクで最新の明細（過去分も月選択で）を見られるので、共有は最初の1回だけで済みます。発行は一度きり表示・共有は必ずLINE個別トークなど本人だけに届く経路で<br>
-  ・止めさし手当（+3000円/回）の対象: 白石さん・大和田さん・今泉さん。回数は各自の報告から入力してください<br>
+  ・止めさし搬入手当（+3000円/回）の対象: 白石さん・大和田さん・今泉さん。<b>止めさし・搬入（引き取り）どちらか一方をやった日も1回に数えます。</b>回数はpunch.htmlの退勤報告（各自の入力）から入ります<br>
   ・社会保険料（健康保険・厚生年金）と税は<b>従業員負担分</b>を円で入力します。空欄は0円扱い
 </div>
 
@@ -373,7 +373,7 @@ function payslipSection(l, month, rows){
   <table>
   <tr><th>出勤日数</th><td>${N(l.work_days)}日</td><th>実働時間</th><td>${N(l.work_hours)}時間</td></tr>
   <tr><th>時給</th><td>¥${N(l.hourly_wage).toLocaleString()}</td><th>基本給</th><td>¥${c.base.toLocaleString()}</td></tr>
-  ${c.stop?`<tr><th>止めさし手当</th><td>¥${c.stop.toLocaleString()}（${N(l.stopkill_count)}回×¥${(N(l.stopkill_unit)||3000).toLocaleString()}）</td><th>その他手当</th><td>¥${N(l.other_allowance).toLocaleString()}</td></tr>`
+  ${c.stop?`<tr><th>止めさし搬入手当</th><td>¥${c.stop.toLocaleString()}（${N(l.stopkill_count)}回×¥${(N(l.stopkill_unit)||3000).toLocaleString()}）</td><th>その他手当</th><td>¥${N(l.other_allowance).toLocaleString()}</td></tr>`
         :(N(l.other_allowance)?`<tr><th>その他手当</th><td colspan="3">¥${N(l.other_allowance).toLocaleString()}</td></tr>`:'')}
   ${c.comm?`<tr><th>通勤費</th><td colspan="3">¥${c.comm.toLocaleString()}　<span style="font-size:11px;color:#555;">${esc(commParts.join(' ＋ '))}</span></td></tr>`:''}
   <tr><th>支給額（総額）</th><td colspan="3" class="big">¥${c.pay.toLocaleString()}</td></tr>
