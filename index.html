@@ -2675,13 +2675,14 @@ document.getElementById('ship-direct-code').addEventListener('keydown', (e) => {
 });
 document.getElementById('ship-direct-cust').addEventListener('input', () => { shipDirectUpdateConfirm(); shipActiveSave(); shipDirectFreightAuto(false); });
 // 送料を手で入れたら、実行中の自動計算の結果は捨てる（手入力が最優先）
-document.getElementById('ship-direct-freight')?.addEventListener('input', () => { shipFreightSeq++; shipActiveSave(); });
+document.getElementById('ship-direct-freight')?.addEventListener('input', () => { shipFreightSeq++; shipFreightAutoFilled = false; shipActiveSave(); });
 document.getElementById('ship-direct-memo').addEventListener('input', shipActiveSave);
 
 /* ── 直販出荷の受け渡し方法と送料 ──
    出荷の大半はこの直販経路を通るため、送料はここで記録しないと請求書・納品書に載らない。 */
 let shipCustAddrMap = {};   // 店名 → 住所（送料の自動計算に使う）
 let shipFreightSeq = 0;     // 自動計算の世代番号。手入力や再操作があれば古い結果は捨てる
+let shipFreightAutoFilled = false;   // いま欄に入っている金額が自動計算の結果か（手入力なら false。手入力は上書きしない）
 
 function shipDirectMethodChange() {
   const send = document.getElementById('ship-direct-method')?.value === '発送';
@@ -2711,9 +2712,22 @@ async function shipLoadRates() {
     shipRatesCache = Array.isArray(rates) ? rates : [];
     shipAreasCache = Array.isArray(areas) ? areas : [];
   } catch (e) {
-    shipRatesCache = []; shipAreasCache = [];
+    // 読めなかったら覚えない＝次の操作で読み直す（一度の通信失敗で以後ずっと手入力にならないように）
+    shipRatesCache = null; shipAreasCache = null;
+    return [];
   }
   return shipRatesCache;
+}
+// 料金表に無かったときの案内文。あるサイズを列挙して、何を選べば出るかを示す
+function shipRateMissingMsg(carrier, area, size, cool) {
+  if (!shipRatesCache) return '料金表を読み込めませんでした。「↻ 再計算」を押すか、送料を直接入力してください。';
+  const sizes = (shipRatesCache || [])
+    .filter(r => r.carrier === carrier && r.area === area && (!cool || r.cool_surcharge != null))
+    .map(r => Number(r.size_code)).sort((a, b) => a - b);
+  const what = `${esc2(carrier)}・${esc2(area)}の${size}サイズ${cool ? '（クール便）' : ''}`;
+  return sizes.length
+    ? `${what}は料金表にありません（${cool ? 'クール便が' : ''}あるのは ${sizes.join('・')}）。サイズを選び直すか、送料を直接入力してください。`
+    : `${what}は料金表にありません。送料を直接入力してください。`;
 }
 // 住所文字列 → 都道府県（DB側 tgc_addr_pref と同じ規則）
 function shipAddrPref(addr) {
@@ -2773,7 +2787,7 @@ async function baseFreightAuto(key, force) {
   const v = shipRateFromTable(carrier, area, size, cool);
   if (v == null) {
     fEl.value = '';
-    if (note) note.innerHTML = `<span style="color:var(--gold)">${esc2(carrier)} ${size}サイズ${cool ? '・クール' : ''}は料金表にありません。送料を直接入力してください。</span>`;
+    if (note) note.innerHTML = `<span style="color:var(--gold)">${shipRateMissingMsg(carrier, area, size, cool)}</span>`;
     return null;
   }
   fEl.value = v;
@@ -2788,7 +2802,8 @@ async function shipDirectFreightAuto(force) {
   const note = document.getElementById('ship-direct-freight-note');
   const fEl = document.getElementById('ship-direct-freight');
   if (!fEl || document.getElementById('ship-direct-method')?.value !== '発送') return;
-  if (!force && fEl.value) return;              // 手入力済みは尊重する
+  // 手入力済みは尊重する。自動計算で入った金額は、出荷先が変わったら計算し直す（前の店の送料を引きずらない）
+  if (!force && fEl.value && !shipFreightAutoFilled) return;
   const name = (document.getElementById('ship-direct-cust')?.value || '').trim();
   const addr = shipCustAddrMap[name] || '';
   const opts = {
@@ -2823,11 +2838,14 @@ async function shipDirectFreightAuto(force) {
   }
   if (seq !== shipFreightSeq) return;
   if (v == null) {
-    fEl.value = '';
-    if (note) note.innerHTML = `<span style="color:var(--gold)">${esc2(opts.carrier)} ${opts.size}サイズ${opts.cool ? '・クール' : ''}は料金表にありません（クール便は120サイズまで）。送料を直接入力してください。</span>`;
+    // 古い自動計算の金額だけ消す。手入力の金額は残す
+    if (shipFreightAutoFilled) { fEl.value = ''; shipFreightAutoFilled = false; }
+    const area = areaSel ? areaSel.value : SHIP_DEFAULT_AREA;
+    if (note) note.innerHTML = `<span style="color:var(--gold)">${shipRateMissingMsg(opts.carrier, area, opts.size, opts.cool)}</span>`;
     return;
   }
   fEl.value = v;
+  shipFreightAutoFilled = true;
   if (note) note.innerHTML = `${basis} → <b style="color:var(--gold)">¥${v.toLocaleString()}</b>（税抜・${esc2(opts.carrier)} ${opts.size}サイズ${opts.cool ? '・クール' : ''}）`;
 }
 
@@ -8016,7 +8034,9 @@ async function indLifeOpen(labelId) {
     try {
       const pend = await sb('POST', 'rpc/staff_voices_list', { p_status: 'pending', p_limit: 500 }) || [];
       pendingVoices = pend.filter(v => v.individual_label === labelId).length;
-    } catch (e) {}
+    } catch (e) {
+      pendingVoices = null;   // 取れなかった（権限・通信）ことを「0件」と区別して画面に出す
+    }
 
     indLifeData = { ind, parts, logs, batchCodes, packs, items, orders, custs, eventItems, events, voices, pendingVoices };
     indLifeRender();
@@ -8064,6 +8084,7 @@ function indLifeRender() {
   }).filter(Boolean))];
 
   const evItems = d.eventItems || [], voices = d.voices || [], pendingVoices = d.pendingVoices || 0;
+  const pendingUnknown = d.pendingVoices === null;   // 承認待ち件数を取得できなかった（0件とは違う）
   const evNames = [...new Set(evItems.map(x => {
     const e = (d.events || []).find(y => String(y.id) === String(x.event_id));
     return e ? (e.venue_name || e.title || '') : '';
@@ -8198,6 +8219,9 @@ function indLifeRender() {
   }).join('');
   const pendingNote = pendingVoices
     ? `<div style="margin-top:8px;font-size:12.5px;color:var(--gold);">承認待ちの感想が ${pendingVoices}件 あります。
+        <button class="btn btn-sm" onclick="indLifeGoVoices()" style="margin-left:6px;">💬 食べた人の声で確認する</button></div>`
+    : pendingUnknown
+    ? `<div style="margin-top:8px;font-size:12px;color:var(--text3);">承認待ちの件数は取得できませんでした（権限か通信）。
         <button class="btn btn-sm" onclick="indLifeGoVoices()" style="margin-left:6px;">💬 食べた人の声で確認する</button></div>`
     : '';
   const voice = voices.length

@@ -183,6 +183,55 @@ const AREAS = [
   results.push(['計算中の手入力が上書きされない', await page.$eval('#ship-direct-freight', el => el.value) === '3333',
     await page.$eval('#ship-direct-freight', el => el.value)]);
 
+  // 5e) 自動計算で入った金額は、出荷先を変えると計算し直す（前の店の送料を引きずらない）
+  //     燗むすび（東京・DB計算1500）→ 大阪の店（DBは料金表なし→地域「関西」で 1200+400）
+  await page.evaluate(async () => {
+    document.getElementById('ship-direct-carrier').value = 'ヤマト';
+    shipDirectFillAreaOptions('関東');
+    document.getElementById('ship-direct-size').value = '100';
+    document.getElementById('ship-direct-cool').checked = true;
+    document.getElementById('ship-direct-cust').value = '燗むすび';
+    document.getElementById('ship-direct-freight').value = '';
+    await shipDirectFreightAuto(true);
+  });
+  await page.waitForTimeout(250);
+  const beforeSwitch = await page.$eval('#ship-direct-freight', el => el.value);
+  await page.evaluate(async () => {
+    document.getElementById('ship-direct-cust').value = '大阪の店';
+    await shipDirectFreightAuto(false);   // 出荷先の入力イベントと同じ呼び方
+  });
+  await page.waitForTimeout(300);
+  const afterSwitch = await page.evaluate(() => ({
+    v: document.getElementById('ship-direct-freight').value,
+    area: document.getElementById('ship-direct-area').value
+  }));
+  results.push(['自動計算の金額は出荷先を変えると計算し直す', beforeSwitch === '1500' && afterSwitch.v === '1600', `${beforeSwitch} → ${afterSwitch.v}`]);
+  results.push(['出荷先の住所から地域も切り替わる（関西）', afterSwitch.area === '関西', afterSwitch.area]);
+
+  // 5f) 手入力した金額は、出荷先を変えても上書きしない
+  await page.evaluate(async () => {
+    document.getElementById('ship-direct-freight').value = '777';
+    document.getElementById('ship-direct-freight').dispatchEvent(new Event('input'));
+    document.getElementById('ship-direct-cust').value = '燗むすび';
+    await shipDirectFreightAuto(false);
+  });
+  await page.waitForTimeout(300);
+  results.push(['手入力の金額は出荷先を変えても残る', await page.$eval('#ship-direct-freight', el => el.value) === '777',
+    await page.$eval('#ship-direct-freight', el => el.value)]);
+
+  // 5g) 手入力の金額は、料金表に無い組み合わせで再計算しても消えない（消えるのは自動計算の金額だけ）
+  await page.evaluate(async () => {
+    document.getElementById('ship-direct-size').value = '140';   // ヤマト140クールは料金表に無い
+    await shipDirectFreightAuto(true);
+  });
+  await page.waitForTimeout(300);
+  const keepManual = await page.evaluate(() => ({
+    v: document.getElementById('ship-direct-freight').value,
+    note: document.getElementById('ship-direct-freight-note').innerText
+  }));
+  results.push(['料金表に無くても手入力の金額は消えない', keepManual.v === '777', keepManual.v]);
+  results.push(['案内文に「あるサイズ」を列挙', /あるのは 60・100/.test(keepManual.note), keepManual.note.slice(0, 80)]);
+
   // 6) 出荷確定で運送会社・サイズ・クール・送料が保存される
   await page.evaluate(async () => {
     shipDirectItems = [{ id: 'v1', ident_code: 'TGC-08-M167-RO', part_name: 'ロース', weight: 2.1, species: 'イノシシ' }];

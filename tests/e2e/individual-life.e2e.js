@@ -147,6 +147,7 @@ const PENDING = [
   await page.waitForTimeout(300);
   const t3 = await page.$eval('#ind-life-body', el => el.innerText);
   results.push(['声のRPCが失敗しても一生ビューは出る', /いのち/.test(t3) && /ロース/.test(t3), '']);
+  results.push(['承認待ちが取れないことを「0件」と区別して表示', /承認待ちの件数は取得できませんでした/.test(t3) && !/承認待ちの感想が/.test(t3), '']);
 
   results.push(['pageerrorなし', errors.length === 0, errors.join(' / ')]);
 

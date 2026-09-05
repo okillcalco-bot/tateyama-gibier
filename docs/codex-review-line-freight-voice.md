@@ -1,25 +1,40 @@
-# 「1個体の一生」の線を太くする — 送料の空欄をなくす／一生ビューに出店と声をつなぐ — Codex レビュー依頼
+# 「1個体の一生」の線を太くする — 送料の空欄をなくす／一生ビューに出店と声をつなぐ — Codex レビュー依頼（第2版）
 
 軸（CLAUDE.md）: **生態 → 個体 → 精肉 → 加工 → 販売 → 食べた人の声 が1本の線で繋がっていること。**
-今回はこの軸を変えず、実測で見つかった「線が切れている2か所」を直した。DBスキーマ変更なし、
-マイグレーションなし、ジビエ基幹の既存テーブルへの書き込み経路も増やしていない。
+この軸を変えず、実測で見つかった「線が切れている2か所」を直した。
+**DBスキーマ・RLS・権限・DB関数・既存データは一切変更していない。マイグレーションもない。**
 
-## ブランチ / 差分
+第2版は、第1版（コミット ba145b1）を最新 main（PR #253〜#256）の上に載せ替え、自己レビューで見つけた
+軽微な不具合3件と表示1件を直したもの。第1版の変更は重ねて修正していない（下記「前回指摘の対応表」）。
 
-- ブランチ: `claude/alco-os-architecture-n56n5z`（ベース: `origin/main` = `15236e7`（PR #252 を含む）、0 behind）
-- 変更ファイル（main 差分）:
-  - `index.html` — 直販出荷の送料（届け先の地域・確定前ガード）、BASE出荷の送料自動入力、個体の一生ビュー（出店・声）
-  - `tests/e2e/direct-ship-freight.e2e.js`（28件）/ `tests/e2e/base-ship-freight.e2e.js`（18件）/ `tests/e2e/individual-life.e2e.js`（26件）
-  - `tests/e2e/line-voice-and-shipment-link.e2e.js`（#252 のテスト。声の取り方を RPC 経由に合わせた。下記「#252 との関係」）
-  - `CLAUDE.md`（現状の実測値を 2026-09-03 に更新）
-  - `docs/codex-review-line-freight-voice.md`（本書）
-- 触っていないもの: `capture-form.html` / `order-admin.html` / `order-portal.html` / `s.html` / `sw.js` / `manifest.json` / `migrations/` / `alco-os/`
+## 1. 所在
 
-## まず測った（本番 `clpdyrehdgzgiidbfucj`・読み取りのみ・2026-09-03）
+| 項目 | 値 |
+|---|---|
+| repository | okillcalco-bot/tateyama-gibier |
+| branch | `claude/alco-os-architecture-n56n5z` |
+| base（origin/main） | `5bfaa47`（PR #256 まで） |
+| head | 本文末尾「提出物」に記載（コミット後のSHA） |
+| PR | 本文末尾「提出物」に記載（Draft・merge しない） |
+| 未コミット変更 | なし（提出時点で全部コミット済み。ただし **本番未デプロイ**） |
+
+### 関連ブランチ・PR（今回の対象との関係）
+- **PR #252（main に入っている）**: 同じ一生ビューと直販確定を触った。その上にリベース済み。一生ビューの声は
+  #252 の「`meal_voices` を画面から直接 GET」を採用せず RPC 経由にした（理由は §4-3）。
+- **PR #243（Draft・未マージ・本番未適用）P0-A セキュリティ是正**: `staff_voices_list` を staff-key 必須のラッパーに
+  置き換える（`20260901_p0_rpc_least_privilege.sql`）。マージされると一生ビューの「承認待ち件数」取得が
+  `42501` で失敗する。本変更はその失敗を **「0件」と区別して画面に出す**ようにしてある（§4-4）。#243 側で
+  `staffKeyEnsure()` を一生ビューにも掛けるか、承認待ち件数を諦めるかは #243 マージ時の判断（§8）。
+- **PR #101（未マージ・8月）受発注管理の送料自動計算（app_settings に料金表）**: main はその後 `shipping_rates` /
+  `shipping_areas` テーブル + `tgc_compute_freight` で同機能を別実装済み（20260824）。本変更はテーブル側を使う。
+  #101 は設計が重複するため、そのままマージしないこと（本変更の対象外）。
+- 他の open PR（#98〜#100・#102・#157）は alco-os / capture-form / order-admin 側で、本変更と重ならない。
+
+## 2. まず測った（本番・SELECT のみ・2026-09-03）
 
 | 区間 | 08-26 基準 | 09-03 実測 | 見方 |
 |---|---|---|---|
-| 個体 | 600 | **634** | `individuals`（deleted_at null・AUTO-除く） |
+| 個体 | 600 | **634** | `individuals`（deleted_at null・AUTO- 除く） |
 | → 精肉 | 235 | **402** | `inventory.tier=2` を持つ個体 |
 | → 加工 | — | **19** | `processing_log` → `inventory.tier=3` |
 | → 販売 | 49 | **65**（注文64・出店11・出店のみ1） | `order_items→inventory` ＋ `sale_event_items.individual_label / member_labels` |
@@ -28,327 +43,138 @@
 | 生態: 緯度経度/推定年齢/体長/餌/胃内容物 | 1/0/0/0/— | **1/0/8/0/0** | `individuals` 各列 |
 
 ### 切れていた場所と原因
-
-1. **送料が1件も保存されていない（35/35）。** 08-24 に送料の自動計算（`tgc_compute_freight`・住所→都道府県→地域）と
-   入力欄を入れたのに、その後の9件も全部空。直近の直販出荷の出荷先8件のうち**6件は顧客台帳に住所が無い**
-   （エヴァーブルースカイ・Oobanburumai・はれとけ・館山美食倶楽部・燗むすび・自然の家 …）。
+1. **送料が1件も保存されていない（35/35）。** 08-24 に送料の自動計算（`tgc_compute_freight`・住所→都道府県→地域）を
+   入れたのに、その後の9件も全部空。直近の直販出荷の出荷先8件のうち **6件は顧客台帳に住所が無い**。
    コードは「住所が分からなければ自動計算を諦めて『直接入力してください』と出す」だけで、
    確定時は「未入力（あとで請求書に反映されません）」と**表示して通していた**。
-   ＝ 同じ症状が3回どころか9回。対症療法（案内文）ではなく構造を変える。
-2. **一生ビューの「こえ」が固定で「準備中」。** `meal_voices` / 物語ページ（s.html）/ 承認画面は #219〜#221 で完成しているのに、
-   個体からたどる画面が最後の区間を表示していなかった。さらに「とどけた先」は `order_items` 経由だけを見ていて、
+2. **一生ビューの「こえ」が固定で「準備中」**（#252 で着手済み）。加えて「とどけた先」は `order_items` 経由だけを見ていて、
    **出店・直売会（`sale_event_items`）で売れた分**（11頭。うち1頭は出店でしか売れていない）が線に載っていなかった。
+3. 精肉→販売の断絶（402→65）は業務側（保管中・加工に回る等）でコードの欠陥ではない。生態データ（体長8・胃内容物0）は
+   入力欄ができて日が浅い。いずれも今回は触らない。
 
-3. 精肉→販売の断絶（402→65）は業務側（在庫として保管中・加工に回る等）で、コードの欠陥ではない。今回は触らない。
-   生態データ（体長8・胃内容物0）は入力欄が出来て日が浅い。次回の計測で見る。
+## 3. 前回（第1版）のレビュー観点の対応表
 
-## 変更1: 直販出荷の送料 — 住所が分からなくても「届け先の地域」から必ず出す
+第1版で「レビューで見てほしい点」として挙げた8点を、現在のコードで再確認した。Codex からの指摘文は
+受け取っていないため、対象は第1版の観点リストである。
 
-### 設計
-- `shipping_rates` / `shipping_areas`（RLS無効・anon読取可。DBの `tgc_compute_freight` と同じ表）を端末に一度だけ読む。
-- 送料の決め方を **2段** にした。
-  1. 住所が分かる → 従来どおり DB の `tgc_compute_freight` を正とする（住所の都道府県から「届け先の地域」も自動選択）。
-  2. 住所が分からない／DBで引けない → 画面の **「届け先の地域」**（既定 **関東**＝館山近郊の客が大半）で料金表から計算。
-     仮置きであることを**画面に明示**し、違えば選び直せる。
-- **確定時のガード**: 「発送」で送料が空なら確定直前にもう一度自動計算。それでも空なら**確定しない**（toast で理由と出口を示す:
-  地域を選ぶ／金額を入れる／着払いは 0／送料が無い受け渡しは「手渡し・持ち帰り」）。
-  「送料なしの発送」を黙って記録する経路を無くした。
-- 手入力は常に最優先（自動計算中の手入力を古い結果で上書きしない仕組み＝`shipFreightSeq` は従来どおり）。
+| # | 観点 | 状態 | 現在のコードでの確認 |
+|---|---|---|---|
+| 1 | 住所不明時の仮置き「関東」 | **未解消（判断待ち）** | コードは既定「関東」＋画面に「仮定」と明示のまま。「必ず選ばせる」方式に変えるかは人の判断（§8） |
+| 2 | 「発送」で送料が空なら確定しない | **未解消（判断待ち）** | ガードはそのまま。出口（地域選択／金額／着払い0／手渡し）を toast に明記 |
+| 3 | `meal_voices` を RLS deny-all のまま RPC で読む | **解消済み（設計として維持）** | `story_get_individual`（公開済み）＋ `staff_voices_list('pending')`（件数）。第2版で **取得失敗を「0件」と区別**（§4-4） |
+| 4 | `shipping_rates` / `shipping_areas` を anon から直接読む | **現状では問題なし** | 両テーブルは RLS 無効・料金表のみ（本番 pg_policies で確認）。読めない場合の再試行を第2版で追加（§4-2） |
+| 5 | `shipDirectFreightAuto` の非同期順序 | **1件解消** | `shipFreightSeq` の破棄は正しい。ただし「自動計算で入った金額が出荷先変更で残る」を発見→第2版で修正（§4-1） |
+| 6 | `or=(individual_label.eq.X,member_labels.cs.{X})` の全角・エンコード | **現状では再現しない** | サンドボックスから REST へ直接は出られない（proxy 403）ため、同じ述語を SQL で本番に実行して該当行を確認（`individual_label = X or member_labels @> array[X]` → 1行）。PostgREST の `cs` は `{}` リテラルで配列包含。全角は `encodeURIComponent` 済み。E2E は URL 文字列を検証 |
+| 7 | 既存テストの意図（住所不明→手入力を促す）の置き換え | **解消済み** | 「住所不明→地域から算出＋仮定の明示」に置き換え、旧意図は「料金表に無い組合せ→手入力を促す」として残した |
+| 8 | 触っていない範囲の確認 | **解消済み** | `git diff --stat origin/main...HEAD` の対象は index.html / tests/e2e 4本 / CLAUDE.md / 本書のみ |
 
-### コード（index.html）
+## 4. 変更内容（第1版 ＋ 第2版）
 
-HTML（直販出荷の配送欄。運送会社の隣に「届け先の地域」を追加）:
-```html
-<div class="form-group" style="margin:0;min-width:120px;"><label>運送会社</label>
-  <select class="form-input" id="ship-direct-carrier" onchange="shipDirectCarrierChange()">
-    <option value="ヤマト">ヤマト運輸</option><option value="佐川">佐川急便</option>
-  </select>
-</div>
-<!-- 届け先の地域。住所が分かれば自動で選ばれ、分からなければ関東（館山近郊）を仮置きして送料を出す。
-     ＝「住所不明→送料が空のまま保存」を無くす（出荷35件中0件が送料入りだった） -->
-<div class="form-group" style="margin:0;min-width:110px;"><label>届け先の地域</label>
-  <select class="form-input" id="ship-direct-area" onchange="shipDirectFreightAuto(true)">
-    <option value="関東" selected>関東</option>
-  </select>
-</div>
-```
+すべて `index.html`（ジビエ基幹・静的PWA）。関数追加と数か所の置換。sw.js / manifest.json は触っていない。
 
-料金表の読み込みと計算（新規）:
-```js
-let shipRatesCache = null;      // [{carrier, area, size_code, base_fee, cool_surcharge}]
-let shipAreasCache = null;      // [{carrier, pref, area}]
-const SHIP_DEFAULT_AREA = '関東';   // 館山近郊のお客様が大半。住所不明時の仮置き（画面で明示する）
-async function shipLoadRates() {
-  if (shipRatesCache) return shipRatesCache;
-  try {
-    const [rates, areas] = await Promise.all([
-      sb('GET', 'shipping_rates', null, '?select=carrier,area,size_code,base_fee,cool_surcharge&limit=500'),
-      sb('GET', 'shipping_areas', null, '?select=carrier,pref,area&limit=200')
-    ]);
-    shipRatesCache = Array.isArray(rates) ? rates : [];
-    shipAreasCache = Array.isArray(areas) ? areas : [];
-  } catch (e) {
-    shipRatesCache = []; shipAreasCache = [];
-  }
-  return shipRatesCache;
-}
-// 住所文字列 → 都道府県（DB側 tgc_addr_pref と同じ規則）
-function shipAddrPref(addr) {
-  const m = String(addr || '').match(/(東京都|北海道|京都府|大阪府|[一-龠]{2,3}県)/);
-  return m ? m[1] : '';
-}
-// 運送会社ごとの地域一覧（料金表にある順）。読み込み前は関東だけ
-function shipAreasFor(carrier) {
-  const seen = new Set(), out = [];
-  (shipRatesCache || []).forEach(r => { if (r.carrier === carrier && !seen.has(r.area)) { seen.add(r.area); out.push(r.area); } });
-  return out.length ? out : [SHIP_DEFAULT_AREA];
-}
-// 住所から地域を引く（その運送会社の区分で）。分からなければ ''
-function shipAreaFromAddress(addr, carrier) {
-  const pref = shipAddrPref(addr);
-  if (!pref) return '';
-  const hit = (shipAreasCache || []).find(a => a.carrier === carrier && a.pref === pref);
-  return hit ? hit.area : '';
-}
-// 料金表から送料（税抜）。無ければ null。クール便で追加料金が無いサイズ（140以上）は null＝要手入力
-function shipRateFromTable(carrier, area, size, cool) {
-  const r = (shipRatesCache || []).find(x => x.carrier === carrier && x.area === area && Number(x.size_code) === Number(size));
-  if (!r) return null;
-  if (cool) return r.cool_surcharge == null ? null : Number(r.base_fee) + Number(r.cool_surcharge);
-  return Number(r.base_fee);
-}
-// 「届け先の地域」の選択肢を運送会社に合わせて作り直す（選択中の地域はできるだけ残す）
-function shipDirectFillAreaOptions(keepArea) {
-  const sel = document.getElementById('ship-direct-area');
-  if (!sel) return;
-  const carrier = document.getElementById('ship-direct-carrier')?.value || 'ヤマト';
-  const areas = shipAreasFor(carrier);
-  const want = keepArea || sel.value || SHIP_DEFAULT_AREA;
-  sel.innerHTML = areas.map(a => `<option value="${esc2(a)}">${esc2(a)}</option>`).join('');
-  sel.value = areas.includes(want) ? want : (areas.includes(SHIP_DEFAULT_AREA) ? SHIP_DEFAULT_AREA : areas[0]);
-}
-function shipDirectCarrierChange() {
-  shipDirectFillAreaOptions();
-  shipDirectFreightAuto(true);
-}
-```
+### 4-1. 直販出荷の送料 — 住所が分からなくても「届け先の地域」から必ず出す（第1版）
+- **何が起きる問題か**: 住所不明の出荷先では送料欄が空のまま「発送」で確定され、請求書・納品書の送料欄が全部空になる（35/35）。
+- **何を直すか**: 「届け先の地域」select（`#ship-direct-area`）を追加。料金表 `shipping_rates` / `shipping_areas` を端末に一度読む。
+  送料は2段: ①住所が分かる → 従来どおり DB の `tgc_compute_freight` を正とし、住所の都道府県から地域も自動選択
+  ②住所不明／DBで引けない → 画面の地域（既定「関東」。**仮置きであることを画面に明示**）で料金表から算出。
+  確定前ガード: 「発送」で送料が空なら確定直前に再計算、それでも空なら **確定しない**（toast で出口を示す）。
+- **既存動作への影響**: 住所が分かる出荷先の計算経路（RPC）と、手入力最優先・手渡し（送料なし）は変えていない。
+  変わるのは「住所不明で空欄のまま確定できた」→「地域から金額が入る／出せなければ止まる」。
+  保存本体（`recordDirectShipment` / `delivery.freight`）は #252 のまま。
 
-自動計算（置換。①住所→DB計算 ②地域→料金表 の2段）:
-```js
-async function shipDirectFreightAuto(force) {
-  const note = document.getElementById('ship-direct-freight-note');
-  const fEl = document.getElementById('ship-direct-freight');
-  if (!fEl || document.getElementById('ship-direct-method')?.value !== '発送') return;
-  if (!force && fEl.value) return;              // 手入力済みは尊重する
-  const name = (document.getElementById('ship-direct-cust')?.value || '').trim();
-  const addr = shipCustAddrMap[name] || '';
-  const opts = {
-    carrier: document.getElementById('ship-direct-carrier').value,
-    size: parseInt(document.getElementById('ship-direct-size').value, 10),
-    cool: document.getElementById('ship-direct-cool').checked
-  };
-  const seq = ++shipFreightSeq;
-  if (note) note.textContent = '計算中…';
-  await shipLoadRates();
-  if (seq !== shipFreightSeq) return;
-  shipDirectFillAreaOptions();
-  const areaSel = document.getElementById('ship-direct-area');
+### 4-1'. 第2版: 自動計算の金額が出荷先を変えても残る（発見→修正）
+- **何が起きる問題か**: 店Aの住所で自動計算した金額が入った状態で出荷先を店B（住所不明・別地域）に変えると、
+  「値が入っている＝手入力」と見なして再計算せず、**Aの送料のままBの出荷が確定できる**。
+- **何を直すか**: `shipFreightAutoFilled` フラグを追加。自動計算で入れた金額は出荷先変更（`force=false`）で計算し直す。
+  手入力（`input` イベント）でフラグを落とし、以後は上書きしない。料金表に無い組合せで再計算したとき、
+  **消すのは自動計算の金額だけ**で手入力は残す（第1版は手入力も消していた＝退行だったので直した）。
+- **既存動作への影響**: 手入力の尊重は強くなる方向。自動計算の金額だけが追従する。
 
-  // ① 住所が分かる → 住所の都道府県から地域を決め、DBの料金計算（tgc_compute_freight）を正とする
-  let v = null, basis = '';
-  if (addr) {
-    const area = shipAreaFromAddress(addr, opts.carrier);
-    if (area && areaSel) shipDirectFillAreaOptions(area);
-    v = await shipComputeFreight(addr, opts);
-    if (seq !== shipFreightSeq) return;
-    if (v == null && area) v = shipRateFromTable(opts.carrier, area, opts.size, opts.cool);
-    basis = `${esc2(name)} の住所（${esc2(shipAddrPref(addr) || '都道府県不明')}）から算出`;
-  }
-  // ② 住所が分からない／料金表で引けない → 画面の「届け先の地域」で計算する（既定は関東）
-  if (v == null) {
-    const area = areaSel ? areaSel.value : SHIP_DEFAULT_AREA;
-    v = shipRateFromTable(opts.carrier, area, opts.size, opts.cool);
-    basis = addr
-      ? `届け先の地域「${esc2(area)}」で算出`
-      : `<span style="color:var(--gold)">住所が分からないため、届け先の地域「${esc2(area)}」で算出しました。違う地域なら選び直してください。</span>`;
-  }
-  if (seq !== shipFreightSeq) return;
-  if (v == null) {
-    fEl.value = '';
-    if (note) note.innerHTML = `<span style="color:var(--gold)">${esc2(opts.carrier)} ${opts.size}サイズ${opts.cool ? '・クール' : ''}は料金表にありません（クール便は120サイズまで）。送料を直接入力してください。</span>`;
-    return;
-  }
-  fEl.value = v;
-  if (note) note.innerHTML = `${basis} → <b style="color:var(--gold)">¥${v.toLocaleString()}</b>（税抜・${esc2(opts.carrier)} ${opts.size}サイズ${opts.cool ? '・クール' : ''}）`;
-}
-```
+### 4-2. 第2版: 料金表を一度読めなかった端末が以後ずっと手入力になる（発見→修正）
+- **何が起きる問題か**: `shipLoadRates` が通信失敗すると空配列をキャッシュし、リロードまで自動計算が一切効かない。
+- **何を直すか**: 失敗時はキャッシュしない（次の操作で読み直す）。読めていない時の案内文を
+  「料金表を読み込めませんでした。↻ 再計算を押すか、送料を直接入力してください」に。
+- **既存動作への影響**: なし（成功時の挙動は同じ）。
 
-確定前ガード（`shipDirectConfirm` 冒頭の確認文を作る部分を置換）:
-```js
-if (_dm === '発送') {
-  // 送料が空なら、確定の直前にもう一度だけ自動計算する（住所不明でも地域から出る）。
-  // それでも空なら確定しない＝「送料なしの発送」を黙って記録しない
-  let _fv = parseInt(document.getElementById('ship-direct-freight').value, 10);
-  if (!(isFinite(_fv) && _fv >= 0)) {
-    await shipDirectFreightAuto(true);
-    _fv = parseInt(document.getElementById('ship-direct-freight').value, 10);
-  }
-  if (!(isFinite(_fv) && _fv >= 0)) {
-    toast('送料が空です。「届け先の地域」を選ぶか送料を入力してください（着払いなら 0、送料が無い受け渡しなら「手渡し・持ち帰り」を選択）', 'error');
-    document.getElementById('ship-direct-freight')?.focus();
-    return;
-  }
-  const _cr = document.getElementById('ship-direct-carrier').value;
-  const _sz = document.getElementById('ship-direct-size').value;
-  const _cl = document.getElementById('ship-direct-cool').checked ? '・クール' : '';
-  const _ar = document.getElementById('ship-direct-area')?.value || '';
-  _dl = `受け渡し: 発送（${_cr} ${_sz}サイズ${_cl}${_ar ? '・' + _ar : ''}）\n送料: ¥${_fv.toLocaleString()}（税抜）`;
-}
-```
-保存本体（`shipBody.freight` を `isFinite(fv) && fv >= 0` のときだけ入れる）は変えていない。
+### 4-3. 第2版: 「クール便は120サイズまで」と決め打ちの文言（表示の不整合→修正）
+- **何が起きる問題か**: 料金表に無い組合せの案内が「クール便は120サイズまで」固定で、佐川（140にクールあり）や
+  サイズ自体が無い場合に誤った説明になる。
+- **何を直すか**: `shipRateMissingMsg()` で料金表から **その運送会社・地域で実際にあるサイズ**を列挙して案内する。
+  BASE 側（`baseFreightAuto`）も同じ関数を使う。
+- **既存動作への影響**: 文言のみ。
 
-## 変更2: BASE注文の発送 — 購入者の都道府県から送料を先に入れておく
+### 4-4. BASE注文の発送 — 購入者の都道府県から送料を先に入れる（第1版）
+- **何が起きる問題か**: BASE の発送処理でも送料欄は手入力のみで、直近4件すべて空。
+- **何を直すか**: `base_order_detail` の `order.prefecture` → 地域 → 料金表で `baseFreightAuto(key,false)` が先に埋める。
+  運送会社・サイズ・クールの変更で再計算。発送処理直前にも空なら再計算。
+- **既存動作への影響**: BASE 経路は従来どおり「それでも空なら記録だけ進める」（料金表が読めない環境で発送が止まらない。E2Eで固定）。
 
-BASEの注文情報（`base_order_detail` → `order.prefecture`）は必ず都道府県を持つ。カード描画時に
-`baseFreightAuto(key, false)` で送料を埋め、運送会社・サイズ・クールの変更で再計算。発送処理の直前にも空なら再計算。
-**BASE経路は従来どおり「それでも空なら記録だけ進める」**（料金表が読めない環境で発送が止まらないように。テストで固定）。
+### 4-5. 個体の一生ビュー — 「とどけた先」に出店を載せ、「こえ」を本物につなぐ（第1版 ＋ 第2版）
+- **何が起きる問題か**: 出店で売れた個体が「まだ販売の記録がひも付いていません」と出る。声は #252 が
+  `meal_voices` を画面から直接 GET しているが、本番の `meal_voices` は RLS `meal_voices_deny`（public / ALL /
+  `USING false`）のため **anon からは常に0件が静かに返る**（エラーにならない）。
+- **何を直すか**:
+  - 出店: `sale_event_items` を `or=(individual_label.eq.X,member_labels.cs.{X})` で引き、`sale_events` と結合して
+    「とどけた先」に行を追加（🏕 会場／品名（n頭のブレンド）／売れた数/持出数／開催日）。段階「とどけた」に出店回数。
+  - 声: 物語ページ（s.html）と同じ `story_get_individual`（SECURITY DEFINER・公開済みのみ）で公開済みの声を表示、
+    `staff_voices_list('pending')` をこの個体で絞って承認待ち件数＋声タブへのボタン。未公開の本文は出さない
+    （「承認してから公開」#221 の建付けを崩さない）。
+  - **第2版**: 承認待ち件数の取得失敗（権限・通信）を `null` にして「承認待ちの件数は取得できませんでした（権限か通信）」と表示。
+    「0件」と区別する（サイレント失敗を作らない）。#243 マージ後に効いてくる。
+  - 各取得は個別 try/catch。RPC が 404 でも一生ビュー全体は落ちない（E2Eで 404 を流して確認）。
+- **既存動作への影響**: 一生ビューは読み取り専用のまま。書き込み経路なし。`#252` の①ラベルQR・②出荷先必須はそのまま。
+  #252 の E2E（`line-voice-and-shipment-link`）③をこの取り方に合わせて書き換えた（`meal_voices` を直接読まないことも検証）。
 
-```js
-async function baseFreightAuto(key, force) {
-  const fEl = document.getElementById('base-freight-' + key);
-  const note = document.getElementById('base-freight-note-' + key);
-  if (!fEl) return null;
-  if (!force && fEl.value) return parseInt(fEl.value, 10);
-  const od = baseOrderCache[key] || {};
-  const carrier = document.getElementById('base-carrier-' + key)?.value || 'ヤマト';
-  const size = parseInt(document.getElementById('base-size-' + key)?.value || '100', 10);
-  const cool = !!document.getElementById('base-cool-' + key)?.checked;
-  await shipLoadRates();
-  const pref = shipAddrPref(od.prefecture || od.address || '');
-  const areaFromPref = pref ? shipAreaFromAddress(pref, carrier) : '';
-  const area = areaFromPref || SHIP_DEFAULT_AREA;
-  const v = shipRateFromTable(carrier, area, size, cool);
-  if (v == null) {
-    fEl.value = '';
-    if (note) note.innerHTML = `<span style="color:var(--gold)">${esc2(carrier)} ${size}サイズ${cool ? '・クール' : ''}は料金表にありません。送料を直接入力してください。</span>`;
-    return null;
-  }
-  fEl.value = v;
-  if (note) note.innerHTML = areaFromPref
-    ? `届け先 ${esc2(pref)}（${esc2(area)}）→ <b style="color:var(--gold)">¥${v.toLocaleString()}</b>（税抜・${esc2(carrier)} ${size}${cool ? '・クール' : ''}）`
-    : `<span style="color:var(--gold)">届け先の都道府県が取れないため、関東で算出 ¥${v.toLocaleString()}（税抜）。違えば送料を直してください。</span>`;
-  return v;
-}
-```
-`baseOrderShip` の確認文を作る直前:
-```js
-let _fv = _fEl ? parseInt(_fEl.value, 10) : NaN;
-if (!(isFinite(_fv) && _fv >= 0)) { await baseFreightAuto(key, true); _fv = _fEl ? parseInt(_fEl.value, 10) : NaN; }
-```
+## 5. DB・既存データ・設計方針への変更有無（確認根拠）
 
-注文経由の出荷（`shipOrderConfirmed`）は `orders.delivery_address` から従来どおりDB計算。今回は触っていない
-（住所が空の注文は注文ポータル側の必須項目なので実データでは起きていない。今後の計測で見る）。
+- **DB スキーマ・RLS・権限・関数**: 変更なし。`git diff --stat origin/main...HEAD` に `migrations/` も `alco-os/supabase/` も含まれない。
+- **既存データ**: 変更なし。本番への操作は `SELECT` のみ（実測SQLは §10）。過去35件の `shipments.freight` は追記していない。
+- **書き込みの意味**: `shipments.freight` に入る値が「空」→「計算値」になるだけ。列・型・制約は同じ。`orders / order_items / inventory`
+  への書き込み内容は #252 の `recordDirectShipment` のまま。
+- **公開／非公開境界**: `meal_voices` は RLS deny-all のまま RPC 経由。`shipping_rates` / `shipping_areas` は元から RLS 無効の料金表。
+- **認証・認可**: 変更なし。staff-key を要する操作を増やしても減らしてもいない。
+- **既存画面・外部連携**: 直販出荷／BASE発送／一生ビューの表示・入力項目の追加のみ。s.html・注文ポータル・LINE は触っていない。
 
-## 変更3: 個体の一生ビュー — 「とどけた先」に出店を載せ、「こえ」を本物につなぐ
+## 6. 今回の制約内では未解決（DB側の変更が必要。**適用していない**。最小変更案のみ）
 
-### 取得（`indLifeOpen` に追加）
-```js
-// 出店・直売会で売れた分（注文を通らない販売）。この個体が単独で載った品と、ブレンド品の一員として載った品
-let eventItems = [], events = [];
-try {
-  eventItems = await sb('GET', 'sale_event_items', null,
-    `?or=(individual_label.eq.${enc},member_labels.cs.{${enc}})&select=id,event_id,kind,item_name,part_name,qty_taken,qty_sold,qty_sample,amount,member_labels&order=created_at.asc`) || [];
-  const evIds = [...new Set(eventItems.map(x => x.event_id).filter(Boolean))];
-  if (evIds.length) {
-    events = await sb('GET', 'sale_events', null, `?id=in.(${evIds.join(',')})&deleted_at=is.null&select=id,event_date,venue_name,title,status`) || [];
-  }
-} catch (e) {}
-
-// 食べた人の声。公開済みは物語ページと同じRPC（story_get_individual）、承認待ちは職員用RPCから件数だけ
-let voices = [], pendingVoices = 0;
-try {
-  const story = await sb('POST', 'rpc/story_get_individual', { p_label: labelId });
-  voices = (story && Array.isArray(story.voices)) ? story.voices : [];
-} catch (e) {}
-try {
-  const pend = await sb('POST', 'rpc/staff_voices_list', { p_status: 'pending', p_limit: 500 }) || [];
-  pendingVoices = pend.filter(v => v.individual_label === labelId).length;
-} catch (e) {}
-
-indLifeData = { ind, parts, logs, batchCodes, packs, items, orders, custs, eventItems, events, voices, pendingVoices };
-```
-- `meal_voices` は RLS が deny-all（public）のため直接は読まず、**既存RPCだけ**を使う。
-  公開済み＝物語ページ（s.html）が見せているものと**同じ関数**の結果なので、画面間で食い違わない。
-- 承認待ちの件数は `staff_voices_list('pending')` を個体番号で絞る（新RPCを作らない。声は現状0件で、500件上限は当面十分。
-  増えたら個体別RPCに置き換える）。
-- RPCが無い／失敗しても一生ビュー全体は落ちない（各取得を個別に try/catch。テストで404を流して確認）。
-
-### 描画（`indLifeRender`）
-- 段階インジケータ: `とどけた` は注文 or 出店があれば点灯、サブに「n件・出店m回」。`こえ` は公開済みがあれば点灯、
-  サブに「n件（待ちk）」。固定の「準備中」を廃止。
-- とどけた先の表に出店の行を追加（🏕 会場 / 品名（n頭のブレンド）/ 売れた数/持出数 / 開催日）。
-- 声の節: 公開済みの声を名前・★・料理・本文・日付で列挙。承認待ちがあれば件数と「💬 食べた人の声で確認する」ボタン
-  （`indLifeGoVoices()`＝モーダルを閉じて声タブへ）。0件なら「QRから残せる／承認すると出る」の案内。
-
-```js
-function indLifeGoVoices() {
-  const modal = document.getElementById('indLifeModal');
-  if (modal) modal.style.display = 'none';
-  const btn = document.querySelector('.tab-btn[data-tab="voices"]');
-  if (btn) btn.click();
-}
-```
-
-## #252（同日に main へ入った別セッションの変更）との関係
-
-PR #252「一頭の線を末端まで通す」が同じ `index.html` の一生ビューと直販確定を触っていたため、その上にリベースした。
-
-- 直販確定: #252 は書き込みを `recordDirectShipment()` に共通化。本変更の「確定前ガード」はその手前（確認文を作る所）に
-  入るので衝突せず、`delivery.freight` の組み立ても #252 のまま。手動「出荷済」（`changeStatus`）経路は送料を持たない
-  （注文なし・手渡し相当）ので今回は触っていない。
-- 一生ビューの声: #252 は `meal_voices` を **画面から直接 GET** していたが、本番の `meal_voices` は
-  `meal_voices_deny`（public / ALL / `USING false`）の RLS で **anon からは常に0件が静かに返る**（エラーにならない）。
-  そのため、物語ページ（s.html）と同じ `story_get_individual`（SECURITY DEFINER・公開済みのみ）と、
-  職員用の `staff_voices_list('pending')`（承認待ち件数）で引く本変更側を採用した。
-  未公開の本文は一生ビューに出さず件数と行き先（声タブ）だけにする＝「承認してから公開」（#221）の建付けを崩さない。
-  #252 の E2E（`line-voice-and-shipment-link`）の③をこの取り方に合わせて書き換えた（`meal_voices` を直接読まないことも確認）。
-- ラベルQR・出荷先必須（#252 の①②）はそのまま。
-
-## テスト
-
-| ファイル | 件数 | 主な確認 |
+| 問題 | なぜアプリ側だけでは解決しないか | 最小変更案（未適用） |
 |---|---|---|
-| `direct-ship-freight.e2e.js` | 28/28 | 住所あり→DB計算1500・地域も自動選択／住所なし→関東で1300と「仮定」の明示／地域選び直し1600／運送会社変更で地域保持＋区分の選択肢／料金表に無い組合せは空欄＋案内／計算中の手入力を上書きしない／**空のまま確定→直前に自動計算して1300を保存**／**出せないまま空なら確定しない（POSTなし・ボタンは押せるまま）**／手渡しは送料なし |
-| `base-ship-freight.e2e.js` | 18/18 | 大阪府→関西で1600を先に入れる・根拠表示／条件変更で再計算／手入力が優先／空のまま発送→直前に自動計算／料金表が読めなければ従来どおり記録は通る |
-| `individual-life.e2e.js` | 26/26 | 出店の行（会場・品名・7/40個・11頭のブレンド）／段階「とどけた」に出店1回／問い合わせが `individual_label.eq` と `member_labels.cs` の両方／声が `story_get_individual` から出る／承認待ちはこの個体の分だけ1件／段階「こえ」1件（待ち1）／「準備中」が消えた／ボタンで声タブへ／販売・声なしでも壊れない／RPC 404でも一生ビューは出る |
+| 承認待ちの声をこの個体だけ取りたい | `meal_voices` は deny-all。`staff_voices_list('pending',500)` を端末で絞るのは 500 件超で漏れる | `staff_voices_list_by_label(p_label text)`（SECURITY DEFINER・件数と status のみ返す）を追加。#243 のラッパー方針（staff-key）に合わせる |
+| #243 適用後、一生ビューの承認待ち件数が取れなくなる | `staff_voices_list` が staff-key 必須になる（#243）。index.html は anon キー直結 | #243 側で「承認待ちの**件数だけ**返す」軽い RPC を anon 許可にするか、一生ビューでも `staffKeyEnsure()` を掛ける。どちらも #243 と同時に決める |
+| 出店で売れた個体の把握が `member_labels` 配列の全文走査 | `sale_event_items.member_labels` に GIN index が無い（現状13行なので実害なし） | 行数が増えたら `create index ... using gin (member_labels)`。今は不要 |
+| 手動「出荷済」（`changeStatus`）の出荷に送料が無い | #252 が作る出荷は「手渡し相当」で配送情報を持たない。送料を持たせるには UI の追加が要る（今回の対象外） | 業務判断（手動出荷済に発送があるか）を確認してから |
 
-全E2E（tests/e2e/ 54本）の結果は末尾「実行結果」に記載。
+## 7. 検証
 
-## 制約の遵守
+### 実施したもの（ローカル・Playwright・ネットワークは全部モック。本番DBへの書き込みなし）
+- 修正前の再現: 第1版時点の E2E「住所不明なら手入力を促す」（旧 direct-ship-freight）が、空欄のまま確定できることを示していた。
+  本番データでも直近の直販出荷（住所無し6件）がすべて `freight null`（§2）。
+- 修正後の解消と回帰（最終コード・単独実行）:
+  `direct-ship-freight` **33/33** / `base-ship-freight` **18/18** / `individual-life` **27/27** /
+  `line-voice-and-shipment-link` **18/18** / `label-layout-overlap` **19/19**
+- 全54本の一括実行（直列・他のブラウザテストを並走させない）: 結果は §11。
+- 本番の読み取りで、PostgREST の述語と同じ SQL（`individual_label = X or member_labels @> array[X]`）が対象行を返すことを確認。
 
-- 本番DBへの書き込みなし（計測は SELECT のみ）。マイグレーションなし。
-- `individuals` / `inventory` / `orders` / `shipments` の**書き込み内容は変えていない**（`shipments.freight` に入る値が「空」から「計算値」になるだけ）。
-- 既存の手入力・上書き防止・手渡し（送料なし）の挙動は既存テストのまま。
-- 一生ビューは読み取り専用のまま（新しい書き込み経路なし）。
-- 触っていないPWA資産: `sw.js` / `manifest.json`。`index.html` の変更は関数追加と3か所の置換のみ。
+### 実施できなかったもの
+- **本番 REST への直接リクエスト**（PostgREST の URL 構文そのものの実機確認）: サンドボックスの egress が supabase.co への
+  CONNECT を 403 で拒否。E2E はモックの URL 文字列を検証しているだけ。→ デプロイ後、出店で売れた個体（例 TGC-08-T276）の
+  一生ビューで「とどけた先」に 🏕 の行が出ることを目視確認してほしい（§8）。
+- 実機のスマホでの直販出荷（UI の並び・タップ）: 未実施。
+- `tests/e2e` の既存ドリフト5本（capture-* 4本・seika-ident-reuse）: 変更前の HEAD でも同じ失敗。今回は直していない。
 
-## 判断を仰ぎたい点（勝手に決めていないこと）
+## 8. 人の判断が必要な事項
 
-1. **住所不明時の仮置きを「関東」にした。** 館山近郊の顧客が大半という前提。画面で「仮定」と明示し選び直せるが、
-   関西などへ送るときに気づかず確定する可能性はある（従来は「空」だったので、間違った金額 vs 空欄 のトレードオフ）。
-   仮置きをやめて「地域を必ず選ばせる（未選択なら確定不可）」にもできる。運用で決めてほしい。
-2. **直販の「発送」で送料が空なら確定しない**ようにした。出口は用意した（地域選択／金額／着払い0／手渡し）。
-   現場で止まる場面があれば緩める。
-3. 過去35件の出荷の送料は**追記していない**（元データは書き換えない方針）。必要なら `shipments.carrier/size_code/is_cool` が
-   入っている6件（08-28〜09-01・ヤマト100クール）は料金表から埋められる。
+1. 住所不明時の仮置きを「関東」にした（従来は空欄）。間違った金額 vs 空欄のトレードオフ。「必ず地域を選ばせる」に変えるか。
+2. 直販「発送」で送料が空なら確定しない。現場で止まる場面があれば緩める。
+3. 過去35件の送料の追記（元データは書き換えない方針。`carrier/size_code/is_cool` が入っている6件は料金表から埋められる）。
+4. #243 マージ時の一生ビューの承認待ち件数の扱い（§6）。
+5. デプロイ後の実機確認: TGC-08-T276 の一生ビュー（出店の行）／住所の無い出荷先での直販出荷（地域「関東」で金額が入る）。
 
-## 見送ったもの（次回以降）
+## 9. 見送ったもの（別PR）
+- 注文経由の出荷（`shipOrderConfirmed`）への地域フォールバック（実データで住所空の注文が出ていない）。
+- 既存E2E 5本のドリフト修正。
 
-- 注文経由の出荷（`shipOrderConfirmed`）への地域フォールバック（実データで住所空が出ていないため）。
-- 声の個体別RPC（`staff_voices_list('pending')` のクライアント絞り込みで足りる規模）。
-- 既存の壊れているE2E 3本（下記）は `capture-form.html` 側のテストのドリフトで、本変更と無関係。別PRで直す。
-
-## 実測SQL（次回の計測用・読み取りのみ）
+## 10. 実測SQL（次回の計測用・読み取りのみ）
 
 ```sql
 with ind as (select * from individuals where deleted_at is null and label_id not like 'AUTO-%'),
@@ -376,19 +202,6 @@ select
   (select count(*) from ind where stomach_contents is not null and array_length(stomach_contents,1) > 0) as stomach;
 ```
 
-## 実行結果
+## 11. 実行結果・提出物
 
-実行コマンド（1本ずつ）:
-```
-CHROME=/opt/pw-browsers/chromium-1194/chrome-linux/chrome NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node tests/e2e/<name>.e2e.js
-```
-
-- リベース後（origin/main 15236e7 の上）の最終コードで再実行:
-  `direct-ship-freight` **28/28** / `base-ship-freight` **18/18** / `individual-life` **26/26** /
-  `line-voice-and-shipment-link` **18/18** / `label-layout-overlap` **19/19** / `shipping-freight` **6/6** / `stomach-contents` **19/19**
-- 全54本の一括実行（リベース前のコード・直列実行）: **47本 EXIT 0**。落ちた7本の内訳:
-  - 変更と無関係（**変更前の deed897 をそのまま取り出した worktree でも同じ失敗**）: `capture-ar-camera` / `capture-edit-from-list` /
-    `capture-elderly-ui` / `capture-usual-flow`（`capture-form.html` のテスト。当日番号の連番・体長入力・?staff= 画面・端末DL判定）と
-    `seika-ident-reuse`（21/22。「ラベルが出たことも伝える」）。別PRで直す。
-  - 一括実行中だけ落ちた（同時に別のブラウザテストを走らせていた）: `shipping-freight` / `stomach-contents` → 単独では上記のとおり全件成功。
-    clean な origin/main でも単独で全件成功（フレーク）。
+（コミット後に追記）
