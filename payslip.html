@@ -121,7 +121,7 @@ function renderSlip(staffName, month, l, trips, attendance){
       <tr><th>実働時間</th><td>${N(l.work_hours)}時間</td></tr>
       <tr><th>時給</th><td>${yen(N(l.hourly_wage))}</td></tr>
       <tr><th>基本給</th><td>${yen(c.base)}</td></tr>
-      ${c.stop?`<tr><th>止めさし手当</th><td>${yen(c.stop)}（${N(l.stopkill_count)}回×${yen(N(l.stopkill_unit)||3000)}）</td></tr>`:''}
+      ${c.stop?`<tr><th>止めさし搬入手当</th><td>${yen(c.stop)}（${N(l.stopkill_count)}回×${yen(N(l.stopkill_unit)||3000)}）</td></tr>`:''}
       ${other?`<tr><th>その他手当</th><td>${yen(other)}</td></tr>`:''}
       ${c.comm?`<tr><th>通勤費</th><td>${yen(c.comm)}<div class="note">${esc(commParts.join(' ＋ '))}</div></td></tr>`:''}
       <tr><th>支給額（総額）</th><td class="big">${yen(pay)}</td></tr>
