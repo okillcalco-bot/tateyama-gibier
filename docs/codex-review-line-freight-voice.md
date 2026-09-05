@@ -152,7 +152,7 @@
 - 修正後の解消と回帰（最終コード・単独実行）:
   `direct-ship-freight` **33/33** / `base-ship-freight` **18/18** / `individual-life` **27/27** /
   `line-voice-and-shipment-link` **18/18** / `label-layout-overlap` **19/19**
-- 全54本の一括実行（直列・他のブラウザテストを並走させない）: 結果は §11。
+- 全57本の一括実行（直列・他のブラウザテストを並走させない）: 結果は §11。
 - 本番の読み取りで、PostgREST の述語と同じ SQL（`individual_label = X or member_labels @> array[X]`）が対象行を返すことを確認。
 
 ### 実施できなかったもの
@@ -204,4 +204,20 @@ select
 
 ## 11. 実行結果・提出物
 
-（コミット後に追記）
+### 提出物
+- PR（Draft・merge しない）: https://github.com/okillcalco-bot/tateyama-gibier/pull/258
+- base: `5bfaa47`（origin/main）／ head: PR #258 の最新コミット（第1版 ba145b1 → リベース → 第2版 7d9df88 → 本書の追記コミット）
+- コード一式（差分・変更ファイル全文・関連コード。anon キーはマスク）: 提出時に tar.gz で別添
+
+### E2E 全57本（main の #253〜#256 で3本増）の直列一括実行（第2版の最終コード・他のブラウザテストを並走させない）
+- **52本 EXIT 0**。落ちた5本は §7 の既存ドリフト（`capture-ar-camera` / `capture-edit-from-list` / `capture-elderly-ui` /
+  `capture-usual-flow` / `seika-ident-reuse`）で、**変更前の deed897 をそのまま取り出した worktree でも同じ失敗**を確認済み。
+  `capture-form.html` は本変更で触っていない。`seika-ident-reuse` は 21/22（「ラベルが出たことも伝える」）で第1版以前から。
+- 第1版の一括実行で並走のために落ちた `shipping-freight` / `stomach-contents` は、今回の直列実行では成功（フレークだった）。
+- 変更した4本の結果（同じ一括実行内）: `individual-life` 27/27 / `direct-ship-freight` 33/33 / `base-ship-freight` 18/18 /
+  `line-voice-and-shipment-link` 全PASS（EXIT 0）。
+
+実行コマンド（1本ずつ）:
+```
+CHROME=/opt/pw-browsers/chromium-1194/chrome-linux/chrome NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node tests/e2e/<name>.e2e.js
+```
