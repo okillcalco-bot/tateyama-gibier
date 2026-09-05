@@ -3116,29 +3116,58 @@ function invPullToggleAll(on){
   document.querySelectorAll('.inv-pull-cb').forEach(cb=>{cb.checked=on;});
 }
 
-function invPullApply(){
+// 品名からサブ部位の丸括弧（モモ（ソト）等）を取り除いた基本部位名を返す。
+// 精肉時の部位分けはそのまま（在庫・在庫ラベルは変更しない）。請求書に積むときだけ束ねる。
+function invPartBase(name){
+  return (name||'').replace(/\s*（[^（）]*）\s*$/, '').trim();
+}
+async function invPullApply(){
   const picked=[];
   document.querySelectorAll('.inv-pull-cb:checked').forEach(cb=>{const o=invPullOrders[parseInt(cb.dataset.i,10)];if(o)picked.push(o);});
   if(!picked.length){alert('取り込む注文を選んでください');return}
   const dup=picked.filter(o=>o._billed);
   if(dup.length && !confirm(`請求済みの注文が${dup.length}件含まれています。二重請求になる可能性があります。続けますか？`)) return;
 
-  // 既存の空行を捨てて、注文明細を積む
-  const keep=invLines.filter(l=>(l.name||'').trim()!==''||invLineAmount(l)>0);
+  // 明細の等級（肉ランク）は在庫からまとめて引く（グループ分け・自動単価に使う）
+  const invIds=[...new Set(picked.flatMap(o=>(o.order_items||[]).map(it=>it.inventory_id).filter(Boolean)))];
+  let gradeMap={};
+  if(invIds.length){
+    const rows=await sb('GET','inventory','',`?id=in.(${invIds.join(',')})&select=id,grade`);
+    rows.forEach(r=>{gradeMap[r.id]=r.grade;});
+  }
+  const cust=allCustomers.find(c=>c.id===document.getElementById('invCustomerId').value);
+  const rank=cust?.price_rank||'standard';
+
+  // 同じ納品日・同じ部位（サブ部位の括弧は丸めて）・同じ肉ランクは1行にまとめる
+  const groups=new Map();
   picked.forEach(o=>{
     (o.order_items||[]).forEach(it=>{
-      const qty=it.weight_kg!=null?it.weight_kg:it.weight;
-      const price=it.unit_price;
-      const amt=Number(it.subtotal!=null?it.subtotal:it.amount)||0;
-      keep.push({
-        name:[it.species||'',it.part_name||''].filter(Boolean).join(' ')||'商品',
-        qty:qty!=null?qty:'', unit:qty!=null?'kg':'式',
-        // 単価が無い/合わない場合は金額から逆算して明細金額を一致させる
-        price:price!=null?price:(qty?Math.round(amt/qty):amt),
-        tax:8
-      });
+      const qty=Number(it.weight_kg!=null?it.weight_kg:it.weight)||0;
+      const grade=it.grade_snapshot||gradeMap[it.inventory_id]||null;
+      const base=invPartBase(it.part_name);
+      const key=[o.delivery_date||'',it.species||'',base,grade||''].join('|');
+      if(!groups.has(key)) groups.set(key,{delivery_date:o.delivery_date,species:it.species,base,grade,qty:0,amt:0,anyPrice:null});
+      const g=groups.get(key);
+      g.qty+=qty;
+      g.amt+=Number(it.subtotal!=null?it.subtotal:it.amount)||0;
+      if(g.anyPrice==null && it.unit_price!=null) g.anyPrice=it.unit_price;
     });
     if(!invLinkedOrderIds.includes(o.id)) invLinkedOrderIds.push(o.id);
+  });
+
+  // 既存の空行を捨てて、まとめた明細を積む
+  const keep=invLines.filter(l=>(l.name||'').trim()!==''||invLineAmount(l)>0);
+  groups.forEach(g=>{
+    const d=g.delivery_date?new Date(g.delivery_date+'T00:00:00'):null;
+    const dLabel=d?`${d.getMonth()+1}/${d.getDate()}納品　`:'';
+    const gradeLabel=(g.grade&&g.grade!=='並')?`（${g.grade}）`:'';
+    const name=`${dLabel}${[g.species||'',g.base||''].filter(Boolean).join(' ')}${gradeLabel}`||'商品';
+    // 価格マスタに種類・部位・肉ランクが一致する単価があれば、顧客の価格ランクで自動計算
+    const pm=allPriceMaster.find(p=>p.species===g.species&&p.part_name===g.base&&(p.grade||'並')===(g.grade||'並'));
+    const pmPrice=pm?(pm['price_'+rank]??pm.price_standard):null;
+    // 一致がなければ元の単価、それも無ければ金額から逆算して明細金額を一致させる
+    const price=pmPrice!=null?pmPrice:(g.anyPrice!=null?g.anyPrice:(g.qty?Math.round(g.amt/g.qty):g.amt));
+    keep.push({name, qty:Math.round(g.qty*100)/100, unit:'kg', price, tax:8});
   });
   invLines=keep.length?keep:[newInvLine()];
   renderInvLines();
