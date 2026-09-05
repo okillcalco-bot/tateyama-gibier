@@ -269,7 +269,7 @@ async function openForm(type) {
   const sel = document.getElementById('f-staff');
   if (sel.options.length <= 1) {
     try {
-      const st = await sb('GET', 'staff', null, '?is_active=eq.true&deleted_at=is.null&select=name&order=name.asc');
+      const st = await sb('GET', 'staff_public', null, '?is_active=eq.true&select=name&order=name.asc');
       sel.innerHTML = '<option value="">選択...</option>' + st.map(s => `<option>${esc(s.name)}</option>`).join('');
     } catch (e) {}
   }

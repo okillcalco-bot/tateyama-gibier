@@ -156,7 +156,8 @@ h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600;
     <div class="brk" id="brk-box" style="display:none;">
       <label>今日の休憩時間（分）※初期値を自動入力。違う日だけ直してください</label>
       <input type="number" id="brk-min" value="60" min="0" step="5">
-      <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:14px;cursor:pointer;"><input type="checkbox" id="brk-set-default" style="width:18px;height:18px;"> この休憩時間を次回からの初期値にする</label>
+      <!-- 「初期値にする」チェックはP0-1で無効化（休憩初期値の変更は管理アプリ側のみ）。要素はJS互換のため残置し非表示 -->
+      <label style="display:none;"><input type="checkbox" id="brk-set-default" style="width:18px;height:18px;"> この休憩時間を次回からの初期値にする</label>
     </div>
 
     <!-- 退勤時の報告（作業内容・清掃） -->
@@ -389,7 +390,8 @@ function isToday() { return workDate === ymd(new Date()); }
 
 async function loadNames() {
   try {
-    staffList = await sb('GET', 'staff', null, '?select=id,name,default_break_min&deleted_at=is.null&is_active=eq.true&order=name.asc');
+    // 公開VIEW（最小列のみ・給与等は含まない）から読む。本体staffはstaff-key必須（P0-2）
+    staffList = await sb('GET', 'staff_public', null, '?select=id,name,default_break_min&is_active=eq.true&order=name.asc');
   } catch (e) { showToast('スタッフの読み込みに失敗しました。通信を確認してください。'); staffList = []; }
   document.getElementById('names').innerHTML = staffList.map(s =>
     `<button class="name-btn" onclick="select('${s.id}')">${esc(s.name)}</button>`).join('');
@@ -820,12 +822,9 @@ async function saveDefaultBreak() {
   if (!selected) return;
   const v = parseInt(document.getElementById('brk-default').value);
   if (isNaN(v) || v < 0) { showToast('休憩の初期値（分）を正しく入れてください'); return; }
-  try {
-    await sb('PATCH', 'staff', { default_break_min: v }, `?id=eq.${selected.id}`);
-    selected.default_break_min = v;
-    const s = staffList.find(x => String(x.id) === String(selected.id)); if (s) s.default_break_min = v;
-    showToast(`${selected.name}さんの休憩の初期値を ${v}分 に保存しました`);
-  } catch (e) { showToast('初期設定の保存に失敗しました。通信を確認してください。'); }
+  // 休憩初期値の変更は、スタッフキーで保護された管理アプリ（スタッフ台帳）でのみ行う。
+  // punch.html からは staff テーブルへ一切書き込まない（P0-1: 無認証のstaff書き込みを廃止）。
+  showToast('休憩の初期値は管理アプリ（スタッフ台帳）で変更してください。この端末からは変更できません。');
 }
 
 function showDone(msg, sub, warn) {
@@ -901,9 +900,8 @@ async function punchOut() {
       clock_out: t, break_minutes: brk, health_out: hv,
       work_types: works || null, stopkill_count: stopkillValue(), updated_at: new Date().toISOString(),
     }, `?id=eq.${todayRec.id}`);
-    if (document.getElementById('brk-set-default').checked) {
-      try { await sb('PATCH', 'staff', { default_break_min: brk }, `?id=eq.${selected.id}`); selected.default_break_min = brk; } catch (_e) {}
-    }
+    // 休憩初期値のstaffテーブルへの保存は廃止（無認証write。管理アプリで変更する・P0-1）。
+    // この端末での退勤打刻自体（attendance）は上で保存済み。
     let cleanMsg = '';
     try {
       const n = await saveCleaning();
@@ -984,7 +982,7 @@ keepAwake();
     const y=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
     const [shifts,staff]=await Promise.all([
       sb('GET','shifts',null,`?date=eq.${y}&select=staff_id,shift_type`),
-      sb('GET','staff',null,'?select=id,name&deleted_at=is.null&is_active=eq.true')
+      sb('GET','staff_public',null,'?select=id,name&is_active=eq.true')
     ]);
     if(!shifts.length) return;
     const nm={}; staff.forEach(s=>nm[s.id]=s.name);
