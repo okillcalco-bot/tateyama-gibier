@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>館山ジビエセンター － 捕獲条件分析（月・天気）</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Barlow+Condensed:wght@400;600;700&display=swap');
+:root {
+  --bg:#0f1117; --surface:#1a1e2a; --surface2:#222736; --border:#2e3447;
+  --accent:#e8a44a; --accent2:#c06a2a; --green:#4caf7d; --red:#e05555; --blue:#5a8cd8; --yellow:#f0c040; --purple:#9b7fd4;
+  --text:#e8eaf0; --text2:#8b90a8; --radius:10px;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--text); font-family:'Noto Sans JP',sans-serif; font-size:14px; min-height:100vh; }
+.header { background:var(--surface); border-bottom:2px solid var(--accent); padding:14px 20px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; flex-wrap:wrap; gap:10px; }
+.header-title { font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:700; color:var(--accent); letter-spacing:.05em; }
+.header-sub { font-size:11px; color:var(--text2); margin-top:2px; }
+.nav-links { display:flex; gap:8px; flex-wrap:wrap; }
+.nav-link { background:var(--surface2); border:1px solid var(--border); color:var(--text2); padding:6px 12px; border-radius:6px; text-decoration:none; font-size:12px; }
+.nav-link:hover { color:var(--accent); border-color:var(--accent); }
+.filter-bar { background:var(--surface); border-bottom:1px solid var(--border); padding:12px 20px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.filter-group { display:flex; align-items:center; gap:6px; }
+.filter-label { font-size:12px; color:var(--text2); white-space:nowrap; }
+select, input[type="date"], input[type="number"] { background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:6px; font-size:13px; font-family:inherit; color-scheme:dark; }
+select:focus, input:focus { outline:none; border-color:var(--accent); }
+.btn { padding:7px 16px; border-radius:6px; border:none; cursor:pointer; font-size:13px; font-family:inherit; font-weight:500; }
+.btn-accent { background:var(--accent); color:#000; }
+.btn-accent:hover { background:var(--accent2); }
+.btn-secondary { background:var(--surface2); color:var(--text2); border:1px solid var(--border); }
+.btn-secondary:hover { color:var(--text); border-color:var(--text2); }
+.main { padding:20px; max-width:1400px; margin:0 auto; }
+.status-bar { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px 16px; margin-bottom:16px; font-size:13px; display:none; white-space:pre-wrap; }
+.status-bar.info { border-color:var(--blue); color:var(--blue); display:block; }
+.status-bar.error { border-color:var(--red); color:var(--red); display:block; }
+.status-bar.loading { border-color:var(--accent); color:var(--accent); display:block; }
+.status-bar.warn { border-color:var(--yellow); color:var(--yellow); display:block; }
+.kpi-row { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:20px; }
+.kpi-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px; position:relative; overflow:hidden; }
+.kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--kpi-color,var(--accent)); }
+.kpi-label { font-size:11px; color:var(--text2); letter-spacing:.06em; margin-bottom:6px; }
+.kpi-value { font-family:'Barlow Condensed',sans-serif; font-size:26px; font-weight:700; }
+.kpi-sub { font-size:11px; color:var(--text2); margin-top:4px; }
+.charts-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:20px; }
+.chart-full { grid-column:1 / -1; }
+.chart-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px; }
+.chart-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; gap:10px; }
+.chart-title { font-size:14px; font-weight:500; }
+.chart-subtitle { font-size:11px; color:var(--text2); margin-top:2px; line-height:1.5; }
+.chart-wrap { position:relative; height:240px; }
+table { width:100%; border-collapse:collapse; }
+th { padding:8px 10px; text-align:left; font-size:11px; color:var(--text2); font-weight:500; letter-spacing:.04em; border-bottom:1px solid var(--border); background:var(--surface2); white-space:nowrap; }
+td { padding:8px 10px; border-bottom:1px solid var(--border); font-size:13px; }
+tr:last-child td { border-bottom:none; }
+.td-num { text-align:right; font-variant-numeric:tabular-nums; font-family:'Barlow Condensed',sans-serif; font-size:15px; }
+.heat td.cell { text-align:center; font-family:'Barlow Condensed',sans-serif; font-size:15px; color:#000; font-weight:600; border-radius:4px; }
+.heat td.cell small { display:block; font-size:10px; font-weight:400; color:#222; font-family:'Noto Sans JP',sans-serif; }
+.idx-up { color:var(--green); } .idx-down { color:var(--red); } .idx-flat { color:var(--text2); }
+.note { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:14px 18px; font-size:12.5px; line-height:1.8; color:var(--text2); margin-bottom:20px; }
+.note b { color:var(--text); }
+.note ul { padding-left:18px; }
+.tag { display:inline-block; padding:1px 7px; border-radius:4px; font-size:11px; background:rgba(232,164,74,.15); color:var(--accent); margin-right:4px; }
+.muted { color:var(--text2); font-size:12px; }
+@media (max-width:1000px) { .kpi-row { grid-template-columns:repeat(2,1fr); } .charts-grid { grid-template-columns:1fr; } .chart-full { grid-column:1; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">🐗 TATEYAMA GIBIER</div>
+    <div class="header-sub">捕獲条件分析 ― 月の満ち欠け・天気と捕獲数の関係</div>
+  </div>
+  <div class="nav-links">
+    <a href="index.html" class="nav-link">📦 業務アプリ</a>
+    <a href="capture-form.html" class="nav-link">🎯 捕獲登録</a>
+    <a href="sales-dashboard.html" class="nav-link">📊 売上分析</a>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <div class="filter-group"><span class="filter-label">種類</span><select id="fSpecies"></select></div>
+  <div class="filter-group"><span class="filter-label">捕獲方法</span>
+    <select id="fMethod"><option value="">すべて</option></select></div>
+  <div class="filter-group"><span class="filter-label">市</span>
+    <select id="fCity"><option value="">すべて</option></select></div>
+  <div class="filter-group"><span class="filter-label">期間</span>
+    <input type="date" id="fFrom"><span class="filter-label">〜</span><input type="date" id="fTo"></div>
+  <div class="filter-group"><span class="filter-label">最小日数</span>
+    <select id="fMinDays" title="条件ランキングに載せるのに必要な日数（少ない日数の条件は偶然の影響が大きいため）"><option value="3">3日</option><option value="5" selected>5日</option><option value="10">10日</option></select></div>
+  <button class="btn btn-accent" onclick="runAnalysis()">🔍 分析する</button>
+  <button class="btn btn-secondary" onclick="downloadCsv()" id="btnCsv" disabled>⬇ 日別データCSV</button>
+  <span class="muted" id="lastUpdated" style="margin-left:auto"></span>
+</div>
+
+<div class="main">
+  <div id="statusBar" class="status-bar"></div>
+
+  <div class="kpi-row">
+    <div class="kpi-card" style="--kpi-color:var(--accent)"><div class="kpi-label">捕獲頭数</div><div class="kpi-value" id="kpiTotal">—</div><div class="kpi-sub" id="kpiTotalSub"></div></div>
+    <div class="kpi-card" style="--kpi-color:var(--blue)"><div class="kpi-label">対象日数</div><div class="kpi-value" id="kpiDays">—</div><div class="kpi-sub">捕獲0の日も含む</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--green)"><div class="kpi-label">1日あたり平均</div><div class="kpi-value" id="kpiMean">—</div><div class="kpi-sub">頭／日（全期間）</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--purple)"><div class="kpi-label">捕獲があった日の割合</div><div class="kpi-value" id="kpiHitRate">—</div><div class="kpi-sub" id="kpiHitSub"></div></div>
+    <div class="kpi-card" style="--kpi-color:var(--yellow)"><div class="kpi-label">気象データの揃い</div><div class="kpi-value" id="kpiWx">—</div><div class="kpi-sub" id="kpiWxSub">Open-Meteo（館山）</div></div>
+  </div>
+
+  <div class="chart-card chart-full" style="margin-bottom:20px">
+    <div class="chart-header"><div><div class="chart-title">🏆 捕獲が多い条件 ／ 少ない条件</div>
+      <div class="chart-subtitle">各条件の「1日あたり捕獲数」を全期間平均と比べた倍率。最小日数に満たない条件は除外。倍率は目安で、罠の設置数（努力量）の違いは含まれていません。</div></div></div>
+    <div id="rankBox" class="muted">分析を実行してください。</div>
+  </div>
+
+  <div class="chart-card chart-full" style="margin-bottom:20px">
+    <div class="chart-header"><div><div class="chart-title">🌙 × ☔ 月相と当日の雨の組み合わせ</div>
+      <div class="chart-subtitle">セル＝その組み合わせの日の「1日あたり捕獲数」（下段は日数）。色が濃いほど多い。日数が少ないセルは偶然の影響が大きいので注意。</div></div></div>
+    <div id="crossBox" class="muted" style="overflow-x:auto">分析を実行してください。</div>
+  </div>
+
+  <div class="charts-grid" id="chartsGrid"></div>
+
+  <div class="chart-card chart-full" style="margin-bottom:20px">
+    <div class="chart-header"><div><div class="chart-title">📈 数値項目との相関（ピアソン r）</div>
+      <div class="chart-subtitle">+なら「その値が大きい日ほど捕獲が多い」、−なら逆。|r|が0.2未満はほぼ関係なし、0.2〜0.4で弱い関係、0.4以上でそこそこの関係、が目安。日数（n）が少ないうちは参考程度。</div></div></div>
+    <div id="corrBox" class="muted">分析を実行してください。</div>
+  </div>
+
+  <div class="note" id="litNote">
+    <b>この分析に入れている要因と、その根拠（文献・現場知見からの仮説）</b>
+    <ul>
+      <li><b>月相・月明かり</b>：日付から計算（外部データ不要）。海外のイノシシ研究では、狩猟圧の高い地域ほど明るい夜（満月前後）に活動を控え、暗い夜に活動が増える傾向が報告されている一方、影響なしとする報告もあります。「新月前後で捕獲が増えるか」を確かめます。</li>
+      <li><b>当日・前日の雨、雨からの日数</b>：雨のあとは地面が柔らかくなり掘り返し（採食）がしやすく、ミミズ等も表層に出るため、雨後に動きが増えるという現場知見・報告があります。箱罠・くくり罠の捕獲は「雨の翌日〜数日後に増える」という現場の声もあり、前日の雨と日数を別々に見ます。</li>
+      <li><b>最高・最低気温</b>：イノシシは汗腺が乏しく暑さに弱いため、猛暑日は日中の活動が落ちます。逆に冬の低温は採食欲求を高め、餌が乏しい時期ほど罠にかかりやすいと言われます。</li>
+      <li><b>気圧・前日からの気圧変化</b>：低気圧接近（気圧下降）で動物の活動が変わるという狩猟者の経験則があります。裏付けは弱いため「試しに見る」項目です。</li>
+      <li><b>風・湿度</b>：強風は音と匂いの手がかりを乱すため警戒が強まり動きが減る、湿度が高いと匂いが残りやすい、などの知見があります。</li>
+      <li><b>日長（昼の長さ）・月</b>：繁殖期・作物（稲・果樹）の時期・堅果（ドングリ）の豊凶といった季節要因の代理です。季節そのものの影響が大きいので、月相や天気を見るときは「同じ季節の中で比べる」意識が必要です。</li>
+      <li><b>曜日</b>：これは動物ではなく<b>人の都合</b>（見回り・搬入する曜日）の影響を見るためです。曜日でハッキリ差が出るなら、それは「捕獲数＝見回った日の数」の色が濃いという合図です。</li>
+    </ul>
+    <b>読み方の注意</b>：ここで使える捕獲数は「搬入された頭数」で、罠を何基かけていたか（努力量）は記録に無いため、条件と捕獲数の関係には罠の増減や見回り頻度の影響が混ざります。次の一歩として、<b>罠の設置数（または見回り基数）を日ごとに記録</b>できるようになると、「罠1基・1日あたりの捕獲率」で条件ごとの差を正しく比べられます。
+    データはまだ1シーズン目（2026年4月〜）で冬季を含まないため、季節が一巡するまでは月相・天気の結論は仮のものと考えてください。
+  </div>
+
+  <div class="chart-card chart-full" style="margin-bottom:20px">
+    <div class="chart-header"><div><div class="chart-title">📅 日別データ（先頭60日）</div>
+      <div class="chart-subtitle">CSVで全期間をダウンロードできます（Excelで自由に分析するとき用）。</div></div></div>
+    <div style="overflow-x:auto"><table id="dailyTable"><thead><tr>
+      <th>日付</th><th>曜</th><th class="td-num">捕獲</th><th>月相</th><th class="td-num">月明かり</th><th>天気</th><th class="td-num">雨(mm)</th><th class="td-num">前日雨</th><th class="td-num">最高</th><th class="td-num">最低</th><th class="td-num">気圧</th><th class="td-num">気圧変化</th><th class="td-num">風(km/h)</th><th class="td-num">湿度</th>
+    </tr></thead><tbody id="dailyBody"><tr><td colspan="14" class="muted">分析を実行してください。</td></tr></tbody></table></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+// 館山ジビエセンター付近（館山市・南房総市はどちらも十数km圏なので1地点で代表させる）
+const WX_LAT = 34.9964, WX_LON = 139.8698;
+const OPEN_METEO_ARCHIVE = 'https://archive-api.open-meteo.com/v1/archive';
+const OPEN_METEO_FORECAST = 'https://api.open-meteo.com/v1/forecast';
+
+// ───────────── Supabase ─────────────
+function staffKeyGet(){ try { return localStorage.getItem('tg_staff_key') || sessionStorage.getItem('tg_staff_key') || ''; } catch(e){ return ''; } }
+async function sb(table, query=''){
+  const headers = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` };
+  const sk = staffKeyGet(); if (sk) headers['x-staff-key'] = sk;
+  const res = await fetch(`${SB_URL}/rest/v1/${table}${query}`, { headers });
+  if (!res.ok) throw new Error(await res.text());
+  const t = await res.text(); return t ? JSON.parse(t) : [];
+}
+function showStatus(type, msg){ const el=document.getElementById('statusBar'); el.className='status-bar '+type; el.textContent=msg; if(!type){ el.style.display='none'; } }
+
+// ───────────── 日付ユーティリティ（"YYYY-MM-DD" 文字列で扱う） ─────────────
+function dUTC(s){ const [y,m,d]=s.split('-').map(Number); return Date.UTC(y,m-1,d); }
+function dStr(ms){ return new Date(ms).toISOString().slice(0,10); }
+function addDays(s,n){ return dStr(dUTC(s)+n*86400000); }
+function todayStr(){ const t=new Date(); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; }
+const WEEKDAYS=['日','月','火','水','木','金','土'];
+function weekdayOf(s){ return new Date(dUTC(s)).getUTCDay(); }
+
+// ───────────── 月相（外部データ不要） ─────────────
+// 平均朔望月と基準新月（2000-01-06 18:14 UTC = JD 2451550.26）から月齢を出す簡易法。
+// 真の新月とは最大で半日程度ずれるが、8分割の月相を判定するには十分。
+const SYNODIC = 29.530588853;
+const MOON_NAMES = ['新月','三日月','上弦','十三夜','満月','立待月','下弦','有明月'];
+function moonAge(dateStr){
+  const [y,m,d]=dateStr.split('-').map(Number);
+  const jd = Date.UTC(y,m-1,d,3,0,0)/86400000 + 2440587.5; // 日本時間の正午
+  let age=(jd-2451550.26)%SYNODIC; if(age<0) age+=SYNODIC; return age;
+}
+function moonInfo(dateStr){
+  const age=moonAge(dateStr);
+  const illum=(1-Math.cos(2*Math.PI*age/SYNODIC))/2;         // 輝面比 0〜1
+  const idx=Math.floor(age/SYNODIC*8+0.5)%8;                 // 0=新月 … 4=満月
+  return { age, illum, idx, name: MOON_NAMES[idx] };
+}
+
+// ───────────── 気象（Open-Meteo・APIキー不要・ブラウザから直接取得） ─────────────
+const DAILY_VARS='temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_sum,wind_speed_10m_max,daylight_duration,weather_code';
+const HOURLY_VARS='pressure_msl,relative_humidity_2m';
+function wxCategory(code){
+  if(code==null) return null;
+  if(code<=1) return '晴れ'; if(code<=3) return '曇り'; if(code<=48) return '霧';
+  if(code<=67) return '雨'; if(code<=77) return '雪'; if(code<=82) return '雨'; if(code<=86) return '雪'; return '雷雨';
+}
+// APIの応答（daily/hourly）を日別マップに畳む。気圧・湿度は時別の平均を取る。
+function wxParse(json, into){
+  const d=json.daily||{}; const times=d.time||[];
+  times.forEach((t,i)=>{
+    const rec=into[t]||(into[t]={});
+    const g=k=>Array.isArray(d[k])&&d[k][i]!=null?Number(d[k][i]):null;
+    rec.tmax=g('temperature_2m_max'); rec.tmin=g('temperature_2m_min'); rec.tmean=g('temperature_2m_mean');
+    rec.precip=g('precipitation_sum'); rec.wind=g('wind_speed_10m_max');
+    rec.daylight=d.daylight_duration&&d.daylight_duration[i]!=null?Number(d.daylight_duration[i])/3600:null;
+    rec.code=d.weather_code&&d.weather_code[i]!=null?Number(d.weather_code[i]):null;
+  });
+  const h=json.hourly||{}; const ht=h.time||[]; const acc={};
+  ht.forEach((t,i)=>{
+    const day=String(t).slice(0,10); const a=acc[day]||(acc[day]={p:0,pn:0,h:0,hn:0});
+    const p=h.pressure_msl?h.pressure_msl[i]:null; const rh=h.relative_humidity_2m?h.relative_humidity_2m[i]:null;
+    if(p!=null){a.p+=Number(p);a.pn++;} if(rh!=null){a.h+=Number(rh);a.hn++;}
+  });
+  Object.keys(acc).forEach(day=>{ const rec=into[day]||(into[day]={}); const a=acc[day];
+    if(a.pn) rec.pressure=a.p/a.pn; if(a.hn) rec.humidity=a.h/a.hn; });
+  return into;
+}
+async function fetchJson(url){
+  const key='ca_wx_'+url; try{ const c=sessionStorage.getItem(key); if(c) return JSON.parse(c); }catch(e){}
+  const res=await fetch(url); if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  const j=await res.json(); if(j&&j.error) throw new Error(j.reason||'API error');
+  try{ sessionStorage.setItem(key, JSON.stringify(j)); }catch(e){}
+  return j;
+}
+// from〜to の気象を取る。アーカイブは数日遅れなので、直近は予報API(past_days)で補う。
+async function fetchWeather(from, to){
+  const wx={}; const problems=[];
+  const today=todayStr(); const archiveEnd=addDays(today,-6);
+  const aTo = to<archiveEnd ? to : archiveEnd;
+  if(from<=aTo){
+    try{
+      const q=`?latitude=${WX_LAT}&longitude=${WX_LON}&start_date=${from}&end_date=${aTo}&daily=${DAILY_VARS}&hourly=${HOURLY_VARS}&timezone=Asia%2FTokyo`;
+      wxParse(await fetchJson(OPEN_METEO_ARCHIVE+q), wx);
+    }catch(e){ problems.push('過去データ: '+e.message); }
+  }
+  if(to>aTo){
+    try{
+      const days=Math.min(92, Math.max(1, Math.round((dUTC(today)-dUTC(addDays(aTo,1)))/86400000)+1));
+      const q=`?latitude=${WX_LAT}&longitude=${WX_LON}&past_days=${days}&forecast_days=1&daily=${DAILY_VARS}&hourly=${HOURLY_VARS}&timezone=Asia%2FTokyo`;
+      const recent={}; wxParse(await fetchJson(OPEN_METEO_FORECAST+q), recent);
+      Object.keys(recent).forEach(day=>{ if(day>aTo && day<=to && !wx[day]) wx[day]=recent[day]; });
+    }catch(e){ problems.push('直近データ: '+e.message); }
+  }
+  return { wx, problems };
+}
+
+// ───────────── 日別データの組み立て ─────────────
+// captures: [{capture_date,...}]  wx: {date: {...}}  → from〜to の全日（捕獲0の日も含む）
+function buildDaily(captures, wx, from, to){
+  const counts={}; captures.forEach(c=>{ if(c.capture_date) counts[c.capture_date]=(counts[c.capture_date]||0)+1; });
+  const rows=[]; let lastRainDay=null;
+  for(let s=from; s<=to; s=addDays(s,1)){
+    const w=wx[s]||{}; const prev=wx[addDays(s,-1)]||{};
+    const m=moonInfo(s);
+    const precip=w.precip!=null?w.precip:null;
+    if(precip!=null && precip>=1) lastRainDay=s;
+    const daysSinceRain = (precip==null)?null:(lastRainDay?Math.round((dUTC(s)-dUTC(lastRainDay))/86400000):null);
+    rows.push({
+      date:s, weekday:weekdayOf(s), month:Number(s.slice(5,7)), captures:counts[s]||0,
+      moonAge:m.age, moonIllum:m.illum, moonIdx:m.idx, moonName:m.name,
+      hasWx: w.tmax!=null || precip!=null,
+      tmax:w.tmax??null, tmin:w.tmin??null, tmean:w.tmean??null, precip,
+      precipPrev: prev.precip!=null?prev.precip:null,
+      daysSinceRain,
+      wind:w.wind??null, daylight:w.daylight??null, code:w.code??null, wxCat:wxCategory(w.code??null),
+      pressure:w.pressure??null, pressureDelta:(w.pressure!=null&&prev.pressure!=null)?(w.pressure-prev.pressure):null,
+      humidity:w.humidity??null,
+    });
+  }
+  return rows;
+}
+
+// ───────────── 区分（バケット）定義 ─────────────
+function band(v, edges, labels){ if(v==null) return null; for(let i=0;i<edges.length;i++){ if(v<edges[i]) return labels[i]; } return labels[edges.length]; }
+const RAIN_LABELS=['なし(<1mm)','小雨(1〜10)','雨(10〜30)','大雨(30〜)'];
+function rainBand(v){ return band(v,[1,10,30],RAIN_LABELS); }
+const CATEGORIES=[
+  { key:'moon',    title:'🌙 月相',            get:r=>r.moonName, order:MOON_NAMES },
+  { key:'illum',   title:'🌕 月明かり（輝面比）', get:r=>band(r.moonIllum*100,[25,50,75],['暗い(<25%)','やや暗い(25〜50)','やや明るい(50〜75)','明るい(75%〜)']), order:['暗い(<25%)','やや暗い(25〜50)','やや明るい(50〜75)','明るい(75%〜)'] },
+  { key:'rain',    title:'☔ 当日の雨',         get:r=>rainBand(r.precip), order:RAIN_LABELS, wx:true },
+  { key:'rainPrev',title:'☔ 前日の雨',         get:r=>rainBand(r.precipPrev), order:RAIN_LABELS, wx:true },
+  { key:'sinceRain',title:'💧 雨（1mm以上）からの日数', get:r=>r.daysSinceRain==null?null:band(r.daysSinceRain,[1,2,4,8],['当日','1日後','2〜3日後','4〜7日後','8日以上']), order:['当日','1日後','2〜3日後','4〜7日後','8日以上'], wx:true },
+  { key:'wxcat',   title:'🌤 天気',             get:r=>r.wxCat, order:['晴れ','曇り','霧','雨','雷雨','雪'], wx:true },
+  { key:'tmax',    title:'🌡 最高気温',          get:r=>band(r.tmax,[15,20,25,30,35],['<15℃','15〜20','20〜25','25〜30','30〜35','35℃〜']), order:['<15℃','15〜20','20〜25','25〜30','30〜35','35℃〜'], wx:true },
+  { key:'tmin',    title:'🌡 最低気温',          get:r=>band(r.tmin,[5,10,15,20,25],['<5℃','5〜10','10〜15','15〜20','20〜25','25℃〜']), order:['<5℃','5〜10','10〜15','15〜20','20〜25','25℃〜'], wx:true },
+  { key:'pressure',title:'🔽 気圧（海面）',       get:r=>band(r.pressure,[1005,1015],['低(<1005hPa)','中(1005〜1015)','高(1015〜)']), order:['低(<1005hPa)','中(1005〜1015)','高(1015〜)'], wx:true },
+  { key:'pdelta',  title:'📉 前日からの気圧変化', get:r=>band(r.pressureDelta,[-3,3],['下降(−3hPa以上)','安定','上昇(+3hPa以上)']), order:['下降(−3hPa以上)','安定','上昇(+3hPa以上)'], wx:true },
+  { key:'wind',    title:'💨 最大風速',          get:r=>band(r.wind,[20,35],['弱い(<20km/h)','中(20〜35)','強い(35〜)']), order:['弱い(<20km/h)','中(20〜35)','強い(35〜)'], wx:true },
+  { key:'humidity',title:'💦 湿度（日平均）',     get:r=>band(r.humidity,[60,75,90],['<60%','60〜75','75〜90','90%〜']), order:['<60%','60〜75','75〜90','90%〜'], wx:true },
+  { key:'weekday', title:'📅 曜日（人の都合の確認用）', get:r=>WEEKDAYS[r.weekday], order:WEEKDAYS },
+  { key:'month',   title:'🗓 月',               get:r=>r.month+'月', order:Array.from({length:12},(_,i)=>(i+1)+'月') },
+];
+function summarize(rows, get, order){
+  const g={}; rows.forEach(r=>{ const k=get(r); if(k==null) return; const s=g[k]||(g[k]={label:k,days:0,total:0,hitDays:0}); s.days++; s.total+=r.captures; if(r.captures>0) s.hitDays++; });
+  const list=Object.values(g).map(s=>({...s, mean:s.total/s.days, hitRate:s.hitDays/s.days}));
+  const pos=k=>{ const i=order.indexOf(k); return i<0?999:i; };
+  return list.sort((a,b)=>pos(a.label)-pos(b.label));
+}
+function pearson(rows, getX){
+  const xs=[],ys=[]; rows.forEach(r=>{ const x=getX(r); if(x==null||!Number.isFinite(x)) return; xs.push(x); ys.push(r.captures); });
+  const n=xs.length; if(n<3) return {r:null,n};
+  const mx=xs.reduce((a,b)=>a+b,0)/n, my=ys.reduce((a,b)=>a+b,0)/n;
+  let sxy=0,sxx=0,syy=0; for(let i=0;i<n;i++){ const dx=xs[i]-mx, dy=ys[i]-my; sxy+=dx*dy; sxx+=dx*dx; syy+=dy*dy; }
+  if(sxx===0||syy===0) return {r:null,n};
+  return { r:sxy/Math.sqrt(sxx*syy), n };
+}
+function analyze(rows, minDays){
+  const days=rows.length, total=rows.reduce((a,r)=>a+r.captures,0);
+  const mean=days?total/days:0;
+  const cats=CATEGORIES.map(c=>({ ...c, groups:summarize(rows,c.get,c.order) }));
+  const ranked=[]; cats.forEach(c=>c.groups.forEach(g=>{ if(g.days>=minDays) ranked.push({cat:c.title, label:g.label, days:g.days, total:g.total, mean:g.mean, index: mean?g.mean/mean:null}); }));
+  ranked.sort((a,b)=>b.mean-a.mean);
+  const cross={}; rows.forEach(r=>{ const rb=rainBand(r.precip); if(rb==null) return; const k=r.moonName+'|'+rb; const s=cross[k]||(cross[k]={days:0,total:0}); s.days++; s.total+=r.captures; });
+  const corr=[
+    ['月明かり（輝面比）', r=>r.moonIllum], ['最高気温', r=>r.tmax], ['最低気温', r=>r.tmin], ['当日の雨(mm)', r=>r.precip], ['前日の雨(mm)', r=>r.precipPrev],
+    ['気圧(hPa)', r=>r.pressure], ['前日からの気圧変化', r=>r.pressureDelta], ['最大風速', r=>r.wind], ['湿度', r=>r.humidity], ['日長(時間)', r=>r.daylight],
+  ].map(([label,get])=>({label, ...pearson(rows,get)}));
+  const wxDays=rows.filter(r=>r.hasWx).length;
+  return { days, total, mean, hitDays: rows.filter(r=>r.captures>0).length, wxDays, cats, ranked, cross, corr };
+}
+
+// ───────────── 画面 ─────────────
+let allCaptures=[], lastDaily=[], lastResult=null, charts={};
+function fillSelect(id, values, keepAll){
+  const sel=document.getElementById(id); const cur=sel.value;
+  sel.innerHTML=(keepAll?'<option value="">すべて</option>':'')+values.map(v=>`<option value="${v}">${v}</option>`).join('');
+  if([...sel.options].some(o=>o.value===cur)) sel.value=cur;
+}
+async function loadCaptures(){
+  showStatus('loading','📥 捕獲データを読み込み中…');
+  const rows=await sb('individuals', '?select=label_id,species,capture_date,capture_method,capture_city,capture_area,weight_total,sex&deleted_at=is.null&capture_date=not.is.null&order=capture_date.asc&limit=20000');
+  allCaptures=rows.filter(r=>r.label_id && !/^TGC-TEST/.test(r.label_id) && !/^仮/.test(r.label_id));
+  const bySp={}; allCaptures.forEach(r=>{ bySp[r.species||'不明']=(bySp[r.species||'不明']||0)+1; });
+  const species=Object.keys(bySp).sort((a,b)=>bySp[b]-bySp[a]);
+  fillSelect('fSpecies', species, false);
+  if(species.includes('イノシシ')) document.getElementById('fSpecies').value='イノシシ';
+  fillSelect('fMethod', [...new Set(allCaptures.map(r=>r.capture_method).filter(Boolean))].sort(), true);
+  fillSelect('fCity', [...new Set(allCaptures.map(r=>r.capture_city).filter(Boolean))].sort(), true);
+  showStatus('', '');
+  setDefaultRange();
+}
+function filteredCaptures(){
+  const sp=document.getElementById('fSpecies').value, me=document.getElementById('fMethod').value, ci=document.getElementById('fCity').value;
+  return allCaptures.filter(r=>(!sp||r.species===sp)&&(!me||r.capture_method===me)&&(!ci||r.capture_city===ci));
+}
+function setDefaultRange(){
+  const rows=filteredCaptures(); if(!rows.length) return;
+  const dates=rows.map(r=>r.capture_date).sort();
+  const f=document.getElementById('fFrom'), t=document.getElementById('fTo');
+  if(!f.value) f.value=dates[0]; if(!t.value) t.value=dates[dates.length-1];
+}
+document.getElementById('fSpecies').addEventListener('change',()=>{ document.getElementById('fFrom').value=''; document.getElementById('fTo').value=''; setDefaultRange(); });
+
+async function runAnalysis(){
+  const from=document.getElementById('fFrom').value, to=document.getElementById('fTo').value;
+  if(!from||!to||from>to){ showStatus('error','期間を正しく指定してください'); return; }
+  const caps=filteredCaptures().filter(r=>r.capture_date>=from && r.capture_date<=to);
+  showStatus('loading',`🌦 気象データを取得中…（${from}〜${to}）`);
+  let wxRes={wx:{},problems:['取得を試みていません']};
+  try{ wxRes=await fetchWeather(from,to); }catch(e){ wxRes={wx:{},problems:[String(e.message||e)]}; }
+  lastDaily=buildDaily(caps, wxRes.wx, from, to);
+  const minDays=parseInt(document.getElementById('fMinDays').value,10)||5;
+  lastResult=analyze(lastDaily, minDays);
+  render(lastResult, lastDaily);
+  document.getElementById('btnCsv').disabled=false;
+  document.getElementById('lastUpdated').textContent='更新: '+new Date().toLocaleString('ja-JP');
+  if(wxRes.problems.length){
+    showStatus(lastResult.wxDays?'warn':'error', '⚠ 気象データの一部/全部を取得できませんでした（月相・曜日・月の分析は表示しています）。\n'+wxRes.problems.join('\n')+'\n※ Open-Meteoにブラウザから直接アクセスします。通信環境をご確認ください。');
+  }else{
+    showStatus('info',`✅ 捕獲${lastResult.total}頭／${lastResult.days}日を分析しました（気象データ ${lastResult.wxDays}日分）`);
+  }
+}
+function pct(v){ return v==null?'—':(v*100).toFixed(0)+'%'; }
+function idxHtml(i){ if(i==null) return '<span class="idx-flat">—</span>'; const c=i>=1.2?'idx-up':(i<=0.8?'idx-down':'idx-flat'); return `<span class="${c}">×${i.toFixed(2)}</span>`; }
+function render(res, daily){
+  document.getElementById('kpiTotal').textContent=res.total.toLocaleString();
+  document.getElementById('kpiTotalSub').textContent=`${daily.length?daily[0].date:''} 〜 ${daily.length?daily[daily.length-1].date:''}`;
+  document.getElementById('kpiDays').textContent=res.days.toLocaleString();
+  document.getElementById('kpiMean').textContent=res.mean.toFixed(2);
+  document.getElementById('kpiHitRate').textContent=res.days?pct(res.hitDays/res.days):'—';
+  document.getElementById('kpiHitSub').textContent=`${res.hitDays}日／${res.days}日`;
+  document.getElementById('kpiWx').textContent=res.days?pct(res.wxDays/res.days):'—';
+  document.getElementById('kpiWxSub').textContent=`${res.wxDays}日分（Open-Meteo・館山）`;
+
+  // ランキング
+  const top=res.ranked.slice(0,10), bottom=res.ranked.slice(-5).reverse();
+  const rowHtml=r=>`<tr><td><span class="tag">${r.cat.replace(/^[^ ]+ /,'')}</span>${r.label}</td><td class="td-num">${r.days}</td><td class="td-num">${r.total}</td><td class="td-num">${r.mean.toFixed(2)}</td><td class="td-num">${idxHtml(r.index)}</td></tr>`;
+  document.getElementById('rankBox').innerHTML = res.ranked.length ? `
+    <div class="charts-grid" style="margin:0">
+      <div><div class="muted" style="margin-bottom:6px">多い順（上位10）</div><table><thead><tr><th>条件</th><th class="td-num">日数</th><th class="td-num">頭数</th><th class="td-num">頭／日</th><th class="td-num">平均比</th></tr></thead><tbody>${top.map(rowHtml).join('')}</tbody></table></div>
+      <div><div class="muted" style="margin-bottom:6px">少ない順（下位5）</div><table><thead><tr><th>条件</th><th class="td-num">日数</th><th class="td-num">頭数</th><th class="td-num">頭／日</th><th class="td-num">平均比</th></tr></thead><tbody>${bottom.map(rowHtml).join('')}</tbody></table></div>
+    </div>` : '<span class="muted">最小日数を満たす条件がありません。期間を広げるか最小日数を下げてください。</span>';
+
+  // クロス集計（月相×雨）
+  const maxMean=Math.max(0.01, ...Object.values(res.cross).map(c=>c.total/c.days));
+  const cell=(k)=>{ const c=res.cross[k]; if(!c) return '<td class="cell" style="background:var(--surface2);color:var(--text2)">—</td>';
+    const m=c.total/c.days; const a=0.15+0.85*(m/maxMean); return `<td class="cell" style="background:rgba(232,164,74,${a.toFixed(2)})">${m.toFixed(2)}<small>${c.days}日・${c.total}頭</small></td>`; };
+  document.getElementById('crossBox').innerHTML = Object.keys(res.cross).length ? `<table class="heat"><thead><tr><th>月相 ＼ 当日の雨</th>${RAIN_LABELS.map(l=>`<th>${l}</th>`).join('')}</tr></thead><tbody>${MOON_NAMES.map(mn=>`<tr><td>${mn}</td>${RAIN_LABELS.map(rl=>cell(mn+'|'+rl)).join('')}</tr>`).join('')}</tbody></table>` : '<span class="muted">気象データが無いため表示できません。</span>';
+
+  // カテゴリ別グラフ
+  Object.values(charts).forEach(c=>{ try{c.destroy();}catch(e){} }); charts={};
+  const grid=document.getElementById('chartsGrid'); grid.innerHTML='';
+  res.cats.forEach(c=>{
+    if(!c.groups.length) return;
+    const id='ch_'+c.key;
+    grid.insertAdjacentHTML('beforeend',`<div class="chart-card"><div class="chart-header"><div><div class="chart-title">${c.title}</div><div class="chart-subtitle">棒＝1日あたり捕獲数／点線＝全期間平均（${res.mean.toFixed(2)}）。各棒の下は日数。</div></div></div><div class="chart-wrap"><canvas id="${id}"></canvas></div></div>`);
+    if(typeof Chart==='undefined'){
+      // グラフ部品（CDN）が読めない環境でも空にせず、簡易バーで同じ数字を見せる
+      const maxMean=Math.max(res.mean, ...c.groups.map(g=>g.mean), 0.01);
+      const wrap=document.getElementById(id).parentElement; wrap.style.height='auto';
+      wrap.innerHTML=`<table class="fallback-bars">${c.groups.map(g=>`<tr><td style="white-space:nowrap;padding:3px 6px;font-size:12px;color:var(--text2)">${g.label}<br><small>${g.days}日</small></td><td style="width:100%;padding:3px 6px"><div style="display:flex;align-items:center;gap:8px"><div style="height:12px;border-radius:3px;background:${g.days<3?'rgba(139,144,168,.5)':'rgba(232,164,74,.85)'};width:${(g.mean/maxMean*100).toFixed(1)}%"></div><span class="td-num">${g.mean.toFixed(2)}</span></div></td></tr>`).join('')}</table><div class="muted" style="margin-top:4px">全期間平均 ${res.mean.toFixed(2)} 頭／日</div>`;
+      return;
+    }
+    const ctx=document.getElementById(id).getContext('2d');
+    charts[c.key]=new Chart(ctx,{ type:'bar',
+      data:{ labels:c.groups.map(g=>`${g.label}\n(${g.days}日)`), datasets:[
+        { label:'頭／日', data:c.groups.map(g=>+g.mean.toFixed(3)), backgroundColor:c.groups.map(g=>g.days<3?'rgba(139,144,168,.5)':'rgba(232,164,74,.85)'), borderRadius:4 },
+        { label:'全期間平均', type:'line', data:c.groups.map(()=>+res.mean.toFixed(3)), borderColor:'#8b90a8', borderDash:[5,4], pointRadius:0, borderWidth:1.5 } ] },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(t)=>t.datasetIndex===0?`${t.parsed.y} 頭／日（${c.groups[t.dataIndex].days}日・${c.groups[t.dataIndex].total}頭）`:`平均 ${t.parsed.y}` } } },
+        scales:{ x:{ ticks:{ color:'#8b90a8', font:{size:10} }, grid:{display:false} }, y:{ beginAtZero:true, ticks:{color:'#8b90a8'}, grid:{color:'#2e3447'} } } } });
+  });
+
+  // 相関
+  document.getElementById('corrBox').innerHTML=`<table><thead><tr><th>項目</th><th class="td-num">r</th><th class="td-num">n（日）</th><th>読み</th></tr></thead><tbody>${res.corr.map(c=>{
+    const r=c.r; const ab=r==null?null:Math.abs(r);
+    const read=r==null?'データ不足':(ab<0.2?'ほぼ関係なし':(ab<0.4?(r>0?'弱い正の関係':'弱い負の関係'):(r>0?'正の関係あり':'負の関係あり')));
+    return `<tr><td>${c.label}</td><td class="td-num">${r==null?'—':(r>0?'+':'')+r.toFixed(2)}</td><td class="td-num">${c.n}</td><td class="muted">${read}</td></tr>`; }).join('')}</tbody></table>`;
+
+  // 日別テーブル
+  const f1=v=>v==null?'—':Number(v).toFixed(1);
+  document.getElementById('dailyBody').innerHTML=daily.slice(0,60).map(r=>`<tr><td>${r.date}</td><td>${WEEKDAYS[r.weekday]}</td><td class="td-num">${r.captures}</td><td>${r.moonName}</td><td class="td-num">${pct(r.moonIllum)}</td><td>${r.wxCat||'—'}</td><td class="td-num">${f1(r.precip)}</td><td class="td-num">${f1(r.precipPrev)}</td><td class="td-num">${f1(r.tmax)}</td><td class="td-num">${f1(r.tmin)}</td><td class="td-num">${r.pressure==null?'—':r.pressure.toFixed(0)}</td><td class="td-num">${r.pressureDelta==null?'—':(r.pressureDelta>0?'+':'')+r.pressureDelta.toFixed(1)}</td><td class="td-num">${f1(r.wind)}</td><td class="td-num">${r.humidity==null?'—':r.humidity.toFixed(0)}</td></tr>`).join('')
+    || '<tr><td colspan="14" class="muted">データがありません</td></tr>';
+}
+function dailyCsv(daily){
+  const head=['日付','曜日','捕獲頭数','月齢','月相','月明かり(%)','天気','雨(mm)','前日の雨(mm)','雨からの日数','最高気温','最低気温','平均気温','気圧(hPa)','前日からの気圧変化','最大風速(km/h)','湿度(%)','日長(時間)'];
+  const v=x=>x==null?'':x;
+  const lines=daily.map(r=>[r.date,WEEKDAYS[r.weekday],r.captures,r.moonAge.toFixed(1),r.moonName,(r.moonIllum*100).toFixed(0),v(r.wxCat),v(r.precip),v(r.precipPrev),v(r.daysSinceRain),v(r.tmax),v(r.tmin),v(r.tmean),r.pressure==null?'':r.pressure.toFixed(1),r.pressureDelta==null?'':r.pressureDelta.toFixed(1),v(r.wind),r.humidity==null?'':r.humidity.toFixed(0),r.daylight==null?'':r.daylight.toFixed(2)].join(','));
+  return '﻿'+[head.join(',')].concat(lines).join('\n');
+}
+function downloadCsv(){
+  if(!lastDaily.length) return;
+  const blob=new Blob([dailyCsv(lastDaily)],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`捕獲条件分析_${document.getElementById('fSpecies').value||'all'}_${lastDaily[0].date}_${lastDaily[lastDaily.length-1].date}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+loadCaptures().catch(e=>showStatus('error','捕獲データを読み込めませんでした: '+(e.message||e)));
+</script>
+</body>
+</html>
