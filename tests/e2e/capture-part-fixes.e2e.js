@@ -26,15 +26,21 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
     const url = decodeURIComponent(route.request().url());
     const j = x => route.fulfill({ contentType: 'application/json', body: JSON.stringify(x) });
     if (url.includes('/area_master')) return j(AREA);
+    // 捕獲者候補は公開VIEW(hunters_public)から取得（P0-2）。実名の直書きはP0-5で撤去済み
+    if (url.includes('/hunters_public')) return j([
+      { name: '野崎徹', furigana: 'のざきとおる', is_retired: false },
+      { name: '根岸典好', furigana: 'ねぎしのりよし', is_retired: false },
+    ]);
     return j([]);
   });
   await p.goto('http://localhost:9081/capture-form.html'); await p.waitForTimeout(600);
 
-  // ② 捕獲者台帳（datalist）に野崎徹・根岸典好が追加されている
+  // ② 捕獲者台帳（datalist）は公開VIEW(hunters_public)から動的に埋まる（P0-2）
   const dl = await p.evaluate(() => [...document.querySelectorAll('#hunterList option')].map(o => o.value));
-  ck('datalistに野崎徹', dl.includes('野崎徹'));
-  ck('datalistに根岸典好', dl.includes('根岸典好'));
-  ck('HUNTER_AREAに根岸典好(海老敷)', await p.evaluate(() => hunterUsualArea('根岸典好')?.area) === '海老敷');
+  ck('datalistに野崎徹（DB由来）', dl.includes('野崎徹'), JSON.stringify(dl));
+  ck('datalistに根岸典好（DB由来）', dl.includes('根岸典好'));
+  // P0-5: 実在捕獲者名の直書きマップはソースから撤去済み（地区推定はDB=loadUsualに委譲）
+  ck('直書きの捕獲者→地区マップは撤去済み(P0-5)', await p.evaluate(() => Object.keys(HUNTER_AREA_RAW).length) === 0);
 
   // ③ 白浜町/和田町は現住所表記（白浜町乙浜）で選べる
   const oaza = await p.evaluate(() => {
