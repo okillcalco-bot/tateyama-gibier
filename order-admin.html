@@ -279,8 +279,9 @@ th,td{padding:8px 6px;font-size:.8rem}
           </select>
         </div>
         <div class="form-group">
-          <label>顧客（絞り込み）</label>
-          <select id="docCustomer" onchange="loadDocOrders()"><option value="">全ての顧客</option></select>
+          <label>顧客（絞り込み・複数選択可）</label>
+          <select id="docCustomer" onchange="loadDocOrders()" multiple size="4"></select>
+          <div style="font-size:.75rem;color:var(--text2);margin-top:2px">何も選ばなければ全顧客。Ctrl（Macは⌘）+クリックで複数選択できます。</div>
         </div>
       </div>
       <div class="form-row" id="docCustomDates" style="display:none;margin-bottom:12px">
@@ -296,6 +297,11 @@ th,td{padding:8px 6px;font-size:.8rem}
     </div>
     <div class="doc-section">
       <h3>書類発行</h3>
+      <div class="form-group" style="margin-bottom:12px;max-width:360px">
+        <label>請求先（宛名）</label>
+        <select id="docBillTo"><option value="">（選択した注文の顧客をそのまま宛名にする）</option></select>
+        <div style="font-size:.75rem;color:var(--text2);margin-top:2px">複数の顧客の注文をまとめて1枚の書類にする場合は、仲卸業者など請求先を選んでください。</div>
+      </div>
       <div class="doc-buttons">
         <button class="btn btn-gold" onclick="generateDoc('見積書')">見積書</button>
         <button class="btn btn-gold" onclick="generateDoc('納品書')">納品書</button>
@@ -998,7 +1004,7 @@ function switchTab(tab){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===tab));
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.toggle('active',c.id==='tab-'+tab));
   try{ history.replaceState(null,'', tab==='orders' ? location.pathname : '#'+tab); }catch(e){}
-  if(tab==='documents'){ populateDocCustomerDropdown(); loadDocOrders(); }
+  if(tab==='documents'){ populateDocCustomerDropdown(); populateDocBillToDropdown(); loadDocOrders(); }
   if(tab==='pricing') renderPricing();
   if(tab==='pproducts') loadPortalProducts();
   if(tab==='reserve'){ loadReservations(); loadBulletins(); loadInquiries(); }
@@ -1581,10 +1587,22 @@ let docDocsMap={}; // order_id -> Set(doc_type)
 function populateDocCustomerDropdown(){
   const sel=document.getElementById('docCustomer');
   if(!sel) return;
-  const prev=sel.value;
+  const prevSelected=new Set([...sel.selectedOptions].map(o=>o.value));
   const shippedIds=new Set(allOrders.filter(o=>SHIP_STATUSES.includes(o.status)).map(o=>o.customer_id));
   const custs=allCustomers.filter(c=>shippedIds.has(c.id)).sort((a,b)=>(a.code||'').localeCompare(b.code||''));
-  sel.innerHTML='<option value="">全ての顧客</option>'+custs.map(c=>`<option value="${c.id}">${esc(c.code||'')} ${esc(c.name||'')}</option>`).join('');
+  sel.innerHTML=custs.map(c=>`<option value="${c.id}">${esc(c.code||'')} ${esc(c.name||'')}</option>`).join('');
+  [...sel.options].forEach(o=>{ if(prevSelected.has(o.value)) o.selected=true; });
+}
+
+// 請求先（宛名）は発送実績の有無に関わらず、全顧客から選べるようにする
+// （仲卸業者など、注文自体は無いが請求だけ受ける相手を選べるようにするため）
+function populateDocBillToDropdown(){
+  const sel=document.getElementById('docBillTo');
+  if(!sel) return;
+  const prev=sel.value;
+  const custs=allCustomers.slice().sort((a,b)=>(a.code||'').localeCompare(b.code||''));
+  sel.innerHTML='<option value="">（選択した注文の顧客をそのまま宛名にする）</option>'
+    +custs.map(c=>`<option value="${c.id}">${esc(c.code||'')} ${esc(c.name||'')}</option>`).join('');
   if(prev && custs.some(c=>c.id===prev)) sel.value=prev;
 }
 
@@ -1602,13 +1620,14 @@ function docPeriodRange(){
 async function loadDocOrders(){
   const el=document.getElementById('docOrderList');
   if(!el) return;
-  const custId=document.getElementById('docCustomer').value;
+  const custIds=[...document.getElementById('docCustomer').selectedOptions].map(o=>o.value).filter(Boolean);
   const range=docPeriodRange();
   if(!range){el.innerHTML='<div class="empty">期間を指定してください</div>';return}
   el.innerHTML='<div class="empty">読み込み中…</div>';
   try{
     let q=`?status=in.(${SHIP_STATUSES.join(',')})&order_date=gte.${range.from}&order_date=lte.${range.to}&select=*,order_items(*)&order=order_date.desc`;
-    if(custId) q+=`&customer_id=eq.${custId}`;
+    if(custIds.length===1) q+=`&customer_id=eq.${custIds[0]}`;
+    else if(custIds.length>1) q+=`&customer_id=in.(${custIds.join(',')})`;
     docOrders=await sb('GET','orders','',q);
     // 発行済み書類を突き合わせ（order_idごとにどの書類が出ているか）
     docDocsMap={};
@@ -1660,17 +1679,22 @@ function getSelectedDocOrders(){
 async function generateDoc(type){
   const selected=getSelectedDocOrders();
   if(!selected.length){alert('注文を選択してください');return}
-  // 選択注文は同一顧客のみ（合算書類は顧客ごと）
+  // 選択注文の元の顧客（複数の可能性あり）と、書類の宛名にする請求先を分けて扱う。
+  // 請求先を明示していれば（仲卸業者など）それを使い、無指定かつ単一顧客ならその顧客をそのまま使う。
   const custIds=[...new Set(selected.map(o=>o.customer_id))];
-  if(custIds.length>1){alert('複数の顧客の注文が選択されています。書類は顧客ごとに発行してください。');return}
-  const custId=custIds[0];
-  const cust=allCustomers.find(c=>c.id===custId);
-  if(!cust){alert('顧客が見つかりません');return}
+  const billToSel=document.getElementById('docBillTo').value;
+  const billToId=billToSel || (custIds.length===1 ? custIds[0] : '');
+  if(!billToId){alert('複数の顧客の注文が選択されています。「請求先（宛名）」を選んでください。');return}
+  const cust=allCustomers.find(c=>c.id===billToId);
+  if(!cust){alert('請求先の顧客が見つかりません');return}
+  const consolidated=custIds.length>1;
   const now=new Date();
   const seq=String(Math.floor(Math.random()*900)+100);
   const docNum=`${type}-${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${seq}`;
   const allItems=[];
-  selected.forEach(o=>(o.order_items||[]).forEach(i=>allItems.push(i)));
+  selected.forEach(o=>(o.order_items||[]).forEach(i=>allItems.push(Object.assign({},i,{
+    _srcCustomer:o.customer_name||'', _srcOrderCode:o.order_code||''
+  }))));
   const subtotal=allItems.reduce((s,i)=>s+Number(i.subtotal||i.amount||0),0);
   const tax=Math.floor(subtotal*0.1);
   const total=subtotal+tax;
@@ -1690,12 +1714,14 @@ async function generateDoc(type){
       <div style="font-size:.85rem">${esc(cust.address||'')} ${esc(cust.building||'')}</div>
       ${cust.company1?`<div style="font-size:.85rem">${esc(cust.company1)}</div>`:''}
     </div>
+    ${consolidated?`<div style="font-size:.8rem;color:#555;margin:-8px 0 12px">※${custIds.length}件の顧客（${esc([...new Set(selected.map(o=>o.customer_name||''))].join('・'))}）への出荷分をまとめています</div>`:''}
     <div style="text-align:center;font-size:1.3rem;font-weight:700;margin:16px 0;border:2px solid #222;padding:8px">
       合計金額: &yen;${total.toLocaleString()}（税込）
     </div>
     <table>
-      <thead><tr><th>品名</th><th>数量(kg)</th><th>単価</th><th>金額</th></tr></thead>
+      <thead><tr>${consolidated?'<th>出荷先</th>':''}<th>品名</th><th>数量(kg)</th><th>単価</th><th>金額</th></tr></thead>
       <tbody>${allItems.map(i=>`<tr>
+        ${consolidated?`<td>${esc(i._srcCustomer)}<br><span style="font-size:.75rem;color:#777">${esc(i._srcOrderCode)}</span></td>`:''}
         <td>${esc((i.species||'')+(i.part_name?' '+i.part_name:''))}</td>
         <td style="text-align:right">${i.weight_kg||i.weight||'--'}</td>
         <td style="text-align:right">&yen;${Number(i.unit_price||0).toLocaleString()}</td>
@@ -1717,9 +1743,11 @@ async function generateDoc(type){
   document.getElementById('docPreviewContent').innerHTML=html;
   openModal('docPreview');
   try{
-    // 選択した各注文を処理済みとして記録（同一書類番号を共有）
+    // 選択した各注文を処理済みとして記録（同一書類番号を共有）。
+    // customer_id は請求先（billToId）。元の注文がどの顧客のものかは order_id から orders.customer_id を辿れば分かるので、
+    // 内訳が消えるわけではない（複数顧客をまとめた場合、請求上の宛先は請求先1人になる）。
     const rows=selected.map((o,idx)=>({
-      doc_type:type,doc_number:docNum,customer_id:custId,
+      doc_type:type,doc_number:docNum,customer_id:billToId,
       order_id:o.id,issue_date:fmtDate(now),
       total_amount:idx===0?total:0,tax_amount:idx===0?tax:0,status:'発行済'
     }));
