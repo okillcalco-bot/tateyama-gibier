@@ -68,9 +68,12 @@ const path = require('path');
   const ck = (name, cond, got) => results.push([name, cond, got]);
 
   await page.evaluate(() => { document.querySelectorAll('#docOrderList input[type=checkbox]').forEach(cb => cb.checked = (cb.dataset.oid === 'ord-a')); });
-  await page.evaluate(() => generateDoc('請求書'));
-  await page.waitForTimeout(150);
-  let previewHtml = await page.$eval('#docPreviewContent', el => el.innerHTML);
+  const [popup1] = await Promise.all([
+    page.waitForEvent('popup'),
+    page.evaluate(() => generateDoc('請求書')),
+  ]);
+  await popup1.waitForLoadState();
+  let previewHtml = await popup1.content();
 
   // 1) モモの部位違いが1行「モモ」にまとまる（1.0+0.3+0.2=1.5kg、2600*1.5=3900円）
   ck('モモの部位違いが1行にまとまる（部位名の細分けは出ない）', !previewHtml.includes('モモ（'), previewHtml);
@@ -86,18 +89,20 @@ const path = require('path');
   ck('送料の明細行が出る（クール100）', previewHtml.includes('送料（クール100）'), previewHtml);
   ck('送料の金額1,300円が明細に出る', /1,300/.test(previewHtml), previewHtml);
 
-  // 合計 = (3900+5700+1300)*1.1 = 10,900*1.1 = 11,990
-  ck('送料込みの合計金額11,990円が出る', /11,990/.test(previewHtml), previewHtml.match(/合計金額[^<]*/)?.[0] || previewHtml);
-
-  // モーダルを閉じて次のケースへ
-  await page.evaluate(() => { const m = document.getElementById('docPreview'); if (m && m.classList) m.classList.remove('active', 'show'); if (typeof closeModal === 'function') { try { closeModal('docPreview'); } catch (e) {} } });
+  // 合計 = 肉(3900+5700=9600・8%)の税768 + 送料(1300・10%)の税130 = 小計10,900+税898 = 11,798
+  ck('送料込みの合計金額11,798円が出る', /11,798/.test(previewHtml), previewHtml.slice(0, 3000));
+  await popup1.close();
 
   // 4) 送料0の注文では送料行が出ない
   await page.evaluate(() => { document.querySelectorAll('#docOrderList input[type=checkbox]').forEach(cb => cb.checked = (cb.dataset.oid === 'ord-b')); });
-  await page.evaluate(() => generateDoc('請求書'));
-  await page.waitForTimeout(150);
-  previewHtml = await page.$eval('#docPreviewContent', el => el.innerHTML);
+  const [popup2] = await Promise.all([
+    page.waitForEvent('popup'),
+    page.evaluate(() => generateDoc('請求書')),
+  ]);
+  await popup2.waitForLoadState();
+  previewHtml = await popup2.content();
   ck('送料0の注文では送料行が出ない', !previewHtml.includes('送料'), previewHtml);
+  await popup2.close();
 
   ck('ページエラーなし', errors.length === 0, errors.join(' / '));
 

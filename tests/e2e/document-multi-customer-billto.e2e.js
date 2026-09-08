@@ -8,15 +8,18 @@
 //     「請求先（宛名）」は発送実績の有無に関わらず全顧客から選べるようにしている。
 //
 //   ここで測ること
-//     1. 単一顧客の選択（従来どおり）: 宛名は自動でその顧客になり、内訳の出荷先列は出ない
+//     1. 単一顧客の選択（従来どおり）: 宛名は自動でその顧客になり、品名に顧客タグは付かない
 //     2. 複数顧客の注文を選び、請求先を指定しないと止まる（アラートが出て発行されない）
 //     3. 請求先を指定すれば、複数顧客の明細が1枚にまとまり、宛名は請求先、
-//        内訳に出荷先（元の顧客名・注文番号）が出て、金額は全注文の合算になる
+//        品名に元の顧客名がタグとして付き、金額は全注文の合算になる
 //     4. 発行記録（documents POST）は、全ての元注文にひもづきつつ customer_id は請求先になる
 //     5. 請求先セレクトには、発送実績が無い顧客（仲卸業者）も候補に出る
 //     6. 備考検索（2026-09-08追加）: 顧客の絞り込み（Ctrl+クリックの複数選択）が非効率という指摘を受け、
 //        顧客IDは卸先の実店舗のまま、備考欄のキーワードで一覧を絞り込めるようにした
 //        （customer_idを請求先に付け替えると、請求先自身の顧客ポータルに他店の注文明細が漏れるため不採用）
+//     7. フォーマット統一（2026-09-08追加）: 発行元・宛名・書式が請求書作成タブ（invRenderPrint）と
+//        バラバラだった（宛名の住所・印鑑が古い決め打ち文言のまま）という指摘を受け、
+//        書類発行タブもinvRenderPrint（新しいウィンドウでの印刷プレビュー）を共用するようにした
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
 
@@ -48,7 +51,7 @@ const path = require('path');
     if (m === 'POST' && /\/documents\b/.test(url)) {
       let body = []; try { body = JSON.parse(req.postData() || '[]'); } catch (e) {}
       postedDocuments.push(...(Array.isArray(body) ? body : [body]));
-      return J(body);
+      return J(body.map((b, i) => Object.assign({ id: 'doc-' + Date.now() + '-' + i }, b)));
     }
     if (m !== 'GET') return J([]);
     if (/\/customers\b/.test(url)) return J([CUST_A, CUST_B, CUST_W]);
@@ -92,24 +95,24 @@ const path = require('path');
   const custFilterOptions = await page.$$eval('#docCustomer option', os => os.map(o => o.textContent));
   ck('絞り込み用セレクトには発送実績のある顧客のみ出る', custFilterOptions.some(t => t.includes('A店')) && custFilterOptions.some(t => t.includes('B店')) && !custFilterOptions.some(t => t.includes('ノブレスオブリージュ')), custFilterOptions.join(','));
 
-  // ── 1) 単一顧客（A店のみ）: 従来どおり自動で宛名になる ──
+  // ── 1) 単一顧客（A店のみ）: 従来どおり自動で宛名になる。品名に顧客タグは付かない ──
   dialogs.length = 0; // 初期化中に出た「スタッフキー」等の無関係なダイアログを除外
   await page.evaluate(() => { document.querySelectorAll('#docOrderList input[type=checkbox]').forEach(cb => cb.checked = (cb.dataset.oid === 'ord-a')); });
-  await page.evaluate(() => generateDoc('納品書'));
-  await page.waitForTimeout(150);
-  let previewHtml = await page.$eval('#docPreviewContent', el => el.innerHTML);
-  ck('単一顧客: プレビューに宛名(A店)が出る', previewHtml.includes('A店'), previewHtml.slice(0, 300));
-  ck('単一顧客: 出荷先の内訳列は出ない', !previewHtml.includes('出荷先'), '');
-  ck('単一顧客: 備考（出荷内訳）は出ない', !previewHtml.includes('備考（出荷内訳）'), '');
+  let [popup1] = await Promise.all([
+    page.waitForEvent('popup'),
+    page.evaluate(() => generateDoc('納品書')),
+  ]);
+  await popup1.waitForLoadState();
+  let previewHtml = await popup1.content();
+  ck('単一顧客: プレビューに宛名(A店)が出る', previewHtml.includes('A店'), previewHtml.slice(0, 500));
+  ck('単一顧客: 品名に顧客タグ[A店]は付かない', !previewHtml.includes('[A店]'), previewHtml);
+  ck('単一顧客: 出荷内訳（備考）は出ない', !previewHtml.includes('出荷内訳'), '');
   let doc1 = postedDocuments.find(d => d.order_id === 'ord-a');
   ck('単一顧客: documentsのcustomer_idはA店本人', !!doc1 && doc1.customer_id === 'cust-a', JSON.stringify(doc1));
   ck('単一顧客: アラートは出ない', dialogs.length === 0, dialogs.join(' / '));
-  await page.click('#docPreview .btn, #docPreview button', { trial: true }).catch(() => {}); // モーダル存在確認のみ
+  await popup1.close();
 
-  // モーダルを閉じて次のケースへ（closeModal相当。無ければinnerHTMLクリアで代用）
-  await page.evaluate(() => { const m = document.getElementById('docPreview'); if (m && m.classList) m.classList.remove('active','show'); if (typeof closeModal === 'function') { try { closeModal('docPreview'); } catch(e){} } });
-
-  // ── 2) 複数顧客(A+B)・請求先未指定 → 止まる ──
+  // ── 2) 複数顧客(A+B)・請求先未指定 → 止まる（ポップアップは開かない） ──
   postedDocuments.length = 0; dialogs.length = 0;
   await page.evaluate(() => { document.getElementById('docBillTo').value = ''; });
   await page.evaluate(() => { document.querySelectorAll('#docOrderList input[type=checkbox]').forEach(cb => cb.checked = true); });
@@ -122,29 +125,33 @@ const path = require('path');
   dialogs.length = 0;
   await page.fill('#docBillToInput', 'C0731 ノブレスオブリージュ');
   await page.dispatchEvent('#docBillToInput', 'input');
-  await page.evaluate(() => generateDoc('請求書'));
-  await page.waitForTimeout(150);
-  previewHtml = await page.$eval('#docPreviewContent', el => el.innerHTML);
+  const [popup2] = await Promise.all([
+    page.waitForEvent('popup'),
+    page.evaluate(() => generateDoc('請求書')),
+  ]);
+  await popup2.waitForLoadState();
+  previewHtml = await popup2.content();
   ck('複数顧客+請求先: アラートは出ない', dialogs.length === 0, dialogs.join(' / '));
-  ck('複数顧客+請求先: 宛名はノブレスオブリージュ', previewHtml.includes('ノブレスオブリージュ'), previewHtml.slice(0, 300));
-  ck('複数顧客+請求先: 内訳に出荷先列が出る', previewHtml.includes('出荷先'), '');
-  ck('複数顧客+請求先: 内訳にA店とB店の両方が出る', previewHtml.includes('A店') && previewHtml.includes('B店'), '');
-  ck('複数顧客+請求先: 元の注文番号が出る', previewHtml.includes('ORD-A001') && previewHtml.includes('ORD-B001'), '');
-  // 合計: (10000+5000)*1.1 = 16500
-  ck('複数顧客+請求先: 合計金額が16,500円', /16,500/.test(previewHtml), previewHtml.match(/合計金額[^<]*/)?.[0] || '');
+  ck('複数顧客+請求先: 宛名はノブレスオブリージュ', previewHtml.includes('ノブレスオブリージュ'), previewHtml.slice(0, 500));
+  ck('複数顧客+請求先: 品名にA店・B店のタグが付く', previewHtml.includes('[A店]') && previewHtml.includes('[B店]'), previewHtml);
+  // 税率8%（食品）: 小計15,000 消費税1,200 合計16,200
+  ck('複数顧客+請求先: 合計金額が16,200円', /16,200/.test(previewHtml), previewHtml.match(/[¥￥]1[,、]?200|16,200/)?.[0] || previewHtml.slice(0, 800));
 
   ck('複数顧客+請求先: documentsが2件（A・B双方の注文にひもづく）', postedDocuments.length === 2, JSON.stringify(postedDocuments));
   ck('複数顧客+請求先: 両方ともcustomer_idは請求先(cust-w)', postedDocuments.every(d => d.customer_id === 'cust-w'), JSON.stringify(postedDocuments));
   ck('複数顧客+請求先: order_idはそれぞれ元の注文のまま', new Set(postedDocuments.map(d => d.order_id)).size === 2
     && postedDocuments.some(d => d.order_id === 'ord-a') && postedDocuments.some(d => d.order_id === 'ord-b'), JSON.stringify(postedDocuments));
+  const savedTotal = postedDocuments.find(d => d.order_id === 'ord-a')?.total_amount;
+  ck('複数顧客+請求先: 保存されるtotal_amountも16,200円', savedTotal === 16200, String(savedTotal));
 
   // 備考（出荷内訳）: 「いつ・どこへ・何を送ったか」が日付ごとに自動で書かれる
-  ck('複数顧客+請求先: 備考見出しが出る', previewHtml.includes('備考（出荷内訳）'), '');
+  ck('複数顧客+請求先: 出荷内訳の見出しが出る', previewHtml.includes('出荷内訳'), '');
   ck('複数顧客+請求先: 9/1にA店の内訳が出る', previewHtml.includes('9/1 A店（イノシシ　モモ　4kg）'), previewHtml);
   ck('複数顧客+請求先: 9/2にB店の内訳が出る', previewHtml.includes('9/2 B店（イノシシ　ロース　2kg）'), previewHtml);
   ck('複数顧客+請求先: 日付順（9/1が9/2より前）に並ぶ', previewHtml.indexOf('9/1 A店') < previewHtml.indexOf('9/2 B店'), '');
   const doc0 = postedDocuments.find(d => d.order_id === 'ord-a');
   ck('複数顧客+請求先: documentsの1件目にmemoとして備考が保存される', !!doc0 && doc0.memo && doc0.memo.includes('9/1 A店') && doc0.memo.includes('9/2 B店'), JSON.stringify(doc0));
+  await popup2.close();
 
   ck('ページエラーなし', errors.length === 0, errors.join(' / '));
 
