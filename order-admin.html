@@ -1485,7 +1485,8 @@ async function odLoadAllocations(orderId){
 function showOrderDetail(id){
   const o=allOrders.find(x=>x.id===id);
   if(!o) return;
-  const items=o.order_items||[];
+  // モモの部位区分（全体・ウチ・ソト・シンタマ）はまとめ、同じ品種・部位の行は合計重量で1行にする
+  const items=consolidateItemsForBilling(o.order_items||[]);
   const cust=allCustomers.find(c=>c.id===o.customer_id);
   document.getElementById('odTitle').textContent=`注文詳細 - ${o.order_code||''}`;
   let html=`
