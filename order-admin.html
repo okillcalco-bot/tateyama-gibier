@@ -1641,7 +1641,7 @@ async function loadDocOrders(){
   if(!range){el.innerHTML='<div class="empty">期間を指定してください</div>';return}
   el.innerHTML='<div class="empty">読み込み中…</div>';
   try{
-    let q=`?status=in.(${SHIP_STATUSES.join(',')})&order_date=gte.${range.from}&order_date=lte.${range.to}&select=*,order_items(*)&order=order_date.desc`;
+    let q=`?status=in.(${SHIP_STATUSES.join(',')})&order_date=gte.${range.from}&order_date=lte.${range.to}&select=*,order_items(*),shipments(freight,carrier,size_code,is_cool)&order=order_date.desc`;
     if(custIds.length===1) q+=`&customer_id=eq.${custIds[0]}`;
     else if(custIds.length>1) q+=`&customer_id=in.(${custIds.join(',')})`;
     docOrders=await sb('GET','orders','',q);
@@ -1694,6 +1694,30 @@ function getSelectedDocOrders(){
   return docOrders.filter(o=>ids.includes(o.id));
 }
 
+// モモの部位（全体・ウチ・ソト・シンタマ）は精肉時の呼び分けであって、請求時には区別しない
+function normalizePartNameForBilling(partName){
+  if(partName && /^モモ[（(]/.test(partName)) return 'モモ';
+  return partName;
+}
+
+// 同一注文内の同じ品種・部位の明細は、請求書には内訳を書かず1行にまとめる
+function consolidateItemsForBilling(items){
+  const groups=new Map();
+  (items||[]).forEach(i=>{
+    const part=normalizePartNameForBilling(i.part_name);
+    const key=(i.species||'')+'|'+(part||'');
+    if(!groups.has(key)) groups.set(key,{species:i.species,part_name:part,weight_kg:0,amount:0});
+    const g=groups.get(key);
+    g.weight_kg+=Number(i.weight_kg||i.weight||0);
+    g.amount+=Number(i.subtotal||i.amount||0);
+  });
+  return [...groups.values()].map(g=>{
+    const weight_kg=Math.round(g.weight_kg*100)/100;
+    return {species:g.species,part_name:g.part_name,weight_kg,
+      unit_price:weight_kg?Math.round(g.amount/weight_kg):0,amount:g.amount,subtotal:g.amount};
+  });
+}
+
 // 複数顧客をまとめた書類向けに「いつ・どこへ・何を送ったか」の備考テキストを自動生成する
 // （仲卸業者宛の請求書に、内訳として卸先の店舗名を書き添える運用のため）
 function buildShipmentNote(selected){
@@ -1701,8 +1725,8 @@ function buildShipmentNote(selected){
   selected.forEach(o=>{
     const d=o.delivery_date||o.order_date;
     if(!d) return;
-    const items=(o.order_items||[]).map(i=>{
-      const w=i.weight_kg||i.weight;
+    const items=consolidateItemsForBilling(o.order_items).map(i=>{
+      const w=i.weight_kg;
       const name=(i.species||'')+(i.part_name?'　'+i.part_name:'');
       return w?`${name}　${w}kg`:name;
     }).join('、');
@@ -1730,9 +1754,17 @@ async function generateDoc(type){
   const seq=String(Math.floor(Math.random()*900)+100);
   const docNum=`${type}-${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${seq}`;
   const allItems=[];
-  selected.forEach(o=>(o.order_items||[]).forEach(i=>allItems.push(Object.assign({},i,{
-    _srcCustomer:o.customer_name||'', _srcOrderCode:o.order_code||''
-  }))));
+  selected.forEach(o=>{
+    consolidateItemsForBilling(o.order_items).forEach(i=>allItems.push(Object.assign({},i,{
+      _srcCustomer:o.customer_name||'', _srcOrderCode:o.order_code||''
+    })));
+    const ship=(o.shipments||[])[0];
+    if(ship && Number(ship.freight)>0){
+      const label='送料'+(ship.size_code?`（${ship.is_cool?'クール':''}${ship.size_code}）`:'');
+      allItems.push({species:label,part_name:'',weight_kg:null,unit_price:Number(ship.freight),amount:Number(ship.freight),subtotal:Number(ship.freight),
+        _srcCustomer:o.customer_name||'',_srcOrderCode:o.order_code||'',_isFreight:true});
+    }
+  });
   const subtotal=allItems.reduce((s,i)=>s+Number(i.subtotal||i.amount||0),0);
   const tax=Math.floor(subtotal*0.1);
   const total=subtotal+tax;
