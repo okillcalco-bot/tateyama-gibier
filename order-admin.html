@@ -3275,8 +3275,14 @@ async function invPullApply(){
     const pm=allPriceMaster.find(p=>p.species===g.species&&p.part_name===g.base&&(p.grade||'並')===(g.grade||'並'));
     const pmPrice=pm?(pm['price_'+rank]??pm.price_standard):null;
     // 一致がなければ元の単価、それも無ければ金額から逆算して明細金額を一致させる
-    const price=pmPrice!=null?pmPrice:(g.anyPrice!=null?g.anyPrice:(g.qty?Math.round(g.amt/g.qty):g.amt));
-    keep.push({name, qty:Math.round(g.qty*100)/100, unit:'kg', price, tax:8});
+    const priceInclusive=pmPrice!=null?pmPrice:(g.anyPrice!=null?g.anyPrice:(g.qty?Math.round(g.amt/g.qty):g.amt));
+    const qty=Math.round(g.qty*100)/100;
+    // 価格マスタの単価・order_items.unit_priceはいずれも税込のため、明細に積む前に税抜相当へ変換する
+    // （invCalcLines()は税抜として税率を上乗せするため、そのまま渡すと二重課税になる）
+    const inclusiveAmount=Math.round(qty*priceInclusive);
+    const exclusiveAmount=Math.round(inclusiveAmount/1.08);
+    const price=qty?Math.round(exclusiveAmount/qty):exclusiveAmount;
+    keep.push({name, qty, unit:'kg', price, tax:8});
   });
   invLines=keep.length?keep:[newInvLine()];
   renderInvLines();
