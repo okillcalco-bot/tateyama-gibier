@@ -304,7 +304,9 @@ th,td{padding:8px 6px;font-size:.8rem}
       <h3>書類発行</h3>
       <div class="form-group" style="margin-bottom:12px;max-width:360px">
         <label>請求先（宛名）</label>
-        <select id="docBillTo"><option value="">（選択した注文の顧客をそのまま宛名にする）</option></select>
+        <input type="text" id="docBillToInput" list="docBillToList" placeholder="店舗名・コードで検索（空欄なら選択した注文の顧客をそのまま宛名にする）" autocomplete="off" oninput="onDocBillToInput()">
+        <datalist id="docBillToList"></datalist>
+        <input type="hidden" id="docBillTo">
         <div style="font-size:.75rem;color:var(--text2);margin-top:2px">複数の顧客の注文をまとめて1枚の書類にする場合は、仲卸業者など請求先を選んでください。</div>
       </div>
       <div class="doc-buttons">
@@ -1599,16 +1601,25 @@ function populateDocCustomerDropdown(){
   [...sel.options].forEach(o=>{ if(prevSelected.has(o.value)) o.selected=true; });
 }
 
-// 請求先（宛名）は発送実績の有無に関わらず、全顧客から選べるようにする
-// （仲卸業者など、注文自体は無いが請求だけ受ける相手を選べるようにするため）
+// 請求先（宛名）は発送実績の有無に関わらず、全顧客から検索・選択できるようにする
+// （仲卸業者など、注文自体は無いが請求だけ受ける相手を選べるようにするため。
+//   件数が多いとプルダウンでは選びづらいので、顧客検索と同じ「入力→datalist候補→確定」の方式にしている）
 function populateDocBillToDropdown(){
-  const sel=document.getElementById('docBillTo');
-  if(!sel) return;
-  const prev=sel.value;
+  const dl=document.getElementById('docBillToList');
+  if(!dl) return;
+  const prevId=document.getElementById('docBillTo').value;
   const custs=allCustomers.slice().sort((a,b)=>(a.code||'').localeCompare(b.code||''));
-  sel.innerHTML='<option value="">（選択した注文の顧客をそのまま宛名にする）</option>'
-    +custs.map(c=>`<option value="${c.id}">${esc(c.code||'')} ${esc(c.name||'')}</option>`).join('');
-  if(prev && custs.some(c=>c.id===prev)) sel.value=prev;
+  dl.innerHTML=custs.map(c=>`<option value="${esc(c.code)} ${esc(c.name)}">${esc(c.kana||'')}</option>`).join('');
+  const prevCust=custs.find(c=>c.id===prevId);
+  if(prevCust) document.getElementById('docBillToInput').value=`${prevCust.code} ${prevCust.name}`;
+}
+function onDocBillToInput(){
+  const v=(document.getElementById('docBillToInput').value||'').trim();
+  if(!v){document.getElementById('docBillTo').value='';return;}
+  const lv=v.toLowerCase();
+  const c=allCustomers.find(x=>`${x.code} ${x.name}`===v)
+    || allCustomers.find(x=>(x.name||'').toLowerCase().includes(lv)||(x.kana||'').toLowerCase().includes(lv)||(x.code||'').toLowerCase().includes(lv));
+  document.getElementById('docBillTo').value=c?c.id:'';
 }
 
 function docPeriodRange(){

@@ -79,9 +79,15 @@ const path = require('path');
   listText = await page.$eval('#docOrderList', el => el.textContent);
   ck('備考検索クリア後: 元通りA店・B店の両方が出る', listText.includes('A店') && listText.includes('B店'), listText);
 
-  // 5) 請求先セレクトには発送実績の無いノブレスオブリージュも出る
-  const billToOptions = await page.$$eval('#docBillTo option', os => os.map(o => o.textContent));
-  ck('請求先セレクトに仲卸業者(ノブレスオブリージュ)が出る', billToOptions.some(t => t.includes('ノブレスオブリージュ')), billToOptions.join(','));
+  // 5) 請求先は検索式（入力→datalist候補）。発送実績の無いノブレスオブリージュも候補に出て、入力するとidに解決される
+  const billToOptions = await page.$$eval('#docBillToList option', os => os.map(o => o.value));
+  ck('請求先候補(datalist)に仲卸業者(ノブレスオブリージュ)が出る', billToOptions.some(t => t.includes('ノブレスオブリージュ')), billToOptions.join(','));
+  await page.fill('#docBillToInput', 'ノブレスオブリージュ');
+  await page.dispatchEvent('#docBillToInput', 'input');
+  ck('請求先に店名を入力するとidに解決される', await page.$eval('#docBillTo', el => el.value) === 'cust-w', await page.$eval('#docBillTo', el => el.value));
+  await page.fill('#docBillToInput', '');
+  await page.dispatchEvent('#docBillToInput', 'input');
+  ck('請求先を空にするとidも空に戻る', await page.$eval('#docBillTo', el => el.value) === '', await page.$eval('#docBillTo', el => el.value));
   // 絞り込み用の顧客セレクトには、発送実績の無い顧客は出ない
   const custFilterOptions = await page.$$eval('#docCustomer option', os => os.map(o => o.textContent));
   ck('絞り込み用セレクトには発送実績のある顧客のみ出る', custFilterOptions.some(t => t.includes('A店')) && custFilterOptions.some(t => t.includes('B店')) && !custFilterOptions.some(t => t.includes('ノブレスオブリージュ')), custFilterOptions.join(','));
@@ -112,9 +118,10 @@ const path = require('path');
   ck('複数顧客・請求先未指定: アラートで止まる', dialogs.some(m => m.includes('請求先')), dialogs.join(' / '));
   ck('複数顧客・請求先未指定: documentsは送信されない', postedDocuments.length === 0, JSON.stringify(postedDocuments));
 
-  // ── 3),4) 複数顧客(A+B)・請求先=ノブレスオブリージュ ──
+  // ── 3),4) 複数顧客(A+B)・請求先=ノブレスオブリージュ（検索入力から選ぶ） ──
   dialogs.length = 0;
-  await page.evaluate(() => { document.getElementById('docBillTo').value = 'cust-w'; });
+  await page.fill('#docBillToInput', 'C0731 ノブレスオブリージュ');
+  await page.dispatchEvent('#docBillToInput', 'input');
   await page.evaluate(() => generateDoc('請求書'));
   await page.waitForTimeout(150);
   previewHtml = await page.$eval('#docPreviewContent', el => el.innerHTML);
