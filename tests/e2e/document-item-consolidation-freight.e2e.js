@@ -15,6 +15,10 @@
 //     2. 同じ品種・部位（例: ロース）の複数行も1行にまとまる
 //     3. 送料（shipments.freight）が明細に「送料（クール◯◯）」として自動で追加され、合計にも反映される
 //     4. 送料が0/未設定の注文では送料行が出ない
+//     5. 税の二重計上防止（2026-09-08追加）: order_items.unit_price／amountは税込
+//        （顧客ポータルのportal_issue_document関数にも明記されている規約）なので、
+//        明細に載せる前に税抜相当へ変換してから8%を計算する（そのまま税抜扱いすると
+//        肉の分だけ二重課税になる）。送料はもともと税抜のため変換しない
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
 
@@ -75,22 +79,24 @@ const path = require('path');
   await popup1.waitForLoadState();
   let previewHtml = await popup1.content();
 
-  // 1) モモの部位違いが1行「モモ」にまとまる（1.0+0.3+0.2=1.5kg、2600*1.5=3900円）
+  // 1) モモの部位違いが1行「モモ」にまとまる（1.0+0.3+0.2=1.5kg、税込2600*1.5=3900円）
+  // order_items.unit_priceは税込のため、明細では税抜相当（3,900÷1.08≒3,611円）に変換して載る
   ck('モモの部位違いが1行にまとまる（部位名の細分けは出ない）', !previewHtml.includes('モモ（'), previewHtml);
   ck('モモの合算重量1.5kgが出る', previewHtml.includes('1.5'), previewHtml);
-  ck('モモの合算金額3,900円が出る', /3,900/.test(previewHtml), previewHtml);
+  ck('モモの合算金額が税抜換算3,611円で出る（税込3,900円から変換・二重課税なし）', /3,611/.test(previewHtml), previewHtml);
 
-  // 2) ロースの重複行が1行にまとまる（1.0+0.5=1.5kg、3800*1.5=5700円）
+  // 2) ロースの重複行が1行にまとまる（1.0+0.5=1.5kg、税込3800*1.5=5700円→税抜換算5,279円）
   const rosuCount = (previewHtml.match(/ロース/g) || []).length;
   ck('ロースの行が1つだけにまとまる', rosuCount === 1, `ロースの出現回数=${rosuCount}`);
-  ck('ロースの合算金額5,700円が出る', /5,700/.test(previewHtml), previewHtml);
+  ck('ロースの合算金額が税抜換算5,279円で出る（税込5,700円から変換・二重課税なし）', /5,279/.test(previewHtml), previewHtml);
 
-  // 3) 送料が明細行として自動で入り、ラベルにサイズ・クールが出る
+  // 3) 送料が明細行として自動で入り、ラベルにサイズ・クールが出る（送料はもともと税抜なので変換不要）
   ck('送料の明細行が出る（クール100）', previewHtml.includes('送料（クール100）'), previewHtml);
   ck('送料の金額1,300円が明細に出る', /1,300/.test(previewHtml), previewHtml);
 
-  // 合計 = 肉(3900+5700=9600・8%)の税768 + 送料(1300・10%)の税130 = 小計10,900+税898 = 11,798
-  ck('送料込みの合計金額11,798円が出る', /11,798/.test(previewHtml), previewHtml.slice(0, 3000));
+  // 合計 = 肉の税抜換算(3,611+5,279=8,890・8%の税711) + 送料(1,300・10%の税130) = 小計10,190+税841 = 11,031
+  // （税込3,900+5,700+送料税込1,430=11,030に近い額。旧実装は税込価格にさらに8%を足す二重課税で11,798円になっていた）
+  ck('送料込みの合計金額11,031円が出る（二重課税なし）', /11,031/.test(previewHtml), previewHtml.slice(0, 3000));
   await popup1.close();
 
   // 4) 送料0の注文では送料行が出ない

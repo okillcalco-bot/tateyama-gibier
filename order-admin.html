@@ -1785,10 +1785,19 @@ async function generateDoc(type){
     const custTag=(consolidated&&o.customer_name)?`[${o.customer_name}] `:'';
     const tag=dateTag+custTag;
     consolidateItemsForBilling(o.order_items).forEach(i=>{
-      lines.push({name:tag+(i.species||'')+(i.part_name?' '+i.part_name:''),qty:i.weight_kg,unit:'kg',price:Number(i.unit_price||0),tax:8,amount:Number(i.subtotal||i.amount||0)});
+      // order_items.unit_price／amountは税込（価格マスタの単価がそのまま税込表示価格のため）。
+      // invCalcLines()は明細を税抜として扱い税率分を上乗せするので、ここで税抜相当に変換してから渡す
+      // （そのまま渡すと税込価格に消費税をもう一度乗せる二重課税になる）。
+      const inclusiveAmount=Number(i.subtotal||i.amount||0);
+      const exclusiveAmount=Math.round(inclusiveAmount/1.08);
+      const exclusivePrice=i.weight_kg?Math.round(exclusiveAmount/i.weight_kg):exclusiveAmount;
+      // 明細の金額欄はinvCalcLines()と同じ「数量×単価」の丸めで出す（表示と集計を一致させるため）
+      const displayAmount=i.weight_kg?Math.round(i.weight_kg*exclusivePrice):exclusiveAmount;
+      lines.push({name:tag+(i.species||'')+(i.part_name?' '+i.part_name:''),qty:i.weight_kg,unit:'kg',price:exclusivePrice,tax:8,amount:displayAmount});
     });
     const ship=(o.shipments||[])[0];
     if(ship && Number(ship.freight)>0){
+      // shipments.freightはもともと税抜（現場の送料入力欄も「税抜」表記）なので変換不要
       const label='送料'+(ship.size_code?`（${ship.is_cool?'クール':''}${ship.size_code}）`:'');
       lines.push({name:tag+label,qty:1,unit:'個',price:Number(ship.freight),tax:10,amount:Number(ship.freight)});
     }

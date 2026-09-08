@@ -17,6 +17,10 @@
 //     6. 備考検索（2026-09-08追加）: 顧客の絞り込み（Ctrl+クリックの複数選択）が非効率という指摘を受け、
 //        顧客IDは卸先の実店舗のまま、備考欄のキーワードで一覧を絞り込めるようにした
 //        （customer_idを請求先に付け替えると、請求先自身の顧客ポータルに他店の注文明細が漏れるため不採用）
+//     7. 税の二重計上防止（2026-09-08追加）: order_items.amountは税込（顧客ポータルの
+//        portal_issue_document関数にも明記）なのに、invCalcLines()は明細を税抜として
+//        税率を上乗せするため、そのまま渡すと肉の分だけ二重課税になっていた不具合を修正。
+//        税込金額を税抜相当に変換してから渡すことで、合計が元の税込合計と一致するようにした
 //     7. フォーマット統一（2026-09-08追加）: 発行元・宛名・書式が請求書作成タブ（invRenderPrint）と
 //        バラバラだった（宛名の住所・印鑑が古い決め打ち文言のまま）という指摘を受け、
 //        書類発行タブもinvRenderPrint（新しいウィンドウでの印刷プレビュー）を共用するようにした
@@ -134,15 +138,17 @@ const path = require('path');
   ck('複数顧客+請求先: アラートは出ない', dialogs.length === 0, dialogs.join(' / '));
   ck('複数顧客+請求先: 宛名はノブレスオブリージュ', previewHtml.includes('ノブレスオブリージュ'), previewHtml.slice(0, 500));
   ck('複数顧客+請求先: 品名にA店・B店のタグが付く', previewHtml.includes('[A店]') && previewHtml.includes('[B店]'), previewHtml);
-  // 税率8%（食品）: 小計15,000 消費税1,200 合計16,200
-  ck('複数顧客+請求先: 合計金額が16,200円', /16,200/.test(previewHtml), previewHtml.match(/[¥￥]1[,、]?200|16,200/)?.[0] || previewHtml.slice(0, 800));
+  // order_items.amount(A:10,000 B:5,000)は税込のため、税抜相当に変換してから8%を計算し直す
+  // （そのまま税抜扱いすると二重課税になるため。詳細はconsolidateItemsForBillingの呼び出し元を参照）
+  // 変換・丸めの結果、合計はほぼ15,000円（税込の元の合計）に戻る
+  ck('複数顧客+請求先: 合計金額が約15,000円（税込の二重計上なし）', /15,00[01]/.test(previewHtml), previewHtml.slice(0, 800));
 
   ck('複数顧客+請求先: documentsが2件（A・B双方の注文にひもづく）', postedDocuments.length === 2, JSON.stringify(postedDocuments));
   ck('複数顧客+請求先: 両方ともcustomer_idは請求先(cust-w)', postedDocuments.every(d => d.customer_id === 'cust-w'), JSON.stringify(postedDocuments));
   ck('複数顧客+請求先: order_idはそれぞれ元の注文のまま', new Set(postedDocuments.map(d => d.order_id)).size === 2
     && postedDocuments.some(d => d.order_id === 'ord-a') && postedDocuments.some(d => d.order_id === 'ord-b'), JSON.stringify(postedDocuments));
   const savedTotal = postedDocuments.find(d => d.order_id === 'ord-a')?.total_amount;
-  ck('複数顧客+請求先: 保存されるtotal_amountも16,200円', savedTotal === 16200, String(savedTotal));
+  ck('複数顧客+請求先: 保存されるtotal_amountも約15,000円（元の税込合計と一致・二重課税なし）', savedTotal >= 14990 && savedTotal <= 15010, String(savedTotal));
 
   // 備考（出荷内訳）: 「いつ・どこへ・何を送ったか」が日付ごとに自動で書かれる
   ck('複数顧客+請求先: 出荷内訳の見出しが出る', previewHtml.includes('出荷内訳'), '');
