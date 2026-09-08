@@ -26,6 +26,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold2)}
 table{width:100%;border-collapse:collapse}
 th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)}
 th{color:var(--text2);font-weight:500;font-size:.8rem;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+.sort-icon{color:var(--gold);font-size:.7rem}
 td{font-size:.9rem}
 tr:hover{background:var(--surface2)}
 .badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:12px;letter-spacing:.5px;display:inline-block;white-space:nowrap}
@@ -122,30 +123,6 @@ header{background:var(--surface);border-bottom:1px solid var(--border);padding:1
 .loading{text-align:center;color:var(--text2);padding:30px}
 .pagination{display:flex;justify-content:center;gap:8px;margin-top:16px}
 
-#docPreview .doc-preview-content{background:#fff;color:#222;padding:40px;border-radius:4px;font-family:'Noto Sans JP',sans-serif;max-width:210mm;margin:0 auto}
-#docPreview .doc-header{text-align:center;margin-bottom:24px;border-bottom:2px solid #222;padding-bottom:16px}
-#docPreview .doc-header h2{font-size:1.4rem;margin-bottom:4px}
-#docPreview .doc-header .doc-sub{font-size:.8rem;color:#666}
-#docPreview .doc-meta{display:flex;justify-content:space-between;margin-bottom:20px;font-size:.85rem}
-#docPreview .doc-customer{margin-bottom:16px}
-#docPreview .doc-customer h3{font-size:1rem;border-bottom:1px solid #ccc;padding-bottom:4px;margin-bottom:4px}
-#docPreview table{width:100%;border-collapse:collapse;margin-bottom:16px}
-#docPreview th,#docPreview td{border:1px solid #ccc;padding:8px;text-align:right;font-size:.85rem}
-#docPreview th{background:#f5f5f0;text-align:center;font-weight:700}
-#docPreview td:first-child{text-align:left}
-#docPreview .doc-totals{text-align:right;font-size:.95rem;margin-bottom:16px}
-#docPreview .doc-totals .total-row{padding:4px 0}
-#docPreview .doc-totals .grand-total{font-size:1.2rem;font-weight:700;color:#c00}
-#docPreview .doc-issuer{margin-top:30px;text-align:right;font-size:.8rem;line-height:1.8}
-#docPreview .doc-stamp{border:2px solid #c00;color:#c00;display:inline-block;padding:8px 16px;border-radius:50%;font-weight:700;transform:rotate(-15deg);margin-top:10px}
-.doc-actions{display:flex;gap:8px;margin-bottom:16px;justify-content:flex-end}
-
-@media print{
-body *{visibility:hidden}
-#docPreview,#docPreview *{visibility:visible}
-#docPreview{position:absolute;left:0;top:0;width:100%}
-#docPreview .doc-actions{display:none}
-}
 @media(max-width:768px){
 header{padding:10px 14px}
 .main{padding:14px}
@@ -252,7 +229,15 @@ th,td{padding:8px 6px;font-size:.8rem}
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>注文番号</th><th>顧客名</th><th>納品希望日</th><th>品目</th><th>金額</th><th>ステータス</th><th>操作</th></tr></thead>
+        <thead><tr>
+          <th style="cursor:pointer" onclick="sortOrdersBy('order_code')">注文番号<span id="sortIcon-order_code" class="sort-icon"></span></th>
+          <th style="cursor:pointer" onclick="sortOrdersBy('customer_name')">顧客名<span id="sortIcon-customer_name" class="sort-icon"></span></th>
+          <th style="cursor:pointer" onclick="sortOrdersBy('delivery_date')">納品希望日<span id="sortIcon-delivery_date" class="sort-icon"></span></th>
+          <th>品目</th>
+          <th style="cursor:pointer" onclick="sortOrdersBy('total_amount')">金額<span id="sortIcon-total_amount" class="sort-icon"></span></th>
+          <th style="cursor:pointer" onclick="sortOrdersBy('status')">ステータス<span id="sortIcon-status" class="sort-icon"></span></th>
+          <th>操作</th>
+        </tr></thead>
         <tbody id="ordersBody"></tbody>
       </table>
     </div>
@@ -899,17 +884,6 @@ th,td{padding:8px 6px;font-size:.8rem}
   </div>
 </div>
 
-<!-- Document Preview Modal -->
-<div class="modal-overlay" id="docPreview">
-  <div class="modal modal-wide">
-    <div class="doc-actions">
-      <button class="btn btn-gold" onclick="window.print()">&#x1f5a8; 印刷</button>
-      <button class="btn btn-outline" onclick="closeModal('docPreview')">閉じる</button>
-    </div>
-    <div class="doc-preview-content" id="docPreviewContent"></div>
-  </div>
-</div>
-
 <script>
 const SB_URL='https://clpdyrehdgzgiidbfucj.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
@@ -1422,11 +1396,32 @@ function filterOrders(status,btn){
   renderOrders();
 }
 
+// 日付がバラバラ・二重入力の疑いがある注文を見つけやすくするための並べ替え
+let ordersSortKey='', ordersSortDir=1; // 1=昇順, -1=降順
+function sortOrdersBy(key){
+  if(ordersSortKey===key) ordersSortDir=-ordersSortDir;
+  else { ordersSortKey=key; ordersSortDir=1; }
+  renderOrders();
+}
+function updateOrdersSortIcons(){
+  ['order_code','customer_name','delivery_date','total_amount','status'].forEach(k=>{
+    const el=document.getElementById('sortIcon-'+k);
+    if(el) el.textContent=(k===ordersSortKey)?(ordersSortDir>0?' ▲':' ▼'):'';
+  });
+}
+
 function renderOrders(){
   const search=document.getElementById('orderSearch').value.toLowerCase();
   let filtered=allOrders;
   if(currentFilter!=='all') filtered=filtered.filter(o=>o.status===currentFilter);
   if(search) filtered=filtered.filter(o=>(o.order_code||'').toLowerCase().includes(search)||(o.customer_name||'').toLowerCase().includes(search));
+  if(ordersSortKey){
+    filtered=filtered.slice().sort((a,b)=>{
+      if(ordersSortKey==='total_amount') return (Number(a.total_amount||0)-Number(b.total_amount||0))*ordersSortDir;
+      return String(a[ordersSortKey]||'').localeCompare(String(b[ordersSortKey]||''))*ordersSortDir;
+    });
+  }
+  updateOrdersSortIcons();
   const body=document.getElementById('ordersBody');
   if(!filtered.length){body.innerHTML='<tr><td colspan="7" class="empty">注文がありません</td></tr>';return}
   body.innerHTML=filtered.map(o=>{
@@ -1739,6 +1734,21 @@ function buildShipmentNote(selected){
   }).join('\n');
 }
 
+// 請求書作成タブと同じ採番方式（種類ごとにYYYYMM内で連番）を使う。
+// documents テーブルを共有しているため、2つのタブから発行しても番号が重複しない。
+async function computeDocNumber(type,dateStr){
+  const d=dateStr?new Date(dateStr+'T00:00:00'):new Date();
+  const ym=`${d.getFullYear()}${pad(d.getMonth()+1)}`;
+  const spec=INV_DOC_SPEC[type]||INV_DOC_SPEC['請求書'];
+  const prefix=`${spec.prefix}-${ym}-`;
+  let max=0;
+  try{
+    const rows=await sb('GET','documents','',`?doc_number=like.${prefix}*&select=doc_number`);
+    rows.forEach(r=>{const m=(r.doc_number||'').match(/-(\d+)$/);if(m){const n=parseInt(m[1],10);if(n>max)max=n;}});
+  }catch(e){console.error('採番エラー',e)}
+  return prefix+String(max+1).padStart(3,'0');
+}
+
 async function generateDoc(type){
   const selected=getSelectedDocOrders();
   if(!selected.length){alert('注文を選択してください');return}
@@ -1751,83 +1761,56 @@ async function generateDoc(type){
   const cust=allCustomers.find(c=>c.id===billToId);
   if(!cust){alert('請求先の顧客が見つかりません');return}
   const consolidated=custIds.length>1;
-  const now=new Date();
-  const seq=String(Math.floor(Math.random()*900)+100);
-  const docNum=`${type}-${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${seq}`;
-  const allItems=[];
-  selected.forEach(o=>{
-    consolidateItemsForBilling(o.order_items).forEach(i=>allItems.push(Object.assign({},i,{
-      _srcCustomer:o.customer_name||'', _srcOrderCode:o.order_code||''
-    })));
+
+  // 請求書は納品日（無ければ注文日）の古い順に並べる
+  const sorted=selected.slice().sort((a,b)=>(a.delivery_date||a.order_date||'').localeCompare(b.delivery_date||b.order_date||''));
+
+  // 明細は請求書作成タブ（invRenderPrint）と同じ形式で組み立て、発行元・宛名・フォーマットを完全に一致させる
+  const lines=[];
+  sorted.forEach(o=>{
+    const tag=(consolidated&&o.customer_name)?`[${o.customer_name}] `:'';
+    consolidateItemsForBilling(o.order_items).forEach(i=>{
+      lines.push({name:tag+(i.species||'')+(i.part_name?' '+i.part_name:''),qty:i.weight_kg,unit:'kg',price:Number(i.unit_price||0),tax:8,amount:Number(i.subtotal||i.amount||0)});
+    });
     const ship=(o.shipments||[])[0];
     if(ship && Number(ship.freight)>0){
       const label='送料'+(ship.size_code?`（${ship.is_cool?'クール':''}${ship.size_code}）`:'');
-      allItems.push({species:label,part_name:'',weight_kg:null,unit_price:Number(ship.freight),amount:Number(ship.freight),subtotal:Number(ship.freight),
-        _srcCustomer:o.customer_name||'',_srcOrderCode:o.order_code||'',_isFreight:true});
+      lines.push({name:tag+label,qty:1,unit:'個',price:Number(ship.freight),tax:10,amount:Number(ship.freight)});
     }
   });
-  const subtotal=allItems.reduce((s,i)=>s+Number(i.subtotal||i.amount||0),0);
-  const tax=Math.floor(subtotal*0.1);
-  const total=subtotal+tax;
-  const typeLabel={'見積書':'見積書','納品書':'納品書','請求書':'請求書','領収書':'領収書'}[type]||type;
-  const isPaid=type==='領収書';
-  const shipmentNote=consolidated?buildShipmentNote(selected):'';
-  let html=`
-    <div class="doc-header">
-      <h2>${typeLabel}</h2>
-      <div class="doc-sub">No. ${docNum}</div>
-    </div>
-    <div class="doc-meta">
-      <div>発行日: ${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日</div>
-      ${type==='請求書'?`<div>お支払期限: ${now.getFullYear()}年${now.getMonth()+2>12?1:now.getMonth()+2}月末日</div>`:''}
-    </div>
-    <div class="doc-customer">
-      <h3>${esc(cust.name)} ${esc(cust.honorific||'様')}</h3>
-      <div style="font-size:.85rem">${esc(cust.address||'')} ${esc(cust.building||'')}</div>
-      ${cust.company1?`<div style="font-size:.85rem">${esc(cust.company1)}</div>`:''}
-    </div>
-    ${consolidated?`<div style="font-size:.8rem;color:#555;margin:-8px 0 12px">※${custIds.length}件の顧客（${esc([...new Set(selected.map(o=>o.customer_name||''))].join('・'))}）への出荷分をまとめています</div>`:''}
-    <div style="text-align:center;font-size:1.3rem;font-weight:700;margin:16px 0;border:2px solid #222;padding:8px">
-      合計金額: &yen;${total.toLocaleString()}（税込）
-    </div>
-    <table>
-      <thead><tr>${consolidated?'<th>出荷先</th>':''}<th>品名</th><th>数量(kg)</th><th>単価</th><th>金額</th></tr></thead>
-      <tbody>${allItems.map(i=>`<tr>
-        ${consolidated?`<td>${esc(i._srcCustomer)}<br><span style="font-size:.75rem;color:#777">${esc(i._srcOrderCode)}</span></td>`:''}
-        <td>${esc((i.species||'')+(i.part_name?' '+i.part_name:''))}</td>
-        <td style="text-align:right">${i.weight_kg||i.weight||'--'}</td>
-        <td style="text-align:right">&yen;${Number(i.unit_price||0).toLocaleString()}</td>
-        <td style="text-align:right">&yen;${Number(i.subtotal||i.amount||0).toLocaleString()}</td>
-      </tr>`).join('')}</tbody>
-    </table>
-    <div class="doc-totals">
-      <div class="total-row">小計（税抜）: &yen;${subtotal.toLocaleString()}</div>
-      <div class="total-row">消費税（10%）: &yen;${tax.toLocaleString()}</div>
-      <div class="total-row grand-total">合計（税込）: &yen;${total.toLocaleString()}</div>
-    </div>
-    ${isPaid?'<div style="text-align:center;margin:20px 0;font-size:1rem">上記金額を正に領収いたしました。</div>':''}
-    ${shipmentNote?`<div class="doc-note-block" style="margin:16px 0;font-size:.85rem;white-space:pre-wrap;border-top:1px dashed #ccc;padding-top:10px"><strong>備考（出荷内訳）</strong><br>${esc(shipmentNote)}</div>`:''}
-    <div class="doc-issuer">
-      館山ジビエセンター<br>合同会社アルコ<br>
-      〒294-0014 千葉県館山市山本1-3<br>
-      TEL: 0470-29-3919<br>担当：沖
-      <br><span class="doc-stamp">TGC</span>
-    </div>`;
-  document.getElementById('docPreviewContent').innerHTML=html;
-  openModal('docPreview');
+  if(!lines.length){alert('明細がありません');return}
+
+  const shipmentNote=consolidated?buildShipmentNote(sorted):'';
+  const s=invoiceSettings;
+  const spec=INV_DOC_SPEC[type]||INV_DOC_SPEC['請求書'];
+  const p={
+    name:cust.name||'',honorific:cust.honorific||'御中',
+    address:[cust.address||'',cust.building||''].filter(Boolean).join(' '),
+    subject:'',date:today(),due:invDueDefault(type),
+    memo:shipmentNote?`【出荷内訳】\n${shipmentNote}`:'',
+    customer_id:billToId,order_ids:sorted.map(o=>o.id),type,
+    proviso:'',bank:spec.bank?(s.bank||''):'',
+    issuer:{issuer_name:s.issuer_name,issuer_sub:s.issuer_sub,postal:s.postal,address:s.address,tel:s.tel,email:s.email,reg_number:s.reg_number},
+    seal:s.seal_data_url||'',
+    lines
+  };
+  const c=invCalcLines(p.lines);
+  const docNum=await computeDocNumber(type,p.date);
+  invRenderPrint(p,docNum,{});
+
   try{
     // 選択した各注文を処理済みとして記録（同一書類番号を共有）。
     // customer_id は請求先（billToId）。元の注文がどの顧客のものかは order_id から orders.customer_id を辿れば分かるので、
     // 内訳が消えるわけではない（複数顧客をまとめた場合、請求上の宛先は請求先1人になる）。
-    const rows=selected.map((o,idx)=>({
+    const rows=sorted.map((o,idx)=>({
       doc_type:type,doc_number:docNum,customer_id:billToId,
-      order_id:o.id,issue_date:fmtDate(now),
-      total_amount:idx===0?total:0,tax_amount:idx===0?tax:0,status:'発行済',
+      order_id:o.id,issue_date:p.date,
+      total_amount:idx===0?c.total:0,tax_amount:idx===0?c.taxTotal:0,status:'発行済',
       memo:idx===0?(shipmentNote||null):null
     }));
     await sb('POST','documents',rows);
     // 一覧を更新（発行済みは下がる）
-    selected.forEach(o=>{(docDocsMap[o.id]=docDocsMap[o.id]||new Set()).add(type);});
+    sorted.forEach(o=>{(docDocsMap[o.id]=docDocsMap[o.id]||new Set()).add(type);});
     renderDocOrders();
   }catch(e){console.error('書類保存エラー:',e); alert('⚠ 書類の発行記録の保存に失敗しました。プレビューは表示されていますが「発行済み」として記録されていません。\n\n'+String(e.message||e));}
 }
