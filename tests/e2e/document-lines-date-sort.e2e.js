@@ -5,8 +5,10 @@
 //     明細を積んでいたため、選んだ順によっては新しい日付が先に出てしまっていた。
 //
 //   ここで測ること
-//     選択（チェックした）順が新しい日付→古い日付でも、発行される明細は
-//     常に納品日の古い順（8/1が8/2より先）に並ぶ
+//     1. 選択（チェックした）順が新しい日付→古い日付でも、発行される明細は
+//        常に納品日の古い順（8/1が8/2より先）に並ぶ
+//     2. 各明細に「請求書にも納品日を書いて」という指摘を受け、
+//        [M/D納品分] の形で納品日が明記される
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
 
@@ -59,6 +61,9 @@ const path = require('path');
   ]);
   await popup.waitForLoadState();
   const html = await popup.content();
+
+  ck('明細に納品日が[M/D納品分]の形で書かれる（古い方）', html.includes('[8/1納品分]'), html.slice(0, 3000));
+  ck('明細に納品日が[M/D納品分]の形で書かれる（新しい方）', html.includes('[8/20納品分]'), html.slice(0, 3000));
 
   const idxHire = html.indexOf('ヒレ');   // 8/20（新しい）
   const idxNaizo = html.indexOf('内臓');  // 8/1（古い）
