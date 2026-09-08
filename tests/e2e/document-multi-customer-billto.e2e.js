@@ -14,6 +14,9 @@
 //        内訳に出荷先（元の顧客名・注文番号）が出て、金額は全注文の合算になる
 //     4. 発行記録（documents POST）は、全ての元注文にひもづきつつ customer_id は請求先になる
 //     5. 請求先セレクトには、発送実績が無い顧客（仲卸業者）も候補に出る
+//     6. 備考検索（2026-09-08追加）: 顧客の絞り込み（Ctrl+クリックの複数選択）が非効率という指摘を受け、
+//        顧客IDは卸先の実店舗のまま、備考欄のキーワードで一覧を絞り込めるようにした
+//        （customer_idを請求先に付け替えると、請求先自身の顧客ポータルに他店の注文明細が漏れるため不採用）
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
 
@@ -28,13 +31,14 @@ const path = require('path');
   const CUST_B = { id: 'cust-b', code: 'C0002', name: 'B店', address: '千葉県B市', is_active: true };
   const CUST_W = { id: 'cust-w', code: 'C0731', name: 'ノブレスオブリージュ', address: '東京都W区', is_active: true }; // 仲卸業者・自身の注文は無い
 
-  const mkOrder = (id, cust, orderCode, item, date) => ({
+  const mkOrder = (id, cust, orderCode, item, date, memo) => ({
     id, customer_id: cust.id, customer_name: cust.name, order_code: orderCode,
     order_date: date || '2026-09-01', delivery_date: date || '2026-09-01', status: '発送済', total_amount: item.subtotal,
-    order_items: [item],
+    order_items: [item], memo: memo || null,
   });
-  const ORDER_A = mkOrder('ord-a', CUST_A, 'ORD-A001', { id: 'ia', species: 'イノシシ', part_name: 'モモ', weight_kg: 4, unit_price: 2500, subtotal: 10000 });
-  // Bだけ日付をずらし、備考の自動生成が「日付ごとに行を分けて並べる」ことも確認する
+  // A店の注文だけ備考に「ノブレスオブリージュ」を記録（実運用: 卸先の店舗名義のまま、備考で請求先グループを検索できるようにする運用）
+  const ORDER_A = mkOrder('ord-a', CUST_A, 'ORD-A001', { id: 'ia', species: 'イノシシ', part_name: 'モモ', weight_kg: 4, unit_price: 2500, subtotal: 10000 }, null, 'ノブレスオブリージュ');
+  // Bだけ日付をずらし、備考の自動生成が「日付ごとに行を分けて並べる」ことも確認する（備考なし＝備考検索の対象外になることも確認）
   const ORDER_B = mkOrder('ord-b', CUST_B, 'ORD-B001', { id: 'ib', species: 'イノシシ', part_name: 'ロース', weight_kg: 2, unit_price: 2500, subtotal: 5000 }, '2026-09-02');
 
   const postedDocuments = [];
@@ -62,6 +66,18 @@ const path = require('path');
 
   const results = [];
   const ck = (name, cond, got) => results.push([name, cond, got]);
+
+  // 6) 備考検索: 卸先の店舗名義のまま、備考のキーワードで一覧を絞り込める
+  let listText = await page.$eval('#docOrderList', el => el.textContent);
+  ck('備考検索前: A店・B店の両方が一覧に出る', listText.includes('A店') && listText.includes('B店'), listText);
+  await page.fill('#docMemoSearch', 'ノブレスオブリージュ');
+  await page.waitForTimeout(150);
+  listText = await page.$eval('#docOrderList', el => el.textContent);
+  ck('備考検索後: 備考に一致するA店だけが残る', listText.includes('A店') && !listText.includes('B店'), listText);
+  await page.fill('#docMemoSearch', '');
+  await page.waitForTimeout(150);
+  listText = await page.$eval('#docOrderList', el => el.textContent);
+  ck('備考検索クリア後: 元通りA店・B店の両方が出る', listText.includes('A店') && listText.includes('B店'), listText);
 
   // 5) 請求先セレクトには発送実績の無いノブレスオブリージュも出る
   const billToOptions = await page.$$eval('#docBillTo option', os => os.map(o => o.textContent));

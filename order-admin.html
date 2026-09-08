@@ -283,6 +283,11 @@ th,td{padding:8px 6px;font-size:.8rem}
           <select id="docCustomer" onchange="loadDocOrders()" multiple size="4"></select>
           <div style="font-size:.75rem;color:var(--text2);margin-top:2px">何も選ばなければ全顧客。Ctrl（Macは⌘）+クリックで複数選択できます。</div>
         </div>
+        <div class="form-group">
+          <label>備考検索</label>
+          <input type="text" id="docMemoSearch" oninput="renderDocOrders()" placeholder="例: ノブレスオブリージュ">
+          <div style="font-size:.75rem;color:var(--text2);margin-top:2px">注文の備考欄に含まれる文字で絞り込みます（顧客の絞り込みと併用可）。</div>
+        </div>
       </div>
       <div class="form-row" id="docCustomDates" style="display:none;margin-bottom:12px">
         <div class="form-group"><label>開始日</label><input type="date" id="docDateFrom" onchange="loadDocOrders()"></div>
@@ -1642,9 +1647,11 @@ async function loadDocOrders(){
 
 function renderDocOrders(){
   const el=document.getElementById('docOrderList');
-  if(!docOrders.length){el.innerHTML='<div class="empty">該当する発送はありません</div>';return}
+  const memoQ=(document.getElementById('docMemoSearch')?.value||'').trim();
+  const filtered=memoQ?docOrders.filter(o=>(o.memo||'').includes(memoQ)):docOrders;
+  if(!filtered.length){el.innerHTML=`<div class="empty">該当する発送は${memoQ?'（備考の絞り込みでは）':''}ありません</div>`;return}
   // 未発行（発行書類ゼロ）を上に、次に発行数の少ない順、同点は新しい発送順
-  const sorted=docOrders.slice().sort((a,b)=>{
+  const sorted=filtered.slice().sort((a,b)=>{
     const na=(docDocsMap[a.id]||new Set()).size, nb=(docDocsMap[b.id]||new Set()).size;
     if(na!==nb) return na-nb;
     return (b.order_date||'').localeCompare(a.order_date||'');
