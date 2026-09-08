@@ -28,13 +28,14 @@ const path = require('path');
   const CUST_B = { id: 'cust-b', code: 'C0002', name: 'B店', address: '千葉県B市', is_active: true };
   const CUST_W = { id: 'cust-w', code: 'C0731', name: 'ノブレスオブリージュ', address: '東京都W区', is_active: true }; // 仲卸業者・自身の注文は無い
 
-  const mkOrder = (id, cust, orderCode, item) => ({
+  const mkOrder = (id, cust, orderCode, item, date) => ({
     id, customer_id: cust.id, customer_name: cust.name, order_code: orderCode,
-    order_date: '2026-09-01', delivery_date: '2026-09-01', status: '発送済', total_amount: item.subtotal,
+    order_date: date || '2026-09-01', delivery_date: date || '2026-09-01', status: '発送済', total_amount: item.subtotal,
     order_items: [item],
   });
   const ORDER_A = mkOrder('ord-a', CUST_A, 'ORD-A001', { id: 'ia', species: 'イノシシ', part_name: 'モモ', weight_kg: 4, unit_price: 2500, subtotal: 10000 });
-  const ORDER_B = mkOrder('ord-b', CUST_B, 'ORD-B001', { id: 'ib', species: 'イノシシ', part_name: 'ロース', weight_kg: 2, unit_price: 2500, subtotal: 5000 });
+  // Bだけ日付をずらし、備考の自動生成が「日付ごとに行を分けて並べる」ことも確認する
+  const ORDER_B = mkOrder('ord-b', CUST_B, 'ORD-B001', { id: 'ib', species: 'イノシシ', part_name: 'ロース', weight_kg: 2, unit_price: 2500, subtotal: 5000 }, '2026-09-02');
 
   const postedDocuments = [];
   await page.route('**/rest/v1/**', rt => {
@@ -77,6 +78,7 @@ const path = require('path');
   let previewHtml = await page.$eval('#docPreviewContent', el => el.innerHTML);
   ck('単一顧客: プレビューに宛名(A店)が出る', previewHtml.includes('A店'), previewHtml.slice(0, 300));
   ck('単一顧客: 出荷先の内訳列は出ない', !previewHtml.includes('出荷先'), '');
+  ck('単一顧客: 備考（出荷内訳）は出ない', !previewHtml.includes('備考（出荷内訳）'), '');
   let doc1 = postedDocuments.find(d => d.order_id === 'ord-a');
   ck('単一顧客: documentsのcustomer_idはA店本人', !!doc1 && doc1.customer_id === 'cust-a', JSON.stringify(doc1));
   ck('単一顧客: アラートは出ない', dialogs.length === 0, dialogs.join(' / '));
@@ -112,6 +114,14 @@ const path = require('path');
   ck('複数顧客+請求先: 両方ともcustomer_idは請求先(cust-w)', postedDocuments.every(d => d.customer_id === 'cust-w'), JSON.stringify(postedDocuments));
   ck('複数顧客+請求先: order_idはそれぞれ元の注文のまま', new Set(postedDocuments.map(d => d.order_id)).size === 2
     && postedDocuments.some(d => d.order_id === 'ord-a') && postedDocuments.some(d => d.order_id === 'ord-b'), JSON.stringify(postedDocuments));
+
+  // 備考（出荷内訳）: 「いつ・どこへ・何を送ったか」が日付ごとに自動で書かれる
+  ck('複数顧客+請求先: 備考見出しが出る', previewHtml.includes('備考（出荷内訳）'), '');
+  ck('複数顧客+請求先: 9/1にA店の内訳が出る', previewHtml.includes('9/1 A店（イノシシ　モモ　4kg）'), previewHtml);
+  ck('複数顧客+請求先: 9/2にB店の内訳が出る', previewHtml.includes('9/2 B店（イノシシ　ロース　2kg）'), previewHtml);
+  ck('複数顧客+請求先: 日付順（9/1が9/2より前）に並ぶ', previewHtml.indexOf('9/1 A店') < previewHtml.indexOf('9/2 B店'), '');
+  const doc0 = postedDocuments.find(d => d.order_id === 'ord-a');
+  ck('複数顧客+請求先: documentsの1件目にmemoとして備考が保存される', !!doc0 && doc0.memo && doc0.memo.includes('9/1 A店') && doc0.memo.includes('9/2 B店'), JSON.stringify(doc0));
 
   ck('ページエラーなし', errors.length === 0, errors.join(' / '));
 

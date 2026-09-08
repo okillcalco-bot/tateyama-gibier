@@ -1676,6 +1676,26 @@ function getSelectedDocOrders(){
   return docOrders.filter(o=>ids.includes(o.id));
 }
 
+// 複数顧客をまとめた書類向けに「いつ・どこへ・何を送ったか」の備考テキストを自動生成する
+// （仲卸業者宛の請求書に、内訳として卸先の店舗名を書き添える運用のため）
+function buildShipmentNote(selected){
+  const byDate={};
+  selected.forEach(o=>{
+    const d=o.delivery_date||o.order_date;
+    if(!d) return;
+    const items=(o.order_items||[]).map(i=>{
+      const w=i.weight_kg||i.weight;
+      const name=(i.species||'')+(i.part_name?'　'+i.part_name:'');
+      return w?`${name}　${w}kg`:name;
+    }).join('、');
+    (byDate[d]=byDate[d]||[]).push(`${o.customer_name||''}（${items}）`);
+  });
+  return Object.keys(byDate).sort().map(d=>{
+    const dt=new Date(d+'T00:00:00');
+    return `${dt.getMonth()+1}/${dt.getDate()} ${byDate[d].join('、')}`;
+  }).join('\n');
+}
+
 async function generateDoc(type){
   const selected=getSelectedDocOrders();
   if(!selected.length){alert('注文を選択してください');return}
@@ -1700,6 +1720,7 @@ async function generateDoc(type){
   const total=subtotal+tax;
   const typeLabel={'見積書':'見積書','納品書':'納品書','請求書':'請求書','領収書':'領収書'}[type]||type;
   const isPaid=type==='領収書';
+  const shipmentNote=consolidated?buildShipmentNote(selected):'';
   let html=`
     <div class="doc-header">
       <h2>${typeLabel}</h2>
@@ -1734,6 +1755,7 @@ async function generateDoc(type){
       <div class="total-row grand-total">合計（税込）: &yen;${total.toLocaleString()}</div>
     </div>
     ${isPaid?'<div style="text-align:center;margin:20px 0;font-size:1rem">上記金額を正に領収いたしました。</div>':''}
+    ${shipmentNote?`<div class="doc-note-block" style="margin:16px 0;font-size:.85rem;white-space:pre-wrap;border-top:1px dashed #ccc;padding-top:10px"><strong>備考（出荷内訳）</strong><br>${esc(shipmentNote)}</div>`:''}
     <div class="doc-issuer">
       館山ジビエセンター<br>合同会社アルコ<br>
       〒294-0014 千葉県館山市山本1-3<br>
@@ -1749,7 +1771,8 @@ async function generateDoc(type){
     const rows=selected.map((o,idx)=>({
       doc_type:type,doc_number:docNum,customer_id:billToId,
       order_id:o.id,issue_date:fmtDate(now),
-      total_amount:idx===0?total:0,tax_amount:idx===0?tax:0,status:'発行済'
+      total_amount:idx===0?total:0,tax_amount:idx===0?tax:0,status:'発行済',
+      memo:idx===0?(shipmentNote||null):null
     }));
     await sb('POST','documents',rows);
     // 一覧を更新（発行済みは下がる）
