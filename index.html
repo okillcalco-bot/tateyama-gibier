@@ -7524,9 +7524,14 @@ function pmLabelHtml(d) {
     .wu { font-size:9pt; }
     .ex { font-size:7pt; font-weight:bold; margin-top:.5mm; }
     .tmp{ font-size:5.5pt; color:#333; }
-    /* flex-basisで高さを確保し、縮小も禁止（0にすると中のSVGが上下にはみ出して文字に重なる） */
-    .bc { flex:0 0 10mm; height:10mm; display:flex; align-items:center; justify-content:center; }
-    .bc svg { display:block; width:38mm !important; height:9.5mm !important; shape-rendering:crispEdges; }
+    /* flex-basisで高さを確保し、縮小も禁止（0にすると中のSVGが上下にはみ出して文字に重なる）
+       2026-09-03にQRの場所を作るため12.5mm/12mm→10mm/9.5mmに縮めたが、
+       「読み取りは幅＝8桁で担保しており高さは実測していない」という前提のまま出荷し、
+       2026-09-08に現物での読み取り失敗（ノクチラボ向け出荷）で判明。
+       実際に描画して測ると、QRを載せたままでも12.5mm/12mmに戻して60mmに収まる
+       （最長品名+住所まで含めて54.9mm、5mm以上の余裕）ため、縮める必要が無かった。 */
+    .bc { flex:0 0 12.5mm; height:12.5mm; display:flex; align-items:center; justify-content:center; }
+    .bc svg { display:block; width:38mm !important; height:12mm !important; shape-rendering:crispEdges; }
     /* バーコードの下：左に「この肉の物語」QR、右に手打ち用8桁と識別コード */
     .cap { display:flex; align-items:center; gap:1mm; margin-top:.2mm; }
     .cap .qr svg { display:block; width:9.5mm !important; height:9.5mm !important; }
