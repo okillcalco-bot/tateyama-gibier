@@ -16,11 +16,15 @@ const path = require('path');
   await page.waitForTimeout(500);
 
   // 実寸(40mm×60mm)のiframeにラベルを描画し、各要素の位置を実測する
-  const measure = async (identCode, partName) => await page.evaluate(async ({ identCode, partName }) => {
+  // scanCode を渡すと、実際の出荷ラベルと同じく「この肉の物語」QRも一緒に描画する
+  // （2026-09-08: QRを載せたまま元のバーコード高さ12mmに戻せるかを確かめるため追加）
+  const measure = async (identCode, partName, scanCode) => await page.evaluate(async ({ identCode, partName, scanCode }) => {
     const html = pmLabelHtml({
       origin: '館山産', speciesName: 'イノシシ肉', labelId: 'TGC-08-M168',
       partName, labelWeight: 0.76, expiryStr: '2027/8/26', identCode,
-      barcodeSvg: makeCode128SVG(shortIdent(identCode))
+      barcodeSvg: makeCode128SVG(scanCode || shortIdent(identCode)),
+      scanCode: scanCode || null,
+      qrSvg: scanCode ? makeQRSVG(storyUrl(scanCode), 9.5) : null
     });
     const f = document.createElement('iframe');
     f.style.cssText = 'position:fixed;left:-9999px;top:0;border:0;width:40mm;height:60mm;';
@@ -39,7 +43,7 @@ const path = require('path');
     };
     f.remove();
     return out;
-  }, { identCode, partName });
+  }, { identCode, partName, scanCode });
 
   const results = [];
   const check = (label, m) => {
@@ -63,14 +67,18 @@ const path = require('path');
     results.push([`${label}: 消費期限の行が潰れていない`, m.ex.h >= 1.5 * m.mmPx, `${mm(m.ex.h).toFixed(1)}mm`]);
     // 6) 読み取りに効くバー幅は維持（38mm幅）
     results.push([`${label}: バーコード幅38mmを維持`, Math.abs(mm(m.svg.w) - 38) < 1.5, `${mm(m.svg.w).toFixed(1)}mm`]);
-    // 7) バーコード高さは9.5mm確保（「この肉の物語」QRの場所を作るため12→9.5mmに。
-    //    読み取りに効くのはバー幅＝8桁の数字キーで担保しており、高さは狙いやすさの範囲）
-    results.push([`${label}: バーコード高さ9.5mm`, mm(m.svg.h) >= 9.0, `${mm(m.svg.h).toFixed(1)}mm`]);
+    // 7) バーコード高さは12mmを維持する（2026-09-03にQRの場所を作るため12→9.5mmに縮めたが、
+    //    2026-09-08に現物のスキャン失敗（ノクチラボ向け出荷）で発覚。実測すると12mmに戻しても
+    //    QR込みで60mmに収まる＝縮める必要が無かったため、元の高さに戻した）
+    results.push([`${label}: バーコード高さ12mm`, mm(m.svg.h) >= 11.5, `${mm(m.svg.h).toFixed(1)}mm`]);
   };
 
   // 写真と同じ条件（長い部位名・ペットフード用）と、長い識別コードの両方
   check('ペットフード用', await measure('TGC-08-M168', 'ペットフード用（なし）'));
   check('長い識別コード', await measure('TGC-08-M167-AJ-2', 'ロース'));
+  // 「この肉の物語」QRを載せた実際の出荷ラベルと同じ組み合わせ（長い品名＋QR）でも
+  // バーコードを12mmに戻したまま60mmに収まることを確かめる
+  check('QR付き・長い品名', await measure('TGC-08-M168', '骨付き モモ [上] [小売]', '10000926'));
 
   // 品名は語の途中で折り返さない（実際に使う品名で1行に収まること）
   const NAMES = ['ロース', 'モモ', 'ウデ', 'ミンチ用', 'ペットフード用（なし）', 'ペットフード用（あり）',
