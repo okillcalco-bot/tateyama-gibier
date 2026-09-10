@@ -1922,24 +1922,37 @@ async function generateDoc(type){
     lines
   };
   const c=invCalcLines(p.lines);
-  const docNum=await computeDocNumber(type,p.date);
-  invRenderPrint(p,docNum,{});
 
-  try{
-    // 選択した各注文を処理済みとして記録（同一書類番号を共有）。
-    // customer_id は請求先（billToId）。元の注文がどの顧客のものかは order_id から orders.customer_id を辿れば分かるので、
-    // 内訳が消えるわけではない（複数顧客をまとめた場合、請求上の宛先は請求先1人になる）。
-    const rows=sorted.map((o,idx)=>({
-      doc_type:type,doc_number:docNum,customer_id:billToId,
-      order_id:o.id,issue_date:p.date,
-      total_amount:idx===0?c.total:0,tax_amount:idx===0?c.taxTotal:0,status:'発行済',
-      memo:idx===0?(shipmentNote||null):null
-    }));
-    await sb('POST','documents',rows);
-    // 一覧を更新（発行済みは下がる）
-    sorted.forEach(o=>{(docDocsMap[o.id]=docDocsMap[o.id]||new Set()).add(type);});
-    renderDocOrders();
-  }catch(e){console.error('書類保存エラー:',e); alert('⚠ 書類の発行記録の保存に失敗しました。プレビューは表示されていますが「発行済み」として記録されていません。\n\n'+String(e.message||e));}
+  // 採番と保存の間に他の発行が挟まると番号が競合しうる（請求書作成タブのinvIssue()と同じ問題）ため、
+  // 同じくリトライで対処する。プレビューは番号が確定した後（保存成功後）に出す
+  // ―― 先にプレビューを出してから保存に失敗すると、見せた番号と実際には保存されない番号がずれるため。
+  for(let attempt=0;attempt<3;attempt++){
+    const docNum=await computeDocNumber(type,p.date);
+    try{
+      // 選択した各注文を処理済みとして記録（同一書類番号を共有）。
+      // customer_id は請求先（billToId）。元の注文がどの顧客のものかは order_id から orders.customer_id を辿れば分かるので、
+      // 内訳が消えるわけではない（複数顧客をまとめた場合、請求上の宛先は請求先1人になる）。
+      const rows=sorted.map((o,idx)=>({
+        doc_type:type,doc_number:docNum,customer_id:billToId,
+        order_id:o.id,issue_date:p.date,
+        total_amount:idx===0?c.total:0,tax_amount:idx===0?c.taxTotal:0,status:'発行済',
+        memo:idx===0?(shipmentNote||null):null
+      }));
+      await sb('POST','documents',rows);
+      invRenderPrint(p,docNum,{});
+      // 一覧を更新（発行済みは下がる）
+      sorted.forEach(o=>{(docDocsMap[o.id]=docDocsMap[o.id]||new Set()).add(type);});
+      renderDocOrders();
+      return;
+    }catch(e){
+      const msg=String(e.message||e);
+      if(msg.includes('23505')||msg.includes('duplicate')||msg.includes('documents_doc_number_key')) continue; // 採番競合→リトライ
+      console.error('書類保存エラー:',e);
+      alert('⚠ 書類の発行記録の保存に失敗しました。\n\n'+msg);
+      return;
+    }
+  }
+  alert('書類番号の採番が競合しました。もう一度発行し直してください。');
 }
 
 // ── Customers Tab ──
