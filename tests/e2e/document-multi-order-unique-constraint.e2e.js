@@ -103,6 +103,16 @@ const path = require('path');
     && [1, 2, 3, 4, 5].every(n => db.documentOrders.some(o => o.order_id === 'ord-' + n)), JSON.stringify(db.documentOrders));
   ck('document_ordersは発行したdocumentを指す', db.documents.length === 1 && db.documentOrders.every(o => o.document_id === db.documents[0].id), JSON.stringify(db));
 
+  // 2026-09-10追記: documentsの行自体は保存できても、宛名(partner_name)・支払期限(due_date)・
+  // 入金状態(billing_status)・再印刷用データ(snapshot)が抜けていたため、請求書作成タブの
+  // 請求書一覧では「宛名: --」「支払期限: --」の空欄行として表示され、再印刷もできなかった
+  // （書類発行タブと請求書作成タブが同じdocumentsテーブルを共有しているため）。
+  const doc1 = db.documents[0] || {};
+  ck('宛名(partner_name)が保存される', doc1.partner_name === 'ノブレスオブリージュ', String(doc1.partner_name));
+  ck('支払期限(due_date)が保存される（発行日の翌月末）', doc1.due_date === '2026-10-31', String(doc1.due_date));
+  ck('入金状態(billing_status)が未入金で保存される', doc1.billing_status === '未入金', String(doc1.billing_status));
+  ck('再印刷用データ(snapshot)が保存される', !!doc1.snapshot && Array.isArray(doc1.snapshot.lines) && doc1.snapshot.lines.length > 0, JSON.stringify(doc1.snapshot).slice(0, 200));
+
   // ② 続けて別の請求書を発行すると、採番が正しく進んでいる（INV-202609-002）
   alerts.length = 0;
   await page.evaluate(() => { document.querySelectorAll('#docOrderList input[type=checkbox]').forEach(cb => cb.checked = (cb.dataset.oid === 'ord-1')); });
