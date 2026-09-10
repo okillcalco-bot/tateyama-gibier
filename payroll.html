@@ -297,7 +297,14 @@ function renderTotal(){
 function importAtt(i){
   const att=attMap[lines[i].staff_name]; if(!att) return;
   lines[i].work_days=att.days; lines[i].work_hours=att.hours;
-  lines[i].commute_count=att.days; lines[i]._dirty=true;
+  lines[i].commute_count=att.days;
+  // スタッフ台帳の往復km・単価は、明細行を作った後に台帳側だけ更新されることがある
+  // （例: 台帳が未設定のまま行だけ先に作られ、後から往復kmを入力）。
+  // 取込のたびに台帳の最新値へ同期し直す（台帳が空欄なら明細行の値を残す）
+  const s=staffList.find(x=>x.name===lines[i].staff_name);
+  if(s && s.commute_round_km!=null) lines[i].commute_round_km=s.commute_round_km;
+  if(s && s.commute_yen_per_km!=null) lines[i].commute_yen_per_km=s.commute_yen_per_km;
+  lines[i]._dirty=true;
   render();
 }
 function importAllAttendance(){
