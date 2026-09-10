@@ -5,8 +5,12 @@
 //     これ見ながら振り込むから」という要望（例:
 //     「8月振込額」に続けて「氏名 金額」を1行ずつ）。
 //
+//   追記（2026-09-10）
+//     「8月を集計してボタンを押した際は9月振込になるから注意して」との指摘。
+//     振込は働いた月の翌月なので、見出しは対象月そのものではなく+1か月にする。
+//
 //   ここで測ること
-//     1. 先頭行が「{対象月}月振込額」になる
+//     1. 先頭行が「{対象月+1}月振込額」になる（8月分→9月振込額）
 //     2. 各行が「氏名 差引支給額（カンマ区切り）」になる（画面の差引支給額と一致）
 //     3. クリップボードへ実際に書き込まれる
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
@@ -55,7 +59,7 @@ const path = require('path');
   const clip = await page.evaluate(() => window.__clipboard[0]);
   T('クリップボードへ書き込まれる', typeof clip === 'string' && clip.length > 0, String(clip));
   const lines = (clip || '').split('\n');
-  T('先頭行が「8月振込額」になる', lines[0] === '8月振込額', JSON.stringify(lines));
+  T('8月分を集計すると振込は翌月なので「9月振込額」になる', lines[0] === '9月振込額', JSON.stringify(lines));
   T('白石秀一の行が「白石秀一 70,780」になる', lines.includes('白石秀一 70,780'), JSON.stringify(lines));
   T('沖浩志の行が「沖浩志 297,600」になる', lines.includes('沖浩志 297,600'), JSON.stringify(lines));
 

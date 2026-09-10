@@ -62,7 +62,7 @@ const path = require('path');
   T('吉田友美の行が追加される', names.some(n => n.includes('吉田友美')), JSON.stringify(names));
   T('大和田薫の行が追加される', names.some(n => n.includes('大和田薫')), JSON.stringify(names));
 
-  const daysVals = await page.$$eval('#body tr', trs => trs.map(tr => tr.querySelectorAll('input')[1]?.value)); // 0:hourly_wage 1:work_days
+  const daysVals = await page.$$eval('#body tr', trs => trs.map(tr => tr.querySelectorAll('input')[2]?.value)); // 0:hourly_wage 1:monthly_salary 2:work_days
   T('追加された行にも勤怠の日数が入る（20・18を含む）',
     daysVals.includes('20') && daysVals.includes('18'), JSON.stringify(daysVals));
 
