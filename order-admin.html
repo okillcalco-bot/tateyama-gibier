@@ -1896,10 +1896,11 @@ async function computeDocNumber(type,dateStr){
   const spec=INV_DOC_SPEC[type]||INV_DOC_SPEC['請求書'];
   const prefix=`${spec.prefix}-${ym}-`;
   let max=0;
-  try{
-    const rows=await sb('GET','documents','',`?doc_number=like.${prefix}*&select=doc_number`);
-    rows.forEach(r=>{const m=(r.doc_number||'').match(/-(\d+)$/);if(m){const n=parseInt(m[1],10);if(n>max)max=n;}});
-  }catch(e){console.error('採番エラー',e)}
+  // キャッシュされた古い結果（例: まだ1件も無かった頃の空配列）を拾わないよう、
+  // 毎回別のURLになるようキャッシュ回避のパラメータを付ける（採番が進まず同じ番号に
+  // 衝突し続ける不具合の原因になっていた）
+  const rows=await sb('GET','documents','',`?doc_number=like.${prefix}*&select=doc_number&_ts=${Date.now()}`);
+  rows.forEach(r=>{const m=(r.doc_number||'').match(/-(\d+)$/);if(m){const n=parseInt(m[1],10);if(n>max)max=n;}});
   return prefix+String(max+1).padStart(3,'0');
 }
 
@@ -1967,7 +1968,14 @@ async function generateDoc(type,forcedOrders){
   // 同じくリトライで対処する。プレビューは番号が確定した後（保存成功後）に出す
   // ―― 先にプレビューを出してから保存に失敗すると、見せた番号と実際には保存されない番号がずれるため。
   for(let attempt=0;attempt<3;attempt++){
-    const docNum=await computeDocNumber(type,p.date);
+    let docNum;
+    try{
+      docNum=await computeDocNumber(type,p.date);
+    }catch(e){
+      console.error('採番エラー:',e);
+      alert('⚠ 書類番号の採番でエラーが発生しました。\n\n'+String(e.message||e));
+      return false;
+    }
     try{
       // 選択した各注文を処理済みとして記録（同一書類番号を共有）。
       // customer_id は請求先（billToId）。元の注文がどの顧客のものかは order_id から orders.customer_id を辿れば分かるので、
@@ -3305,10 +3313,10 @@ async function regenInvNumber(){
   const ym=`${d.getFullYear()}${pad(d.getMonth()+1)}`;
   const prefix=`${invSpec().prefix}-${ym}-`;
   let max=0;
-  try{
-    const rows=await sb('GET','documents','',`?doc_number=like.${prefix}*&select=doc_number`);
-    rows.forEach(r=>{const m=(r.doc_number||'').match(/-(\d+)$/);if(m){const n=parseInt(m[1],10);if(n>max)max=n;}});
-  }catch(e){console.error('採番エラー',e)}
+  // computeDocNumber()と同じ理由でキャッシュ回避のパラメータを付ける（採番が進まず
+  // 同じ番号に衝突し続ける不具合の原因になっていた）。失敗時も握り潰さず投げる
+  const rows=await sb('GET','documents','',`?doc_number=like.${prefix}*&select=doc_number&_ts=${Date.now()}`);
+  rows.forEach(r=>{const m=(r.doc_number||'').match(/-(\d+)$/);if(m){const n=parseInt(m[1],10);if(n>max)max=n;}});
   el.value=prefix+String(max+1).padStart(3,'0');
 }
 
@@ -3693,7 +3701,13 @@ async function invIssue(){
   if(!confirm(`${invType}を発行します。\n\n宛名: ${p.name} ${p.honorific}\n合計: ¥${c.total.toLocaleString()}（税込・内消費税 ¥${c.taxTotal.toLocaleString()}）\n\n発行すると${invSpec().numberLabel}が確定し、以後この${invType}は編集できません（訂正は一覧から「取消」→「複製」で再発行）。よろしいですか？`)) return;
 
   for(let attempt=0;attempt<3;attempt++){
-    await regenInvNumber();
+    try{
+      await regenInvNumber();
+    }catch(e){
+      console.error('採番エラー:',e);
+      alert('⚠ 書類番号の採番でエラーが発生しました。\n\n'+String(e.message||e));
+      return;
+    }
     const number=document.getElementById('invNumber').value;
     const header={
       doc_type:invType,doc_number:number,customer_id:p.customer_id,issue_date:p.date,due_date:p.due||null,
@@ -3728,7 +3742,8 @@ async function invIssue(){
       invRenderPrint(p,number,{});
       invResetForm();
       loadInvoiceList();
-      regenInvNumber();
+      // 発行自体は成功済み。次の書類用の採番プレビューが失敗しても発行エラーとして報告しない
+      regenInvNumber().catch(e=>console.error('次回採番プレビューの取得に失敗',e));
       return;
     }catch(e){
       const msg=String(e.message||'');
