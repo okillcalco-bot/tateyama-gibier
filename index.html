@@ -1906,7 +1906,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div class="form-group"><label>実施者 *</label><select class="form-input" id="clean-staff"></select></div>
       <div style="font-size:12px;color:var(--text2);margin:10px 0 6px;">実施した項目（チェックを外すと未実施として記録されません）</div>
       <div id="clean-items" style="display:flex;flex-direction:column;gap:6px;"></div>
-      <div class="form-group" id="clean-temp-row" style="display:none;margin-top:10px;"><label>庫内温度（例: 冷蔵2℃ / 冷凍-20℃）</label><input class="form-input" id="clean-temp" /></div>
+      <div class="form-group" id="clean-temp-row" style="display:none;margin-top:10px;"><label>庫内温度 * （例: 冷蔵2℃ / 冷凍-20℃）</label><input class="form-input" id="clean-temp" placeholder="例: 冷蔵2℃ / 冷凍-20℃" /></div>
       <div class="form-group" style="margin-top:10px;"><label>特記事項</label><input class="form-input" id="clean-note" placeholder="例: 排水溝の詰まりを解消" /></div>
       <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
         <button class="btn" onclick="document.getElementById('cleanModal').style.display='none'">キャンセル</button>
@@ -9410,12 +9410,16 @@ async function cleaningSave() {
   if (!staff) { toast('実施者を選択してください', 'error'); return; }
   const items = [...document.querySelectorAll('.clean-chk:checked')].map(c => c.value);
   if (!items.length) { toast('実施した項目にチェックを入れてください', 'error'); return; }
+  // 冷蔵・冷凍庫は温度が空欄のまま30日間0件だった（HACCP温度記録表が丸ごと空白になる不具合）。
+  // 任意入力にしていたため誰も入れないまま記録だけ積み上がっていたので、この庫だけは必須にする。
+  const tempVal = cleanCurrentRoom.temp ? document.getElementById('clean-temp').value.trim() : '';
+  if (cleanCurrentRoom.temp && !tempVal) { toast('庫内温度を入力してください（HACCP温度記録表に必須です）', 'error'); return; }
   const payload = {
     room: cleanCurrentRoom.key,
     staff_name: staff,
     cleaned_at: new Date().toISOString(),
     items: items.join('、'),
-    temperature: cleanCurrentRoom.temp ? (document.getElementById('clean-temp').value.trim() || null) : null,
+    temperature: cleanCurrentRoom.temp ? tempVal : null,
     note: document.getElementById('clean-note').value.trim() || null,
   };
   try {
