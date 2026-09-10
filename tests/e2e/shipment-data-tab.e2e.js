@@ -16,10 +16,16 @@
 //     「出荷データは部位ごとの明細も知りたい。これだと分からない」という指摘。
 //     内容欄が1行にtext-overflow:ellipsisで詰め込まれ、モモの複数梱包などが
 //     「イノシシ モモ（全体）2.4kg、イノシシ モモ（全体）2.3…」のように
-//     途中で切れてホバーしないと読めなかった。請求書作成タブと同じ
-//     consolidateItemsForBilling で部位ごとにまとめ、1部位1行で改行表示する。
-//     5. モモの全体/ウチ/ソト等、複数梱包の同じ部位は合計重量1行にまとまる
-//     6. 違う部位は省略されず、それぞれ別の行として全部見える
+//     途中で切れてホバーしないと読めなかった。まずは請求書作成タブと同じ
+//     consolidateItemsForBilling で部位ごとにまとめる形にした。
+//
+//   追記2（2026-09-10）
+//     「出荷データに関しては、部位ごとにまとめる必要無くて、出荷した一次データの
+//     全ての情報を知りたい。個体番号ごとの部位とその重量まで記載して」という
+//     指摘で、上の部位まとめ方針を撤回。一次データなのでまとめずに
+//     個体番号（inventory.individual_id）ごとに1明細1行で全部並べる。
+//     5. 同じ部位の複数梱包もまとめず、個体番号つきでそれぞれ別行のまま見える
+//     6. 各行に個体番号（例: TGC-08-T307）が出る
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
 
@@ -54,10 +60,10 @@ const path = require('path');
       orders: {
         order_code: 'DIR-C001', customer_name: '澄川精肉店', customer_id: 'cust-c', order_date: '2026-09-08',
         order_items: [
-          { species: 'イノシシ', part_name: 'モモ（全体）', weight_kg: 2.4 },
-          { species: 'イノシシ', part_name: 'モモ（全体）', weight_kg: 2.3 },
-          { species: 'イノシシ', part_name: 'モモ（ウチ）', weight_kg: 1.2 },
-          { species: 'イノシシ', part_name: 'ロース', weight_kg: 5 },
+          { species: 'イノシシ', part_name: 'モモ（全体）', weight_kg: 2.4, inventory: { individual_id: 'TGC-08-T307' } },
+          { species: 'イノシシ', part_name: 'モモ（全体）', weight_kg: 2.3, inventory: { individual_id: 'TGC-08-T310' } },
+          { species: 'イノシシ', part_name: 'モモ（ウチ）', weight_kg: 1.2, inventory: { individual_id: 'TGC-08-T307' } },
+          { species: 'イノシシ', part_name: 'ロース', weight_kg: 5, inventory: { individual_id: 'TGC-08-T312' } },
         ],
       },
     },
@@ -93,13 +99,13 @@ const path = require('path');
   ck('注文番号が出る', bodyText.includes('DIR-A001') && bodyText.includes('DIR-B001'), '');
   ck('ステータスが出る', bodyText.includes('出荷済') && bodyText.includes('準備中'), '');
 
-  // 2b) 部位ごとにまとまり、途中で切れずに全部見える（澄川精肉店の実例）
-  // モモの全体/ウチ/ソト等は請求書作成タブと同じ慣習で1部位（モモ）にまとめる。
-  // 違う部位（ロース）は別行のまま省略されずに残る。
+  // 2b) 一次データなので部位ごとにまとめず、個体番号つきで全件別行のまま見える（澄川精肉店の実例）
   const sumiRow = await page.$$eval('#shipDataBody tr', trs =>
     trs.find(tr => tr.textContent.includes('澄川精肉店'))?.outerHTML || '');
-  ck('モモの全体/ウチ3件は合計5.9kgの1行にまとまる', /モモ　5\.9kg/.test(sumiRow), sumiRow);
-  ck('ロースも省略されずに別行で見える', /ロース　5kg/.test(sumiRow), sumiRow);
+  ck('モモ（全体）2.4kgがTGC-08-T307つきで出る（まとめない）', /TGC-08-T307　イノシシ モモ（全体）　2\.4kg/.test(sumiRow), sumiRow);
+  ck('同じ部位でも別個体(TGC-08-T310)のモモ2.3kgは別行のまま', /TGC-08-T310　イノシシ モモ（全体）　2\.3kg/.test(sumiRow), sumiRow);
+  ck('モモ（ウチ）1.2kgも部位名のまま（モモに丸められない）', /TGC-08-T307　イノシシ モモ（ウチ）　1\.2kg/.test(sumiRow), sumiRow);
+  ck('ロース(TGC-08-T312)も省略されずに別行で見える', /TGC-08-T312　イノシシ ロース　5kg/.test(sumiRow), sumiRow);
   ck('「…」で途中省略されない', !sumiRow.includes('…'), sumiRow);
 
   // 3) 顧客名・注文番号で検索できる

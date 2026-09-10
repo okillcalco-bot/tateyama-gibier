@@ -988,7 +988,7 @@ let shipData=[];
 async function loadShipData(){
   try{
     shipData=await sb('GET','shipments','',
-      `?select=*,orders(order_code,customer_name,customer_id,order_date,order_items(*,inventory(grade)))`
+      `?select=*,orders(order_code,customer_name,customer_id,order_date,order_items(*,inventory(grade,individual_id)))`
       +`&order=shipment_date.desc.nullslast,created_at.desc&limit=1000`);
   }catch(e){
     console.error('出荷データの読込エラー',e);
@@ -1038,10 +1038,13 @@ function renderShipData(){
   body.innerHTML=filtered.map(s=>{
     const o=s.orders||{};
     const items=o.order_items||[];
-    // 同じ品種・部位・肉ランクはまとめて1行にし、部位ごとの重量が一目で分かるようにする
-    // （請求書作成タブの内訳まとめと同じ考え方＝consolidateItemsForBilling）
-    const parts=consolidateItemsForBilling(items);
-    const content=parts.map(p=>`${esc(p.species||'')} ${esc(p.part_name||'')}　${p.weight_kg?p.weight_kg+'kg':''}`).join('<br>');
+    // 出荷の一次データなので部位ごとにまとめず、個体番号ごとの明細をそのまま1行ずつ出す
+    // （まとめると「どの個体から何が出たか」が消えて一次データとして使えないため）
+    const content=items.map(i=>{
+      const indiv=(i.inventory&&i.inventory.individual_id)||'';
+      const w=i.weight_kg||i.weight;
+      return `${indiv?esc(indiv)+'　':''}${esc(i.species||'')} ${esc(i.part_name||'')}${w?'　'+w+'kg':''}`;
+    }).join('<br>');
     const totalWeight=shipWeightSum(items);
     return `<tr>
       <td>${s.shipment_date||s.delivery_date||'--'}</td>
