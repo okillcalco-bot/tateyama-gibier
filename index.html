@@ -299,8 +299,14 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .pm-numpad-toggle{font-size:11px;padding:3px 10px;border-radius:10px;border:1px solid var(--border);background:none;color:var(--text2);cursor:pointer;margin-top:6px;font-family:inherit;}
 .pm-numpad-toggle.active{border-color:var(--gold2);color:var(--gold);}
 
-/* Completed List */
-.pm-completed-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;flex:1;min-height:0;overflow-y:auto;}
+/* Completed List
+   全部位完了ボタンはこのセクションの内容と一緒にスクロールしないようにする。
+   登録済みの部位が増えるとチップの一覧が伸びて、ボタンが画面端に押し出され
+   押しにくくなっていた（現場のタブレットで「全部位完了」が画面下端でほぼ隠れる不具合）。
+   ヘッダー行（件数＋ボタン）を固定し、チップ一覧だけを内側でスクロールさせる。 */
+.pm-completed-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
+.pm-completed-header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;flex-shrink:0;}
+.pm-completed-scroll{flex:1;min-height:0;overflow-y:auto;}
 .pm-completed-grid{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
 .pm-completed-chip{display:flex;align-items:center;gap:5px;padding:7px 12px;background:var(--surface2);border:1px solid var(--green);border-radius:14px;font-size:14px;}
 .pm-completed-chip .chip-name{font-weight:600;color:var(--text);}
@@ -2169,15 +2175,17 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <span id="pmBuybackPreview" style="font-size:13px;color:var(--gold);font-weight:700;margin-left:auto;"></span>
         </div>
         <div class="pm-completed-section">
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div class="pm-completed-header">
             <div style="font-size:13px;color:var(--gold);font-weight:600;">登録済み <span id="pmCompletedCount">(0件)</span></div>
             <button class="btn btn-primary" onclick="pmFinishIndividual()" style="font-size:16px;font-weight:800;padding:12px 24px;box-shadow:0 2px 8px rgba(0,0,0,0.25);">✅ 全部位完了</button>
           </div>
-          <div class="pm-completed-grid" id="pmCompletedGrid"></div>
-          <div class="pm-yield-summary" id="pmYieldSummary" style="display:none;">
-            合計: <strong id="pmYieldTotal">0 kg</strong>
-            / 個体: <span id="pmYieldIndWeight">0</span> kg
-            → 歩留まり: <strong id="pmYieldPct">0%</strong>
+          <div class="pm-completed-scroll">
+            <div class="pm-completed-grid" id="pmCompletedGrid"></div>
+            <div class="pm-yield-summary" id="pmYieldSummary" style="display:none;">
+              合計: <strong id="pmYieldTotal">0 kg</strong>
+              / 個体: <span id="pmYieldIndWeight">0</span> kg
+              → 歩留まり: <strong id="pmYieldPct">0%</strong>
+            </div>
           </div>
         </div>
       </div>
