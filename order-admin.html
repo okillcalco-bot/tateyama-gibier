@@ -941,7 +941,7 @@ th,td{padding:8px 6px;font-size:.8rem}
 const SB_URL='https://clpdyrehdgzgiidbfucj.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
 
-async function sb(method,table,body,query=''){
+async function sb(method,table,body,query='',opts={}){
   const headers={
     'apikey':SB_KEY,
     'Authorization':`Bearer ${SB_KEY}`,
@@ -952,7 +952,8 @@ async function sb(method,table,body,query=''){
   const sk=staffKeyGet(); if(sk) headers['x-staff-key']=sk;
   const res=await fetch(`${SB_URL}/rest/v1/${table}${query}`,{
     method,headers,
-    body:body?JSON.stringify(body):undefined
+    body:body?JSON.stringify(body):undefined,
+    ...opts
   });
   if(!res.ok) throw new Error(await res.text());
   const t=await res.text();
@@ -1897,9 +1898,10 @@ async function computeDocNumber(type,dateStr){
   const prefix=`${spec.prefix}-${ym}-`;
   let max=0;
   // キャッシュされた古い結果（例: まだ1件も無かった頃の空配列）を拾わないよう、
-  // 毎回別のURLになるようキャッシュ回避のパラメータを付ける（採番が進まず同じ番号に
-  // 衝突し続ける不具合の原因になっていた）
-  const rows=await sb('GET','documents','',`?doc_number=like.${prefix}*&select=doc_number&_ts=${Date.now()}`);
+  // ブラウザのHTTPキャッシュを使わせない（採番が進まず同じ番号に衝突し続ける不具合の原因だった）。
+  // ダミーのクエリパラメータでURLを変える方式は、PostgRESTがそれを列名として
+  // フィルタ解釈しようとしてエラーになる（?_ts=... → failed to parse filter）ため使えない。
+  const rows=await sb('GET','documents','',`?doc_number=like.${prefix}*&select=doc_number`,{cache:'no-store'});
   rows.forEach(r=>{const m=(r.doc_number||'').match(/-(\d+)$/);if(m){const n=parseInt(m[1],10);if(n>max)max=n;}});
   return prefix+String(max+1).padStart(3,'0');
 }
@@ -3313,9 +3315,9 @@ async function regenInvNumber(){
   const ym=`${d.getFullYear()}${pad(d.getMonth()+1)}`;
   const prefix=`${invSpec().prefix}-${ym}-`;
   let max=0;
-  // computeDocNumber()と同じ理由でキャッシュ回避のパラメータを付ける（採番が進まず
-  // 同じ番号に衝突し続ける不具合の原因になっていた）。失敗時も握り潰さず投げる
-  const rows=await sb('GET','documents','',`?doc_number=like.${prefix}*&select=doc_number&_ts=${Date.now()}`);
+  // computeDocNumber()と同じ理由でHTTPキャッシュを使わせない（採番が進まず同じ番号に
+  // 衝突し続ける不具合の原因になっていた）。失敗時も握り潰さず投げる
+  const rows=await sb('GET','documents','',`?doc_number=like.${prefix}*&select=doc_number`,{cache:'no-store'});
   rows.forEach(r=>{const m=(r.doc_number||'').match(/-(\d+)$/);if(m){const n=parseInt(m[1],10);if(n>max)max=n;}});
   el.value=prefix+String(max+1).padStart(3,'0');
 }
