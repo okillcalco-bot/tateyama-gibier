@@ -274,9 +274,14 @@
       <label>種別</label>
       <select id="speciesFilter">
         <option value="">すべて</option>
-        <option value="イノシシ'>イノシシ</option>
+        <option value="__not_boar__">イノシシ以外（全種）</option>
+        <option value="イノシシ">イノシシ</option>
         <option value="シカ">シカ</option>
-        <option value="その他">その他</option>
+        <option value="アライグマ">アライグマ</option>
+        <option value="ハクビシン">ハクビシン</option>
+        <option value="キョン">キョン</option>
+        <option value="タヌキ">タヌキ</option>
+        <option value="ノウサギ">ノウサギ</option>
       </select>
     </div>
     <div class="filter-group">
@@ -285,6 +290,7 @@
     </div>
     <button class="btn btn-primary" onclick="loadData()">🔍 検索</button>
     <button class="btn btn-secondary" onclick="resetFilters()">リセット</button>
+    <button class="btn btn-secondary" onclick="copyShareLink()">🔗 このリスト（絞込条件）を市役所へ共有</button>
   </div>
 
   <div class="toolbar">
@@ -356,6 +362,44 @@ function resetFilters() {
   loadData();
 }
 
+// 今の絞り込み条件（期間・種別）をURLに埋め込んで、そのまま同じ一覧が開けるリンクを作る。
+// 市役所へ送れば、届いている捕獲票と突き合わせやすい期間・種別で一覧を見てもらえる。
+function buildShareUrl() {
+  const params = new URLSearchParams();
+  const dateFrom = document.getElementById('dateFrom').value;
+  const dateTo   = document.getElementById('dateTo').value;
+  const species  = document.getElementById('speciesFilter').value;
+  if (dateFrom) params.set('from', dateFrom);
+  if (dateTo)   params.set('to', dateTo);
+  if (species)  params.set('species', species);
+  const qs = params.toString();
+  return location.origin + location.pathname + (qs ? '?' + qs : '');
+}
+
+async function copyShareLink() {
+  const url = buildShareUrl();
+  try {
+    await navigator.clipboard.writeText(url);
+    showStatus('info', '🔗 リンクをコピーしました: ' + url);
+  } catch (e) {
+    // クリップボード権限が無い環境向けに、コピーできなくてもリンクは必ず見せる
+    prompt('このリンクをコピーして市役所へ送ってください:', url);
+  }
+}
+
+// URLの ?from=&to=&species= を読み、その条件で開いた状態にする（市役所に送るリンク用）
+function applyFiltersFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const from = params.get('from');
+  const to = params.get('to');
+  const species = params.get('species');
+  if (!from && !to && !species) return false;
+  if (from) document.getElementById('dateFrom').value = from;
+  if (to)   document.getElementById('dateTo').value = to;
+  if (species) document.getElementById('speciesFilter').value = species;
+  return true;
+}
+
 // ============================================================
 // Load data
 // ============================================================
@@ -373,7 +417,8 @@ async function loadData() {
 
   if (dateFrom) q = q.gte('capture_date', dateFrom);
   if (dateTo)   q = q.lte('capture_date', dateTo);
-  if (species)  q = q.eq('species', species);
+  if (species === '__not_boar__') q = q.neq('species', 'イノシシ');
+  else if (species) q = q.eq('species', species);
   if (keyword)  q = q.or(`label_id.ilike.%${keyword}%,hunter_name.ilike.%${keyword}%,origin.ilike.%${keyword}%`);
 
   const { data, error } = await q.limit(200);
@@ -638,12 +683,14 @@ function buildRecordBlock(r, n) {
 // Init
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
-  // Set default date range: last 30 days
-  const today = new Date();
-  const from  = new Date(today);
-  from.setDate(from.getDate() - 30);
-  document.getElementById('dateTo').value   = today.toISOString().split('T')[0];
-  document.getElementById('dateFrom').value = from.toISOString().split('T')[0];
+  if (!applyFiltersFromUrl()) {
+    // URLに条件が無ければ既定: 直近30日
+    const today = new Date();
+    const from  = new Date(today);
+    from.setDate(from.getDate() - 30);
+    document.getElementById('dateTo').value   = today.toISOString().split('T')[0];
+    document.getElementById('dateFrom').value = from.toISOString().split('T')[0];
+  }
   loadData();
 });
 </script>
