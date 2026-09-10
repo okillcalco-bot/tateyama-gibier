@@ -301,9 +301,25 @@ function importAtt(i){
   render();
 }
 function importAllAttendance(){
+  // 打刻はあるのに、まだこの月の明細行が無い人を先に追加する
+  // （行が無いと取込先が無く、その人だけ取り込まれない状態になっていた）
+  let added=0;
+  Object.keys(attMap).forEach(name=>{
+    if(lines.some(l=>l.staff_name===name)) return;
+    const s=staffList.find(x=>x.name===name); if(!s) return;
+    lines.push({staff_id:s.id,staff_name:s.name,hourly_wage:s.hourly_wage??'',
+      commute_round_km:s.commute_round_km??'',stopkill_unit:3000,commute_yen_per_km:s.commute_yen_per_km??20,_dirty:true});
+    added++;
+  });
+  if(added){
+    lines.sort((a,b)=>a.staff_name.localeCompare(b.staff_name,'ja'));
+    const sel=document.getElementById('addSel');
+    sel.innerHTML=staffList.filter(s=>!lines.some(l=>l.staff_name===s.name))
+      .map(s=>`<option value="${s.id}">${s.name}</option>`).join('')||'<option value="">（全員追加済み）</option>';
+  }
   let n=0;
   lines.forEach((l,i)=>{ if(attMap[l.staff_name]){ importAtt(i); n++; } });
-  msg(n?n+'名分を勤怠から取り込みました（保存はまだ）':'この月の打刻記録がありません',n>0);
+  msg(n?n+'名分を勤怠から取り込みました'+(added?`（新規追加 ${added}名を含む）`:'')+'（保存はまだ）':'この月の打刻記録がありません',n>0);
 }
 
 async function saveLine(i){
