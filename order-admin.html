@@ -1630,7 +1630,7 @@ function showOrderDetail(id){
     ${o.memo?`<div style="margin-bottom:12px;font-size:.85rem"><strong>備考:</strong> ${esc(o.memo)}</div>`:''}
     <div class="table-wrap"><table>
       <thead><tr><th>種別</th><th>部位</th><th>重量(kg)</th><th>単価</th><th>金額</th></tr></thead>
-      <tbody>${items.map(i=>`<tr><td>${esc(i.species||'')}</td><td>${esc(i.part_name||'')}</td><td>${i.weight_kg||i.weight||'--'}</td><td>&yen;${Number(i.unit_price||0).toLocaleString()}</td><td>&yen;${Number(i.subtotal||i.amount||0).toLocaleString()}</td></tr>`).join('')}</tbody>
+      <tbody>${items.map(i=>`<tr><td>${esc(i.species||'')}</td><td>${esc(i.part_name||'')}</td><td>${i.weight_kg?i.weight_kg:(i.qty?i.qty+(i.unit||'枚'):'--')}</td><td>&yen;${Number(i.unit_price||0).toLocaleString()}</td><td>&yen;${Number(i.subtotal||i.amount||0).toLocaleString()}</td></tr>`).join('')}</tbody>
     </table></div>
     <div style="text-align:right;font-size:1.1rem;font-weight:700;color:var(--gold);margin:12px 0">合計: &yen;${Number(o.total_amount||0).toLocaleString()}</div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">`;
@@ -1861,15 +1861,28 @@ function consolidateItemsForBilling(items){
     const part=normalizePartNameForBilling(i.part_name);
     const grade=itemGradeForBilling(i);
     const key=(i.species||'')+'|'+(part||'')+'|'+(grade||'');
-    if(!groups.has(key)) groups.set(key,{species:i.species,part_name:part,grade,weight_kg:0,amount:0});
+    if(!groups.has(key)) groups.set(key,{species:i.species,part_name:part,grade,weight_kg:0,qty:0,amount:0,isCount:false});
     const g=groups.get(key);
-    g.weight_kg+=Number(i.weight_kg||i.weight||0);
+    const w=Number(i.weight_kg||i.weight||0);
+    if(w>0){
+      g.weight_kg+=w;
+    }else{
+      // 毛皮など重量を持たない品目は個数（枚）で数える。個数そのものは列が無く保存されていないため、
+      // 単価から逆算する（例: 顧客指定単価500円で金額2,000円→4枚）
+      g.isCount=true;
+      const up=Number(i.unit_price||0);
+      g.qty+=up?Math.round(Number(i.subtotal||i.amount||0)/up):0;
+    }
     g.amount+=Number(i.subtotal||i.amount||0);
   });
   return [...groups.values()].map(g=>{
     const weight_kg=Math.round(g.weight_kg*100)/100;
     const partWithGrade=(g.part_name||'')+(g.grade?`（${g.grade}）`:'');
-    return {species:g.species,part_name:partWithGrade,weight_kg,
+    if(g.isCount&&!weight_kg){
+      return {species:g.species,part_name:partWithGrade,weight_kg:0,qty:g.qty,unit:'枚',
+        unit_price:g.qty?Math.round(g.amount/g.qty):0,amount:g.amount,subtotal:g.amount};
+    }
+    return {species:g.species,part_name:partWithGrade,weight_kg,qty:weight_kg,unit:'kg',
       unit_price:weight_kg?Math.round(g.amount/weight_kg):0,amount:g.amount,subtotal:g.amount};
   });
 }
@@ -1882,9 +1895,10 @@ function buildShipmentNote(selected){
     const d=o.delivery_date||o.order_date;
     if(!d) return;
     const items=consolidateItemsForBilling(o.order_items).map(i=>{
-      const w=i.weight_kg;
       const name=(i.species||'')+(i.part_name?'　'+i.part_name:'');
-      return w?`${name}　${w}kg`:name;
+      if(i.weight_kg) return `${name}　${i.weight_kg}kg`;
+      if(i.qty) return `${name}　${i.qty}${i.unit||'枚'}`;
+      return name;
     }).join('、');
     (byDate[d]=byDate[d]||[]).push(`${o.customer_name||''}（${items}）`);
   });
@@ -1939,12 +1953,16 @@ async function generateDoc(type,forcedOrders){
       // order_items.unit_price／amountは税込（価格マスタの単価がそのまま税込表示価格のため）。
       // invCalcLines()は明細を税抜として扱い税率分を上乗せするので、ここで税抜相当に変換してから渡す
       // （そのまま渡すと税込価格に消費税をもう一度乗せる二重課税になる）。
+      // 毛皮など重量を持たない品目はqty=枚数・unit='枚'になる（consolidateItemsForBilling参照）。
+      // 以前はqtyに常にweight_kgを使っていたため、重量を持たない品目は「0kg」という
+      // 実態と合わない明細になっていた。
       const inclusiveAmount=Number(i.subtotal||i.amount||0);
       const exclusiveAmount=Math.round(inclusiveAmount/1.08);
-      const exclusivePrice=i.weight_kg?Math.round(exclusiveAmount/i.weight_kg):exclusiveAmount;
+      const qty=i.qty||0;
+      const exclusivePrice=qty?Math.round(exclusiveAmount/qty):exclusiveAmount;
       // 明細の金額欄はinvCalcLines()と同じ「数量×単価」の丸めで出す（表示と集計を一致させるため）
-      const displayAmount=i.weight_kg?Math.round(i.weight_kg*exclusivePrice):exclusiveAmount;
-      lines.push({name:tag+(i.species||'')+(i.part_name?' '+i.part_name:''),qty:i.weight_kg,unit:'kg',price:exclusivePrice,tax:8,amount:displayAmount});
+      const displayAmount=qty?Math.round(qty*exclusivePrice):exclusiveAmount;
+      lines.push({name:tag+(i.species||'')+(i.part_name?' '+i.part_name:''),qty,unit:i.unit||'kg',price:exclusivePrice,tax:8,amount:displayAmount});
     });
     const ship=(o.shipments||[])[0];
     if(ship && Number(ship.freight)>0){
