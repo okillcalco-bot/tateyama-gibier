@@ -67,6 +67,7 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
   <button class="btn" onclick="addLine()">＋ 行を追加</button>
   <button class="btn btn-gold" onclick="saveAll()">💾 まとめて保存</button>
   <button class="btn" onclick="payslipPrintAll()">📄 明細をまとめて印刷</button>
+  <button class="btn" onclick="copyNetPayList()">📋 差引支給額をLINE用にコピー</button>
   <span id="msg"></span>
 </div>
 <div class="card">
@@ -327,6 +328,21 @@ function importAllAttendance(){
   let n=0;
   lines.forEach((l,i)=>{ if(attMap[l.staff_name]){ importAtt(i); n++; } });
   msg(n?n+'名分を勤怠から取り込みました'+(added?`（新規追加 ${added}名を含む）`:'')+'（保存はまだ）':'この月の打刻記録がありません',n>0);
+}
+
+// 振込作業でLINEに貼って確認しながら振り込めるよう、氏名と差引支給額をテキストでコピーする
+async function copyNetPayList(){
+  if(!lines.length){ msg('コピーする明細がありません',false); return; }
+  const month=document.getElementById('month').value;
+  const mNum=parseInt((month||'').split('-')[1],10);
+  const rows=lines.map(l=>`${l.staff_name} ${Math.round(calc(l).net).toLocaleString()}`);
+  const text=[(isNaN(mNum)?'':mNum+'月')+'振込額',...rows].join('\n');
+  try{
+    await navigator.clipboard.writeText(text);
+    msg('LINE用にコピーしました（'+lines.length+'名分）',true);
+  }catch(e){
+    prompt('コピーしてLINEに貼り付けてください:',text);
+  }
 }
 
 async function saveLine(i){
