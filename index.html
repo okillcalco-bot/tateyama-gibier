@@ -1854,6 +1854,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="form-group"><label>月給（円）</label><input class="form-input" id="stf-f-monthly_salary" type="number" /></div>
         <div class="form-group"><label>社会保険</label><select class="form-input" id="stf-f-social_insurance"><option value="">選択...</option><option>加入</option><option>未加入</option></select></div>
         <div class="form-group"><label>雇用保険</label><select class="form-input" id="stf-f-employment_insurance"><option value="">選択...</option><option>加入</option><option>未加入</option></select></div>
+        <div class="form-group"><label>自宅⇔センター 往復km</label><input class="form-input" id="stf-f-commute_round_km" type="number" step="0.1" placeholder="例: 20" /></div>
+        <div class="form-group"><label>通勤費 単価（円/km）</label><input class="form-input" id="stf-f-commute_yen_per_km" type="number" placeholder="既定20" /></div>
         <div class="form-group" style="grid-column:1/-1"><label>メモ</label><textarea class="form-input" id="stf-f-memo" rows="2" style="resize:vertical;"></textarea></div>
       </div>
       <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
@@ -3343,7 +3345,7 @@ async function loadDashboard() {
 
     // Recent processing
     const procBody = document.getElementById('dash-proc');
-    procBody.innerHTML = procLogs.length ? procLogs.map(p => `<tr><td>${fmtDt(p.created_at)}</td><td style="color:var(--text2)">${p.parent_ident_code||'-'}</td><td style="color:var(--gold)">${p.child_ident_code||'-'}</td><td>${p.weight||'-'} kg</td><td>${p.operator||'-'}</td></tr>`).join('') : '<tr><td colspan="5" class="empty-state">データなし</td></tr>';
+    procBody.innerHTML = procLogs.length ? procLogs.map(p => `<tr><td>${fmtDt(p.created_at)}</td><td style="color:var(--text2)">${p.parent_ident_code||'-'}</td><td style="color:var(--gold)">${p.child_ident_code||'-'}</td><td>${p.weight!=null?evNum(p.weight).toFixed(2):'-'} kg</td><td>${p.operator||'-'}</td></tr>`).join('') : '<tr><td colspan="5" class="empty-state">データなし</td></tr>';
 
     // Recent shipments
     const shipBody = document.getElementById('dash-ship');
@@ -3480,7 +3482,7 @@ async function showDetailModal(item) {
     const logs = await sb('GET', 'processing_log', null, `?or=(child_ident_code.eq.${encodeURIComponent(item.ident_code)},parent_ident_code.eq.${encodeURIComponent(item.ident_code)})&order=created_at.desc`);
     if (logs.length) {
       html += `<div style="margin-top:16px;"><strong style="color:var(--gold);font-size:13px;">加工履歴</strong><table style="margin-top:8px;"><thead><tr><th>日時</th><th>親コード</th><th>子コード</th><th>重量</th><th>担当</th></tr></thead><tbody>`;
-      logs.forEach(l => { html += `<tr><td>${fmtDt(l.created_at)}</td><td>${l.parent_ident_code||'-'}</td><td>${l.child_ident_code||'-'}</td><td>${l.weight||'-'} kg</td><td>${l.operator||'-'}</td></tr>`; });
+      logs.forEach(l => { html += `<tr><td>${fmtDt(l.created_at)}</td><td>${l.parent_ident_code||'-'}</td><td>${l.child_ident_code||'-'}</td><td>${l.weight!=null?evNum(l.weight).toFixed(2):'-'} kg</td><td>${l.operator||'-'}</td></tr>`; });
       html += `</tbody></table></div>`;
     }
   } catch(e) {}
@@ -5125,6 +5127,12 @@ function pmNextIdent(barcodeNum) {
   return base + '-' + Date.now();   // まず起きないが、番号が尽きても作業は止めない
 }
 
+// はかりの生値からビニール袋10gを差し引く。単純な引き算だと0.57-0.01=0.5699999999999999...のような
+// 浮動小数点の誤差がそのままDB(processing_log.weight/inventory.weight)に残り、ラベルは丸めて表示するので
+// 気付かず、この値を生で出す画面（最近の精肉処理・加工履歴・HACCP帳票）にだけ現れていた。
+// 差引の時点でグラム単位（小数3桁）に丸め、誤差を発生源で止める。
+function pmNetWeight(w) { return Math.max(0, Math.round((w - 0.010) * 1000) / 1000); }
+
 /* 登録1件ぶんの中身を1回だけ決める。印刷と保存で必ず同じ番号を使うため。 */
 function pmBuildPlan(weight_kg) {
   const baseName = pmSelectedPart.part_name;
@@ -5592,7 +5600,7 @@ function scaleHandleLine(line) {
 
   // 計量待機中（登録ボタンを先に押した場合）は「安定」した値だけ自動登録する
   if (pmWaitingForScale && pmSelectedPart && isStable) {
-    const net = Math.max(0, weight - 0.010); // 手入力・プリント経由と同じくビニール袋10gを差し引く
+    const net = pmNetWeight(weight); // 手入力・プリント経由と同じくビニール袋10gを差し引く
     document.getElementById('pmWeightDisplay').textContent = net.toFixed(3);
     pmRequestRegister(net);  // そのまま登録・印刷（確認なし。誤りは削除機能で取消）
   }
@@ -5664,7 +5672,7 @@ function pmStartMeasure() {
     const w = parseFloat(pmNumBuf);
     if (isNaN(w) || w < 0.050) { toast('重量が小さすぎます（0.050kg未満）','error'); return; }
     pmNumBuf = '';
-    const w_net = Math.max(0, w - 0.010); // 袋重量10g差引
+    const w_net = pmNetWeight(w); // 袋重量10g差引
     pmRequestRegister(w_net);  // そのまま登録・印刷（確認なし）
     return;
   }
@@ -5673,7 +5681,7 @@ function pmStartMeasure() {
   const w = parseFloat(document.getElementById('pmWeightDisplay').textContent);
   if (w >= 0.050) {
     // 重量がすでに表示されている場合はそのまま登録
-    const w_net = Math.max(0, w - 0.010); // 袋重量10g差引
+    const w_net = pmNetWeight(w); // 袋重量10g差引
     pmRequestRegister(w_net);  // そのまま登録・印刷（確認なし）
     return;
   }
@@ -5698,7 +5706,7 @@ function pmStartMeasure() {
       document.getElementById('pmMeasureBtn').onclick = () => {
         const ww = parseFloat(document.getElementById('pmWeightDisplay').textContent);
         if (ww >= 0.050) {
-          const ww_net = Math.max(0, ww - 0.010); // 袋重量10g差引
+          const ww_net = pmNetWeight(ww); // 袋重量10g差引
           pmRequestRegister(ww_net);  // そのまま登録・印刷（確認なし）
         } else { toast('重量を入力してください','error'); }
         document.getElementById('pmMeasureBtn').onclick = pmStartMeasure;
@@ -8935,7 +8943,7 @@ async function agingFinish(labelId) {
 /* ───────── スタッフ管理 ───────── */
 let staffData = [];
 let staffEditId = null;
-const STAFF_FIELDS = ['name', 'role', 'phone', 'hire_date', 'employment_type', 'hourly_wage', 'monthly_salary', 'social_insurance', 'employment_insurance', 'memo'];
+const STAFF_FIELDS = ['name', 'role', 'phone', 'hire_date', 'employment_type', 'hourly_wage', 'monthly_salary', 'social_insurance', 'employment_insurance', 'commute_round_km', 'commute_yen_per_km', 'memo'];
 
 async function loadStaffPanel() {
   const body = document.getElementById('staff-body');
@@ -8987,7 +8995,7 @@ async function staffSave() {
   const payload = {};
   STAFF_FIELDS.forEach(f => {
     let v = document.getElementById('stf-f-' + f).value.trim();
-    if (f === 'hourly_wage' || f === 'monthly_salary') v = v ? parseFloat(v) : null;
+    if (f === 'hourly_wage' || f === 'monthly_salary' || f === 'commute_round_km' || f === 'commute_yen_per_km') v = v ? parseFloat(v) : null;
     payload[f] = v === '' ? null : v;
   });
   if (!payload.name) { toast('氏名は必須です', 'error'); return; }
@@ -10723,7 +10731,7 @@ const DOC_DEFS = [
       return { columns: ['区分', '番号', '内容', '日付', '担当'],
         rows: [
           ...anom.map(i => ['異常個体', i.label_id, [i.capture_anomalies, i.organ_anomalies, i.quality === '不良' ? '品質不良' : '', i.hunter_health_ok === false ? '猟師健康要確認' : ''].filter(x => x && x !== 'なし').join(' / '), i.capture_date, i.recorder || '']),
-          ...disposed.map(v => ['在庫廃棄', v.ident_code, `${v.part_name || ''} ${v.weight || ''}kg`, (v.updated_at || '').slice(0, 10), v.operator || '']),
+          ...disposed.map(v => ['在庫廃棄', v.ident_code, `${v.part_name || ''} ${v.weight != null ? evNum(v.weight).toFixed(2) : ''}kg`, (v.updated_at || '').slice(0, 10), v.operator || '']),
         ], note: '捕獲票の異常記録と在庫の廃棄処理から自動転記。' };
     } },
   { key: 'process_record', cat: 'HACCP・衛生管理', title: '加工工程記録', gen: async (m) => {
@@ -10732,7 +10740,7 @@ const DOC_DEFS = [
       const moves = await sb('GET', 'product_movements', null, `?movement_type=eq.完成&created_at=gte.${d1}T00:00:00&created_at=lte.${d2}T23:59:59&select=*&order=created_at.asc&limit=500`);
       return { columns: ['日時', '工程', '対象', '数量/重量', '担当'],
         rows: [
-          ...logs.map(l => [fmtDt(l.created_at), '精肉（分割）', `${l.parent_ident_code || ''} → ${l.child_ident_code || ''}`, (l.weight || '') + 'kg', l.operator || '']),
+          ...logs.map(l => [fmtDt(l.created_at), '精肉（分割）', `${l.parent_ident_code || ''} → ${l.child_ident_code || ''}`, (l.weight != null ? evNum(l.weight).toFixed(2) : '') + 'kg', l.operator || '']),
           ...moves.map(v => [fmtDt(v.created_at), '二次加工（完成）', `${v.source_ident_code ? v.source_ident_code + ' → ' : ''}${v.product_name}`, v.qty + '個', v.staff_name || '']),
         ], note: '精肉登録と加工処理の完成記録から自動転記。' };
     } },
@@ -10873,7 +10881,7 @@ const DOC_DEFS = [
       ]);
       return { columns: ['日付', '区分', '品目', '数量/重量', '担当'],
         rows: [
-          ...invs.map(v => [(v.updated_at || '').slice(0, 10), '精肉廃棄', `${v.ident_code} ${v.part_name || ''}`, (v.weight || '') + 'kg', v.operator || '']),
+          ...invs.map(v => [(v.updated_at || '').slice(0, 10), '精肉廃棄', `${v.ident_code} ${v.part_name || ''}`, (v.weight != null ? evNum(v.weight).toFixed(2) : '') + 'kg', v.operator || '']),
           ...moves.map(v => [(v.created_at || '').slice(0, 10), '加工品廃棄', v.product_name, v.qty + '個', v.staff_name || '']),
         ] };
     } },
