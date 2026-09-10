@@ -11,6 +11,15 @@
 //     2. 出荷日・顧客名・内容（品目＋重量）・合計重量・送料・注文番号・ステータスが出る
 //     3. 顧客名・注文番号で検索できる
 //     4. 見出しクリックで日付・顧客名・重量の並べ替えができる
+//
+//   追記（2026-09-10）
+//     「出荷データは部位ごとの明細も知りたい。これだと分からない」という指摘。
+//     内容欄が1行にtext-overflow:ellipsisで詰め込まれ、モモの複数梱包などが
+//     「イノシシ モモ（全体）2.4kg、イノシシ モモ（全体）2.3…」のように
+//     途中で切れてホバーしないと読めなかった。請求書作成タブと同じ
+//     consolidateItemsForBilling で部位ごとにまとめ、1部位1行で改行表示する。
+//     5. モモの全体/ウチ/ソト等、複数梱包の同じ部位は合計重量1行にまとまる
+//     6. 違う部位は省略されず、それぞれ別の行として全部見える
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
 
@@ -35,6 +44,21 @@ const path = require('path');
       orders: {
         order_code: 'DIR-B001', customer_name: 'B店', customer_id: 'cust-b', order_date: '2026-09-09',
         order_items: [{ species: 'シカ', part_name: 'ロース', weight_kg: 2 }, { species: 'シカ', part_name: 'バラ', weight_kg: 1.5 }],
+      },
+    },
+    {
+      // 実例（2026-09-08 澄川精肉店）: 同じ部位の梱包が複数に分かれ、内容欄が
+      // 「モモ（全体）2.4kg、モモ（全体）2.3…」のように途中で切れて読めなかった
+      id: 'sh-3', order_id: 'ord-3', shipment_date: '2026-09-08', delivery_date: '2026-09-08',
+      status: '出荷済', freight: 800, carrier: 'ヤマト',
+      orders: {
+        order_code: 'DIR-C001', customer_name: '澄川精肉店', customer_id: 'cust-c', order_date: '2026-09-08',
+        order_items: [
+          { species: 'イノシシ', part_name: 'モモ（全体）', weight_kg: 2.4 },
+          { species: 'イノシシ', part_name: 'モモ（全体）', weight_kg: 2.3 },
+          { species: 'イノシシ', part_name: 'モモ（ウチ）', weight_kg: 1.2 },
+          { species: 'イノシシ', part_name: 'ロース', weight_kg: 5 },
+        ],
       },
     },
   ];
@@ -69,6 +93,15 @@ const path = require('path');
   ck('注文番号が出る', bodyText.includes('DIR-A001') && bodyText.includes('DIR-B001'), '');
   ck('ステータスが出る', bodyText.includes('出荷済') && bodyText.includes('準備中'), '');
 
+  // 2b) 部位ごとにまとまり、途中で切れずに全部見える（澄川精肉店の実例）
+  // モモの全体/ウチ/ソト等は請求書作成タブと同じ慣習で1部位（モモ）にまとめる。
+  // 違う部位（ロース）は別行のまま省略されずに残る。
+  const sumiRow = await page.$$eval('#shipDataBody tr', trs =>
+    trs.find(tr => tr.textContent.includes('澄川精肉店'))?.outerHTML || '');
+  ck('モモの全体/ウチ3件は合計5.9kgの1行にまとまる', /モモ　5\.9kg/.test(sumiRow), sumiRow);
+  ck('ロースも省略されずに別行で見える', /ロース　5kg/.test(sumiRow), sumiRow);
+  ck('「…」で途中省略されない', !sumiRow.includes('…'), sumiRow);
+
   // 3) 顧客名・注文番号で検索できる
   await page.fill('#shipDataSearch', 'A店');
   await page.waitForTimeout(100);
@@ -81,15 +114,15 @@ const path = require('path');
   await page.fill('#shipDataSearch', '');
   await page.waitForTimeout(100);
 
-  // 4) 並べ替え（出荷日クリックで昇順→A店が先、もう一度で降順→B店が先）
+  // 4) 並べ替え（出荷日クリックで昇順→9/8の2件(A店・澄川精肉店)が先、もう一度で降順→9/9のB店が先）
   await page.click('th:has-text("出荷日")');
   await page.waitForTimeout(100);
   let names = await page.$$eval('#shipDataBody tr td:nth-child(2)', els => els.map(e => e.textContent.trim()));
-  ck('出荷日クリックで昇順（A店が先）', JSON.stringify(names) === JSON.stringify(['A店', 'B店']), JSON.stringify(names));
+  ck('出荷日クリックで昇順（A店・澄川精肉店が先、B店が最後）', JSON.stringify(names) === JSON.stringify(['A店', '澄川精肉店', 'B店']), JSON.stringify(names));
   await page.click('th:has-text("出荷日")');
   await page.waitForTimeout(100);
   names = await page.$$eval('#shipDataBody tr td:nth-child(2)', els => els.map(e => e.textContent.trim()));
-  ck('もう一度クリックで降順（B店が先）', JSON.stringify(names) === JSON.stringify(['B店', 'A店']), JSON.stringify(names));
+  ck('もう一度クリックで降順（B店が先）', names[0] === 'B店', JSON.stringify(names));
 
   ck('ページエラーなし', errors.length === 0, errors.join(' / '));
 
