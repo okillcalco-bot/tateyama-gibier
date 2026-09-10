@@ -8,10 +8,18 @@
 //     古い結果を返し続けていたことが原因と判明。また、GET自体が失敗した場合も
 //     try/catchで握り潰して黙ってmax=0を採用しており、サイレント失敗になっていた。
 //
+//   2026-09-10 追記: 最初の修正でURLに ?_ts=<timestamp> というダミーのクエリパラメータを
+//     付けてキャッシュを回避しようとしたが、PostgRESTはクエリパラメータを列名として
+//     フィルタ解釈するため「failed to parse filter」で採番自体が常に失敗するようになって
+//     しまった（キャッシュされる時だけ失敗する前の不具合より悪化）。ダミーパラメータ方式を
+//     やめ、fetchの cache:'no-store' オプションでHTTPキャッシュ自体を無効化する方式に直した。
+//
 //   ここで測ること
-//     1. 採番のGETクエリは呼ぶたびにURLが変わる（キャッシュ回避パラメータが付く）
+//     1. 採番のGETクエリのURLに、PostgRESTがフィルタと誤解釈するダミーパラメータ
+//        （旧修正の ?_ts=... など）が含まれていない
 //     2. 採番のGET自体が失敗した場合、握り潰さず明確なアラートを出し、
 //        書類は保存されない（サイレントに番号0番から採番し直したりしない）
+//     3. 通常時（GET成功）は正しく採番でき、書類発行そのものが成功する
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
 
@@ -30,6 +38,7 @@ const path = require('path');
 
   const docNumberGetUrls = [];
   let postCount = 0;
+  let docNumberShouldFail = true; // 最初は失敗させ、あとで成功に切り替える
 
   await page.route('**/rest/v1/**', rt => {
     const req = rt.request(); const url = decodeURIComponent(req.url()); const m = req.method();
@@ -39,8 +48,8 @@ const path = require('path');
     if (/\/orders\b/.test(url) && m === 'GET') return J([]);
     if (/\/documents\b/.test(url) && m === 'GET' && /doc_number=like\./.test(url)) {
       docNumberGetUrls.push(url);
-      // 採番クエリ自体がエラーを返すケース（DB側の一時的な失敗などを想定）
-      return J({ message: 'internal error' }, 500);
+      if (docNumberShouldFail) return J({ message: 'internal error' }, 500); // 採番クエリ自体がエラーを返すケース
+      return J([]); // 成功時（まだ0件）
     }
     if (/\/documents\b/.test(url) && m === 'GET') return J([]); // 発行済み突き合わせ（order_id=in.）は正常応答
     if (/\/documents\b/.test(url) && m === 'POST') { postCount++; return J([{ id: 'doc-1' }], 201); }
@@ -64,11 +73,15 @@ const path = require('path');
   ck('採番が失敗した場合はdocumentsに保存されない', postCount === 0, String(postCount));
   ck('「採番が競合しました」の誤ったアラートは出ない（真の競合ではないため）', !alerts.some(a => /採番が競合/.test(a)), JSON.stringify(alerts));
 
-  // 2回連続で採番GETを呼んでもURLが同一にならない（キャッシュ回避パラメータの確認）
-  const u1 = await page.evaluate(() => computeDocNumber('請求書', '2026-09-08').catch(() => null));
-  const u2 = await page.evaluate(() => computeDocNumber('請求書', '2026-09-08').catch(() => null));
-  ck('採番GETのURLに毎回異なるキャッシュ回避パラメータが付く', docNumberGetUrls.length >= 2 && docNumberGetUrls[docNumberGetUrls.length - 1] !== docNumberGetUrls[docNumberGetUrls.length - 2], JSON.stringify(docNumberGetUrls.slice(-2)));
-  ck('採番GETのURLに_tsパラメータが含まれる', docNumberGetUrls.every(u => /[?&]_ts=\d+/.test(u)), JSON.stringify(docNumberGetUrls));
+  ck('採番GETのURLにPostgRESTがフィルタと誤解釈するダミーパラメータが含まれない（?_ts=等）',
+    docNumberGetUrls.length > 0 && docNumberGetUrls.every(u => !/[?&]_ts=/.test(u)), JSON.stringify(docNumberGetUrls));
+
+  // GETが成功する状態に戻して、通常どおり採番→発行できることを確認する
+  docNumberShouldFail = false;
+  let docNumberOk = false;
+  const num = await page.evaluate(() => computeDocNumber('請求書', '2026-09-08').then(n => { window.__docNumberOk = true; return n; }).catch(e => { window.__docNumberErr = String(e && e.message || e); return null; }));
+  docNumberOk = await page.evaluate(() => !!window.__docNumberOk);
+  ck('採番GETが成功すれば正しく採番できる（例外にならない）', docNumberOk && /^INV-\d{6}-\d{3}$/.test(num || ''), String(num) + ' / ' + (await page.evaluate(() => window.__docNumberErr || '')));
 
   ck('ページエラーなし', errors.length === 0, errors.join(' / '));
 
