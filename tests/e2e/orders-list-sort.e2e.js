@@ -35,6 +35,9 @@ const path = require('path');
 
   await page.goto('file://' + path.resolve(__dirname, '../../order-admin.html'));
   await page.waitForTimeout(600);
+  // 2026-09-10: 「出荷データ」タブが先頭・初期表示になったため、注文一覧タブへ明示的に切り替える
+  await page.evaluate(() => switchTab('orders'));
+  await page.waitForTimeout(100);
 
   const results = [];
   const ck = (name, cond, got) => results.push([name, cond, got]);
@@ -46,7 +49,7 @@ const path = require('path');
   ck('初期表示は3件出る', codes.length === 3, JSON.stringify(codes));
 
   // 1) 納品希望日を昇順に
-  await page.click('th:has-text("納品希望日")');
+  await page.click('#tab-orders th:has-text("納品希望日")');
   await page.waitForTimeout(100);
   codes = await orderCodes();
   ck('納品希望日クリックで昇順（ORD-A, ORD-B, ORD-C）に並ぶ', JSON.stringify(codes) === JSON.stringify(['ORD-A', 'ORD-B', 'ORD-C']), JSON.stringify(codes));
@@ -54,7 +57,7 @@ const path = require('path');
   ck('昇順の矢印(▲)が出る', icon.includes('▲'), icon);
 
   // 2) もう一度クリックで降順に
-  await page.click('th:has-text("納品希望日")');
+  await page.click('#tab-orders th:has-text("納品希望日")');
   await page.waitForTimeout(100);
   codes = await orderCodes();
   ck('もう一度クリックで降順（ORD-C, ORD-B, ORD-A）に並ぶ', JSON.stringify(codes) === JSON.stringify(['ORD-C', 'ORD-B', 'ORD-A']), JSON.stringify(codes));
@@ -62,7 +65,7 @@ const path = require('path');
   ck('降順の矢印(▼)が出る', icon.includes('▼'), icon);
 
   // 3) 顧客名で並べ替え（昇順）
-  await page.click('th:has-text("顧客名")');
+  await page.click('#tab-orders th:has-text("顧客名")');
   await page.waitForTimeout(100);
   codes = await orderCodes();
   ck('顧客名クリックでA店→B店→C店の順に並ぶ', JSON.stringify(codes) === JSON.stringify(['ORD-A', 'ORD-B', 'ORD-C']), JSON.stringify(codes));
