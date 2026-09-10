@@ -49,16 +49,27 @@ const path = require('path');
   const ORDER_B = mkOrder('ord-b', CUST_B, 'ORD-B001', { id: 'ib', species: 'イノシシ', part_name: 'ロース', weight_kg: 2, unit_price: 2500, subtotal: 5000 }, '2026-09-02');
 
   const postedDocuments = [];
+  const postedDocOrders = [];
+  let docIdSeq = 0;
   await page.route('**/rest/v1/**', rt => {
     const req = rt.request(); const url = decodeURIComponent(req.url()); const m = req.method();
     const J = x => rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(x) });
-    if (m === 'POST' && /\/documents\b/.test(url)) {
+    if (m === 'POST' && /\/document_orders\b/.test(url)) {
       let body = []; try { body = JSON.parse(req.postData() || '[]'); } catch (e) {}
-      postedDocuments.push(...(Array.isArray(body) ? body : [body]));
-      return J(body.map((b, i) => Object.assign({ id: 'doc-' + Date.now() + '-' + i }, b)));
+      const rows = Array.isArray(body) ? body : [body];
+      postedDocOrders.push(...rows);
+      return J(rows.map((b, i) => Object.assign({ id: 'do-' + Date.now() + '-' + i }, b)));
+    }
+    if (m === 'POST' && /\/documents\b/.test(url)) {
+      let body = []; try { body = JSON.parse(req.postData() || '{}'); } catch (e) {}
+      const rows = Array.isArray(body) ? body : [body];
+      const withIds = rows.map(b => Object.assign({ id: 'doc-' + (docIdSeq++) }, b));
+      postedDocuments.push(...withIds);
+      return J(withIds); // Prefer: return=representation は常に配列で返る（単一オブジェクト投稿でも）
     }
     if (m !== 'GET') return J([]);
     if (/\/customers\b/.test(url)) return J([CUST_A, CUST_B, CUST_W]);
+    if (/\/document_orders\b/.test(url)) return J([]);
     if (/\/documents\b/.test(url)) return J([]);
     if (/\/orders\b/.test(url) && /order_items/.test(url)) return J([ORDER_A, ORDER_B]);
     if (/\/orders\b/.test(url)) return J([]);
@@ -117,7 +128,7 @@ const path = require('path');
   await popup1.close();
 
   // ── 2) 複数顧客(A+B)・請求先未指定 → 止まる（ポップアップは開かない） ──
-  postedDocuments.length = 0; dialogs.length = 0;
+  postedDocuments.length = 0; postedDocOrders.length = 0; dialogs.length = 0;
   await page.evaluate(() => { document.getElementById('docBillTo').value = ''; });
   await page.evaluate(() => { document.querySelectorAll('#docOrderList input[type=checkbox]').forEach(cb => cb.checked = true); });
   await page.evaluate(() => generateDoc('請求書'));
@@ -143,11 +154,15 @@ const path = require('path');
   // 変換・丸めの結果、合計はほぼ15,000円（税込の元の合計）に戻る
   ck('複数顧客+請求先: 合計金額が約15,000円（税込の二重計上なし）', /15,00[01]/.test(previewHtml), previewHtml.slice(0, 800));
 
-  ck('複数顧客+請求先: documentsが2件（A・B双方の注文にひもづく）', postedDocuments.length === 2, JSON.stringify(postedDocuments));
-  ck('複数顧客+請求先: 両方ともcustomer_idは請求先(cust-w)', postedDocuments.every(d => d.customer_id === 'cust-w'), JSON.stringify(postedDocuments));
-  ck('複数顧客+請求先: order_idはそれぞれ元の注文のまま', new Set(postedDocuments.map(d => d.order_id)).size === 2
-    && postedDocuments.some(d => d.order_id === 'ord-a') && postedDocuments.some(d => d.order_id === 'ord-b'), JSON.stringify(postedDocuments));
-  const savedTotal = postedDocuments.find(d => d.order_id === 'ord-a')?.total_amount;
+  // documents.doc_numberはテーブル全体でUNIQUEなので、複数注文でも書類の行は1件だけ。
+  // 元注文との対応づけはdocument_ordersの中間テーブルで持つ（2件とも同じdoc_numberの行を
+  // 作っていた旧実装は、2件目で必ずUNIQUE制約違反になり複数注文の請求書が絶対に保存できなかった）。
+  ck('複数顧客+請求先: documentsの行は1件だけ（doc_numberのUNIQUE制約に違反しない）', postedDocuments.length === 1, JSON.stringify(postedDocuments));
+  ck('複数顧客+請求先: customer_idは請求先(cust-w)', postedDocuments[0]?.customer_id === 'cust-w', JSON.stringify(postedDocuments));
+  ck('複数顧客+請求先: document_ordersで両方の元注文にひもづく', postedDocOrders.length === 2
+    && postedDocOrders.some(d => d.order_id === 'ord-a') && postedDocOrders.some(d => d.order_id === 'ord-b'), JSON.stringify(postedDocOrders));
+  ck('複数顧客+請求先: document_ordersは発行したdocumentを指す', postedDocOrders.every(d => d.document_id === postedDocuments[0]?.id), JSON.stringify({ postedDocuments, postedDocOrders }));
+  const savedTotal = postedDocuments[0]?.total_amount;
   ck('複数顧客+請求先: 保存されるtotal_amountも約15,000円（元の税込合計と一致・二重課税なし）', savedTotal >= 14990 && savedTotal <= 15010, String(savedTotal));
 
   // 備考（出荷内訳）: 「いつ・どこへ・何を送ったか」が日付ごとに自動で書かれる
@@ -155,8 +170,8 @@ const path = require('path');
   ck('複数顧客+請求先: 9/1にA店の内訳が出る', previewHtml.includes('9/1 A店（イノシシ　モモ　4kg）'), previewHtml);
   ck('複数顧客+請求先: 9/2にB店の内訳が出る', previewHtml.includes('9/2 B店（イノシシ　ロース　2kg）'), previewHtml);
   ck('複数顧客+請求先: 日付順（9/1が9/2より前）に並ぶ', previewHtml.indexOf('9/1 A店') < previewHtml.indexOf('9/2 B店'), '');
-  const doc0 = postedDocuments.find(d => d.order_id === 'ord-a');
-  ck('複数顧客+請求先: documentsの1件目にmemoとして備考が保存される', !!doc0 && doc0.memo && doc0.memo.includes('9/1 A店') && doc0.memo.includes('9/2 B店'), JSON.stringify(doc0));
+  const doc0 = postedDocuments[0];
+  ck('複数顧客+請求先: documentsにmemoとして備考が保存される', !!doc0 && doc0.memo && doc0.memo.includes('9/1 A店') && doc0.memo.includes('9/2 B店'), JSON.stringify(doc0));
   await popup2.close();
 
   ck('ページエラーなし', errors.length === 0, errors.join(' / '));

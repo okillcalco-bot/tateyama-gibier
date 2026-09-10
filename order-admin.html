@@ -1785,12 +1785,17 @@ async function loadDocOrders(){
     if(custIds.length===1) q+=`&customer_id=eq.${custIds[0]}`;
     else if(custIds.length>1) q+=`&customer_id=in.(${custIds.join(',')})`;
     docOrders=await sb('GET','orders','',q);
-    // 発行済み書類を突き合わせ（order_idごとにどの書類が出ているか）
+    // 発行済み書類を突き合わせ（order_idごとにどの書類が出ているか）。
+    // 複数注文をまとめた書類はdocuments.order_idを持たずdocument_ordersの中間テーブルで
+    // 対応づけているため、単独注文（documents.order_id）とまとめた注文（document_orders）の
+    // 両方を見る。
     docDocsMap={};
     const ids=docOrders.map(o=>o.id);
     if(ids.length){
       const docs=await sb('GET','documents','',`?order_id=in.(${ids.join(',')})&select=order_id,doc_type`);
       docs.forEach(d=>{ (docDocsMap[d.order_id]=docDocsMap[d.order_id]||new Set()).add(d.doc_type); });
+      const linked=await sb('GET','document_orders','',`?order_id=in.(${ids.join(',')})&select=order_id,documents(doc_type)`);
+      linked.forEach(l=>{ if(l.documents&&l.documents.doc_type) (docDocsMap[l.order_id]=docDocsMap[l.order_id]||new Set()).add(l.documents.doc_type); });
     }
     renderDocOrders();
   }catch(e){console.error(e);el.innerHTML='<div class="empty">エラーが発生しました</div>'}
@@ -1979,16 +1984,21 @@ async function generateDoc(type,forcedOrders){
       return false;
     }
     try{
-      // 選択した各注文を処理済みとして記録（同一書類番号を共有）。
-      // customer_id は請求先（billToId）。元の注文がどの顧客のものかは order_id から orders.customer_id を辿れば分かるので、
-      // 内訳が消えるわけではない（複数顧客をまとめた場合、請求上の宛先は請求先1人になる）。
-      const rows=sorted.map((o,idx)=>({
+      // documents.doc_numberはテーブル全体でUNIQUEなので、複数注文の書類でも行は1件だけ作る
+      // （以前は注文ごとに同じdoc_numberの行を作っており、2件目で必ずUNIQUE制約違反になっていた＝
+      // 複数注文をまとめた請求書が採番リトライを3回しても絶対に保存できない不具合の真因だった）。
+      // 注文との対応づけは請求書作成タブ（invIssue）と同じくdocument_ordersの中間テーブルで持つ。
+      const header={
         doc_type:type,doc_number:docNum,customer_id:billToId,
-        order_id:o.id,issue_date:p.date,
-        total_amount:idx===0?c.total:0,tax_amount:idx===0?c.taxTotal:0,status:'発行済',
-        memo:idx===0?(shipmentNote||null):null
-      }));
-      await sb('POST','documents',rows);
+        order_id:sorted.length===1?sorted[0].id:null,issue_date:p.date,
+        total_amount:c.total,tax_amount:c.taxTotal,status:'発行済',
+        memo:shipmentNote||null
+      };
+      const created=await sb('POST','documents',header);
+      const docId=Array.isArray(created)&&created[0]&&created[0].id;
+      if(docId){
+        await sb('POST','document_orders',sorted.map(o=>({document_id:docId,order_id:o.id})));
+      }
       invRenderPrint(p,docNum,{});
       // 一覧を更新（発行済みは下がる）
       sorted.forEach(o=>{(docDocsMap[o.id]=docDocsMap[o.id]||new Set()).add(type);});
