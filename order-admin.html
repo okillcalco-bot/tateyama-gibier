@@ -326,6 +326,33 @@ th,td{padding:8px 6px;font-size:.8rem}
         <button class="btn btn-gold" onclick="generateDoc('請求書')">請求書</button>
         <button class="btn btn-gold" onclick="generateDoc('領収書')">領収書</button>
       </div>
+      <div style="margin-top:10px">
+        <button class="btn btn-outline" onclick="docBatchStart()">📤 未発行の請求書を1件ずつ処理</button>
+        <div style="font-size:.75rem;color:var(--text2);margin-top:4px">今の絞り込み（期間・顧客・備考検索）の中で、まだ請求書が出ていない顧客だけを1人ずつ順番に案内します。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 未発行の請求書を1件ずつ処理するパネル -->
+  <div id="docBatchModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center;" onclick="if(event.target===this)docBatchClose()">
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;width:480px;max-width:92vw;max-height:88vh;overflow:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <h3 style="margin:0;font-size:16px">📤 未発行の請求書</h3>
+        <button class="btn btn-sm" onclick="docBatchClose()">閉じる</button>
+      </div>
+      <div id="docBatchProgress" style="font-size:.85rem;color:var(--text2);margin-bottom:10px"></div>
+      <div id="docBatchCustomer" style="font-size:15px;font-weight:700;margin-bottom:4px"></div>
+      <div id="docBatchAmount" style="font-size:.85rem;color:var(--text2);margin-bottom:12px"></div>
+      <button class="btn btn-gold" id="docBatchIssueBtn" onclick="docBatchIssueCurrent()">📄 発行してプレビューを開く</button>
+      <div style="margin-top:14px">
+        <label style="font-size:.8rem;color:var(--text2)">メッセージ文（LINEなどに貼り付け用）</label>
+        <textarea id="docBatchMsg" readonly rows="4" style="width:100%;margin-top:4px;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);font-family:inherit;resize:vertical" onclick="this.select()"></textarea>
+        <button class="btn btn-sm" style="margin-top:4px" onclick="docBatchCopyMsg()">📋 メッセージをコピー</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button class="btn" onclick="docBatchSkip()">スキップ</button>
+        <button class="btn btn-gold" onclick="docBatchNext()">次へ</button>
+      </div>
     </div>
   </div>
 
@@ -1876,8 +1903,8 @@ async function computeDocNumber(type,dateStr){
   return prefix+String(max+1).padStart(3,'0');
 }
 
-async function generateDoc(type){
-  const selected=getSelectedDocOrders();
+async function generateDoc(type,forcedOrders){
+  const selected=forcedOrders||getSelectedDocOrders();
   if(!selected.length){alert('注文を選択してください');return}
   // 選択注文の元の顧客（複数の可能性あり）と、書類の宛名にする請求先を分けて扱う。
   // 請求先を明示していれば（仲卸業者など）それを使い、無指定かつ単一顧客ならその顧客をそのまま使う。
@@ -1956,16 +1983,86 @@ async function generateDoc(type){
       // 一覧を更新（発行済みは下がる）
       sorted.forEach(o=>{(docDocsMap[o.id]=docDocsMap[o.id]||new Set()).add(type);});
       renderDocOrders();
-      return;
+      return true;
     }catch(e){
       const msg=String(e.message||e);
       if(msg.includes('23505')||msg.includes('duplicate')||msg.includes('documents_doc_number_key')) continue; // 採番競合→リトライ
       console.error('書類保存エラー:',e);
       alert('⚠ 書類の発行記録の保存に失敗しました。\n\n'+msg);
-      return;
+      return false;
     }
   }
   alert('書類番号の採番が競合しました。もう一度発行し直してください。');
+  return false;
+}
+
+// ── 未発行の請求書を1件ずつ処理する（顧客ごとに選び直す手間を無くす） ──
+// 「1回1回選択してPDFにするのは面倒」との要望で追加。ブラウザの仕様上、開いたページから
+// 勝手にファイル保存はできないため、1人ずつ印刷プレビューを開く方式にしている
+// （プレビューのタイトルがそのままPDF保存時の既定ファイル名になる＝invRenderPrint()内で設定済み）。
+let docBatchList=[], docBatchIdx=0;
+
+function docPeriodLabel(){
+  const period=document.getElementById('docPeriod').value;
+  if(period==='custom'){
+    const range=docPeriodRange();
+    if(!range) return 'この期間';
+    const f=new Date(range.from+'T00:00:00'), t=new Date(range.to+'T00:00:00');
+    return `${f.getMonth()+1}/${f.getDate()}〜${t.getMonth()+1}/${t.getDate()}`;
+  }
+  return {thisMonth:'今月',lastMonth:'先月',thisYear:'今年度'}[period]||'今回';
+}
+
+// 今の絞り込み（期間・顧客・備考検索）の中で、請求書がまだ出ていない顧客だけを拾う
+function docBatchQueue(){
+  const memoQ=(document.getElementById('docMemoSearch')?.value||'').trim();
+  const filtered=memoQ?docOrders.filter(o=>(o.memo||'').includes(memoQ)):docOrders;
+  const unissued=filtered.filter(o=>o.customer_id && !(docDocsMap[o.id]||new Set()).has('請求書'));
+  const byCust=new Map();
+  unissued.forEach(o=>{
+    if(!byCust.has(o.customer_id)) byCust.set(o.customer_id,{customerId:o.customer_id,customerName:o.customer_name,orders:[]});
+    byCust.get(o.customer_id).orders.push(o);
+  });
+  return [...byCust.values()];
+}
+
+function docBatchStart(){
+  docBatchList=docBatchQueue();
+  if(!docBatchList.length){ alert('未発行の請求書はありません（今の絞り込みの中では）'); return; }
+  docBatchIdx=0;
+  document.getElementById('docBatchModal').style.display='flex';
+  docBatchRender();
+}
+function docBatchClose(){ document.getElementById('docBatchModal').style.display='none'; }
+function docBatchRender(){
+  const cur=docBatchList[docBatchIdx];
+  document.getElementById('docBatchProgress').textContent=`${docBatchIdx+1} / ${docBatchList.length}件`;
+  document.getElementById('docBatchCustomer').textContent=cur.customerName||'（顧客名なし）';
+  const total=cur.orders.reduce((s,o)=>s+Number(o.total_amount||0),0);
+  document.getElementById('docBatchAmount').textContent=`注文 ${cur.orders.length}件・合計 ¥${total.toLocaleString()}`;
+  document.getElementById('docBatchMsg').value=`${cur.customerName||''}様\n\n${docPeriodLabel()}の請求書をお送りします。ご確認をお願いいたします。`;
+  const btn=document.getElementById('docBatchIssueBtn');
+  btn.textContent='📄 発行してプレビューを開く';
+  btn.disabled=false;
+}
+async function docBatchIssueCurrent(){
+  const cur=docBatchList[docBatchIdx];
+  const btn=document.getElementById('docBatchIssueBtn');
+  btn.disabled=true; btn.textContent='発行中…';
+  const ok=await generateDoc('請求書',cur.orders);
+  if(ok){ btn.textContent='✓ 発行済み'; }
+  else { btn.disabled=false; btn.textContent='📄 発行してプレビューを開く'; }
+}
+async function docBatchCopyMsg(){
+  const ta=document.getElementById('docBatchMsg');
+  try{ await navigator.clipboard.writeText(ta.value); }
+  catch(e){ ta.select(); }
+}
+function docBatchSkip(){ docBatchNext(); }
+function docBatchNext(){
+  if(docBatchIdx>=docBatchList.length-1){ alert('これで最後です。'); docBatchClose(); return; }
+  docBatchIdx++;
+  docBatchRender();
 }
 
 // ── Customers Tab ──
