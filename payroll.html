@@ -73,7 +73,7 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
 <div class="card">
   <table>
     <thead><tr>
-      <th>氏名</th><th>時給</th><th>日数</th><th>時間</th><th>基本給</th>
+      <th>氏名</th><th>時給</th><th>月給</th><th>日数</th><th>時間</th><th>基本給</th>
       <th>止め搬入<br>(回)</th><th>止めさし搬入<br>手当</th>
       <th>往復<br>km</th><th>通勤<br>回数</th><th>通勤費</th>
       <th>他手当</th><th>支給合計</th>
@@ -86,7 +86,7 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
   </table>
 </div>
 <div class="hint">
-  ・<b>青字は自動計算</b>（基本給＝時給×時間、止めさし搬入手当＝3000円×回数、通勤費＝往復km×20円×回数）。入力欄はどれも手で直せます<br>
+  ・<b>青字は自動計算</b>（基本給＝時給×時間。月給が入っている人は月給をそのまま基本給にします、止めさし搬入手当＝3000円×回数、通勤費＝往復km×20円×回数）。入力欄はどれも手で直せます<br>
   ・「勤怠から取込」は打刻記録（<a href="punch.html">punch.html</a>／業務アプリの勤怠）から日数・時間を計算して入れます。通勤回数は日数と同じ値が入ります<br>
   ・🚚ボタンで<b>行き先別の移動費</b>（産廃処理・アワコネ・資材購入など）を人ごとに追加できます。センター以外へ行った日は「通勤回数」を1回減らしてください<br>
   ・📄ボタンで<b>その人の給与明細書</b>を発行できます（印刷・PDF保存→LINEやメールで送付）。明細の発行はこの画面に統一しています<br>
@@ -196,7 +196,8 @@ function tripLabel(name){
 
 /* 行の金額（すべてこの1か所で計算する）。交通費＝センター往復＋行き先別 */
 function calc(l){
-  const base=Math.round(N(l.hourly_wage)*N(l.work_hours));
+  // 月給者（時給が無く月給が設定されている人）は時間に関係なく月給を基本給にする
+  const base=N(l.monthly_salary)?Math.round(N(l.monthly_salary)):Math.round(N(l.hourly_wage)*N(l.work_hours));
   const stop=N(l.stopkill_count)*(N(l.stopkill_unit)||3000);
   const comm=Math.round(N(l.commute_round_km)*(N(l.commute_yen_per_km)||20)*N(l.commute_count))
             +tripSum(l.staff_name);
@@ -226,7 +227,7 @@ async function load(){
   }
 }
 
-const FIELDS=['hourly_wage','work_days','work_hours','stopkill_count','commute_round_km','commute_count',
+const FIELDS=['hourly_wage','monthly_salary','work_days','work_hours','stopkill_count','commute_round_km','commute_count',
   'other_allowance','health_insurance','pension','employment_insurance','income_tax','resident_tax','other_deduction','memo'];
 
 function render(){
@@ -239,6 +240,7 @@ function render(){
     return `<tr>
       <td>${l.staff_name}${att?`<div class="att">勤怠: <b>${att.days}日 ${att.hours}h</b></div>`:''}</td>
       <td>${inp('hourly_wage')}</td>
+      <td>${inp('monthly_salary')}</td>
       <td>${inp('work_days')}</td>
       <td>${inp('work_hours')}</td>
       <td class="calc">${yen(c.base)}</td>
@@ -270,7 +272,7 @@ function render(){
   }).join('');
   const t=lines.reduce((a,l)=>{const c=calc(l);a.pay+=c.pay;a.ded+=c.ded;a.net+=c.net;return a;},{pay:0,ded:0,net:0});
   document.getElementById('foot').innerHTML=lines.length?`<tr class="total-row">
-    <td>合計（${lines.length}名）</td><td colspan="10"></td>
+    <td>合計（${lines.length}名）</td><td colspan="11"></td>
     <td class="calc pay">${yen(t.pay)}</td><td colspan="6"></td>
     <td class="calc ded">${yen(t.ded)}</td><td class="calc pay">${yen(t.net)}</td><td colspan="2"></td>
   </tr>`:'';
@@ -305,6 +307,7 @@ function importAtt(i){
   const s=staffList.find(x=>x.name===lines[i].staff_name);
   if(s && s.commute_round_km!=null) lines[i].commute_round_km=s.commute_round_km;
   if(s && s.commute_yen_per_km!=null) lines[i].commute_yen_per_km=s.commute_yen_per_km;
+  if(s && s.monthly_salary!=null) lines[i].monthly_salary=s.monthly_salary;
   lines[i]._dirty=true;
   render();
 }
@@ -315,7 +318,7 @@ function importAllAttendance(){
   Object.keys(attMap).forEach(name=>{
     if(lines.some(l=>l.staff_name===name)) return;
     const s=staffList.find(x=>x.name===name); if(!s) return;
-    lines.push({staff_id:s.id,staff_name:s.name,hourly_wage:s.hourly_wage??'',
+    lines.push({staff_id:s.id,staff_name:s.name,hourly_wage:s.hourly_wage??'',monthly_salary:s.monthly_salary??'',
       commute_round_km:s.commute_round_km??'',stopkill_unit:3000,commute_yen_per_km:s.commute_yen_per_km??20,_dirty:true});
     added++;
   });
@@ -333,10 +336,13 @@ function importAllAttendance(){
 // 振込作業でLINEに貼って確認しながら振り込めるよう、氏名と差引支給額をテキストでコピーする
 async function copyNetPayList(){
   if(!lines.length){ msg('コピーする明細がありません',false); return; }
-  const month=document.getElementById('month').value;
-  const mNum=parseInt((month||'').split('-')[1],10);
+  const month=document.getElementById('month').value; // 対象月（働いた月）
+  // 振込は翌月（例: 8月分の給与を集計したボタンは9月の振込額になる）
+  const [y,m]=(month||'').split('-').map(Number);
+  let payMonth='';
+  if(y&&m) payMonth=(m===12?1:m+1)+'月';
   const rows=lines.map(l=>`${l.staff_name} ${Math.round(calc(l).net).toLocaleString()}`);
-  const text=[(isNaN(mNum)?'':mNum+'月')+'振込額',...rows].join('\n');
+  const text=[payMonth+'振込額',...rows].join('\n');
   try{
     await navigator.clipboard.writeText(text);
     msg('LINE用にコピーしました（'+lines.length+'名分）',true);
@@ -374,7 +380,7 @@ async function saveAll(){
 function addLine(){
   const id=document.getElementById('addSel').value; if(!id) return;
   const s=staffList.find(x=>x.id===id); if(!s) return;
-  lines.push({staff_id:s.id,staff_name:s.name,hourly_wage:s.hourly_wage??'',
+  lines.push({staff_id:s.id,staff_name:s.name,hourly_wage:s.hourly_wage??'',monthly_salary:s.monthly_salary??'',
     commute_round_km:s.commute_round_km??'',stopkill_unit:3000,commute_yen_per_km:s.commute_yen_per_km??20,_dirty:true});
   lines.sort((a,b)=>a.staff_name.localeCompare(b.staff_name,'ja'));
   render();
@@ -411,7 +417,7 @@ function payslipSection(l, month, rows){
   <p>氏名: <strong>${esc(l.staff_name)}</strong><br>館山ジビエセンター（合同会社アルコ）</p>
   <table>
   <tr><th>出勤日数</th><td>${N(l.work_days)}日</td><th>実働時間</th><td>${N(l.work_hours)}時間</td></tr>
-  <tr><th>時給</th><td>¥${N(l.hourly_wage).toLocaleString()}</td><th>基本給</th><td>¥${c.base.toLocaleString()}</td></tr>
+  <tr><th>${N(l.monthly_salary)?'月給':'時給'}</th><td>¥${(N(l.monthly_salary)||N(l.hourly_wage)).toLocaleString()}</td><th>基本給</th><td>¥${c.base.toLocaleString()}</td></tr>
   ${c.stop?`<tr><th>止めさし搬入手当</th><td>¥${c.stop.toLocaleString()}（${N(l.stopkill_count)}回×¥${(N(l.stopkill_unit)||3000).toLocaleString()}）</td><th>その他手当</th><td>¥${N(l.other_allowance).toLocaleString()}</td></tr>`
         :(N(l.other_allowance)?`<tr><th>その他手当</th><td colspan="3">¥${N(l.other_allowance).toLocaleString()}</td></tr>`:'')}
   ${c.comm?`<tr><th>通勤費</th><td colspan="3">¥${c.comm.toLocaleString()}　<span style="font-size:11px;color:#555;">${esc(commParts.join(' ＋ '))}</span></td></tr>`:''}
