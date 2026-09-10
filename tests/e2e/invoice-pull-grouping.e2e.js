@@ -39,6 +39,9 @@ const path = require('path');
       mkItem('i11', 'モモ（全体）', 1.79, 'inv11'), mkItem('i12', 'モモ（全体）', 0.77, 'inv12'),
       mkItem('i13', 'モモ（全体）', 1.32, 'inv13'), mkItem('i14', 'モモ（全体）', 0.63, 'inv14'),
     ],
+    // 2026-09-10追記: 「請求書作成」タブの注文取り込みはorder_itemsしか見ておらず、
+    // 送料（shipments.freight）が請求書に一切反映されない不具合があった。
+    shipments: [{ freight: 1300, size_code: 100, is_cool: true }],
   };
   const INV_GRADE = {};
   ['inv1', 'inv2', 'inv3', 'inv4'].forEach(id => INV_GRADE[id] = '極上');
@@ -81,7 +84,17 @@ const path = require('path');
   const results = [];
   const ck = (name, cond, got) => results.push([name, cond, got]);
 
-  ck('14件の明細が2行にまとまる', lines.length === 2, JSON.stringify(lines));
+  ck('14件の明細が肉2行+送料1行にまとまる', lines.length === 3, JSON.stringify(lines));
+
+  const freightLine = lines.find(l => /送料/.test(l.name));
+  ck('送料の行がある（以前はorder_itemsしか見ておらず送料が消えていた）', !!freightLine, JSON.stringify(lines));
+  if (freightLine) {
+    ck('送料の行に納品日が入る', freightLine.name.startsWith('8/14納品'), freightLine.name);
+    ck('送料のサイズ・クール表記が入る', /（クール100）/.test(freightLine.name), freightLine.name);
+    ck('送料は税抜変換せずそのまま1,300円', Number(freightLine.price) === 1300, String(freightLine.price));
+    ck('送料は消費税10%（軽減税率の対象外）', Number(freightLine.tax) === 10, String(freightLine.tax));
+    ck('送料の数量は1', Number(freightLine.qty) === 1, String(freightLine.qty));
+  }
 
   const l805 = lines.find(l => /8\/5/.test(l.name));
   const l814 = lines.find(l => /8\/14/.test(l.name));

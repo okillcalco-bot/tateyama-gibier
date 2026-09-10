@@ -3446,7 +3446,7 @@ async function invPullSearch(){
   }
   res.textContent='検索中…'; list.innerHTML=''; acts.style.display='none';
   try{
-    let q=`?customer_id=eq.${custId}&status=in.(${INV_BILLABLE.join(',')})&select=*,order_items(*)&order=delivery_date.asc,order_date.asc`;
+    let q=`?customer_id=eq.${custId}&status=in.(${INV_BILLABLE.join(',')})&select=*,order_items(*),shipments(freight,size_code,is_cool)&order=delivery_date.asc,order_date.asc`;
     const r=invPullRange();
     if(r) q+=`&order_date=gte.${r.from}&order_date=lte.${r.to}`;
     const orders=await sb('GET','orders','',q);
@@ -3515,6 +3515,9 @@ async function invPullApply(){
 
   // 同じ納品日・同じ部位（サブ部位の括弧は丸めて）・同じ肉ランクは1行にまとめる
   const groups=new Map();
+  // 送料は注文（＝出荷）ごとに別行で積む（書類発行タブのgenerateDoc()と同じ扱い）。
+  // 以前はorder_itemsしか見ていなかったため、注文に紐づく送料が請求書に一切反映されなかった。
+  const freightLines=[];
   picked.forEach(o=>{
     (o.order_items||[]).forEach(it=>{
       const qty=Number(it.weight_kg!=null?it.weight_kg:it.weight)||0;
@@ -3527,6 +3530,14 @@ async function invPullApply(){
       g.amt+=Number(it.subtotal!=null?it.subtotal:it.amount)||0;
       if(g.anyPrice==null && it.unit_price!=null) g.anyPrice=it.unit_price;
     });
+    const ship=(o.shipments||[])[0];
+    if(ship && Number(ship.freight)>0){
+      // shipments.freightはもともと税抜（現場の送料入力欄も「税抜」表記）なので変換不要
+      const d=o.delivery_date?new Date(o.delivery_date+'T00:00:00'):null;
+      const dLabel=d?`${d.getMonth()+1}/${d.getDate()}納品　`:'';
+      const label=dLabel+'送料'+(ship.size_code?`（${ship.is_cool?'クール':''}${ship.size_code}）`:'');
+      freightLines.push({name:label,qty:1,unit:'個',price:Number(ship.freight),tax:10});
+    }
     if(!invLinkedOrderIds.includes(o.id)) invLinkedOrderIds.push(o.id);
   });
 
@@ -3550,6 +3561,7 @@ async function invPullApply(){
     const price=qty?Math.round(exclusiveAmount/qty):exclusiveAmount;
     keep.push({name, qty, unit:'kg', price, tax:8});
   });
+  keep.push(...freightLines);
   invLines=keep.length?keep:[newInvLine()];
   renderInvLines();
 
