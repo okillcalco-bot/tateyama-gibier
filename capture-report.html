@@ -584,9 +584,13 @@ function buildRecordBlock(r, n) {
   const receiveTime = r.receive_time || '';
   const processTime = r.process_time || '';
 
+  // 放射能検査（全頭検査）はイノシシだけの制度。イノシシ以外は市役所が捕獲実績を
+  // 確認したいだけなので、放射能検査欄そのものが不要（空欄の記入用紙が付くだけで紛らわしい）
+  const isBoar = species === 'イノシシ';
+
   return `<div class="record-block">
     <div class="block-header">
-      <span class="block-title">館山ジビエセンター　捕獲票兼放射能検査台帳</span>
+      <span class="block-title">館山ジビエセンター　${isBoar ? '捕獲票兼放射能検査台帳' : '捕獲票'}</span>
       <span class="block-id">${r.label_id || ''}</span>
       <span class="block-no">No. ${r.serial_number ?? n}</span>
     </div>
@@ -646,9 +650,13 @@ function buildRecordBlock(r, n) {
         <td class="lbl">記録者</td>
         <td class="val">${recorder}</td>
       </tr>
+      <tr>
+        <td class="lbl">備考</td>
+        <td colspan="5" class="val wide">${notes || '　'}</td>
+      </tr>
     </table>
-
-    <!-- 放射能検査欄 -->
+${isBoar ? `
+    <!-- 放射能検査欄（イノシシのみ全頭検査の対象） -->
     <div class="block-section">▼ 放射能検査記録</div>
     <table class="block-table">
       <tr>
@@ -669,13 +677,11 @@ function buildRecordBlock(r, n) {
       </tr>
       <tr>
         <td class="lbl">判定</td>
-        <td colspan="2" class="val">
+        <td colspan="5" class="val">
           <span class="check-box"></span>合格　　<span class="check-box"></span>不合格
         </td>
-        <td class="lbl">備考</td>
-        <td colspan="2" class="val">${notes || '　'}</td>
       </tr>
-    </table>
+    </table>` : ''}
   </div>`;
 }
 
