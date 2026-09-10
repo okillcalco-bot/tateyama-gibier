@@ -1792,10 +1792,12 @@ async function loadDocOrders(){
     docDocsMap={};
     const ids=docOrders.map(o=>o.id);
     if(ids.length){
-      const docs=await sb('GET','documents','',`?order_id=in.(${ids.join(',')})&select=order_id,doc_type`);
+      // 取消済みの書類は「未発行」扱いに戻す（請求書作成タブのinvPullSearch()と同じ扱い。
+      // 以前はstatusを見ておらず、取消した書類の注文がずっと「発行済」バッジのままだった）。
+      const docs=await sb('GET','documents','',`?order_id=in.(${ids.join(',')})&status=neq.取消&select=order_id,doc_type`);
       docs.forEach(d=>{ (docDocsMap[d.order_id]=docDocsMap[d.order_id]||new Set()).add(d.doc_type); });
-      const linked=await sb('GET','document_orders','',`?order_id=in.(${ids.join(',')})&select=order_id,documents(doc_type)`);
-      linked.forEach(l=>{ if(l.documents&&l.documents.doc_type) (docDocsMap[l.order_id]=docDocsMap[l.order_id]||new Set()).add(l.documents.doc_type); });
+      const linked=await sb('GET','document_orders','',`?order_id=in.(${ids.join(',')})&select=order_id,documents(doc_type,status)`);
+      linked.forEach(l=>{ if(l.documents&&l.documents.doc_type&&l.documents.status!=='取消') (docDocsMap[l.order_id]=docDocsMap[l.order_id]||new Set()).add(l.documents.doc_type); });
     }
     renderDocOrders();
   }catch(e){console.error(e);el.innerHTML='<div class="empty">エラーが発生しました</div>'}
@@ -1928,6 +1930,15 @@ async function computeDocNumber(type,dateStr){
 async function generateDoc(type,forcedOrders){
   const selected=forcedOrders||getSelectedDocOrders();
   if(!selected.length){alert('注文を選択してください');return}
+  // 既にこの種類の書類が発行済みの注文が含まれていないか確認する（二重請求防止）。
+  // 一覧にはバッジで表示されるだけで選択自体はブロックされないため、全選択などで
+  // 気づかず発行済みの注文をもう一度発行してしまう事故があった（請求書作成タブの
+  // invPullApply()には同種のチェックが元からあったが、こちらには無かった）。
+  const dupOrders=selected.filter(o=>(docDocsMap[o.id]||new Set()).has(type));
+  if(dupOrders.length){
+    const names=dupOrders.map(o=>o.order_code||o.id).join('、');
+    if(!confirm(`既に${type}が発行済みの注文が${dupOrders.length}件含まれています（${names}）。\n二重発行になる可能性があります。続けますか？`)) return;
+  }
   // 選択注文の元の顧客（複数の可能性あり）と、書類の宛名にする請求先を分けて扱う。
   // 請求先を明示していれば（仲卸業者など）それを使い、無指定かつ単一顧客ならその顧客をそのまま使う。
   const custIds=[...new Set(selected.map(o=>o.customer_id))];
