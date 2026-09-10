@@ -281,7 +281,7 @@ th,td{padding:8px 6px;font-size:.8rem}
       <div class="form-row" style="margin-bottom:12px">
         <div class="form-group">
           <label>期間</label>
-          <select id="docPeriod" onchange="loadDocOrders()">
+          <select id="docPeriod" onchange="populateDocCustomerDropdown();loadDocOrders()">
             <option value="thisMonth">今月</option>
             <option value="lastMonth">先月</option>
             <option value="thisYear">今年度</option>
@@ -290,8 +290,9 @@ th,td{padding:8px 6px;font-size:.8rem}
         </div>
         <div class="form-group">
           <label>顧客（絞り込み・複数選択可）</label>
+          <input type="text" id="docCustomerSearch" oninput="renderDocCustomerOptions()" placeholder="顧客名・コードで検索" style="margin-bottom:4px">
           <select id="docCustomer" onchange="loadDocOrders()" multiple size="4"></select>
-          <div style="font-size:.75rem;color:var(--text2);margin-top:2px">何も選ばなければ全顧客。Ctrl（Macは⌘）+クリックで複数選択できます。</div>
+          <div style="font-size:.75rem;color:var(--text2);margin-top:2px">この期間に出荷実績がある顧客だけ表示しています。何も選ばなければ全顧客。Ctrl（Macは⌘）+クリックで複数選択できます。</div>
         </div>
         <div class="form-group">
           <label>備考検索</label>
@@ -300,8 +301,8 @@ th,td{padding:8px 6px;font-size:.8rem}
         </div>
       </div>
       <div class="form-row" id="docCustomDates" style="display:none;margin-bottom:12px">
-        <div class="form-group"><label>開始日</label><input type="date" id="docDateFrom" onchange="loadDocOrders()"></div>
-        <div class="form-group"><label>終了日</label><input type="date" id="docDateTo" onchange="loadDocOrders()"></div>
+        <div class="form-group"><label>開始日</label><input type="date" id="docDateFrom" onchange="populateDocCustomerDropdown();loadDocOrders()"></div>
+        <div class="form-group"><label>終了日</label><input type="date" id="docDateTo" onchange="populateDocCustomerDropdown();loadDocOrders()"></div>
       </div>
       <div style="font-size:.8rem;color:var(--text2)">発送済みの注文のみ表示。<strong>未発行が上</strong>、書類を発行すると<strong>処理済み</strong>として下がります。</div>
     </div>
@@ -1689,14 +1690,26 @@ const SHIP_STATUSES=['発送済','納品完了'];
 const DOC_TYPES=['見積書','納品書','請求書','領収書'];
 let docDocsMap={}; // order_id -> Set(doc_type)
 
-// 発送した顧客だけをドロップダウンに出す
+// この期間に出荷実績がある顧客だけをドロップダウンの候補にする
+// （期間を変えるたびに呼び直す。候補は検索欄の絞り込み用に保持しておく）
+let docCustomerCandidates=[];
 function populateDocCustomerDropdown(){
+  const range=docPeriodRange();
+  const shippedIds=new Set(allOrders.filter(o=>SHIP_STATUSES.includes(o.status)
+    && (!range || ((o.order_date||'')>=range.from && (o.order_date||'')<=range.to))
+  ).map(o=>o.customer_id));
+  docCustomerCandidates=allCustomers.filter(c=>shippedIds.has(c.id)).sort((a,b)=>(a.code||'').localeCompare(b.code||''));
+  renderDocCustomerOptions();
+}
+function renderDocCustomerOptions(){
   const sel=document.getElementById('docCustomer');
   if(!sel) return;
   const prevSelected=new Set([...sel.selectedOptions].map(o=>o.value));
-  const shippedIds=new Set(allOrders.filter(o=>SHIP_STATUSES.includes(o.status)).map(o=>o.customer_id));
-  const custs=allCustomers.filter(c=>shippedIds.has(c.id)).sort((a,b)=>(a.code||'').localeCompare(b.code||''));
-  sel.innerHTML=custs.map(c=>`<option value="${c.id}">${esc(c.code||'')} ${esc(c.name||'')}</option>`).join('');
+  const search=(document.getElementById('docCustomerSearch')?.value||'').trim().toLowerCase();
+  const list=search
+    ? docCustomerCandidates.filter(c=>(c.name||'').toLowerCase().includes(search)||(c.code||'').toLowerCase().includes(search)||(c.kana||'').toLowerCase().includes(search))
+    : docCustomerCandidates;
+  sel.innerHTML=list.map(c=>`<option value="${c.id}">${esc(c.code||'')} ${esc(c.name||'')}</option>`).join('');
   [...sel.options].forEach(o=>{ if(prevSelected.has(o.value)) o.selected=true; });
 }
 
