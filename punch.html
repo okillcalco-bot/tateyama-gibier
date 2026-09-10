@@ -902,6 +902,13 @@ async function punchOut() {
       clock_out: t, break_minutes: brk, health_out: hv,
       work_types: works || null, stopkill_count: stopkillValue(), updated_at: new Date().toISOString(),
     }, `?id=eq.${todayRec.id}`);
+    // 退勤PATCH成功後にtodayRecを更新しないと、6秒後のgoHomeまでの間に
+    // 同じ人が再度「出勤」を押すと退勤済みガードが効かず、二重の出勤行ができてしまう
+    todayRec.clock_out = t;
+    todayRec.break_minutes = brk;
+    todayRec.health_out = hv;
+    todayRec.work_types = works || null;
+    todayRec.stopkill_count = stopkillValue();
     if (document.getElementById('brk-set-default').checked) {
       try { await sb('PATCH', 'staff', { default_break_min: brk }, `?id=eq.${selected.id}`); selected.default_break_min = brk; } catch (_e) {}
     }
