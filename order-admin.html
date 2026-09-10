@@ -988,7 +988,7 @@ let shipData=[];
 async function loadShipData(){
   try{
     shipData=await sb('GET','shipments','',
-      `?select=*,orders(order_code,customer_name,customer_id,order_date,order_items(species,part_name,weight_kg,weight))`
+      `?select=*,orders(order_code,customer_name,customer_id,order_date,order_items(*,inventory(grade)))`
       +`&order=shipment_date.desc.nullslast,created_at.desc&limit=1000`);
   }catch(e){
     console.error('出荷データの読込エラー',e);
@@ -1038,12 +1038,15 @@ function renderShipData(){
   body.innerHTML=filtered.map(s=>{
     const o=s.orders||{};
     const items=o.order_items||[];
-    const content=items.map(i=>`${i.species||''} ${i.part_name||''}${(i.weight_kg||i.weight)?'　'+(i.weight_kg||i.weight)+'kg':''}`).join('、');
+    // 同じ品種・部位・肉ランクはまとめて1行にし、部位ごとの重量が一目で分かるようにする
+    // （請求書作成タブの内訳まとめと同じ考え方＝consolidateItemsForBilling）
+    const parts=consolidateItemsForBilling(items);
+    const content=parts.map(p=>`${esc(p.species||'')} ${esc(p.part_name||'')}　${p.weight_kg?p.weight_kg+'kg':''}`).join('<br>');
     const totalWeight=shipWeightSum(items);
     return `<tr>
       <td>${s.shipment_date||s.delivery_date||'--'}</td>
       <td style="font-weight:700">${esc(o.customer_name||'--')}</td>
-      <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(content)}">${esc(content||'--')}</td>
+      <td style="max-width:340px;white-space:normal;line-height:1.6">${content||'--'}</td>
       <td style="text-align:right">${totalWeight?totalWeight.toFixed(2)+'kg':'--'}</td>
       <td style="text-align:right">${s.freight!=null?'&yen;'+Number(s.freight).toLocaleString():'<span style="color:var(--text3)">未設定</span>'}</td>
       <td>${esc(o.order_code||'--')}</td>
