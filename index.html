@@ -2864,7 +2864,7 @@ async function shipDirectScan() {
   input.focus();
   if (!code) return;
   try {
-    const invs = await sb('GET', 'inventory', null, `?${invScanFilter(raw)}&deleted_at=is.null&select=id,ident_code,part_name,weight,species,individual_id,status`);
+    const invs = await sb('GET', 'inventory', null, `?${invScanFilter(raw)}&deleted_at=is.null&select=id,ident_code,part_name,weight,species,individual_id,status,grade`);
     if (!invs.length) {
       // 識別コードが一致しない → 個体番号（3セグメント）としてその個体の在庫を出し、部位を選ばせる
       const segs = code.split('-');
@@ -3497,6 +3497,20 @@ async function showDetailModal(item) {
 /* 注文なし出荷の記録を1か所にまとめる。直販確定と、在庫の手動「出荷済」化の両方から使う。
    出荷先の無い「出荷済」を作らない（どこへ届いたかが消え、一頭の線が販売で切れるため）。
    orders（DIR-…/発送済/直販）→ order_items（在庫IDで紐付け）→ shipments → 在庫を出荷済。 */
+// 価格マスタ×肉ランクから単価（税込）を引く。部位名の末尾の（全体）等は
+// 価格マスタの基本部位名と揃えるため丸める（請求書作成タブのinvPartBase()と同じ考え方）。
+function directShipPartBase(name) { return (name || '').replace(/\s*（[^（）]*）\s*$/, '').trim(); }
+function directShipPrice(pmList, rank, item) {
+  const species = item.species || '';
+  const grade = item.grade || '並';
+  const exact = pmList.find(p => p.species === species && p.part_name === item.part_name && (p.grade || '並') === grade);
+  const base = directShipPartBase(item.part_name);
+  const byBase = exact || pmList.find(p => p.species === species && p.part_name === base && (p.grade || '並') === grade);
+  const pm = byBase || pmList.find(p => p.species === species && p.part_name === base);
+  if (!pm) return null;
+  return pm['price_' + rank] ?? pm.price_standard ?? null;
+}
+
 async function recordDirectShipment(items, custName, opts) {
   opts = opts || {};
   if (!items || !items.length) throw new Error('出荷する在庫がありません');
@@ -3505,8 +3519,27 @@ async function recordDirectShipment(items, custName, opts) {
   let customerId = null;
   try { customerId = await sb('POST', 'rpc/staff_lookup_customer_id', { p_name: custName }) || null; } catch(e) {}
 
+  // 単価を価格マスタ×顧客の価格ランクから決める（送料しか乗らない0円請求書になっていたバグの修正）。
+  // タブの巡回順に依存させないよう、その場で価格マスタと顧客ランクを取り直す。
+  let priceRank = 'standard';
+  if (customerId) {
+    try { const cs = await sb('GET', 'customers', null, `?id=eq.${customerId}&select=price_rank`); if (cs[0]) priceRank = cs[0].price_rank || 'standard'; } catch(e) {}
+  }
+  let pmList = [];
+  try { pmList = await sb('GET', 'price_master', null, '?select=*'); } catch(e) {}
+
   const now = new Date();
   const orderCode = 'DIR-' + now.toISOString().slice(0,10).replace(/-/g,'') + '-' + now.toTimeString().slice(0,8).replace(/:/g,'');
+
+  const priced = items.map(i => {
+    const weight = parseFloat(i.weight) || null;
+    const unitPrice = directShipPrice(pmList, priceRank, i);
+    const amount = (unitPrice != null && weight) ? Math.round(weight * unitPrice) : null;
+    return { i, weight, unitPrice, amount };
+  });
+  const unpriced = priced.filter(p => p.unitPrice == null);
+  const totalAmount = priced.reduce((s, p) => s + (p.amount || 0), 0);
+
   const orderBody = {
     order_code: orderCode,
     customer_name: custName,
@@ -3515,19 +3548,26 @@ async function recordDirectShipment(items, custName, opts) {
     delivery_date: now.toISOString().slice(0,10),
     status: '発送済',
     channel: '直販（注文なし）',
+    total_amount: totalAmount,
     notes: [opts.memo, opts.operator ? `担当:${opts.operator}` : ''].filter(Boolean).join(' / ') || null
   };
   if (customerId) orderBody.customer_id = customerId;
   const created = await sb('POST', 'orders', orderBody);
   const orderId = created[0].id;
 
-  await sb('POST', 'order_items', items.map(i => ({
+  await sb('POST', 'order_items', priced.map(({ i, weight, unitPrice, amount }) => ({
     order_id: orderId,
     inventory_id: i.id,
     part_name: i.part_name || '-',
     species: i.species || null,
-    weight: parseFloat(i.weight) || null,
-    weight_kg: parseFloat(i.weight) || null
+    weight: weight,
+    weight_kg: weight,
+    grade_snapshot: i.grade || null,
+    unit_price: unitPrice,
+    amount: amount,
+    subtotal: amount,
+    price_rank_applied: unitPrice != null ? priceRank : null,
+    price_source: unitPrice != null ? 'price_master' : null
   })));
 
   const shipBody = { order_id: orderId, shipment_date: now.toISOString().slice(0,10), status: '出荷済',
@@ -3539,7 +3579,12 @@ async function recordDirectShipment(items, custName, opts) {
   for (const i of items) {
     await sb('PATCH', 'inventory', { status: '出荷済', updated_at: now.toISOString() }, `?id=eq.${i.id}`);
   }
-  return { orderId, orderCode };
+  // 単価が見つからなかった部位は、請求時まで気付かず0円になっていた事故の再発防止として
+  // その場で必ず知らせる（サイレント失敗を作らない）
+  if (unpriced.length) {
+    toast(`⚠ ${unpriced.length}件は価格マスタに単価が無く0円のままです（${[...new Set(unpriced.map(p => p.i.part_name))].join('・')}）。請求前に単価を確認してください`, 'error');
+  }
+  return { orderId, orderCode, unpriced: unpriced.map(p => p.i) };
 }
 
 async function changeStatus(id, code) {
@@ -3552,11 +3597,11 @@ async function changeStatus(id, code) {
       // 出荷先の無い「出荷済」は作らない。直販確定と同じ注文・出荷・紐付けをここで作る。
       const custName = (prompt(`${code} の出荷先（お店名・施設名など）を入力してください。\n※出荷先が無いと「出荷済」にはできません（どこへ届いたかが消えるため）`) || '').trim();
       if (!custName) { toast('出荷先が無いため、出荷済にはしませんでした', 'error'); return; }
-      const rows = await sb('GET', 'inventory', null, `?id=eq.${id}&select=id,ident_code,part_name,species,weight,weight_kg,status`);
+      const rows = await sb('GET', 'inventory', null, `?id=eq.${id}&select=id,ident_code,part_name,species,weight,weight_kg,status,grade`);
       const inv = rows && rows[0];
       if (!inv) { toast('在庫が見つかりません', 'error'); return; }
       if (inv.status === '出荷済') { toast('すでに出荷済です', 'error'); return; }
-      const item = { id: inv.id, ident_code: inv.ident_code, part_name: inv.part_name, species: inv.species,
+      const item = { id: inv.id, ident_code: inv.ident_code, part_name: inv.part_name, species: inv.species, grade: inv.grade,
                      weight: inv.weight != null ? inv.weight : inv.weight_kg };
       const { orderCode } = await recordDirectShipment([item], custName, { memo: '在庫画面から出荷済に変更' });
       toast(`${code} を ${custName} へ出荷済にしました（${orderCode}）`);
