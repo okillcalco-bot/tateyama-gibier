@@ -38,7 +38,8 @@ const path = require('path');
       odd: w / mods(makeCode128SVG('2000000'))            // 奇数桁はSetBのまま（後方互換）
     };
   });
-  results.push(['数字8桁のバー幅 >= 0.45mm', enc.num8 >= 0.45, enc.num8.toFixed(3) + 'mm']);
+  // 2026-09-11: 静穏帯10モジュール×2をSVG内に持たせたため 79+20=99モジュール → 0.384mm
+  results.push(['数字8桁のバー幅 >= 0.36mm（静穏帯込み）', enc.num8 >= 0.36, enc.num8.toFixed(3) + 'mm']);
   results.push(['数字8桁は従来コードより太い', enc.num8 > enc.idAJ * 1.3, `数字${enc.num8.toFixed(3)} / 英数${enc.idAJ.toFixed(3)}`]);
   results.push(['従来の9文字は依然として細い(比較用)', enc.idMU2 < 0.33, enc.idMU2.toFixed(3) + 'mm']);
   results.push(['加工品19文字は極細(比較用)', enc.kk < 0.2, enc.kk.toFixed(3) + 'mm']);
@@ -52,7 +53,7 @@ const path = require('path');
     const mods = parseInt((svg.match(/viewBox="0 0 (\d+)/) || [])[1], 10);
     return { expect, mods };
   });
-  results.push(['SetCのシンボル数が理論値(79)', ck.mods === 79, String(ck.mods)]);
+  results.push(['SetCのシンボル数が理論値(79)+静穏帯20 = 99', ck.mods === 99, String(ck.mods)]);
 
   // 3) ラベルに数字キーが入る（精肉ラベル）
   const lbl = await page.evaluate(() => {
@@ -63,7 +64,7 @@ const path = require('path');
     return { hasIdentText: /TGC-08-M168/.test(html), mods: parseInt((html.match(/viewBox="0 0 (\d+)/) || [])[1], 10) };
   });
   results.push(['ラベルの文字は識別コードのまま', lbl.hasIdentText, '']);
-  results.push(['ラベルのバーコードは数字キー(79)', lbl.mods === 79, String(lbl.mods)]);
+  results.push(['ラベルのバーコードは数字キー(79+静穏帯20=99)', lbl.mods === 99, String(lbl.mods)]);
 
   // 4) スキャン解決：8桁数字→scan_code、それ以外→ident_code
   const f = await page.evaluate(() => ({

@@ -6065,18 +6065,26 @@ function makeCode128SVG(text, barH) {
   vals.push(check % 103);
   const bits = vals.map(v => T[v]).join('') + '1100011101011';
   const W = bits.length;
+  // 静穏帯（クワイエットゾーン）: バーの両側に10モジュール以上の白が必要（ISO/IEC 15417）。
+  // 以前はバーをSVGの端まで描き、CSSで38mm幅いっぱいに引き伸ばしていたため、40mm幅ラベルでは
+  // 両側の白がラベルの余白1mm（2モジュール弱）しか無かった。2026-09-11、8桁キー（0.48mm/バー）の
+  // ラベルまで含めて全て読めない事故が起き、原因はバー幅ではなく静穏帯不足と判断した。
+  // 静穏帯をSVGの中に持たせ、精肉ラベル・加工ラベルどちらで使っても必ず付くようにする。
+  // （8桁キーは 79+20=99モジュール → 38mm幅で0.38mm/バー、静穏帯3.8mm）
+  const Q = 10;
+  const TW = W + Q * 2;
   let rects = '';
   for (let i = 0; i < W; ) {
     if (bits[i] === '1') {
       let j = i + 1;
       while (j < W && bits[j] === '1') j++;
-      rects += '<rect x="' + i + '" y="0" width="' + (j - i) + '" height="' + barH + '" fill="#000"/>';
+      rects += '<rect x="' + (Q + i) + '" y="0" width="' + (j - i) + '" height="' + barH + '" fill="#000"/>';
       i = j;
     } else { i++; }
   }
-  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + barH
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + TW + ' ' + barH
     + '" preserveAspectRatio="none" shape-rendering="crispEdges" style="display:block;width:38mm;height:14mm;">'
-    + '<rect width="' + W + '" height="' + barH + '" fill="#fff"/>' + rects + '</svg>';
+    + '<rect width="' + TW + '" height="' + barH + '" fill="#fff"/>' + rects + '</svg>';
 }
 
 /* QRコード（バイトモード・誤り訂正M・バージョン1〜6）。
@@ -7531,8 +7539,16 @@ let pmScanCodeFor = {};   // identCode → scan_code（印刷と保存で必ず�
      識別コード    'T268-MU-2' 134モジュール → 0.284mm  読めない
 
    数字キーを確保できないと識別コードで印字する作りになっていたため、
-   「印刷はできたが読めないラベル」が黙って出ていた。下限を決めて判定する。 */
-const LABEL_BARCODE_MIN_MM = 0.40;
+   「印刷はできたが読めないラベル」が黙って出ていた。下限を決めて判定する。
+
+   2026-09-11追記: 上の実測はどれも静穏帯（バー両側の白）がほぼ無い状態での結果だった
+   （バーを38mm幅いっぱいに描き、両側の白はラベル余白1mmのみ）。同日、0.48mm/バーの
+   8桁キーのラベルまで全て読めない事故があり、静穏帯不足が主因と判断して
+   makeCode128SVG に10モジュールずつの静穏帯を持たせた。その分バーは細くなる
+   （8桁キー 0.481mm → 0.384mm）。一般的なハンディスキャナのCode128最小バー幅は
+   0.19〜0.25mmなので0.38mmは十分太い。下限は0.33mm（識別コード印字の旧ラベル
+   'T278-MU' は0.29mmで引き続き「読めない」判定）。 */
+const LABEL_BARCODE_MIN_MM = 0.33;
 const LABEL_BARCODE_WIDTH_MM = 38;
 function labelBarcodeMm(code) {
   const m = /viewBox="0 0 (\d+)/.exec(makeCode128SVG(code));
