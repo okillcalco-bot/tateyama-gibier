@@ -35,8 +35,9 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   });
 
   // 8桁は読める・長い識別コードは読めない（実測）
-  ck('8桁キーは読める(>=0.40mm)', R.readable8 === true && R.mm8 >= 0.40, R.mm8.toFixed(3));
-  ck('長い識別コードは読めない', R.readableIdent === false && R.mmIdent < 0.40, R.mmIdent.toFixed(3));
+  // 2026-09-11: 静穏帯10モジュール×2をSVG内に持たせたため、8桁は0.481mm→0.384mm（下限0.33mm）
+  ck('8桁キーは読める(>=0.36mm)', R.readable8 === true && R.mm8 >= 0.36, R.mm8.toFixed(3));
+  ck('長い識別コードは読めない', R.readableIdent === false && R.mmIdent < 0.33, R.mmIdent.toFixed(3));
 
   // scanCodeがあれば、手打ち用に8桁を大きく表示し、識別コードは小さく併記
   ck('scanあり: 8桁を大きく表示(.bct)', /class="bct">10003258</.test(R.withScan), R.withScan.slice(0, 40));
