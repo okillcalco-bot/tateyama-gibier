@@ -105,6 +105,7 @@ function pick(qs) {
     short: invScanFilter('t272-kr'),
     full: invScanFilter('TGC-08-T272-KR'),
     legacy: invScanFilter('X-428-RO'),
+    qr: invScanFilter('https://tateyama-gibier.vercel.app/s.html?c=10000992'),
     ni: normIdent('10000992'),
     niShort: normIdent('T272-KR')
   }));
@@ -115,6 +116,9 @@ function pick(qs) {
   T('小文字の短縮コードも引ける', /TGC-08-T272-KR/.test(decodeURIComponent(f.short)), decodeURIComponent(f.short));
   T('フル桁はそのまま引く', f.full === 'ident_code=eq.TGC-08-T272-KR', decodeURIComponent(f.full));
   T('旧ラベル X-428-RO も候補に入る', /"X-428-RO"/.test(decodeURIComponent(f.legacy)), decodeURIComponent(f.legacy));
+  // 2026-09-11追記: バーコードが霜・血液で読めなくても、同じラベルのQR(物語ページURL)を
+  // スキャンすれば同じ在庫が引けるようにした（QRは汚れ・欠けに強いため代替手段になる）
+  T('QR(物語ページURL)を読んでも同じscan_codeで引く', f.qr === 'scan_code=eq.10000992', f.qr);
 
   // ── 2) 出荷画面でバーコードを読ませる（実際に落ちた動線） ──
   await page.evaluate(() => {
@@ -144,6 +148,16 @@ function pick(qs) {
   await page.waitForTimeout(600);
   const res2 = await page.$eval('#ship-scan-result', el => el.textContent.replace(/\s+/g, ' '));
   T('2枚目（ロース 1.9kg）も割り当てられる', /割当完了/.test(res2) && /ロース/.test(res2), res2.slice(0, 80));
+
+  // 3枚目：バーコードが読めない想定で、同じラベルのQRのURLを読ませても割り当てられる
+  invQueries.length = 0; patches.length = 0;
+  await page.evaluate(async () => {
+    document.getElementById('ship-scan-code').value = 'https://tateyama-gibier.vercel.app/s.html?c=10000944';
+    await handleShippingScan();
+  });
+  await page.waitForTimeout(600);
+  T('QRのURLを読んでもscan_codeで引く（TGC-08-HTTPS...で探さない）',
+    invQueries.some(q => /scan_code=eq\.10000944/.test(q)), invQueries[0] ? invQueries[0].slice(0, 70) : '(問合せ無し)');
 
   // ── 3) 削除済みの行を指すラベルは行き止まりにしない ──
   invQueries.length = 0; patches.length = 0;
