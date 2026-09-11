@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>産廃搬出ルール・チェック表 | 館山ジビエセンター</title>
+<meta name="robots" content="noindex">
+<style>
+  :root{
+    --bg:#f6f4ee; --card:#fff; --ink:#1d211c; --ink2:#57604f; --ink3:#8e9486;
+    --line:#e4ded0; --moss:#3c6b4a; --moss-soft:#e8f0e9; --gold:#a8781f; --gold-soft:#f6ecd8;
+    --red:#a8322c; --red-soft:#fbeceb;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --bg:#12150f; --card:#1a1e18; --ink:#e9ece5; --ink2:#a5ad9f; --ink3:#727a6d;
+           --line:#282e26; --moss:#7ab493; --moss-soft:#1b2c21; --gold:#d3a95c; --gold-soft:#2e2718;
+           --red:#e8837c; --red-soft:#2c1a19; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    line-height:1.85;-webkit-text-size-adjust:100%}
+  .wrap{max-width:760px;margin:0 auto;padding:18px 16px 60px}
+  header{padding:10px 0 4px}
+  .back{display:inline-block;font-size:13px;color:var(--ink2);text-decoration:none;
+    border:1px solid var(--line);border-radius:999px;padding:5px 14px;background:var(--card)}
+  .eyebrow{font-size:11px;letter-spacing:.2em;color:var(--gold);margin:16px 0 6px}
+  h1{font-size:25px;margin:0;font-weight:700;letter-spacing:.02em}
+  .sub{font-size:13.5px;color:var(--ink2);margin:8px 0 0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin:14px 0}
+  h2{font-size:17px;margin:32px 0 6px;display:flex;align-items:center;gap:9px;scroll-margin-top:12px}
+  h2 .ic{font-size:20px}
+  h3{font-size:14.5px;margin:16px 0 7px;color:var(--moss)}
+  h3:first-child{margin-top:0}
+  p{margin:0 0 10px}
+  .lead{font-size:14px;color:var(--ink2)}
+  .rule{background:var(--red-soft);border:1.5px solid var(--red);border-radius:14px;padding:18px;margin:14px 0}
+  .rule h3{color:var(--red);font-size:16px;margin-top:0}
+  .note{background:var(--gold-soft);border-left:4px solid var(--gold);border-radius:8px;
+    padding:12px 14px;font-size:13.5px;margin:12px 0}
+  .warn{background:var(--red-soft);border-left:4px solid var(--red);border-radius:8px;
+    padding:12px 14px;font-size:13.5px;margin:12px 0;font-weight:700}
+  .toc{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 0}
+  .toc a{font-size:13px;text-decoration:none;color:var(--moss);background:var(--moss-soft);
+    border-radius:999px;padding:5px 13px}
+  .steps{list-style:none;margin:10px 0;padding:0;display:flex;flex-direction:column;gap:8px}
+  .steps li{display:flex;gap:10px;align-items:flex-start;font-size:14px}
+  .steps .num{flex:0 0 26px;height:26px;border-radius:50%;background:var(--moss-soft);color:var(--moss);
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+  .rulebox{display:flex;gap:12px;padding:14px 0;border-bottom:1px solid var(--line)}
+  .rulebox:last-child{border-bottom:none}
+  .rulebox .n{flex:0 0 30px;height:30px;border-radius:8px;background:var(--moss-soft);color:var(--moss);
+    display:flex;align-items:center;justify-content:center;font-weight:700}
+  .rulebox b{display:block;font-size:14.5px;margin-bottom:3px}
+  .rulebox span{font-size:13.5px;color:var(--ink2)}
+  .checkform{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 18px;font-size:13px}
+  .checkform label{display:block;color:var(--ink3);margin-bottom:3px}
+  .checkform input{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;
+    background:var(--bg);color:var(--ink);font-size:14px;font-family:inherit}
+  .citem{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--line)}
+  .citem:last-child{border-bottom:none}
+  .citem input[type=checkbox]{width:22px;height:22px;flex:0 0 22px;margin-top:1px;accent-color:var(--moss)}
+  .citem .t{font-size:14px}
+  .citem.checked .t{color:var(--ink3);text-decoration:line-through}
+  .citem .no{font-size:12px;color:var(--ink3);font-weight:700;margin-right:4px}
+  .gate{position:sticky;bottom:0;margin:18px 0 0;padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+    border-top:1px solid var(--line);background:var(--card);font-weight:700;text-align:center;font-size:14.5px}
+  .gate.ok{color:var(--moss);background:var(--moss-soft);border-color:var(--moss)}
+  .gate.ng{color:var(--red);background:var(--red-soft);border-color:var(--red)}
+  .resetbtn{display:block;width:100%;margin-top:14px;padding:11px;border:1px solid var(--line);
+    border-radius:9px;background:var(--bg);color:var(--ink2);font-size:13.5px;font-family:inherit}
+  footer{text-align:center;font-size:11.5px;color:var(--ink3);margin-top:34px;line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="back" href="index.html">← 業務トップ</a>
+    <p class="eyebrow">館山ジビエセンター｜動植物性残さ</p>
+    <h1>産廃搬出ルール・チェック表</h1>
+    <p class="sub">搬入方法について指摘を受けたことをきっかけに定めた、搬出時の標準ルールです。<br>
+      スマホからいつでも確認できます。</p>
+  </header>
+
+  <div class="warn">この3点が守れていなければ、搬出しない：① 45L袋に収まる大きさ　② 血・液体の外漏れゼロ　③ 荷台をブルーシートで包む</div>
+
+  <div class="note">
+    <b>この頁は現場確認用の参考ページです。</b>
+    出発前の記録として法的に残すのは、廃棄用ストッカーに常備してある紙の「最終チェック表」
+    （搬出担当者のサイン入り）です。下のチェックはあくまで出発前の自己確認用で、
+    ページを閉じたり読み込み直すと消えます。
+  </div>
+
+  <div class="toc">
+    <a href="#rule">ルール</a>
+    <a href="#flow">搬出の流れ</a>
+    <a href="#check">最終チェック表</a>
+  </div>
+
+  <!-- ══ ルール ══ -->
+  <h2 id="rule"><span class="ic">📋</span>標準ルール</h2>
+  <div class="card">
+    <div class="rulebox">
+      <div class="n">1</div>
+      <div>
+        <b>廃棄物は45Lビニール袋に収まる大きさにする</b>
+        <span>丸のまま・袋から突き出す状態では搬出しません。必要な裁断はストッカー投入前までに行い、袋口を確実に結べる状態にします。</span>
+      </div>
+    </div>
+    <div class="rulebox">
+      <div class="n">2</div>
+      <div>
+        <b>血液・液体を外へ漏らさない</b>
+        <span>袋の破れ・穴・結束を確認します。液漏れの懸念がある場合は袋を補強・二重化し、外側に血液等が付着した状態では積み込みません。</span>
+      </div>
+    </div>
+    <div class="rulebox">
+      <div class="n">3</div>
+      <div>
+        <b>荷台は防水ブルーシートで二次防護する</b>
+        <span>積載前に荷台の底面と側面をブルーシートで覆い、端部を立ち上げて包み込みます。破れのあるシートは使用しません。</span>
+      </div>
+    </div>
+    <div class="rulebox">
+      <div class="n">4</div>
+      <div>
+        <b>出発前に「最終チェック表」を必ず記入する</b>
+        <span>廃棄用ストッカーにチェック表を常備します。搬出担当者が全項目を確認し、1項目でも未確認・不適合があれば出発しません。</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 搬出の流れ ══ -->
+  <h2 id="flow"><span class="ic">🚚</span>搬出の流れ</h2>
+  <div class="card">
+    <ol class="steps">
+      <li><span class="num">1</span>裁断・袋詰め</li>
+      <li><span class="num">2</span>袋口結束／破損・液漏れ確認</li>
+      <li><span class="num">3</span>荷台をブルーシートで包む</li>
+      <li><span class="num">4</span>積載</li>
+      <li><span class="num">5</span>最終チェック表記入</li>
+      <li><span class="num">6</span>出発</li>
+    </ol>
+    <p class="lead"><b>搬入後：</b>ブルーシートに血液等が付着した場合は洗浄・乾燥し、破損があれば交換します。記入済みチェック表は社内で保管します。</p>
+  </div>
+
+  <!-- ══ 最終チェック表 ══ -->
+  <h2 id="check"><span class="ic">✅</span>最終チェック表（出発前の自己確認用）</h2>
+  <div class="card">
+    <div class="checkform">
+      <div><label>搬出日</label><input type="date" id="cfDate"></div>
+      <div><label>出発時刻</label><input type="time" id="cfTime"></div>
+      <div><label>搬出担当者</label><input type="text" id="cfStaff" placeholder="氏名"></div>
+      <div><label>車両</label><input type="text" id="cfCar" placeholder="車両名・番号"></div>
+    </div>
+    <div id="checkList"></div>
+    <button class="resetbtn" onclick="cfReset()">チェックをリセット</button>
+  </div>
+</div>
+
+<div class="gate ng" id="gate">STOP：1つでも未確認の項目があります。搬出しないでください。</div>
+
+<footer style="padding:0 16px">合同会社アルコ／館山ジビエセンター　2026年9月10日制定</footer>
+
+<script>
+const CHECK_ITEMS=[
+  '廃棄物はすべて45Lビニール袋の中に完全に収まっている',
+  '丸のまま・大きな塊・袋から突き出す状態の廃棄物がない',
+  'すべての袋口が確実に結束されている',
+  '袋に破れ・穴・裂けがない',
+  '袋の外側に血液・液体が付着・滴下していない',
+  '液漏れの懸念がある袋は補強または二重袋にしている',
+  '荷台の底面・側面を、破損のない防水ブルーシートで覆っている',
+  'ブルーシートの端部を立ち上げ、積載物を包み込む状態にしている',
+  '積載後、荷台・車外へ血液や液体が漏れる状態ではない',
+  '上記すべてを確認し、不適合があれば是正してから出発する'
+];
+const list=document.getElementById('checkList');
+list.innerHTML=CHECK_ITEMS.map((t,i)=>`
+  <label class="citem" id="item${i}">
+    <input type="checkbox" onchange="cfUpdate()">
+    <span class="t"><span class="no">${i+1}</span>${t}</span>
+  </label>`).join('');
+
+function cfUpdate(){
+  const boxes=[...list.querySelectorAll('input[type=checkbox]')];
+  boxes.forEach((cb,i)=>{ document.getElementById('item'+i).classList.toggle('checked',cb.checked); });
+  const allOk=boxes.every(cb=>cb.checked);
+  const gate=document.getElementById('gate');
+  gate.className='gate '+(allOk?'ok':'ng');
+  gate.textContent=allOk?'全項目確認OK：搬出できます':'STOP：1つでも未確認の項目があります。搬出しないでください。';
+}
+function cfReset(){
+  list.querySelectorAll('input[type=checkbox]').forEach(cb=>cb.checked=false);
+  ['cfDate','cfTime','cfStaff','cfCar'].forEach(id=>document.getElementById(id).value='');
+  cfUpdate();
+}
+cfUpdate();
+</script>
+</body>
+</html>
