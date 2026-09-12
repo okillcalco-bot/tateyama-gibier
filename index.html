@@ -458,6 +458,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <button class="tab-btn" data-tab="customers">&#x1F3E2; 顧客台帳</button>
   <button class="tab-btn" data-tab="staff">&#x1F465; スタッフ管理</button>
   <button class="tab-btn" data-tab="supplies">&#x1F9F4; 資材在庫<span class="nav-badge" id="nav-badge-supplies"></span></button>
+  <button class="tab-btn" data-tab="equipment">&#x1F9F0; 備品台帳</button>
   <div class="nav-group">書類・帳票</div>
   <button class="tab-btn" data-tab="docs">&#x1F4C4; 書類・帳票<span class="nav-badge" id="nav-badge-docs"></span></button>
   <button class="tab-btn" data-tab="manual">&#x1F4D6; マニュアル</button>
@@ -1597,7 +1598,6 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="form-group"><label>搬出日</label><input class="form-input" id="wc-date" type="date"></div>
         <div class="form-group"><label>出発時刻</label><input class="form-input" id="wc-time" type="time"></div>
         <div class="form-group"><label>搬出担当者 *</label><select class="form-input" id="wc-staff"></select></div>
-        <div class="form-group"><label>車両</label><input class="form-input" id="wc-vehicle" placeholder="車両名・番号"></div>
       </div>
       <div id="wc-items" style="display:flex;flex-direction:column;gap:6px;"></div>
       <div class="form-group" style="margin-top:10px;"><label>是正した場合の内容</label><input class="form-input" id="wc-note" placeholder="例: 液漏れの袋を二重にした"></div>
@@ -1608,7 +1608,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
       <div style="overflow-x:auto;margin-top:14px;">
         <table>
-          <thead><tr><th>搬出日</th><th>出発</th><th>担当者</th><th>車両</th><th>結果</th><th>是正内容</th></tr></thead>
+          <thead><tr><th>搬出日</th><th>出発</th><th>担当者</th><th>結果</th><th>是正内容</th></tr></thead>
           <tbody id="wc-recent"></tbody>
         </table>
       </div>
@@ -1741,6 +1741,35 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     </div>
   </div>
 
+  <!-- Equipment Ledger (備品管理台帳) -->
+  <div class="tab-panel" id="panel-equipment">
+    <div class="section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>備品管理台帳</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn" onclick="equipPrint()">🖨 台帳を印刷/PDF</button>
+          <button class="btn" onclick="exportCSV('equipment','備品台帳')">⬇ CSV</button>
+          <button class="btn btn-primary" onclick="equipOpenNew()">＋ 備品を追加</button>
+        </div>
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;line-height:1.7;">
+        3万円以上の備品を目安に、<strong>管理番号・備品名・管理場所・購入日・購入金額</strong>を残します（スプレッドシート「備品管理台帳（TGC）2025」を移行）。借用品・譲受け品は購入情報に書いておくと、市役所への返却や監査のときに困りません。
+        消耗品（袋・洗剤など）は <a href="#" onclick="document.querySelector('.tab-btn[data-tab=&quot;supplies&quot;]').click();return false;" style="font-weight:700;">資材在庫</a> へ。
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+        <input class="form-input" id="equipment-search" placeholder="備品名・場所・備考で検索" style="max-width:280px;" oninput="renderEquipment()" />
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;"><input type="checkbox" id="equipment-show-disposed" onchange="renderEquipment()"> 廃棄・返却済みも表示</label>
+        <span id="equipment-stats" style="font-size:12.5px;color:var(--text2);"></span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>No.</th><th>備品名</th><th>数</th><th>管理場所</th><th>購入日</th><th>購入金額</th><th>状態</th><th>購入情報・備考</th><th>操作</th></tr></thead>
+          <tbody id="equipment-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- Docs Hub (書類・帳票) -->
   <div class="tab-panel" id="panel-docs">
     <div class="section">
@@ -1798,7 +1827,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div id="manual-index" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;"></div>
     </div>
     <div class="section">
-      <div class="section-title">📥 手順書のダウンロード（現場で作ったマニュアル）</div>
+      <div class="section-title">📥 手順書・資料集（ダウンロード）</div>
       <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;">
         紙で持ちたい人・スマホに入れておきたい人はここから。ふだん読むのは<strong>PDF</strong>、内容を直すときだけ<strong>原本（PowerPoint）</strong>を使ってください。
       </div>
@@ -1806,6 +1835,13 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <a class="btn" style="justify-content:flex-start;text-align:left;" href="staff-docs/manual-slice-vacuum.pdf" target="_blank" rel="noopener">🥩 スライス作業・小分けパック詰め・真空パック機（PDF・全6頁／追補2頁つき 2026-08-31）</a>
         <a class="btn" style="justify-content:flex-start;text-align:left;" href="staff-docs/manual-slice-vacuum.pptx">📝 同・原本（PowerPoint／内容を直す人向け）</a>
         <a class="btn" style="justify-content:flex-start;text-align:left;" href="manual-app.html" target="_blank" rel="noopener">📖 マニュアルアプリを開く（就業規則などの書類もこちら）</a>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:var(--gold);margin:16px 0 6px;">🔬 異常の見分け・衛生の資料</div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:8px;">受入・内臓摘出・解体で「これは食用にできるか」を迷ったときの写真資料。判断は<strong>枝肉・内臓 全部廃棄</strong>側に倒すのが原則です。</div>
+      <div style="display:flex;flex-direction:column;gap:8px;max-width:640px;">
+        <a class="btn" style="justify-content:flex-start;text-align:left;" href="staff-docs/color-atlas-r7.pdf" target="_blank" rel="noopener">🩻 カラーアトラス（厚生労働省・令和7年3月改訂／PDF 52頁）— シカ p.8〜・イノシシ p.23〜・気をつける異常 p.43〜</a>
+        <a class="btn" style="justify-content:flex-start;text-align:left;" href="manabu.html#sfts" target="_blank" rel="noopener">🌿 獣を知る（学習）— マダニ・SFTS・疥癬の項</a>
+        <a class="btn" style="justify-content:flex-start;text-align:left;" href="sanpai.html" target="_blank" rel="noopener">🚮 産廃搬出ルール・最終チェック表（9/11改訂）</a>
       </div>
     </div>
   </div>
@@ -1920,6 +1956,35 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
         <button class="btn" onclick="document.getElementById('supplyModal').style.display='none'">キャンセル</button>
         <button class="btn btn-primary" onclick="supplySave()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Equipment Modal (備品台帳) -->
+  <div id="equipModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:560px;margin:40px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);" id="equipModalTitle">備品 新規登録</div>
+        <button onclick="document.getElementById('equipModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="form-group"><label>管理番号（No.）</label><input class="form-input" id="eq-f-mgmt_no" type="number" inputmode="numeric" /></div>
+        <div class="form-group"><label>在庫数</label><input class="form-input" id="eq-f-qty" type="number" inputmode="numeric" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>備品名 *</label><input class="form-input" id="eq-f-name" placeholder="例: 大型冷凍庫2" /></div>
+        <div class="form-group"><label>管理場所</label><input class="form-input" id="eq-f-location" list="equip-locations" placeholder="例: 保管室" /><datalist id="equip-locations"></datalist></div>
+        <div class="form-group"><label>状態</label><select class="form-input" id="eq-f-status"><option>使用中</option><option>修理中</option><option>廃棄</option><option>返却済み</option></select></div>
+        <div class="form-group"><label>購入日（例: 令和4年8月）</label><input class="form-input" id="eq-f-purchased_on" placeholder="例: 令和4年8月" /></div>
+        <div class="form-group"><label>購入金額（円）</label><input class="form-input" id="eq-f-price" type="number" inputmode="numeric" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>購入情報の補足（譲受け・借用元・予算など）</label><input class="form-input" id="eq-f-funding" placeholder="例: 館山市より借用 / 譲受け / 館山市予算で設置" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>備考</label><input class="form-input" id="eq-f-note" placeholder="例: なるかポーク一式80万" /></div>
+        <div class="form-group"><label>廃棄・返却日</label><input class="form-input" id="eq-f-disposed_on" type="date" /></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:space-between;flex-wrap:wrap;">
+        <button class="btn btn-danger" id="equip-delete-btn" onclick="equipDelete()" style="display:none;">この行を削除（誤登録）</button>
+        <div style="display:flex;gap:8px;margin-left:auto;">
+          <button class="btn" onclick="document.getElementById('equipModal').style.display='none'">キャンセル</button>
+          <button class="btn btn-primary" onclick="equipSave()">保存</button>
+        </div>
       </div>
     </div>
   </div>
@@ -2519,7 +2584,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     if (!btn.dataset.tab) return; // <a>のナビリンク（注文管理など）はそのままページ遷移
     // 台帳（捕獲者・顧客・スタッフ）は管理者のみ閲覧可（口座・個人情報・給与を含むため）
-    if (['hunters', 'customers', 'staff'].includes(btn.dataset.tab) && !requireAdmin('台帳の閲覧')) return;
+    if (['hunters', 'customers', 'staff', 'equipment'].includes(btn.dataset.tab) && !requireAdmin('台帳の閲覧')) return;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
@@ -2541,6 +2606,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'radiation') loadRadiation();
     if (btn.dataset.tab === 'manual') loadManual();
     if (btn.dataset.tab === 'supplies') loadSupplies();
+    if (btn.dataset.tab === 'equipment') loadEquipment();
     if (btn.dataset.tab === 'datamgmt') loadDataMgmt();
     if (btn.dataset.tab === 'shifts') loadShiftBoard();
     if (btn.dataset.tab === 'board') loadBoard();
@@ -9554,7 +9620,6 @@ function wasteChecklistUpdate() {
 function wasteChecklistReset() {
   document.querySelectorAll('.wc-chk').forEach(b => { b.checked = false; });
   document.getElementById('wc-note').value = '';
-  document.getElementById('wc-vehicle').value = '';
   document.getElementById('wc-staff').value = '';
   document.getElementById('wc-date').value = '';
   document.getElementById('wc-time').value = '';
@@ -9571,7 +9636,7 @@ async function wasteChecklistSave() {
     checked_on: document.getElementById('wc-date').value || new Date().toISOString().slice(0, 10),
     departure_time: document.getElementById('wc-time').value || null,
     staff_name: staff,
-    vehicle: document.getElementById('wc-vehicle').value.trim() || null,
+    // 車両は運搬車（産廃の車両登録）と紐づいているので、ここでは記録しない（2026-09-12 現場判断）
     items, all_ok: true,
     correction_note: document.getElementById('wc-note').value.trim() || null,
   };
@@ -9592,11 +9657,10 @@ async function loadWasteChecklists() {
       <td style="white-space:nowrap;">${esc2(r.checked_on || '')}</td>
       <td>${esc2(r.departure_time || '-')}</td>
       <td>${esc2(r.staff_name || '')}</td>
-      <td>${esc2(r.vehicle || '-')}</td>
       <td>${r.all_ok ? '<span class="badge badge-green">全項目OK</span>' : '<span class="badge badge-red">不適合</span>'}</td>
       <td style="font-size:12px;color:var(--text2);">${esc2(r.correction_note || '')}</td>
-    </tr>`).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text3);">記録がありません</td></tr>';
-  } catch (e) { body.innerHTML = '<tr><td colspan="6" style="color:var(--red);">読み込みエラー: ' + esc2(sbSafeMsg(e)) + '</td></tr>'; }
+    </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--text3);">記録がありません</td></tr>';
+  } catch (e) { body.innerHTML = '<tr><td colspan="5" style="color:var(--red);">読み込みエラー: ' + esc2(sbSafeMsg(e)) + '</td></tr>'; }
 }
 
 async function cleaningReport() {
@@ -9726,12 +9790,132 @@ function supplyOrderList() {
   setTimeout(() => w.print(), 300);
 }
 
+/* ───────── 備品管理台帳（3万円以上の備品・借用品） ─────────
+   スプレッドシート「備品管理台帳（TGC）2025」を移行（migrations/20260912_equipment.sql）。
+   消耗品は資材在庫（supplies）、こちらは冷凍庫・スライサー等の設備。 */
+let equipmentData = [];
+let equipmentEditId = null;
+const EQUIP_FIELDS = ['mgmt_no', 'name', 'qty', 'location', 'purchased_on', 'price', 'funding', 'note', 'status', 'disposed_on'];
+const EQUIP_LOCATIONS = ['放血室', '処理室', '懸吊室', 'カット室', '保管室', '休憩室', '屋外倉庫', '事務室'];
+function equipYen(v) { return v == null || v === '' ? '-' : '¥' + Number(v).toLocaleString('ja-JP'); }
+
+async function loadEquipment() {
+  const body = document.getElementById('equipment-body');
+  if (!body) return;
+  body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
+  try {
+    equipmentData = await sb('GET', 'equipment', null, '?select=*&deleted_at=is.null&order=mgmt_no.asc.nullslast,name.asc');
+    const dl = document.getElementById('equip-locations');
+    if (dl) dl.innerHTML = [...new Set([...EQUIP_LOCATIONS, ...equipmentData.map(e => e.location).filter(Boolean)])].map(l => `<option value="${esc2(l)}">`).join('');
+    renderEquipment();
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--red);">${esc2(sbSafeMsg(err))}</td></tr>`;
+  }
+}
+
+function renderEquipment() {
+  const body = document.getElementById('equipment-body');
+  if (!body) return;
+  const q = (document.getElementById('equipment-search').value || '').trim();
+  const showDone = document.getElementById('equipment-show-disposed').checked;
+  const isDone = e => e.status === '廃棄' || e.status === '返却済み';
+  const rows = equipmentData.filter(e => (showDone || !isDone(e)) && (!q || [e.name, e.location, e.note, e.funding, e.mgmt_no != null ? String(e.mgmt_no) : ''].some(v => (v || '').includes(q))));
+  const active = equipmentData.filter(e => !isDone(e));
+  const total = active.reduce((s, e) => s + (Number(e.price) || 0), 0);
+  document.getElementById('equipment-stats').textContent = `使用中 ${active.length}件（購入金額合計 ${equipYen(total)}）${equipmentData.length - active.length ? ` ／ 廃棄・返却 ${equipmentData.length - active.length}件` : ''}`;
+  if (!rows.length) { body.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text3);">${equipmentData.length ? '該当する備品がありません' : '備品が未登録です。「＋備品を追加」から登録してください。'}</td></tr>`; return; }
+  const badge = st => st === '使用中' ? '<span class="badge badge-green">使用中</span>' : st === '修理中' ? '<span class="badge badge-gold">修理中</span>' : `<span class="badge badge-gray">${esc2(st || '')}</span>`;
+  body.innerHTML = rows.map(e => `<tr style="${isDone(e) ? 'opacity:.6;' : ''}">
+    <td style="text-align:right;color:var(--text2);">${e.mgmt_no != null ? e.mgmt_no : '-'}</td>
+    <td style="font-weight:600;">${esc2(e.name)}</td>
+    <td style="text-align:right;">${e.qty != null ? e.qty : '-'}</td>
+    <td>${esc2(e.location || '-')}</td>
+    <td style="white-space:nowrap;">${esc2(e.purchased_on || '-')}</td>
+    <td style="text-align:right;white-space:nowrap;">${equipYen(e.price)}</td>
+    <td>${badge(e.status)}${e.disposed_on ? `<div style="font-size:11px;color:var(--text3);">${esc2(e.disposed_on)}</div>` : ''}</td>
+    <td style="font-size:12px;color:var(--text2);">${esc2([e.funding, e.note].filter(Boolean).join(' / ') || '')}</td>
+    <td style="white-space:nowrap;"><button class="btn btn-sm" onclick="equipEdit('${e.id}')">編集</button></td>
+  </tr>`).join('');
+}
+
+function equipFill(e) {
+  EQUIP_FIELDS.forEach(f => { const el = document.getElementById('eq-f-' + f); if (el) el.value = e && e[f] != null ? e[f] : ''; });
+}
+function equipOpenNew() {
+  if (!requireAdmin('備品の新規登録')) return;
+  equipmentEditId = null;
+  document.getElementById('equipModalTitle').textContent = '備品 新規登録';
+  const nextNo = equipmentData.reduce((m, e) => Math.max(m, Number(e.mgmt_no) || 0), 0) + 1;
+  equipFill({ mgmt_no: nextNo, qty: 1, status: '使用中' });
+  document.getElementById('equip-delete-btn').style.display = 'none';
+  document.getElementById('equipModal').style.display = 'block';
+}
+function equipEdit(id) {
+  if (!requireAdmin('備品情報の編集')) return;
+  const e = equipmentData.find(x => String(x.id) === String(id));
+  if (!e) return;
+  equipmentEditId = id;
+  document.getElementById('equipModalTitle').textContent = `備品情報編集（No.${e.mgmt_no != null ? e.mgmt_no : '-'}）`;
+  equipFill(e);
+  document.getElementById('equip-delete-btn').style.display = '';
+  document.getElementById('equipModal').style.display = 'block';
+}
+async function equipSave() {
+  const payload = {};
+  EQUIP_FIELDS.forEach(f => {
+    let v = document.getElementById('eq-f-' + f).value.trim();
+    if (f === 'mgmt_no' || f === 'price') v = v === '' ? null : parseInt(v, 10);
+    else if (f === 'qty') v = v === '' ? 1 : parseInt(v, 10);
+    payload[f] = v === '' ? null : v;
+  });
+  if (!payload.name) { toast('備品名は必須です', 'error'); return; }
+  if (!payload.status) payload.status = '使用中';
+  if ((payload.status === '廃棄' || payload.status === '返却済み') && !payload.disposed_on) payload.disposed_on = new Date().toISOString().slice(0, 10);
+  const dupNo = payload.mgmt_no != null && equipmentData.find(e => e.mgmt_no === payload.mgmt_no && String(e.id) !== String(equipmentEditId));
+  if (dupNo) { toast(`管理番号 ${payload.mgmt_no} は「${dupNo.name}」で使われています`, 'error'); return; }
+  payload.updated_at = new Date().toISOString();
+  try {
+    if (equipmentEditId) { await sb('PATCH', 'equipment', payload, '?id=eq.' + equipmentEditId); toast(`備品「${payload.name}」を更新しました`); }
+    else { await sb('POST', 'equipment', payload); toast(`備品「${payload.name}」を登録しました`); }
+    document.getElementById('equipModal').style.display = 'none';
+    loadEquipment();
+  } catch (err) { toast('保存に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+async function equipDelete() {
+  if (!equipmentEditId || !requireAdmin('備品の削除')) return;
+  const e = equipmentData.find(x => String(x.id) === String(equipmentEditId));
+  if (!confirm(`「${e ? e.name : ''}」を台帳から削除しますか？\n（廃棄・返却した備品は削除ではなく「状態」を変えて残してください）`)) return;
+  try {
+    await sb('PATCH', 'equipment', { deleted_at: new Date().toISOString() }, '?id=eq.' + equipmentEditId);
+    toast('削除しました');
+    document.getElementById('equipModal').style.display = 'none';
+    loadEquipment();
+  } catch (err) { toast('削除に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+function equipPrint() {
+  const isDone = e => e.status === '廃棄' || e.status === '返却済み';
+  const rows = equipmentData.filter(e => !isDone(e));
+  if (!rows.length) { toast('印刷する備品がありません', 'info'); return; }
+  const today = new Date();
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>備品管理台帳</title>
+  <style>body{font-family:'Noto Sans JP',sans-serif;padding:28px;color:#222;} table{border-collapse:collapse;width:100%;} th,td{border:1px solid #999;padding:5px 8px;font-size:12px;} th{background:#f0f0f0;} td.r{text-align:right;} @page{size:A4 landscape;margin:12mm;}</style></head><body>
+  <h1 style="font-size:18px;margin:0 0 4px;">備品管理台帳</h1>
+  <p style="font-size:12px;margin:0 0 10px;">館山ジビエセンター　／　${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日現在　／　備品は3万円以上を目安　／　使用中 ${rows.length}件</p>
+  <table><thead><tr><th>No.</th><th>備品名</th><th>在庫数</th><th>管理場所</th><th>購入日</th><th>購入金額</th><th>購入情報</th><th>備考</th></tr></thead>
+  <tbody>${rows.map(e => `<tr><td class="r">${e.mgmt_no != null ? e.mgmt_no : ''}</td><td>${esc2(e.name)}</td><td class="r">${e.qty != null ? e.qty : ''}</td><td>${esc2(e.location || '')}</td><td>${esc2(e.purchased_on || '')}</td><td class="r">${e.price != null ? equipYen(e.price) : ''}</td><td>${esc2(e.funding || '')}</td><td>${esc2(e.note || '')}</td></tr>`).join('')}</tbody></table>
+  </body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { toast('ポップアップがブロックされました', 'error'); return; }
+  w.document.write(html); w.document.close();
+  setTimeout(() => w.print(), 300);
+}
+
 /* ───────── データ管理（CSV・チェック・フラグ） ───────── */
 const CSV_TABLES = [
   ['individuals', '個体（捕獲受入）'], ['inventory', '在庫'], ['processing_log', '精肉加工履歴'],
   ['orders', '注文'], ['order_items', '注文明細'], ['shipments', '発送'],
   ['hunters', '捕獲者台帳'], ['staff', 'スタッフ'], ['attendance', '出退勤'],
-  ['cleaning_logs', '清掃記録'], ['supplies', '資材在庫'],
+  ['cleaning_logs', '清掃記録'], ['supplies', '資材在庫'], ['equipment', '備品台帳'],
 ];
 
 function loadDataMgmt() {
@@ -11130,6 +11314,12 @@ const DOC_DEFS = [
       const hs = await sb('GET', 'hunters', null, '?select=*&deleted_at=is.null&order=registry_number.asc.nullslast&limit=500');
       return { columns: ['番号', '登録年月日', '捕獲者氏名', '捕獲見込み場所', '住所', '連絡先', '確認書類', '銃', '備考'],
         rows: hs.map(h => [h.registry_number || '-', h.registered_on || '', h.name, h.trap_area || '', h.address || '', h.phone || '', h.document_type || '', h.has_gun ? '○' : '', h.memo || '']) };
+    } },
+  { key: 'equipment_ledger', cat: '認証・監査対応', title: '備品管理台帳', gen: async () => {
+      const es = await sb('GET', 'equipment', null, '?select=*&deleted_at=is.null&order=mgmt_no.asc.nullslast,name.asc');
+      return { columns: ['No.', '備品名', '在庫数', '管理場所', '購入日', '購入金額', '購入情報', '状態', '備考'],
+        rows: es.map(e => [e.mgmt_no != null ? e.mgmt_no : '', e.name, e.qty != null ? e.qty : '', e.location || '', e.purchased_on || '', e.price != null ? '¥' + Number(e.price).toLocaleString('ja-JP') : '', e.funding || '', e.status || '', e.note || '']),
+        note: '台帳タブの「備品台帳」から自動転記（3万円以上の備品を目安・借用品は購入情報に借用元）。冷蔵冷凍庫の温度計・金属検出機など点検対象の設備一覧としても使えます。' };
     } },
 ];
 

@@ -87,7 +87,6 @@ const PAPER_ITEMS = [
 
   // 4) 記録する
   await page.selectOption('#wc-staff', '大和田薫');
-  await page.fill('#wc-vehicle', '軽トラ 709');
   await page.fill('#wc-note', '液漏れの袋を二重にした');
   await page.click('#wc-save');
   await page.waitForTimeout(500);
@@ -96,7 +95,9 @@ const PAPER_ITEMS = [
   T('10項目すべて ok=true で保存', Array.isArray(p.items) && p.items.length === 10 && p.items.every(i => i.ok === true), JSON.stringify(p.items || []).slice(0, 80));
   T('項目の文言も一緒に保存（後から紙と突き合わせられる）', Array.isArray(p.items) && p.items[0].text === PAPER_ITEMS[0], '');
   T('all_ok=true', p.all_ok === true, String(p.all_ok));
-  T('担当者・車両・是正内容が保存', p.staff_name === '大和田薫' && p.vehicle === '軽トラ 709' && p.correction_note === '液漏れの袋を二重にした', JSON.stringify([p.staff_name, p.vehicle, p.correction_note]));
+  T('担当者・是正内容が保存', p.staff_name === '大和田薫' && p.correction_note === '液漏れの袋を二重にした', JSON.stringify([p.staff_name, p.correction_note]));
+  // 車両は運搬車の登録と紐づいているので、チェック表では聞かない（2026-09-12）
+  T('車両欄は無い（運搬車と紐づくため不要）', await page.$('#wc-vehicle') === null && !('vehicle' in p), Object.keys(p).join(','));
   T('搬出日が入る', /^\d{4}-\d{2}-\d{2}$/.test(p.checked_on || ''), p.checked_on);
   const recent = await page.$eval('#wc-recent', el => el.textContent.replace(/\s+/g, ' '));
   T('一覧に出る', /大和田薫/.test(recent) && /全項目OK/.test(recent), recent.slice(0, 100));
