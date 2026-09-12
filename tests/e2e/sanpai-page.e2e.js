@@ -44,10 +44,12 @@ const PAPER_ITEMS = [
   results.push(['外部へ通信しない', outbound === 0, String(outbound)]);
 
   // 2) 3つの必須ルールが出典どおり出ている
-  results.push(['3点ルールが明記', /45L袋に収まる大きさ/.test(all) && /血・液体の外漏れゼロ/.test(all) && /荷台をブルーシートで包む/.test(all), '']);
+  //    （9/11改訂: 肉片は「15cm以下を目安」に、骨・毛皮等は「45L袋に収まる」に緩和）
+  results.push(['3点ルールが明記', /45L袋に収める/.test(all) && /15cm以下を目安/.test(all) && /血・液体の外漏れゼロ/.test(all) && /荷台をブルーシートで包む/.test(all), '']);
+  results.push(['改訂日が出ている', /9月11日改訂/.test(all), '']);
 
   // 3) 搬出の流れが紙と同じ順序で出ている
-  results.push(['搬出の流れが順番どおり', /裁断・袋詰め.*袋口結束.*ブルーシートで包む.*積載.*最終チェック表記入.*出発/s.test(all), '']);
+  results.push(['搬出の流れが順番どおり', /裁断（肉片は15cm以下を目安）・袋詰め.*袋口結束.*ブルーシートで包む.*積載.*最終チェック表記入.*出発/s.test(all), '']);
 
   // 4) 紙のチェック表10項目が1つも欠けず・順序も違わず出ている
   const items = await page.$$eval('#checkList .citem .t', els => els.map(e => e.textContent.replace(/^\d+/, '').trim()));
