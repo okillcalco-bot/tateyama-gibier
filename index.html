@@ -6083,7 +6083,7 @@ function makeCode128SVG(text, barH) {
     } else { i++; }
   }
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + TW + ' ' + barH
-    + '" preserveAspectRatio="none" shape-rendering="crispEdges" style="display:block;width:38mm;height:14mm;">'
+    + '" preserveAspectRatio="none" shape-rendering="crispEdges" style="display:block;width:35mm;height:14mm;">'
     + '<rect width="' + TW + '" height="' + barH + '" fill="#fff"/>' + rects + '</svg>';
 }
 
@@ -7549,7 +7549,8 @@ let pmScanCodeFor = {};   // identCode → scan_code（印刷と保存で必ず�
    0.19〜0.25mmなので0.38mmは十分太い。下限は0.33mm（識別コード印字の旧ラベル
    'T278-MU' は0.29mmで引き続き「読めない」判定）。 */
 const LABEL_BARCODE_MIN_MM = 0.33;
-const LABEL_BARCODE_WIDTH_MM = 38;
+// 2026-09-12: 左右の余白を2.5mmに広げたため38mm→35mm（8桁キーで0.354mm/バー）
+const LABEL_BARCODE_WIDTH_MM = 35;
 function labelBarcodeMm(code) {
   const m = /viewBox="0 0 (\d+)/.exec(makeCode128SVG(code));
   const mods = m ? parseInt(m[1], 10) : 0;
@@ -7572,15 +7573,19 @@ function pmScanCodeGet(identCode) {
   return c;
 }
 
-/* 品名がラベル幅(38mm)に1行で収まるよう文字サイズを自動で詰める。
+/* 品名がラベルの印字幅(35mm)に1行で収まるよう文字サイズを自動で詰める。
    「ペットフード用（な / し）」のように語の途中で折り返すのを防ぐ。
-   全角=1・半角=0.5で数え、1行に収まる大きさを求める（下限7ptまで）。 */
+   全角=1・半角=0.5で数え、1行に収まる大きさを求める（下限6.5ptまで）。
+   2026-09-12: 左右余白を2.5mmに広げ印字幅が38mm→35mmになったため係数を100→92に。
+   下限も7→6.5pt（全角15文字「ペットフード用ミンチ（骨なし）」が7ptだと37mmで収まらないため。
+   6.5ptなら34.4mm。在庫の部位名は最長13文字=32mmなので7ptのまま収まる）。 */
+const LABEL_PART_MIN_PT = 6.5;
 function labelPartFontPt(name, maxPt) {
   maxPt = maxPt || 11;
   const w = [...String(name || '')].reduce((n, ch) => n + (/[ -ÿ｡-ﾟ]/.test(ch) ? 0.55 : 1), 0);
   if (w <= 0) return maxPt;
-  const fit = 100 / w;   // 38mm を w文字で割った1文字あたりの大きさ(pt)
-  return Math.max(7, Math.min(maxPt, Math.floor(fit * 10) / 10));
+  const fit = 92 / w;    // 35mm を w文字で割った1文字あたりの大きさ(pt)
+  return Math.max(LABEL_PART_MIN_PT, Math.min(maxPt, Math.floor(fit * 10) / 10));
 }
 
 /* 上の計算は見積もりなので、実際に描画してから1行に収まるまで詰める仕上げを入れる。
@@ -7593,7 +7598,7 @@ const LABEL_FIT_SCRIPT = `<script>(function(){
     for(var n=0;n<24;n++){
       var lh=parseFloat(g().lineHeight)||parseFloat(g().fontSize)*1.25;
       if(el.getBoundingClientRect().height<=lh*1.2) break; // 1行に収まった
-      if(pt<=7) break;                                     // これ以上は小さくしない
+      if(pt<=6.5) break;                                   // これ以上は小さくしない（LABEL_PART_MIN_PT）
       pt=Math.round((pt-0.3)*10)/10; el.style.fontSize=pt+'pt';
     }
   }
@@ -7604,8 +7609,11 @@ function pmLabelHtml(d) {
   const css = `
     @page { size: 40mm 60mm; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    /* 余白: 2026-09-12 現物で左端の文字（館→宿、消→肖）と最下行の住所が見切れていた。
+       プリンタの印字位置が1〜2mmずれても欠けないよう、左右2.5mm・下3mmの余白を取る。
+       バーコードは静穏帯込みで35mm幅（8桁キーで0.35mm/バー、静穏帯3.5mm）。 */
     body { width:40mm; height:60mm; font-family:'Meiryo','Yu Gothic',sans-serif;
-           padding:1.8mm 1mm 1.5mm; display:flex; flex-direction:column; overflow:hidden; }
+           padding:1.8mm 2.5mm 3mm; display:flex; flex-direction:column; overflow:hidden; }
     /* 文字ブロックは縮ませない。バーコードは下の .bc で領域を確保する */
     body > div { flex:none; }
     .o  { font-size:8.5pt; font-weight:bold; border-bottom:.5pt solid #000; padding-bottom:.4mm; white-space:nowrap; }
@@ -7622,7 +7630,7 @@ function pmLabelHtml(d) {
        実際に描画して測ると、QRを載せたままでも12.5mm/12mmに戻して60mmに収まる
        （最長品名+住所まで含めて54.9mm、5mm以上の余裕）ため、縮める必要が無かった。 */
     .bc { flex:0 0 12.5mm; height:12.5mm; display:flex; align-items:center; justify-content:center; }
-    .bc svg { display:block; width:38mm !important; height:12mm !important; shape-rendering:crispEdges; }
+    .bc svg { display:block; width:35mm !important; height:12mm !important; shape-rendering:crispEdges; }
     /* バーコードの下：左に「この肉の物語」QR、右に手打ち用8桁と識別コード */
     .cap { display:flex; align-items:center; gap:1mm; margin-top:.2mm; }
     .cap .qr svg { display:block; width:9.5mm !important; height:9.5mm !important; }
@@ -10255,7 +10263,7 @@ function kkLabelCss() {
     @page { size: 40mm 60mm; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     .lb { width:40mm; height:60mm; font-family:'Meiryo','Yu Gothic',sans-serif;
-          padding:2.5mm 1mm 2.5mm; display:flex; flex-direction:column; overflow:hidden; page-break-after:always; }
+          padding:2.5mm 2.5mm 3mm; display:flex; flex-direction:column; overflow:hidden; page-break-after:always; }
     /* 文字ブロックは縮ませない。バーコードは下の .bc で領域を確保する */
     .lb > div { flex:none; }
     .o  { font-size:8.5pt; font-weight:bold; border-bottom:.5pt solid #000; padding-bottom:.4mm; white-space:nowrap; }
@@ -10268,7 +10276,7 @@ function kkLabelCss() {
     .rw .nb { white-space:nowrap; }   /* 個体番号がハイフンで折り返されないように */
     /* flex-basisで高さを確保し、縮小も禁止（0にすると中のSVGが上下にはみ出して文字に重なる） */
     .bc { flex:0 0 9.5mm; height:9.5mm; display:flex; align-items:center; justify-content:center; }
-    .bc svg { display:block; width:38mm !important; height:9mm !important; shape-rendering:crispEdges; }
+    .bc svg { display:block; width:35mm !important; height:9mm !important; shape-rendering:crispEdges; }
     .bct{ font-size:6.5pt; font-weight:bold; text-align:center; font-family:monospace; letter-spacing:.3px; }
     /* QRと発行元を横に並べる（縦に積むと60mmに収まらない） */
     .ft { display:flex; align-items:flex-end; gap:1mm; margin-top:.4mm; }

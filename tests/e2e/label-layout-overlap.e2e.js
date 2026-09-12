@@ -65,8 +65,8 @@ const path = require('path');
       `内容=${mm(m.scrollH).toFixed(1)}mm / 用紙=${mm(m.bodyH).toFixed(1)}mm`]);
     // 5) 消費期限が読める高さで残っている
     results.push([`${label}: 消費期限の行が潰れていない`, m.ex.h >= 1.5 * m.mmPx, `${mm(m.ex.h).toFixed(1)}mm`]);
-    // 6) 読み取りに効くバー幅は維持（38mm幅）
-    results.push([`${label}: バーコード幅38mmを維持`, Math.abs(mm(m.svg.w) - 38) < 1.5, `${mm(m.svg.w).toFixed(1)}mm`]);
+    // 6) 読み取りに効くバー幅は維持（2026-09-12: 左右余白2.5mmのため35mm幅。静穏帯込みで8桁=0.35mm/バー）
+    results.push([`${label}: バーコード幅35mmを維持`, Math.abs(mm(m.svg.w) - 35) < 1.5, `${mm(m.svg.w).toFixed(1)}mm`]);
     // 7) バーコード高さは12mmを維持する（2026-09-03にQRの場所を作るため12→9.5mmに縮めたが、
     //    2026-09-08に現物のスキャン失敗（ノクチラボ向け出荷）で発覚。実測すると12mmに戻しても
     //    QR込みで60mmに収まる＝縮める必要が無かったため、元の高さに戻した）

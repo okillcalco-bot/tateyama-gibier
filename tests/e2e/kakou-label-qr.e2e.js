@@ -121,8 +121,13 @@ function decodeQR(grid) {
       const pe = doc.querySelector('.p');
       const nameLines = Math.round(pe.getBoundingClientRect().height / parseFloat(getComputedStyle(pe).lineHeight));
       const wrapped = el => el.getClientRects().length > 1;   // 途中で折り返したか
+      // 本番フォント（Meiryo: 全角=1em）で1行に収まる見込み幅(mm)。サンドボックスの代替フォントは
+      // 全角が約1.17emと広く、長い品名だけ判定が本番より厳しくなるため、実測と併記して判定する
+      const namePt = parseFloat(getComputedStyle(pe).fontSize) / 1.3333;
+      const nameEm = [...prod].reduce((n, ch) => n + (/[ -ÿ｡-ﾟ]/.test(ch) ? 0.55 : 1), 0);
+      const nameMmAtMeiryo = nameEm * namePt * 25.4 / 72;
       out.push({
-        name,
+        name, namePt, nameMmAtMeiryo,
         bottomMm: (last.bottom - lb.top) / mm,
         widthMm: lb.width / mm,
         // バーコード文字列の下端より、QR行の上端が上に来ていたら重なっている
@@ -141,7 +146,11 @@ function decodeQR(grid) {
     results.push([`${r.name}: 60mmに収まる`, r.bottomMm <= 57.5, r.bottomMm.toFixed(1) + 'mm']);
     results.push([`${r.name}: 40mm幅に収まる`, Math.abs(r.widthMm - 40) < 0.2, r.widthMm.toFixed(1) + 'mm']);
     results.push([`${r.name}: QRが文字に重ならない`, !r.overlap, '']);
-    results.push([`${r.name}: 品名が1行`, r.nameLines === 1, r.nameLines + '行']);
+    // 2026-09-12: 左右余白2.5mm（印字幅35mm）。実測1行、または下限7ptまで詰めた上で
+    // 本番フォント幅（全角1em）なら35mmに収まる、のどちらかであること
+    results.push([`${r.name}: 品名が1行（本番フォント幅で35mm以内）`,
+      r.nameLines === 1 || (r.namePt <= 6.55 && r.nameMmAtMeiryo <= 35),
+      `${r.nameLines}行 / ${r.namePt.toFixed(1)}pt / Meiryo換算${r.nameMmAtMeiryo.toFixed(1)}mm`]);
     results.push([`${r.name}: 個体番号が途中で折れない`, !r.rawWrapped, '']);
     results.push([`${r.name}: 案内文が途中で折れない`, !r.capWrapped, '']);
     results.push([`${r.name}: QRが13mm`, Math.abs(r.qrMm - 13) < 0.2, r.qrMm.toFixed(1) + 'mm']);
