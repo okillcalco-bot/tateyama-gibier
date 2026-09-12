@@ -1573,7 +1573,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="section">
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
         <span>記録表の出力（保健所・認証審査用）</span>
-        <div style="display:flex;gap:8px;align-items:center;">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <input class="form-input" id="clean-month" type="month" style="max-width:170px;" />
           <button class="btn btn-primary" onclick="cleaningReport()">🖨 月次記録表を印刷</button>
           <button class="btn" onclick="exportCSV('cleaning_logs','清掃記録')">⬇ CSV</button>
@@ -1583,6 +1583,33 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <table>
           <thead><tr><th>日時</th><th>場所</th><th>実施者</th><th>実施内容</th></tr></thead>
           <tbody id="clean-recent"></tbody>
+        </table>
+      </div>
+    </div>
+    <!-- 産廃搬出 最終チェック表（出発前・スマホ入力）。紙の最終チェック表と同じ10項目 -->
+    <div class="section" id="waste-checklist">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>🚮 産廃搬出 最終チェック表（出発前）</span>
+        <a class="btn" href="sanpai.html" style="font-size:12px;">📋 搬出ルールを見る</a>
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;">紙の「最終チェック表」と同じ10項目です。肉片は15cm以下を目安に裁断。<strong>1項目でもOKでなければ搬出しない</strong>（全部チェックするまで記録できません）。</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:10px;">
+        <div class="form-group"><label>搬出日</label><input class="form-input" id="wc-date" type="date"></div>
+        <div class="form-group"><label>出発時刻</label><input class="form-input" id="wc-time" type="time"></div>
+        <div class="form-group"><label>搬出担当者 *</label><select class="form-input" id="wc-staff"></select></div>
+        <div class="form-group"><label>車両</label><input class="form-input" id="wc-vehicle" placeholder="車両名・番号"></div>
+      </div>
+      <div id="wc-items" style="display:flex;flex-direction:column;gap:6px;"></div>
+      <div class="form-group" style="margin-top:10px;"><label>是正した場合の内容</label><input class="form-input" id="wc-note" placeholder="例: 液漏れの袋を二重にした"></div>
+      <div id="wc-gate" style="margin-top:10px;padding:10px 12px;border-radius:8px;font-weight:700;"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end;">
+        <button class="btn" onclick="wasteChecklistReset()">リセット</button>
+        <button class="btn btn-primary" id="wc-save" onclick="wasteChecklistSave()">✅ 記録する</button>
+      </div>
+      <div style="overflow-x:auto;margin-top:14px;">
+        <table>
+          <thead><tr><th>搬出日</th><th>出発</th><th>担当者</th><th>車両</th><th>結果</th><th>是正内容</th></tr></thead>
+          <tbody id="wc-recent"></tbody>
         </table>
       </div>
     </div>
@@ -2510,7 +2537,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'hunters') loadHunters();
     if (btn.dataset.tab === 'customers') loadCustomersReg();
     if (btn.dataset.tab === 'staff') loadStaffPanel();
-    if (btn.dataset.tab === 'cleaning') { loadCleaning(); loadPest(); }
+    if (btn.dataset.tab === 'cleaning') { loadCleaning(); loadPest(); wasteChecklistInit(); loadWasteChecklists(); }
     if (btn.dataset.tab === 'radiation') loadRadiation();
     if (btn.dataset.tab === 'manual') loadManual();
     if (btn.dataset.tab === 'supplies') loadSupplies();
@@ -2523,12 +2550,20 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   });
 });
 
-/* ?tab=xxx で指定タブを直接開く（受発注管理からの誘導用） */
+/* ?tab=xxx で指定タブを直接開く（受発注管理からの誘導用）
+   &sec=<id> を付けると、タブを開いたあとその欄まで自動で下がる（産廃ルール→最終チェック表など） */
 (function() {
-  const t = new URLSearchParams(location.search).get('tab');
+  const q = new URLSearchParams(location.search);
+  const t = q.get('tab'), sec = q.get('sec');
   if (t) {
     const btn = document.querySelector(`.tab-btn[data-tab="${t}"]`);
-    if (btn) setTimeout(() => btn.click(), 400);
+    if (btn) setTimeout(() => {
+      btn.click();
+      if (sec) {
+        const el = document.getElementById(sec);
+        if (el) setTimeout(() => el.scrollIntoView({ block: 'start', behavior: 'smooth' }), 300);
+      }
+    }, 400);
   }
 })();
 
@@ -9467,6 +9502,101 @@ async function cleaningSave() {
     document.getElementById('cleanModal').style.display = 'none';
     loadCleaning(); refreshNavBadges();
   } catch (err) { toast('清掃記録に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+/* ───────── 産廃搬出 最終チェック表（出発前・スマホ入力） ─────────
+   紙の「産廃搬出 最終チェック表」（2026-09-10制定）と同じ10項目・同じ文言。
+   1項目でもOKでなければ搬出しない、が原則なので、全部チェックするまで記録できない。
+   記録は waste_checklists に残す（紙の控えと同じ扱い。監査で「出発前に確認した」証拠になる）。 */
+const WASTE_CHECK_ITEMS = [
+  '廃棄物はすべて45Lビニール袋の中に完全に収まっている',
+  '丸のまま・大きな塊・袋から突き出す状態の廃棄物がない',
+  'すべての袋口が確実に結束されている',
+  '袋に破れ・穴・裂けがない',
+  '袋の外側に血液・液体が付着・滴下していない',
+  '液漏れの懸念がある袋は補強または二重袋にしている',
+  '荷台の底面・側面を、破損のない防水ブルーシートで覆っている',
+  'ブルーシートの端部を立ち上げ、積載物を包み込む状態にしている',
+  '積載後、荷台・車外へ血液や液体が漏れる状態ではない',
+  '上記すべてを確認し、不適合があれば是正してから出発する'
+];
+function wasteChecklistInit() {
+  const box = document.getElementById('wc-items');
+  if (!box) return;
+  const d = new Date();
+  const dateEl = document.getElementById('wc-date');
+  if (!dateEl.value) dateEl.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const timeEl = document.getElementById('wc-time');
+  if (!timeEl.value) timeEl.value = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const names = PM_OPERATORS; // スタッフマスタ（staffテーブル）由来に統一（清掃記録と同じ）
+  const sel = document.getElementById('wc-staff');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">担当者を選択...</option>' + names.map(n => `<option>${esc2(n)}</option>`).join('');
+  if (cur) sel.value = cur;
+  if (!box.children.length) {
+    box.innerHTML = WASTE_CHECK_ITEMS.map((t, i) => `<label style="display:flex;gap:10px;align-items:flex-start;padding:9px 10px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:14px;line-height:1.5;">
+      <input type="checkbox" class="wc-chk" data-no="${i + 1}" onchange="wasteChecklistUpdate()" style="width:20px;height:20px;flex:0 0 20px;margin-top:1px;">
+      <span><span style="color:var(--text3);font-size:12px;font-weight:700;margin-right:4px;">${i + 1}</span>${esc2(t)}</span></label>`).join('');
+  }
+  wasteChecklistUpdate();
+}
+function wasteChecklistUpdate() {
+  const boxes = [...document.querySelectorAll('.wc-chk')];
+  const n = boxes.filter(b => b.checked).length;
+  const gate = document.getElementById('wc-gate');
+  const ok = boxes.length > 0 && n === boxes.length;
+  gate.style.background = ok ? 'rgba(106,158,90,.15)' : 'rgba(200,80,80,.15)';
+  gate.style.color = ok ? '#3d7a34' : '#b93d3d';
+  gate.textContent = ok ? '全項目確認OK：搬出できます（記録してください）' : `STOP：未確認 ${boxes.length - n} 項目。1つでも未確認・不適合があれば搬出しない`;
+  const btn = document.getElementById('wc-save');
+  if (btn) btn.disabled = !ok;
+}
+function wasteChecklistReset() {
+  document.querySelectorAll('.wc-chk').forEach(b => { b.checked = false; });
+  document.getElementById('wc-note').value = '';
+  document.getElementById('wc-vehicle').value = '';
+  document.getElementById('wc-staff').value = '';
+  document.getElementById('wc-date').value = '';
+  document.getElementById('wc-time').value = '';
+  wasteChecklistInit();
+}
+async function wasteChecklistSave() {
+  const boxes = [...document.querySelectorAll('.wc-chk')];
+  const items = boxes.map(b => ({ no: Number(b.dataset.no), text: WASTE_CHECK_ITEMS[Number(b.dataset.no) - 1], ok: b.checked }));
+  const allOk = items.length === WASTE_CHECK_ITEMS.length && items.every(i => i.ok);
+  if (!allOk) { toast('全項目を確認してチェックしてください（1つでも未確認なら搬出しない）', 'error'); return; }
+  const staff = document.getElementById('wc-staff').value;
+  if (!staff) { toast('搬出担当者を選択してください', 'error'); return; }
+  const payload = {
+    checked_on: document.getElementById('wc-date').value || new Date().toISOString().slice(0, 10),
+    departure_time: document.getElementById('wc-time').value || null,
+    staff_name: staff,
+    vehicle: document.getElementById('wc-vehicle').value.trim() || null,
+    items, all_ok: true,
+    correction_note: document.getElementById('wc-note').value.trim() || null,
+  };
+  try {
+    await sb('POST', 'waste_checklists', payload);
+    playFeedbackSound(true);
+    toast(`産廃搬出チェック表を記録しました（${staff}）`);
+    wasteChecklistReset();
+    loadWasteChecklists();
+  } catch (err) { toast('チェック表の記録に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+async function loadWasteChecklists() {
+  const body = document.getElementById('wc-recent');
+  if (!body) return;
+  try {
+    const rows = await sb('GET', 'waste_checklists', null, '?deleted_at=is.null&select=*&order=checked_on.desc,created_at.desc&limit=20');
+    body.innerHTML = rows.length ? rows.map(r => `<tr>
+      <td style="white-space:nowrap;">${esc2(r.checked_on || '')}</td>
+      <td>${esc2(r.departure_time || '-')}</td>
+      <td>${esc2(r.staff_name || '')}</td>
+      <td>${esc2(r.vehicle || '-')}</td>
+      <td>${r.all_ok ? '<span class="badge badge-green">全項目OK</span>' : '<span class="badge badge-red">不適合</span>'}</td>
+      <td style="font-size:12px;color:var(--text2);">${esc2(r.correction_note || '')}</td>
+    </tr>`).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text3);">記録がありません</td></tr>';
+  } catch (e) { body.innerHTML = '<tr><td colspan="6" style="color:var(--red);">読み込みエラー: ' + esc2(sbSafeMsg(e)) + '</td></tr>'; }
 }
 
 async function cleaningReport() {
