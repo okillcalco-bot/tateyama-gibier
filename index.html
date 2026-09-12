@@ -1776,7 +1776,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div class="section-title">書類・帳票</div>
       <div style="font-size:12.5px;color:var(--text2);margin-bottom:12px;">日々の業務入力（受入・精肉・出荷・清掃・勤怠・加工）から自動転記で帳票を生成します。HACCP・労務・税務の様式は<strong>専門家確認前提の参考様式</strong>、給与関連の金額は<strong>参考計算</strong>です。PDF保存は「印刷/PDF」→印刷ダイアログで「PDFに保存」。</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
-        <div class="form-group" style="margin:0;"><label>対象月</label><input class="form-input" id="doc-month" type="month" onchange="loadDocsHub()" style="max-width:170px;" /></div>
+        <div class="form-group" style="margin:0;"><label>対象月</label><input class="form-input" id="doc-month" type="month" onchange="loadDocsHub();haccpRenderMap()" style="max-width:170px;" /></div>
         <div class="form-group" style="margin:0;"><label>カテゴリ</label><select class="form-input" id="doc-cat-filter" onchange="renderDocsList()">
           <option value="">全て</option>
           <option>HACCP・衛生管理</option>
@@ -1789,9 +1789,24 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
         <button class="btn" onclick="docZipCategory('HACCP・衛生管理')">⬇ HACCP一括ZIP</button>
         <button class="btn" onclick="docZipCategory('労務・社労士')">⬇ 労務一括ZIP</button>
-        <button class="btn" onclick="docZipCategory('経理・税理士')">⬇ 経理一括ZIP（税理士パッケージ）</button>
+        <button class="btn" onclick="docZipCategory('経理・税理士')">⬇ 経理一括ZIP（税理士向け）</button>
       </div>
       <div id="docs-list"></div>
+    </div>
+    <!-- 保健所・市役所の立入対応（HACCP提出セット）: 対応表＋対象月の記録一式を1つの印刷物にする -->
+    <div class="section" id="haccp-pack">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>🏥 保健所・市役所の立入対応（HACCP提出セット）</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn" onclick="haccpSaveFacility()">💾 施設情報を保存</button>
+          <button class="btn btn-primary" onclick="haccpPackPrint()">🖨 提出セットを印刷/PDF</button>
+        </div>
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;line-height:1.7;">
+        千葉県「野生鳥獣肉に係る衛生管理ガイドライン」（令和4年1月）と食品衛生法施行規則 別表17（HACCPの考え方を取り入れた衛生管理）に沿って、<strong>「何を・どこで・どれだけ記録しているか」の対応表</strong>と、対象月の記録一式（上の「HACCP・衛生管理」の帳票）を1つの印刷物にまとめます。赤い行は対象月の記録が0件のところ。表紙の施設情報は下で編集して保存してください（全端末で共有）。
+      </div>
+      <div id="haccp-facility" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-bottom:12px;"></div>
+      <div id="haccp-map" style="overflow-x:auto;"></div>
     </div>
     <div class="section">
       <div class="section-title">🏛 市役所提出（指定管理 業務報告書）</div>
@@ -2590,7 +2605,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.add('active');
     document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
     if (btn.dataset.tab === 'dashboard') { loadDashboard(); refreshNavBadges(); loadTodayTodos(); }
-    if (btn.dataset.tab === 'docs') loadDocsHub();
+    if (btn.dataset.tab === 'docs') { loadDocsHub(); haccpInit(); }
     if (btn.dataset.tab === 'inventory') loadInventory();
     if (btn.dataset.tab === 'individuals') indLoad();
     if (btn.dataset.tab === 'processing') loadProcessingSetup();
@@ -11183,6 +11198,54 @@ const DOC_DEFS = [
         rows: inds.map(i => [i.label_id, i.species || '', i.capture_date, `${i.capture_city || ''}${i.capture_area || ''}`, i.hunter_name || '', (cnt[i.label_id] || {}).t || 0, (cnt[i.label_id] || {}).s || 0]),
         note: '個体→精肉→出荷の紐付け状況。詳細はトレーサビリティ検索で個体番号を検索してください。' };
     } },
+  // ── 2026-09-12 追加: 保健所・市役所の立入で「千葉県ガイドライン／別表17 のこの項目は？」と聞かれる記録 ──
+  { key: 'pest_control_record', cat: 'HACCP・衛生管理', title: 'ねずみ・昆虫駆除記録（年度）', gen: async (m) => {
+      const fy = fiscalYearOf(new Date(m + '-01'));
+      const logs = await sb('GET', 'pest_control_logs', null, `?done_on=gte.${fy}-04-01&done_on=lt.${fy + 1}-04-01&select=*&order=done_on.asc`);
+      return { columns: ['実施日', '対象', '方法', '場所', '実施者・業者', '結果', '対応・措置', '備考'],
+        rows: logs.map(r => [r.done_on, r.target || '', r.method || '', r.area || '', [r.vendor, r.operator].filter(Boolean).join(' / '), r.result || '', r.measure || '', r.note || '']),
+        note: `令和${fy - 2018}年度（${fy}年4月〜${fy + 1}年3月）の実施 ${logs.length}回。食品衛生法施行規則 別表17 五ロ: 年2回以上実施し記録を1年間保存。清掃記録タブ「ねずみ・昆虫の駆除」から自動転記。` };
+    } },
+  { key: 'radiation_record', cat: 'HACCP・衛生管理', title: '放射性物質検査記録（イノシシ全頭検査）', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const inds = await sb('GET', 'individuals', null, `?capture_date=gte.${d1}&capture_date=lte.${d2}&deleted_at=is.null&species=eq.イノシシ&select=label_id,capture_date,capture_city,weight_total,radiation_test_date,radiation_result_date,radiation_result&order=capture_date.asc&limit=500`);
+      const untested = inds.filter(i => !i.radiation_test_date).length;
+      return { columns: ['個体番号', '捕獲日', '捕獲地', '体重(kg)', '検査日', '結果判明日', '結果'],
+        rows: inds.map(i => [i.label_id, i.capture_date, i.capture_city || '', i.weight_total != null ? i.weight_total : '', i.radiation_test_date || '未検査', i.radiation_result_date || '', i.radiation_result || '']),
+        note: `館山市・南房総市産イノシシは出荷制限（全頭検査）が継続中。対象月の受入 ${inds.length}頭 ／ 検査記録なし ${untested}頭。検査機関: 館山市。放射能検査タブから自動転記。` };
+    } },
+  { key: 'waste_checklist_record', cat: 'HACCP・衛生管理', title: '産業廃棄物 搬出前チェック記録', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const rows = await sb('GET', 'waste_checklists', null, `?checked_on=gte.${d1}&checked_on=lte.${d2}&deleted_at=is.null&select=*&order=checked_on.asc,created_at.asc`);
+      return { columns: ['搬出日', '出発時刻', '搬出担当者', '確認項目', '結果', '是正内容'],
+        rows: rows.map(r => [r.checked_on, r.departure_time || '', r.staff_name, `${(r.items || []).filter(i => i.ok).length}/${(r.items || []).length}`, r.all_ok ? '全項目OK' : '不適合', r.correction_note || '']),
+        note: '産廃搬出ルール（2026-09-10制定／9-11改訂）の出発前 最終チェック表（清掃記録タブ）から自動転記。別表17 六: 廃棄物の保管・廃棄の手順、汚液・汚臭の漏れ防止。' };
+    } },
+  { key: 'sales_ledger', cat: 'HACCP・衛生管理', title: '野生鳥獣肉 出荷・販売台帳（千葉県ガイドライン 参考様式2）', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const items = await sb('GET', 'order_items', null, `?select=part_name,species,weight_kg,weight,orders!inner(order_code,delivery_date,customer_name,delivery_address,delivery_phone,status),inventory(individual_id,lot_code,part_name,weight_kg,species,process_type)&orders.delivery_date=gte.${d1}&orders.delivery_date=lte.${d2}&limit=2000`);
+      const live = items.filter(it => it.orders && !/取消|キャンセル/.test(it.orders.status || ''));
+      live.sort((a, b) => (a.orders.delivery_date || '').localeCompare(b.orders.delivery_date || '') || (a.orders.order_code || '').localeCompare(b.orders.order_code || ''));
+      // 販売形態（様式2: ブロック／スライス／凍結）: 品名から判定。製品はすべて冷凍（-18℃以下）で出荷
+      const formOf = name => /スライス/.test(name) ? 'スライス（冷凍）' : /ミンチ|挽/.test(name) ? 'ミンチ（冷凍）' : 'ブロック（冷凍）';
+      return { columns: ['個体管理番号', '種類', '部位', '販売形態', '販売量(kg)', '販売先', '住所', '連絡先', '販売日', '注文番号'],
+        rows: live.map(it => {
+          const inv = it.inventory || {}; const o = it.orders;
+          const w = it.weight_kg != null ? it.weight_kg : (it.weight != null ? it.weight : inv.weight_kg);
+          const name = it.part_name || inv.part_name || '';
+          const ident = inv.individual_id || (inv.lot_code ? `ロット ${inv.lot_code}（複数個体・ミンチ等）` : '（加工品・個体紐付けなし）');
+          return [ident, it.species || inv.species || '', name, formOf(name + (inv.process_type || '')), w != null ? Number(w).toFixed(2) : '', o.customer_name || '', o.delivery_address || '', o.delivery_phone || '', o.delivery_date || '', o.order_code || ''];
+        }),
+        note: '注文明細（在庫の識別コードに紐付いた行）と納品先から自動転記。参考様式2の「代表者名・賞味期限・保存検体」は必要なら紙で補記。個体番号から捕獲票・放射能検査へはトレーサビリティ検索で遡れます。' };
+    } },
+  { key: 'training_record', cat: 'HACCP・衛生管理', title: '衛生教育・訓練記録', template: true,
+    gen: async () => ({ columns: ['実施日', '内容', '教材', '参加者', '講師・確認者', '確認方法'], rows: [
+      ['', '野生鳥獣肉の衛生管理（E型肝炎・寄生虫・中心部75℃1分以上の加熱）', '獣を知る（manabu.html）', '', '', '確認クイズ 8問'],
+      ['', '内臓・枝肉の異常の見分け方（全部廃棄の判断）', 'カラーアトラス（厚労省 令和7年3月改訂）', '', '', '口頭確認'],
+      ['', 'マダニ・SFTS・疥癬の予防（長袖・手袋・体調不良時は受診）', '獣を知る #sfts', '', '', '口頭確認'],
+      ['', '産廃搬出ルール（45L袋・液漏れゼロ・ブルーシート）', 'sanpai.html', '', '', '最終チェック表'],
+      ['', '', '', '', '', ''],
+    ], note: '別表17 十三: 食品等取扱者への衛生教育の実施と、効果の定期検証。実施したら日付・参加者を記入して保存。教材はマニュアルタブ「手順書・資料集」にあります。' }) },
   // ── 労務・社労士 ──
   { key: 'attendance_summary', cat: '労務・社労士', title: 'スタッフ別勤怠集計表', gen: async (m) => {
       const [d1, d2] = docMonthRange(m);
@@ -11516,6 +11579,155 @@ async function docZipCategory(cat) {
   a.click(); URL.revokeObjectURL(a.href);
   playFeedbackSound(true);
   toast(`${cat} ${files.length}帳票をZIP出力しました`);
+}
+
+/* ───────── 保健所・市役所の立入対応（HACCP提出セット） ─────────
+   千葉県野生鳥獣肉衛生管理ガイドライン（令和4年1月）と食品衛生法施行規則 別表17 の各項目に
+   本アプリのどの記録が対応するかを対応表にし、対象月の帳票と一緒に1つの印刷物にする。
+   表紙の施設情報（許可番号・衛生責任者など）は app_settings.haccp_facility に保存（全端末共有）。 */
+const HACCP_FACILITY_FIELDS = [
+  ['name', '施設名', '館山ジビエセンター'],
+  ['address', '所在地', '千葉県館山市西長田1163-5'],
+  ['operator', '営業者', '合同会社アルコ'],
+  ['license_no', '食肉処理業 許可番号', ''],
+  ['license_date', '許可年月日', ''],
+  ['hygiene_manager', '食品衛生責任者', ''],
+  ['gibier_manager', '野生鳥獣肉処理衛生管理者', ''],
+  ['water', '使用水', '水道水（館山市）'],
+  ['hokenjo', '管轄保健所', '安房保健所（館山市北条1093-1／0470-22-4511）'],
+  ['kachiku', '家畜保健衛生所', '南部家畜保健衛生所（鴨川市八色52／04-7092-2304）'],
+  ['shokuniku', '食肉衛生検査所', '南総食肉衛生検査所（茂原市上林203-1／0475-24-6511）'],
+];
+let haccpFacility = null;
+
+/* 対応表: 根拠 → 求められること → 本アプリでの記録 → 添付する帳票 → 対象月の件数の数え方 */
+const HACCP_MAP = [
+  { law: 'ガイドライン 第3-2 ／ 別表17 十四', req: '捕獲〜販売の各段階で記録を作成・保存', app: '捕獲票・精肉登録・出荷確定が個体番号で1本に繋がる', docs: ['trace_evidence'], count: 'individuals' },
+  { law: 'ガイドライン 第3-3 ／ 別表17・18', req: 'HACCPに沿った衛生管理計画の作成・周知', app: '衛生管理計画書（本アプリで管理）', docs: ['sanitation_plan'] },
+  { law: 'ガイドライン 第3-4 ／ 別表17 七', req: '従事者の体調管理・手指の傷・ダニ対策', app: '出退勤打刻の体調チェック（出勤時・退勤時）', docs: ['staff_health'], count: 'attendance' },
+  { law: 'ガイドライン 第4・第5', req: '捕獲方法・異常の有無・放血・運搬の記録を捕獲者から受け取る', app: '捕獲票入力（capture-form）→ 個体台帳', docs: ['intake_inspection'], count: 'individuals' },
+  { law: 'ガイドライン 第6-4', req: '受入時に1頭ごと異常の有無を確認し、不適は受け入れない', app: '捕獲受入・個体タブの受入確認（異常・品質）', docs: ['intake_inspection', 'anomaly_disposal'], count: 'individuals' },
+  { law: 'ガイドライン 第6-5', req: '解体後の内臓確認・廃棄の判断と記録', app: '捕獲票の内臓異常欄・在庫の廃棄処理', docs: ['anomaly_disposal'], count: 'anomalies' },
+  { law: 'ガイドライン 第6-6(4)(5)(6) ／ 別表17 二・三', req: '施設・器具の清掃、ナイフ等は1頭ごと83℃以上で消毒', app: '清掃記録(HACCP)タブ：区域ごとに毎日記録', docs: ['daily_check', 'cleaning_record'], count: 'cleaning' },
+  { law: 'ガイドライン 第6-6(12) ／ 別表17 三ニ', req: '枝肉・カット肉は速やかに10℃以下、温度計の点検・記録', app: '清掃記録（冷蔵・冷凍庫）の庫内温度入力', docs: ['temp_log'], count: 'temps' },
+  { law: 'ガイドライン 第6-6(13)', req: '枝肉・部位ごとに管理番号を付け、捕獲〜処理の記録と紐付け', app: 'ラベル（識別コード・バーコード/QR）とトレーサビリティ検索', docs: ['trace_evidence', 'process_record'], count: 'inventory' },
+  { law: 'ガイドライン 第6-6(14) ／ 別表17 六', req: '廃棄物を区分し速やかに搬出、汚液・汚臭が漏れないよう管理', app: '産廃搬出ルール（9/11改訂）と出発前の最終チェック表', docs: ['waste_checklist_record'], count: 'waste' },
+  { law: '別表17 五', req: 'ねずみ・昆虫の駆除を年2回以上実施し記録を1年保存', app: '清掃記録タブ「ねずみ・昆虫の駆除」', docs: ['pest_control_record'], count: 'pest' },
+  { law: '別表17 四', req: '使用水は水道水または飲用適の水', app: '施設情報「使用水」（水道水のため水質検査は不要）', docs: [] },
+  { law: '別表17 三 ／ 条例 別表第1 四', req: '機械器具の整備・温度計等の計器の点検', app: '備品台帳（冷蔵冷凍庫・金属検出機・スライサー等）', docs: ['equipment_ledger'], count: 'equipment' },
+  { law: 'ガイドライン 第7 ／ 参考様式2', req: '出荷・販売の記録（個体番号・部位・販売先・販売日）', app: '受発注管理の注文明細と出荷確定', docs: ['sales_ledger', 'shipping_judgment'], count: 'shipments' },
+  { law: '出荷制限（千葉県・全頭検査）', req: '館山市・南房総市産イノシシは放射性物質の全頭検査', app: '放射能検査タブ（検査日・結果判明日・結果）', docs: ['radiation_record'], count: 'radiation' },
+  { law: '別表17 九・十', req: '健康被害情報の提供、回収の手順', app: 'クレーム・回収対応記録／気になる点フラグ（是正処置）', docs: ['complaint_record', 'corrective_action'], count: 'flags' },
+  { law: '別表17 十三', req: '従事者への衛生教育と効果の検証', app: '獣を知る（確認クイズ）・カラーアトラス・手順書', docs: ['training_record'] },
+];
+const HACCP_UNIT = { individuals: '頭', attendance: '人日', cleaning: '件', temps: '件', inventory: '点', waste: '回', pest: '回（年度）', equipment: '点', shipments: '件', radiation: '頭', flags: '件', anomalies: '頭' };
+
+async function haccpLoadFacility() {
+  if (haccpFacility) return haccpFacility;
+  try { const rows = await sb('GET', 'app_settings', null, '?key=eq.haccp_facility&select=value'); haccpFacility = (rows[0] && rows[0].value) || {}; }
+  catch (e) { haccpFacility = {}; }
+  return haccpFacility;
+}
+function haccpFacilityValue(k) {
+  const f = HACCP_FACILITY_FIELDS.find(x => x[0] === k);
+  return (haccpFacility && haccpFacility[k]) || (f ? f[2] : '');
+}
+async function haccpInit() {
+  const box = document.getElementById('haccp-facility');
+  if (!box) return;
+  await haccpLoadFacility();
+  if (!box.children.length) {
+    box.innerHTML = HACCP_FACILITY_FIELDS.map(([k, label, def]) => `<div class="form-group" style="margin:0;"><label>${label}</label><input class="form-input" id="hf-${k}" placeholder="${esc2(def || '（未設定・保健所の許可証を見て入力）')}"></div>`).join('');
+  }
+  HACCP_FACILITY_FIELDS.forEach(([k]) => { const el = document.getElementById('hf-' + k); if (el) el.value = haccpFacilityValue(k); });
+  haccpRenderMap();
+}
+async function haccpSaveFacility() {
+  if (!requireAdmin('施設情報の保存')) return;
+  const val = {};
+  HACCP_FACILITY_FIELDS.forEach(([k]) => { val[k] = (document.getElementById('hf-' + k).value || '').trim(); });
+  try {
+    const rows = await sb('GET', 'app_settings', null, '?key=eq.haccp_facility&select=key');
+    if (rows.length) await sb('PATCH', 'app_settings', { value: val, updated_at: new Date().toISOString() }, '?key=eq.haccp_facility');
+    else await sb('POST', 'app_settings', { key: 'haccp_facility', value: val });
+    haccpFacility = val;
+    toast('施設情報を保存しました（全端末で共有）');
+  } catch (e) { toast('施設情報の保存に失敗しました: ' + sbSafeMsg(e), 'error'); }
+}
+/* 対象月の記録件数（取得に失敗した項目は null＝「取得失敗」と表示し、0と混同しない） */
+async function haccpCounts(m) {
+  const [d1, d2] = docMonthRange(m);
+  const fy = fiscalYearOf(new Date(m + '-01'));
+  const c = {};
+  const q = async (k, table, qs, fn) => { try { const r = await sb('GET', table, null, qs); c[k] = fn ? r.filter(fn).length : r.length; } catch (e) { c[k] = null; } };
+  const anom = v => v && v !== 'なし';
+  await Promise.all([
+    q('individuals', 'individuals', `?capture_date=gte.${d1}&capture_date=lte.${d2}&deleted_at=is.null&select=id&limit=1000`),
+    q('attendance', 'attendance', `?work_date=gte.${d1}&work_date=lte.${d2}&select=id&limit=2000`),
+    q('cleaning', 'cleaning_logs', `?cleaned_at=gte.${d1}T00:00:00&cleaned_at=lte.${d2}T23:59:59&select=id&limit=5000`),
+    q('temps', 'cleaning_logs', `?room=eq.冷蔵・冷凍庫&temperature=not.is.null&cleaned_at=gte.${d1}T00:00:00&cleaned_at=lte.${d2}T23:59:59&select=id&limit=2000`),
+    q('inventory', 'inventory', `?created_at=gte.${d1}T00:00:00&created_at=lte.${d2}T23:59:59&deleted_at=is.null&select=id&limit=5000`),
+    q('waste', 'waste_checklists', `?checked_on=gte.${d1}&checked_on=lte.${d2}&deleted_at=is.null&select=id`),
+    q('pest', 'pest_control_logs', `?done_on=gte.${fy}-04-01&done_on=lt.${fy + 1}-04-01&select=id`),
+    q('equipment', 'equipment', `?deleted_at=is.null&status=eq.使用中&select=id`),
+    q('shipments', 'shipments', `?shipment_date=gte.${d1}&shipment_date=lte.${d2}&select=id&limit=2000`),
+    q('radiation', 'individuals', `?capture_date=gte.${d1}&capture_date=lte.${d2}&deleted_at=is.null&species=eq.イノシシ&radiation_test_date=not.is.null&select=id&limit=1000`),
+    q('flags', 'data_flags', `?created_at=gte.${d1}T00:00:00&created_at=lte.${d2}T23:59:59&select=id&limit=1000`),
+    q('anomalies', 'individuals', `?capture_date=gte.${d1}&capture_date=lte.${d2}&deleted_at=is.null&select=id,capture_anomalies,organ_anomalies&limit=1000`, i => anom(i.capture_anomalies) || anom(i.organ_anomalies)),
+  ]);
+  return c;
+}
+function haccpMapTable(m, c, forPrint) {
+  const titleOf = k => (DOC_DEFS.find(d => d.key === k) || {}).title || k;
+  const cell = forPrint ? 'border:1px solid #888;padding:4px 6px;font-size:10.5px;vertical-align:top;' : 'padding:6px 8px;font-size:12.5px;vertical-align:top;border-bottom:1px solid var(--border);';
+  const head = forPrint ? 'border:1px solid #888;padding:4px 6px;font-size:10.5px;background:#f0f0f0;text-align:left;' : 'padding:6px 8px;font-size:12px;text-align:left;color:var(--text2);border-bottom:1px solid var(--border);';
+  const rows = HACCP_MAP.map(r => {
+    const n = r.count ? c[r.count] : null;
+    const cnt = !r.count ? '—' : n == null ? '（取得失敗）' : `${n}${HACCP_UNIT[r.count] || '件'}`;
+    const warn = r.count && n === 0 && !forPrint;
+    return `<tr class="haccp-row${warn ? ' haccp-row-zero' : ''}"${warn ? ' style="background:rgba(200,80,80,.08);"' : ''}><td style="${cell}">${esc2(r.law)}</td><td style="${cell}">${esc2(r.req)}</td><td style="${cell}">${esc2(r.app)}</td><td style="${cell}">${r.docs.map(k => esc2(titleOf(k))).join('<br>') || '（表紙に記載）'}</td><td style="${cell}white-space:nowrap;text-align:right;">${cnt}</td></tr>`;
+  }).join('');
+  return `<table style="border-collapse:collapse;width:100%;"><thead><tr><th style="${head}">根拠</th><th style="${head}">求められること</th><th style="${head}">本アプリでの記録</th><th style="${head}">添付帳票</th><th style="${head}">${m} の記録</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+async function haccpRenderMap() {
+  const box = document.getElementById('haccp-map');
+  if (!box) return;
+  box.innerHTML = '<div class="loading"><span class="spin"></span>対象月の記録を数えています...</div>';
+  const m = docMonth();
+  const c = await haccpCounts(m);
+  box.innerHTML = haccpMapTable(m, c, false);
+}
+function haccpPackKeys() { return HACCP_MAP.flatMap(r => r.docs).filter((k, i, a) => a.indexOf(k) === i); }
+async function haccpPackPrint() {
+  const m = docMonth();
+  const w = window.open('', '_blank');
+  if (!w) { toast('ポップアップがブロックされました', 'error'); return; }
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>HACCP提出セット</title></head><body style="font-family:sans-serif;padding:24px;">生成中...</body></html>');
+  toast('HACCP提出セットを生成中...', 'info');
+  try {
+    await haccpLoadFacility();
+    const c = await haccpCounts(m);
+    const parts = [];
+    for (const k of haccpPackKeys()) {
+      const def = DOC_DEFS.find(d => d.key === k); if (!def) continue;
+      try { const data = await def.gen(m); parts.push(`<section style="page-break-before:always;">${docHtml(def, data, true)}</section>`); }
+      catch (e) { parts.push(`<section style="page-break-before:always;"><h1 style="font-size:18px;">${esc2(def.title)}</h1><p style="color:#b00;">生成できませんでした: ${esc2(sbSafeMsg(e))}</p></section>`); }
+    }
+    const f = k => esc2(haccpFacilityValue(k) || '＿＿＿＿＿＿＿＿＿＿');
+    const cover = `<h1 style="font-size:22px;margin:0 0 6px;">HACCPに沿った衛生管理 記録一式</h1>
+      <p style="font-size:13px;margin:0 0 14px;">対象期間: ${m}　／　出力日: ${new Date().toLocaleDateString('ja-JP')}　／　千葉県野生鳥獣肉に係る衛生管理ガイドライン（令和4年1月）・食品衛生法施行規則 別表17 準拠</p>
+      <table style="border-collapse:collapse;width:100%;margin-bottom:16px;">${HACCP_FACILITY_FIELDS.map(([k, label]) => `<tr><th style="border:1px solid #888;padding:5px 8px;font-size:11.5px;background:#f0f0f0;text-align:left;width:32%;">${label}</th><td style="border:1px solid #888;padding:5px 8px;font-size:11.5px;">${f(k)}</td></tr>`).join('')}</table>
+      <h2 style="font-size:15px;margin:0 0 6px;">対応表（ガイドライン・別表17 の項目 ↔ 本施設の記録）</h2>
+      ${haccpMapTable(m, c, true)}
+      <p style="font-size:10.5px;color:#666;margin-top:8px;">※ 各帳票は業務アプリ（tateyama-gibier.vercel.app）の日々の入力から自動転記。様式は参考様式であり、保健所の指導により随時見直す。個体番号から捕獲票・放射能検査・出荷先までトレーサビリティ検索で遡れる。</p>
+      <p style="font-size:11px;margin-top:14px;">作成者: ＿＿＿＿＿＿　確認者（食品衛生責任者）: ＿＿＿＿＿＿　承認者: ＿＿＿＿＿＿</p>`;
+    w.document.open();
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>HACCP提出セット ${m}</title><style>body{font-family:'Noto Sans JP',sans-serif;padding:20px;color:#222;} @page{size:A4;margin:12mm;} section{margin-top:24px;}</style></head><body>${cover}${parts.join('')}<p style="font-size:10px;color:#999;">PDF保存: 印刷ダイアログで「PDFに保存」を選択</p></body></html>`);
+    w.document.close();
+    setTimeout(() => w.print(), 500);
+    playFeedbackSound(true);
+    toast(`HACCP提出セット（${parts.length}帳票）を生成しました`);
+  } catch (e) { toast('生成に失敗しました: ' + sbSafeMsg(e), 'error'); }
 }
 
 /* ───────── 市役所提出（指定管理 業務報告書） ───────── */
