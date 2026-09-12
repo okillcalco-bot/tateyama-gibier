@@ -23,7 +23,7 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
       labelWeight: 5.83, expiryStr: '2027/9/3', identCode: 'TGC-08-T312-EDS-3',
       barcodeSvg: makeCode128SVG(scanCode || 'T312-EDS-3'), barcodeThin: !scanCode, scanCode: scanCode || null
     });
-    const width = (code) => { const m = /viewBox="0 0 (\d+)/.exec(makeCode128SVG(code)); return m ? 38 / parseInt(m[1], 10) : 0; };
+    const width = (code) => { const m = /viewBox="0 0 (\d+)/.exec(makeCode128SVG(code)); return m ? LABEL_BARCODE_WIDTH_MM / parseInt(m[1], 10) : 0; };
     return {
       withScan: mk('10003258'),
       noScan: mk(null),
@@ -36,7 +36,7 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
 
   // 8桁は読める・長い識別コードは読めない（実測）
   // 2026-09-11: 静穏帯10モジュール×2をSVG内に持たせたため、8桁は0.481mm→0.384mm（下限0.33mm）
-  ck('8桁キーは読める(>=0.36mm)', R.readable8 === true && R.mm8 >= 0.36, R.mm8.toFixed(3));
+  ck('8桁キーは読める(>=0.35mm)', R.readable8 === true && R.mm8 >= 0.35, R.mm8.toFixed(3));
   ck('長い識別コードは読めない', R.readableIdent === false && R.mmIdent < 0.33, R.mmIdent.toFixed(3));
 
   // scanCodeがあれば、手打ち用に8桁を大きく表示し、識別コードは小さく併記

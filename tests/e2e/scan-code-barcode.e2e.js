@@ -29,7 +29,7 @@ const path = require('path');
   // 1) Code128-C：数字8桁はバーが太くなる（読み取り余裕）
   const enc = await page.evaluate(() => {
     const mods = s => parseInt((s.match(/viewBox="0 0 (\d+)/) || [])[1], 10);
-    const w = 38;
+    const w = LABEL_BARCODE_WIDTH_MM;   // 2026-09-12: 38→35mm（左右余白2.5mm）
     return {
       num8: w / mods(makeCode128SVG('20000001')),
       idAJ: w / mods(makeCode128SVG('M167-AJ')),         // 7文字（従来のギリギリ可）
@@ -39,7 +39,7 @@ const path = require('path');
     };
   });
   // 2026-09-11: 静穏帯10モジュール×2をSVG内に持たせたため 79+20=99モジュール → 0.384mm
-  results.push(['数字8桁のバー幅 >= 0.36mm（静穏帯込み）', enc.num8 >= 0.36, enc.num8.toFixed(3) + 'mm']);
+  results.push(['数字8桁のバー幅 >= 0.35mm（静穏帯込み・35mm幅）', enc.num8 >= 0.35, enc.num8.toFixed(3) + 'mm']);
   results.push(['数字8桁は従来コードより太い', enc.num8 > enc.idAJ * 1.3, `数字${enc.num8.toFixed(3)} / 英数${enc.idAJ.toFixed(3)}`]);
   results.push(['従来の9文字は依然として細い(比較用)', enc.idMU2 < 0.33, enc.idMU2.toFixed(3) + 'mm']);
   results.push(['加工品19文字は極細(比較用)', enc.kk < 0.2, enc.kk.toFixed(3) + 'mm']);

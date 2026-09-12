@@ -30,7 +30,7 @@ const path = require('path');
   await page.waitForTimeout(500);
 
   const out = await page.evaluate(() => {
-    const svgW = 38; // .bc svg 幅(mm)
+    const svgW = LABEL_BARCODE_WIDTH_MM; // .bc svg 幅(mm)。2026-09-12: 38→35（左右余白2.5mm）
     const mk = t => {
       const s = makeCode128SVG(t);
       const total = parseInt((s.match(/viewBox="0 0 (\d+)/) || [])[1], 10);
@@ -46,12 +46,33 @@ const path = require('path');
 
   const results = [];
   results.push(['crispEdges付与', out.key.crisp, out.key.crisp]);
-  results.push(['幅38mm', out.key.w38, out.key.w38]);
   results.push(['8桁キー: 79モジュール+静穏帯20=99', out.key.total === 99, String(out.key.total)]);
   results.push(['8桁キー: バーはx=10から（左に10モジュールの白）', out.key.first === 10, String(out.key.first)]);
   results.push(['8桁キー: 右にも10モジュールの白', out.key.quietRight === 10, String(out.key.quietRight)]);
-  results.push(['8桁キー: バー幅>=0.36mm', out.key.xdim >= 0.36, out.key.xdim.toFixed(3)]);
-  results.push(['8桁キー: 静穏帯>=3.5mm', out.key.quietMm >= 3.5, out.key.quietMm.toFixed(2) + 'mm']);
+  results.push(['8桁キー: バー幅>=0.35mm', out.key.xdim >= 0.35, out.key.xdim.toFixed(3)]);
+  results.push(['8桁キー: 静穏帯>=3.3mm', out.key.quietMm >= 3.3, out.key.quietMm.toFixed(2) + 'mm']);
+
+  // 2026-09-12: 現物で左端の文字と最下行が見切れていた（プリンタの印字位置ずれ）。
+  // 実際に描画して、文字がラベル左端から2.5mm以上・下端から3mm以上離れていることを測る。
+  await page.setContent(await page.evaluate(() => pmLabelHtml({
+    origin: '館山産', speciesName: 'イノシシ肉', labelId: 'TGC-08-T302', partName: 'ロース',
+    labelWeight: 2.53, expiryStr: '2027/9/9', identCode: 'TGC-08-T302-RO',
+    barcodeSvg: makeCode128SVG('10003514'), barcodeThin: false, scanCode: '10003514',
+    qrSvg: makeQRSVG('https://tateyama-gibier.vercel.app/s.html?c=10003514', 9.5)
+  })));
+  await page.waitForTimeout(200);
+  const geo = await page.evaluate(() => {
+    const mm = 96 / 25.4;
+    const l = el => el ? el.getBoundingClientRect().left / mm : -1;
+    const b = el => el ? el.getBoundingClientRect().bottom / mm : -1;
+    const svg = document.querySelector('.bc svg');
+    return { textLeft: l(document.querySelector('.o')), bcLeft: l(svg), bcWidth: svg ? svg.getBoundingClientRect().width / mm : -1,
+      lastBottom: b(document.querySelector('.ad')), labelH: 60 };
+  });
+  results.push(['文字はラベル左端から2.5mm以上離れる', geo.textLeft >= 2.4, geo.textLeft.toFixed(2) + 'mm']);
+  results.push(['バーコードSVGも左端から2.5mm以上', geo.bcLeft >= 2.4, geo.bcLeft.toFixed(2) + 'mm']);
+  results.push(['バーコードSVG幅は35mm', Math.abs(geo.bcWidth - 35) < 0.3, geo.bcWidth.toFixed(2) + 'mm']);
+  results.push(['最下行（住所）はラベル下端から3mm以上残す', geo.lastBottom > 0 && geo.lastBottom <= 57, geo.lastBottom.toFixed(2) + 'mm']);
   results.push(['8桁キー: 読める判定', out.key.readable === true, '']);
   results.push(['識別コード印字(M167-AJ)は静穏帯込みで細い(<0.33mm)', out.aj.xdim < out.min, out.aj.xdim.toFixed(3)]);
   results.push(['識別コード印字(M167-AJ)は読めない判定', out.aj.readable === false, '']);

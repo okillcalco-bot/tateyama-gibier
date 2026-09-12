@@ -70,7 +70,8 @@ const IND = { label_id: 'TGC-08-T278', species: 'イノシシ', weight_total: 45
   }));
   T('数字キーは読める太さ', mm.key278 >= mm.min && mm.key268 >= mm.min, `${mm.key278.toFixed(3)}mm / ${mm.key268.toFixed(3)}mm`);
   // 2026-09-11: 静穏帯10モジュール×2をSVG内に持たせたため 0.481mm → 0.384mm
-  T('数字キーは0.38mm前後（静穏帯込み）', Math.abs(mm.key278 - 0.384) < 0.01, mm.key278.toFixed(3) + 'mm');
+  // 2026-09-12: 左右余白を広げバーコード幅38mm→35mm → 0.354mm
+  T('数字キーは0.35mm前後（静穏帯込み・35mm幅）', Math.abs(mm.key278 - 0.354) < 0.01, mm.key278.toFixed(3) + 'mm');
   T('T278-MU は細くて読めない', mm.id278 < mm.min, mm.id278.toFixed(3) + 'mm');
   T('T268-MU-2 はもっと細い', mm.id268 < mm.id278, mm.id268.toFixed(3) + 'mm');
   T('読める/読めないの判定が効く',
