@@ -3137,7 +3137,8 @@ async function qrLabelPrefill() {
   const hint = document.getElementById('qrLabelHint');
   try {
     if (sp === 'イノシシ') {
-      const r = await sb('GET', 'individuals', null, '?select=serial_number&serial_number=not.is.null&order=serial_number.desc&limit=1');
+      // 通し番号は削除した番号を詰めて使うので、生きているイノシシの最大＋1から（indShowNextNumbersと同じ基準）
+      const r = await sb('GET', 'individuals', null, '?species=eq.イノシシ&select=serial_number&serial_number=not.is.null&deleted_at=is.null&order=serial_number.desc&limit=1');
       const max = (r[0] && r[0].serial_number) || 0;
       document.getElementById('qrFrom').value = max + 1;
       document.getElementById('qrTo').value = max + 24;
@@ -8499,10 +8500,11 @@ async function indShowNextNumbers() {
   if (!hint) return;
   hint.textContent = '次の番号を確認中…';
   try {
-    // 削除済みも含めて見る。番号は削除しても解放されないため、
-    // 生きている行だけで計算すると「使用済みの番号」を案内してしまう
+    // 通し番号は「削除した番号は詰めて使う」運用（2026-09-12 確認）。保存時の重複チェックも
+    // 削除済みを無視するので、案内も生きている行だけで計算して両者を揃える
+    // （以前は削除済みも数えていたため、532を削除→再利用した後に「次は537」と案内していた）。
     const [sr, tr, mr] = await Promise.all([
-      sb('GET', 'individuals', null, '?species=eq.イノシシ&serial_number=not.is.null&select=serial_number&order=serial_number.desc&limit=1'),
+      sb('GET', 'individuals', null, '?species=eq.イノシシ&serial_number=not.is.null&deleted_at=is.null&select=serial_number&order=serial_number.desc&limit=1'),
       sb('GET', 'individuals', null, '?label_id=like.TGC-08-T*&select=label_id&order=label_id.desc&limit=1'),
       sb('GET', 'individuals', null, '?label_id=like.TGC-08-M*&select=label_id&order=label_id.desc&limit=1'),
     ]);
