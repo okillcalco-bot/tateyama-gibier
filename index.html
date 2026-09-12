@@ -315,6 +315,20 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .pm-yield-summary{margin-top:8px;padding:7px 10px;background:var(--surface2);border-radius:var(--radius);display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--text2);}
 .pm-yield-summary strong{color:var(--gold);}
 
+/* 全部位完了バー（2026-09-12）
+   ボタンを登録済み一覧の見出しから、精肉モード全体の最下段バーへ移した。
+   一覧の見出しに固定しても、縦持ち（1カラム）では .pm-body 全体がスクロールするため
+   ボタンごと画面の外へ流れ、現場のタブレット（Windowsのタスクバーで下端が狭い）では
+   ほぼ見えなかった。最下段バーは .pm-overlay の flex 子（flex-shrink:0）なので、
+   横持ち・縦持ち・一覧の長さ・スクロール位置に関係なく常に同じ位置に見える。 */
+.pm-footer{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 14px calc(8px + env(safe-area-inset-bottom));background:var(--surface);border-top:2px solid var(--green);}
+.pm-footer-summary{font-size:14px;color:var(--text2);line-height:1.5;}
+.pm-footer-summary strong{color:var(--gold);font-size:17px;}
+.pm-finish-btn{min-height:56px;min-width:240px;padding:12px 28px;font-size:20px;font-weight:800;color:#fff;background:linear-gradient(135deg,#3d7a34,var(--green));border:none;border-radius:var(--radius);box-shadow:0 3px 10px rgba(0,0,0,.3);cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparent;white-space:nowrap;}
+.pm-finish-btn:hover{filter:brightness(1.08);}
+.pm-finish-btn:active{transform:scale(.98);}
+@media (max-width:700px){ .pm-finish-btn{min-width:0;flex:1;} .pm-footer-summary{font-size:12.5px;} }
+
 /* Print label styles */
 @media print {
   .pm-label-print-area { display: block !important; }
@@ -2285,7 +2299,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="pm-completed-section">
           <div class="pm-completed-header">
             <div style="font-size:13px;color:var(--gold);font-weight:600;">登録済み <span id="pmCompletedCount">(0件)</span></div>
-            <button class="btn btn-primary" onclick="pmFinishIndividual()" style="font-size:16px;font-weight:800;padding:12px 24px;box-shadow:0 2px 8px rgba(0,0,0,0.25);">✅ 全部位完了</button>
+            <div style="font-size:11.5px;color:var(--text3);">全部終わったら画面下の緑「全部位完了」</div>
           </div>
           <div class="pm-completed-scroll">
             <div class="pm-completed-grid" id="pmCompletedGrid"></div>
@@ -2297,6 +2311,11 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           </div>
         </div>
       </div>
+    </div>
+    <!-- 全部位完了は常に見える最下段バー（一覧のスクロール・縦持ち・タスクバーに関係なく同じ位置） -->
+    <div class="pm-footer" id="pmFooter">
+      <div class="pm-footer-summary">登録済み <strong id="pmFooterCount">0件</strong> <span id="pmFooterYield"></span></div>
+      <button class="pm-finish-btn" id="pmFinishBtn" onclick="pmFinishIndividual()">✅ 全部位完了</button>
     </div>
   </div>
 </div>
@@ -6063,11 +6082,13 @@ async function pmOnWeightReceived(weight_kg, plan) {
 function pmRenderCompleted() {
   const grid = document.getElementById('pmCompletedGrid');
   document.getElementById('pmCompletedCount').textContent = `(${pmCompletedParts.length}件)`;
+  document.getElementById('pmFooterCount').textContent = `${pmCompletedParts.length}件`;
   pmUpdateBuybackPreview();
 
   if (!pmCompletedParts.length) {
     grid.innerHTML = '<div style="color:var(--text3);font-size:13px;">まだ登録された部位はありません</div>';
     document.getElementById('pmYieldSummary').style.display = 'none';
+    document.getElementById('pmFooterYield').textContent = '';
     return;
   }
 
@@ -6098,6 +6119,7 @@ function pmRenderCompleted() {
   document.getElementById('pmYieldIndWeight').textContent = indWeight || '?';
   document.getElementById('pmYieldPct').textContent = yieldPct.toFixed(1) + '%';
   document.getElementById('pmYieldSummary').style.display = 'flex';
+  document.getElementById('pmFooterYield').textContent = `／ 合計 ${totalParts.toFixed(2)} kg${indWeight > 0 ? `（歩留まり ${yieldPct.toFixed(1)}%）` : ''}`;
 }
 
 // ── 登録済み部位の取消（誤登録・部位間違いの削除）──
