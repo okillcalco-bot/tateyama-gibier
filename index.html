@@ -62,6 +62,8 @@ a.tab-btn{text-decoration:none;}
 .content{padding:24px;max-width:1400px;margin:0 auto;}
 .tab-panel{display:none;}
 .tab-panel.active{display:block;}
+.dash-2col{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.dash-2col>.section{min-width:0;}
 
 /* Cards */
 .card-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px;}
@@ -99,6 +101,16 @@ tr:hover td{background:var(--surface2);}
 .btn-danger{background:var(--red);color:#fff !important;border-color:var(--red);}
 .btn-danger:hover{background:#a03838;border-color:#a03838;}
 .btn-sm{padding:4px 10px;font-size:12px;}
+/* 狭い画面: 本文が約230pxしかないので、長い文言のボタンは折り返して横にはみ出させない
+   （.btn の white-space:nowrap より後に書かないと効かない。2026-09-12 全タブ実測） */
+@media(max-width:560px){ .btn{white-space:normal;line-height:1.35;} }
+/* 指で押す端末（タブレット・スマホ）ではボタン・チェックボックスを押せる大きさにする
+   （2026-09-12 実測: .btn が 27px、チェックボックスが 13px で押しにくかった） */
+@media(pointer:coarse){
+  .btn{min-height:38px;}
+  .btn-sm{min-height:34px;}
+  input[type=checkbox],input[type=radio]{width:18px;height:18px;}
+}
 .btn:disabled{opacity:.4;cursor:not-allowed;}
 .btn.active{background:var(--gold2);color:#fff;border-color:var(--gold2);}
 
@@ -186,6 +198,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   .tab-btn{padding:8px 12px;font-size:12px;}
   .content{padding:12px;}
   .card-row{grid-template-columns:repeat(2,1fr);}
+  .dash-2col{grid-template-columns:1fr;}
   .part-row{grid-template-columns:1fr;gap:8px;}
   .filter-bar{flex-direction:column;}
 }
@@ -209,7 +222,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .toast-info{background:rgba(90,140,216,.15);color:var(--blue);border-color:rgba(90,140,216,.3);}
 @keyframes toastIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
 
-.empty-state{text-align:center;padding:40px;color:var(--text3);font-size:13px;}
+.empty-state{text-align:center;padding:40px 12px;color:var(--text3);font-size:13px;}
 
 /* ===== Processing Mode (精肉モード) ===== */
 .pm-overlay{display:none;position:fixed;inset:0;z-index:500;background:var(--bg);overflow:hidden;}
@@ -486,7 +499,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <div class="tab-panel active" id="panel-dashboard">
     <div class="section">
       <div class="section-title">📌 今日やること</div>
-      <div id="today-todos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px;"><div class="loading"><span class="spin"></span>確認中...</div></div>
+      <div id="today-todos" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:8px;"><div class="loading"><span class="spin"></span>確認中...</div></div>
     </div>
     <div class="card-row" id="dash-cards">
       <div class="card"><div class="card-label">搬入待ち個体数</div><div class="card-value" id="dc-pending">-</div><div class="card-sub">精肉処理前</div></div>
@@ -497,7 +510,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div class="card"><div class="card-label">本日の清掃</div><div class="card-value" id="dc-clean">-</div><div class="card-sub">実施部屋数</div></div>
       <div class="card"><div class="card-label">資材要発注</div><div class="card-value" id="dc-supply">-</div><div class="card-sub">発注点割れ</div></div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+    <div class="dash-2col">
       <div class="section">
         <div class="section-title">部位別在庫 - イノシシ</div>
         <div id="sync-status" style="margin-bottom:24px;"><div style="font-size:11px;color:var(--text2);letter-spacing:.07em;text-transform:uppercase;margin-bottom:12px;">📊 DB 同期状況（個体管理番号で連携）</div><div id="sync-flow" class="sync-flow"><span style="color:var(--text2);font-size:13px;">読み込み中...</span></div></div>
@@ -512,14 +525,14 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div class="section-title">種別別在庫（その他）</div>
       <div id="chart-other" class="bar-chart"></div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+    <div class="dash-2col">
       <div class="section">
         <div class="section-title">最近の精肉処理</div>
-        <table><thead><tr><th>日時</th><th>親コード</th><th>子コード</th><th>重量</th><th>担当</th></tr></thead><tbody id="dash-proc"></tbody></table>
+        <div style="overflow-x:auto;"><table><thead><tr><th>日時</th><th>親コード</th><th>子コード</th><th>重量</th><th>担当</th></tr></thead><tbody id="dash-proc"></tbody></table></div>
       </div>
       <div class="section">
         <div class="section-title">最近の出荷</div>
-        <table><thead><tr><th>出荷日</th><th>注文</th><th>配達日</th><th>ステータス</th></tr></thead><tbody id="dash-ship"></tbody></table>
+        <div style="overflow-x:auto;"><table><thead><tr><th>出荷日</th><th>注文</th><th>配達日</th><th>ステータス</th></tr></thead><tbody id="dash-ship"></tbody></table></div>
       </div>
     </div>
   </div>
@@ -774,10 +787,12 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <span style="flex:1;"></span>
         <button class="btn btn-sm" onclick="procBulkDone()" style="color:var(--text2);">⚡ 過去分をまとめて完了にする</button>
       </div>
-      <table id="proc-individual-table" style="margin-top:12px;">
+      <div style="overflow-x:auto;margin-top:12px;">
+      <table id="proc-individual-table">
         <thead><tr><th>個体番号</th><th>種別</th><th>体重(kg)</th><th>捕獲日</th><th>操作</th></tr></thead>
         <tbody id="proc-ind-body"></tbody>
       </table>
+      </div>
     </div>
   </div>
 
@@ -1109,7 +1124,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-sm" onclick="manualOpen('product')">📖 使い方</button><button class="btn btn-primary" onclick="productOpenNew()">＋ 商品を追加</button></div>
       </div>
       <div style="font-size:12.5px;color:var(--text2);margin-bottom:12px;">味付け肉・ソーセージ等、<strong>調理・味付けして作った</strong>卸売・小売商品の完成個数をここで記録します（ホワイトボードの置き換え）。完成したら「＋完成」、イベント等へ持ち出したら「−持ち出し」。BASEネットショップの商品と対応しています。<br><span style="color:var(--text3);">※スライス・ミンチなど「精肉ブロックを切り分ける加工」は <strong>加工処理</strong> タブで記録します。</span></div>
-      <div id="products-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;"></div>
+      <div id="products-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(250px,100%),1fr));gap:10px;"></div>
     </div>
     <div class="section">
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
@@ -1682,7 +1697,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="form-group" style="margin:0;"><label>検査日（＝結果判明日）</label><input class="form-input" id="rad-date" type="date" style="max-width:180px;"></div>
         <div class="form-group" style="margin:0;"><label>検査機関</label><input class="form-input" id="rad-agency" value="館山市" style="max-width:140px;"></div>
         <div class="form-group" style="margin:0;"><label>セシウム(Cs)結果</label>
-          <div style="display:flex;gap:6px;">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <button type="button" class="btn btn-primary" id="rad-res-none" onclick="radSetResult('検出下限値以下')">なし（検出下限値以下）</button>
             <button type="button" class="btn" id="rad-res-detect" onclick="radSetResult('検出あり')">検出あり</button>
           </div>
@@ -1853,7 +1868,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px;">
         <button class="btn btn-primary" onclick="manualOpen('all')">🖨 全手順をまとめて印刷（A4）</button>
       </div>
-      <div id="manual-index" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;"></div>
+      <div id="manual-index" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr));gap:10px;"></div>
     </div>
     <div class="section">
       <div class="section-title">📥 手順書・資料集（ダウンロード）</div>
@@ -1861,16 +1876,16 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         紙で持ちたい人・スマホに入れておきたい人はここから。ふだん読むのは<strong>PDF</strong>、内容を直すときだけ<strong>原本（PowerPoint）</strong>を使ってください。
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;max-width:640px;">
-        <a class="btn" style="justify-content:flex-start;text-align:left;" href="staff-docs/manual-slice-vacuum.pdf" target="_blank" rel="noopener">🥩 スライス作業・小分けパック詰め・真空パック機（PDF・全6頁／追補2頁つき 2026-08-31）</a>
-        <a class="btn" style="justify-content:flex-start;text-align:left;" href="staff-docs/manual-slice-vacuum.pptx">📝 同・原本（PowerPoint／内容を直す人向け）</a>
-        <a class="btn" style="justify-content:flex-start;text-align:left;" href="manual-app.html" target="_blank" rel="noopener">📖 マニュアルアプリを開く（就業規則などの書類もこちら）</a>
+        <a class="btn" style="justify-content:flex-start;text-align:left;white-space:normal;line-height:1.4;" href="staff-docs/manual-slice-vacuum.pdf" target="_blank" rel="noopener">🥩 スライス作業・小分けパック詰め・真空パック機（PDF・全6頁／追補2頁つき 2026-08-31）</a>
+        <a class="btn" style="justify-content:flex-start;text-align:left;white-space:normal;line-height:1.4;" href="staff-docs/manual-slice-vacuum.pptx">📝 同・原本（PowerPoint／内容を直す人向け）</a>
+        <a class="btn" style="justify-content:flex-start;text-align:left;white-space:normal;line-height:1.4;" href="manual-app.html" target="_blank" rel="noopener">📖 マニュアルアプリを開く（就業規則などの書類もこちら）</a>
       </div>
       <div style="font-size:13px;font-weight:700;color:var(--gold);margin:16px 0 6px;">🔬 異常の見分け・衛生の資料</div>
       <div style="font-size:12.5px;color:var(--text2);margin-bottom:8px;">受入・内臓摘出・解体で「これは食用にできるか」を迷ったときの写真資料。判断は<strong>枝肉・内臓 全部廃棄</strong>側に倒すのが原則です。</div>
       <div style="display:flex;flex-direction:column;gap:8px;max-width:640px;">
-        <a class="btn" style="justify-content:flex-start;text-align:left;" href="staff-docs/color-atlas-r7.pdf" target="_blank" rel="noopener">🩻 カラーアトラス（厚生労働省・令和7年3月改訂／PDF 52頁）— シカ p.8〜・イノシシ p.23〜・気をつける異常 p.43〜</a>
-        <a class="btn" style="justify-content:flex-start;text-align:left;" href="manabu.html#sfts" target="_blank" rel="noopener">🌿 獣を知る（学習）— マダニ・SFTS・疥癬の項</a>
-        <a class="btn" style="justify-content:flex-start;text-align:left;" href="sanpai.html" target="_blank" rel="noopener">🚮 産廃搬出ルール・最終チェック表（9/11改訂）</a>
+        <a class="btn" style="justify-content:flex-start;text-align:left;white-space:normal;line-height:1.4;" href="staff-docs/color-atlas-r7.pdf" target="_blank" rel="noopener">🩻 カラーアトラス（厚生労働省・令和7年3月改訂／PDF 52頁）— シカ p.8〜・イノシシ p.23〜・気をつける異常 p.43〜</a>
+        <a class="btn" style="justify-content:flex-start;text-align:left;white-space:normal;line-height:1.4;" href="manabu.html#sfts" target="_blank" rel="noopener">🌿 獣を知る（学習）— マダニ・SFTS・疥癬の項</a>
+        <a class="btn" style="justify-content:flex-start;text-align:left;white-space:normal;line-height:1.4;" href="sanpai.html" target="_blank" rel="noopener">🚮 産廃搬出ルール・最終チェック表（9/11改訂）</a>
       </div>
     </div>
   </div>
@@ -6518,7 +6533,7 @@ function wstRender() {
           <div style="font-size:11.5px;color:var(--text3);">${k}</div>
           <div style="font-size:17px;font-weight:600;color:var(--gold);">${v}</div></div>`).join('')}
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:16px;">
       <div><div style="font-size:13px;font-weight:600;margin-bottom:6px;">月ごと</div>
         <div style="overflow-x:auto;"><table><thead><tr><th>月</th><th>枚数</th><th>正味</th></tr></thead>
         <tbody>${months.map(([m, v]) => `<tr><td>${esc2(m)}</td><td>${v.n}</td><td style="text-align:right;">${kg(v.kg)}</td></tr>`).join('')}</tbody></table></div></div>
@@ -6731,7 +6746,7 @@ function evTrendRender() {
           <div style="font-size:17px;font-weight:600;color:var(--gold);">${v}</div>
         </div>`).join('')}
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:16px;">
       <div>
         <div style="font-size:13px;font-weight:600;margin-bottom:6px;">出店先ごと</div>
         <div style="overflow-x:auto;"><table>
