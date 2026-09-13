@@ -39,7 +39,9 @@ const path = require('path');
       bodyH: d.body.getBoundingClientRect().height,
       scrollH: d.body.scrollHeight,
       ex: box(q('.ex')), tmp: box(q('.tmp')), bc: box(q('.bc')), svg: box(q('.bc svg')),
-      bct: box(q('.bct')), mk: box(q('.mk')), ad: box(q('.ad'))
+      bct: box(q('.bct')), mk: box(q('.mk')), ad: box(q('.ad')),
+      lines: (() => { const o = {}; for (const s of ['.wn', '.qt', '.mk']) { const el = q(s); if (!el) continue; const cs = d.defaultView.getComputedStyle(el); const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.2; o[s] = Math.round(el.getBoundingClientRect().height / lh); } return o; })(),
+      clippedX: [...d.querySelectorAll('.wn,.qt,.mk')].filter(el => el.scrollWidth > el.clientWidth + 1).map(el => el.className)
     };
     f.remove();
     return out;
@@ -54,9 +56,15 @@ const path = require('path');
     // 2) バーコードSVGが下の文字（コード表記）と重ならない
     results.push([`${label}: バーコードがコード表記に重ならない`, m.svg.bottom <= m.bct.top + 0.5,
       `svg.bottom=${mm(m.svg.bottom).toFixed(1)}mm / bct.top=${mm(m.bct.top).toFixed(1)}mm`]);
-    // 2b) 実機のフォント差に耐える余白（1mm以上）を最終行の下に確保しておく
-    results.push([`${label}: 用紙に1mm以上の余裕`, (m.bodyH - m.ad.bottom) >= m.mmPx,
+    // 2b) 最終行の下の余白。2026-09-13 現物（T316 枝肉）の写真を実測すると、プリンタは上端から
+    //     約57mmまでしか印字できず（下端2.5〜3mmは白紙）、Windows の Meiryo はこの環境の代替
+    //     フォントより行が高い。当時の余裕3.9mmでは住所が切れたので、5mm以上を要求する。
+    results.push([`${label}: 用紙に5mm以上の余裕（印字可能域は約57mmまで）`, (m.bodyH - m.ad.bottom) >= 5 * m.mmPx,
       `余裕=${mm(m.bodyH - m.ad.bottom).toFixed(1)}mm`]);
+    // 2c) 注記・物語の案内・発行元は1行（2行に折り返すと全体が押し下げられ住所が切れる）
+    results.push([`${label}: 注記・QR案内・発行元が各1行で、横にも切れない`,
+      Object.values(m.lines).every(n => n === 1) && m.clippedX.length === 0,
+      JSON.stringify(m.lines) + (m.clippedX.length ? ' 横切れ:' + m.clippedX.join(',') : '')]);
     // 3) SVGは自分の枠(.bc)からはみ出さない（今回の不具合の直接原因）
     results.push([`${label}: SVGが枠からはみ出さない`, m.svg.top >= m.bc.top - 0.5 && m.svg.bottom <= m.bc.bottom + 0.5,
       `bc=${mm(m.bc.h).toFixed(1)}mm / svg=${mm(m.svg.h).toFixed(1)}mm`]);
