@@ -391,7 +391,7 @@ async function fetchAttendanceRows(l, month){
   const q = l.staff_id
     ? `staff_id=eq.${l.staff_id}`
     : `staff_name=eq.${encodeURIComponent(l.staff_name)}`;
-  const res = await fetch(`${SB_URL}/rest/v1/attendance?${q}&work_date=gte.${month}-01&work_date=lte.${month}-31&select=work_date,clock_in,clock_out,break_minutes,note&order=work_date.asc`,
+  const res = await fetch(`${SB_URL}/rest/v1/attendance?${q}&work_date=gte.${month}-01&work_date=lte.${month}-${new Date(month.slice(0, 4), month.slice(5, 7), 0).getDate()}&select=work_date,clock_in,clock_out,break_minutes,note&order=work_date.asc`,
     { headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` } });
   if(!res.ok) return [];
   return res.json();
@@ -541,7 +541,7 @@ async function payslipPrintAll(){
   // 月の勤怠を1回で取得して人ごとに振り分け
   let attRows=[];
   try{
-    const res=await fetch(`${SB_URL}/rest/v1/attendance?work_date=gte.${month}-01&work_date=lte.${month}-31&select=staff_id,staff_name,work_date,clock_in,clock_out,break_minutes,note&order=work_date.asc`,
+    const res=await fetch(`${SB_URL}/rest/v1/attendance?work_date=gte.${month}-01&work_date=lte.${month}-${new Date(month.slice(0, 4), month.slice(5, 7), 0).getDate()}&select=staff_id,staff_name,work_date,clock_in,clock_out,break_minutes,note&order=work_date.asc`,
       { headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` } });
     if(res.ok) attRows=await res.json();
   }catch(e){}

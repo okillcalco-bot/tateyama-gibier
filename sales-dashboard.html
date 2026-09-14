@@ -423,7 +423,7 @@ function getPeriodRange() {
   const tm = document.getElementById('toMonth').value;
   return {
     fromDate: fm ? fm + '-01' : '2020-01-01',
-    toDate:   tm ? tm + '-31' : new Date().toISOString().split('T')[0]
+    toDate:   tm ? tm + '-' + new Date(tm.slice(0, 4), tm.slice(5, 7), 0).getDate() : new Date().toISOString().split('T')[0]  // 末日は月ごとに違う（'-31' 固定だと30日の月で400）
   };
 }
 

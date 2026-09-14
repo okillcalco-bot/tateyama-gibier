@@ -90,6 +90,12 @@ const path = require('path');
   const zeroRows = await page.$$eval('#haccp-map tr.haccp-row-zero', els => els.map(e => e.children[0].textContent));
   T('0件の行（出退勤・在庫・フラグ）は赤く目立つ', zeroRows.length >= 3 && zeroRows.some(t => /別表17 七/.test(t)), zeroRows.join(' | '));
   T('根拠にガイドライン条番号と別表17が書いてある', /第6-6\(12\)/.test(mapText) && /別表17 五/.test(mapText) && /参考様式2/.test(mapText), '');
+  // 2026-09-14: 9月は '2026-09-31' を問い合わせて PostgREST が 400 → 全項目「取得失敗」だった
+  const bad = reqs.filter(r => /2026-09-31/.test(r));
+  T('30日の月でも末日は 09-30（"-31" の問い合わせを出さない）', bad.length === 0, bad.slice(0, 2).join(' | '));
+  const dm = await page.evaluate(() => ['2026-09', '2026-02', '2024-02', '2026-12', '2026-04'].map(m => docMonthRange(m)[1]));
+  T('docMonthRange は実際の末日（9月30・2月28・うるう2月29・12月31・4月30）', dm.join(',') === '2026-09-30,2026-02-28,2024-02-29,2026-12-31,2026-04-30', dm.join(','));
+  T('対応表に「取得失敗」が無い', !/取得失敗/.test(mapText), '');
 
   // 3) 新しい帳票
   const keys = await page.evaluate(() => DOC_DEFS.filter(d => d.cat === 'HACCP・衛生管理').map(d => d.key));
