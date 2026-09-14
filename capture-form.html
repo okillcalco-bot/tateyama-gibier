@@ -3186,6 +3186,8 @@ async function handleSubmit() {
         if (!pb.label_id) delete pb.label_id;
         const er = await sb('PATCH', 'individuals', pb, '?id=eq.' + editRecordId);
         saved = Array.isArray(er) ? er[0] : er;
+        // 0行更新＝その個体はDBに無い（未送信データを編集した等）。成功扱いにしない
+        if (!saved) throw new Error('NOT_FOUND: この個体（' + (editRecord && editRecord.label_id || editRecordId) + '）はDBにありません。未送信データなら「未送信」バッジから送信してください。');
       } else if (matchedPlaceholderId) {
         // 先に用意した空枠（通し番号だけの行）に登録する
         const er = await sb('PATCH', 'individuals', record, '?id=eq.' + matchedPlaceholderId);
@@ -3195,9 +3197,23 @@ async function handleSubmit() {
       }
       if (Array.isArray(saved)) saved = saved[0];
     } catch(e) {
-      // Offline - queue
-      queueRecord(record);
-      saved = record;
+      // 2026-09-14: 以前はここで何でも「オフライン」扱いにしてキューに入れていた。
+      // DBの一意制約違反（削除済み個体が番号を塞いでいた M191 のケース）までキューに入り、
+      // 再送時に「重複＝登録済み」と判定されて黙って捨てられ、修正が消えていた（サイレント失敗）。
+      // 通信エラー（fetch自体の失敗・オフライン）のときだけキューに入れ、それ以外は画面に出して止める。
+      if (isNetworkError(e)) {
+        if (editMode && editRecordId) {
+          // 編集（PATCH）は新規登録として再送してはいけない。更新として再送する
+          queueRecord(Object.assign({}, record, { _patchId: editRecordId }));
+        } else {
+          queueRecord(record);
+        }
+        saved = record;
+      } else {
+        alert('❌ 保存できませんでした（入力は残っています）。\n\n' + friendlySaveError(e));
+        btn.disabled = false; btn.textContent = editMode ? '修正を保存する' : '搬入登録';
+        return;
+      }
     }
 
     if (window.hunterMode) {
@@ -3261,6 +3277,24 @@ async function handleSubmit() {
 }
 
 /* ── Offline queue ── */
+// 通信エラーかどうか（fetch が投げる TypeError／オフライン）。DBのエラー（4xx/5xx本文）は通信エラーではない
+function isNetworkError(e) {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+  return !!e && (e.name === 'TypeError' || /Failed to fetch|Load failed|NetworkError|network/i.test(String(e && e.message || '')));
+}
+// DBのエラー本文を現場向けの言葉にする
+function friendlySaveError(e) {
+  const msg = String(e && e.message || e || '');
+  if (/individuals_label_id_key|duplicate key.*label_id/i.test(msg)) {
+    const m = /Key \(label_id\)=\(([^)]+)\)/.exec(msg);
+    return `個体番号 ${m ? m[1] : ''} は別の行（削除済みの個体を含む）で使われています。\n通し番号・個体番号を空いている番号に変えるか、管理者に連絡してください。`;
+  }
+  if (/individuals_species_year_serial_uidx/i.test(msg)) return '同じ通し番号のイノシシが既に登録されています。通し番号を空いている番号に変えてください。';
+  if (/individuals_submit_ref_ukey/i.test(msg)) return 'この入力は既に登録済みです（二重送信）。搬入一覧を確認してください。';
+  if (/^NOT_FOUND:/.test(msg)) return msg.replace(/^NOT_FOUND:\s*/, '');
+  try { const j = JSON.parse(msg); if (j && (j.message || j.hint)) return (j.message || '') + (j.hint ? '\n' + j.hint : ''); } catch (x) {}
+  return msg.slice(0, 300);
+}
 function queueRecord(record) {
   const queue = JSON.parse(localStorage.getItem('tgc_queue') || '[]');
   queue.push(record);
@@ -3284,19 +3318,38 @@ async function syncPending() {
   const queue = JSON.parse(localStorage.getItem('tgc_queue') || '[]');
   if (queue.length === 0) return;
   const remaining = [];
+  const failed = [];
   for (const record of queue) {
     try {
-      await sb('POST', 'individuals', record);
+      if (record._patchId) {
+        // 編集の再送は更新として送る（新規登録にすると二重になる）
+        const body = Object.assign({}, record); delete body._patchId; delete body._error;
+        const r = await sb('PATCH', 'individuals', body, '?id=eq.' + record._patchId);
+        if (!(Array.isArray(r) ? r.length : r)) throw new Error('NOT_FOUND: この個体はDBにありません');
+      } else {
+        const body = Object.assign({}, record); delete body._error;
+        await sb('POST', 'individuals', body);
+      }
     } catch(e) {
-      // submit_ref の一意制約違反(23505/duplicate)＝既に登録済み → キューから外す（再送で二重登録しない）。
       const msg = String(e && e.message || '');
-      if (/23505|duplicate key|individuals_submit_ref_ukey/i.test(msg)) continue;
+      // submit_ref の一意制約違反＝この入力は既に登録済み → キューから外す（再送で二重登録しない）。
+      // 2026-09-14: 以前は 23505 全部をここで捨てていたため、個体番号の重複（削除済み個体が番号を
+      // 塞いでいた）で失敗した修正が黙って消えていた。submit_ref の重複だけを「登録済み」とみなす。
+      if (/individuals_submit_ref_ukey/i.test(msg)) continue;
+      record._error = friendlySaveError(e);
       remaining.push(record);
+      if (!isNetworkError(e)) failed.push(record);
     }
   }
   localStorage.setItem('tgc_queue', JSON.stringify(remaining));
   updatePendingBadge();
   if (remaining.length < queue.length) loadTodayCount();
+  // 通信以外の理由で送れないものは、黙って残さず知らせる（1回の同期につき1回）
+  if (failed.length) {
+    alert(`⚠️ 未送信データ ${failed.length}件がサーバーに受け付けられませんでした。\n\n` +
+      failed.slice(0, 3).map(r => `・${r.hunter_name || '(捕獲者未入力)'} ${r.capture_date || ''}: ${r._error}`).join('\n') +
+      '\n\n「未送信」バッジから内容を確認してください。');
+  }
 }
 
 // 未送信（端末内キュー）の中身を確認・削除・今すぐ送信
@@ -3314,7 +3367,8 @@ function showPendingModal() {
   const rows = queue.map((r, i) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;">
       <div style="font-size:14px;line-height:1.5;">
         <b>${esc(r.hunter_name || '(捕獲者未入力)')}</b> ／ ${esc(r.species || '')} ${r.weight_total ? esc(r.weight_total) + 'kg' : ''}<br>
-        <span style="color:var(--text2);font-size:12px;">${esc(r.capture_date || '')} ${esc(r.capture_city || '')}${esc(r.capture_area || '')}</span>
+        <span style="color:var(--text2);font-size:12px;">${esc(r.capture_date || '')} ${esc(r.capture_city || '')}${esc(r.capture_area || '')}${r._patchId ? '（修正の再送）' : ''}</span>
+        ${r._error ? `<div style="color:#b3261e;font-size:12px;margin-top:4px;font-weight:700;">送れない理由: ${esc(r._error)}</div>` : ''}
       </div>
       <button type="button" onclick="deletePending(${i})" style="flex:none;background:#7a2b12;color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;">削除</button>
     </div>`).join('');
@@ -3761,17 +3815,56 @@ function boardNewInput() {
 
 /* ── 看板つきカメラ（AR風）── カメラ映像の左下に看板を重ねて撮影→端末保存 ── */
 let _arStream = null, _arFacing = 'environment', _arMsgT = null, _arAfterRegister = false;
-let _arRot = 0;  // 保存画像の向き（0=縦, 90/270=横）。iPhoneは画面が回らないので手動で切替。
-// 「📐 向き」ボタン：縦→横①→横②を巡回。保存する写真が横向きになり、看板は正立で合成される。
-function arToggleRot() {
-  _arRot = _arRot === 0 ? 90 : (_arRot === 90 ? 270 : 0);
+let _arRot = 0;  // 保存画像の向き（0=縦, 90/270=横）。iPhoneは画面が回らないので端末の傾きから自動で切替（手動でも切替可）。
+let _arManualUntil = 0;   // 手動で向きを選んだ直後は、その向きを自動検出で上書きしない（ms）
+let _arOrientHandler = null;
+function arApplyRot() {
   const btn = document.getElementById('arRotBtn');
   if (btn) btn.textContent = _arRot === 0 ? '📐 縦' : (_arRot === 90 ? '📐 横①' : '📐 横②');
-  arMsg(_arRot === 0 ? '縦向きで保存します'
-    : '横向きで保存します（看板は正立）。向きが逆なら「📐 横②/①」で切替');
-  // プレビュー映像も回して見た目を近づける（対応環境のみ）
+  // プレビュー映像も回して見た目を近づける（対応環境のみ）。看板は正立のまま＝保存画像と一致
   const cam = document.getElementById('arCam');
   if (cam) { cam.classList.remove('arrot90', 'arrot270'); if (_arRot === 90) cam.classList.add('arrot90'); else if (_arRot === 270) cam.classList.add('arrot270'); }
+}
+// 「📐 向き」ボタン：縦→横①→横②を巡回（自動検出の上書き用）。保存する写真が横向きになり、看板は正立で合成される。
+function arToggleRot() {
+  _arRot = _arRot === 0 ? 90 : (_arRot === 90 ? 270 : 0);
+  _arManualUntil = Date.now() + 20000;
+  arApplyRot();
+  arMsg(_arRot === 0 ? '縦向きで保存します'
+    : '横向きで保存します（看板は正立）。向きが逆なら「📐 横②/①」で切替');
+}
+/* 端末の傾きから向きを自動判定する（2026-09-14）
+   現場で横に構えても看板が縦のままだった。iPhone（回転ロック・PWA）は画面が回らないので、
+   deviceorientation の gamma（左右の傾き、-90〜90）で横向きを検出する。
+   画面自体が回る端末（screen.orientation が landscape）は映像も正立なので 0 のまま。 */
+function arRotFromOrientation(beta, gamma) {
+  if (typeof gamma !== 'number' || isNaN(gamma)) return null;
+  // 画面が回る端末は、OSが既に横向きにしているので回さない
+  try { if (screen.orientation && /landscape/.test(screen.orientation.type) && Math.abs(window.innerWidth) > Math.abs(window.innerHeight)) return 0; } catch (e) {}
+  if (Math.abs(gamma) >= 55) return gamma > 0 ? 90 : 270;   // 横に構えた
+  if (Math.abs(gamma) <= 30) return 0;                       // 縦に構えた
+  return null;                                               // 中間（ヒステリシス：変えない）
+}
+function arAutoRotStart() {
+  arAutoRotStop();
+  if (typeof DeviceOrientationEvent === 'undefined') return;
+  const attach = function () {
+    _arOrientHandler = function (ev) {
+      if (Date.now() < _arManualUntil) return;   // 手動選択を尊重
+      const rot = arRotFromOrientation(ev.beta, ev.gamma);
+      if (rot == null || rot === _arRot) return;
+      _arRot = rot; arApplyRot();
+      arMsg(rot === 0 ? '縦向きで保存します（自動）' : '横向きで保存します（自動・看板は正立）。逆なら「📐」で切替');
+    };
+    window.addEventListener('deviceorientation', _arOrientHandler);
+  };
+  // iOS 13+ は許可が必要（撮影ボタンのタップの中で呼ばれたときだけ許可ダイアログが出る）
+  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission().then(function (s) { if (s === 'granted') attach(); }).catch(function () {});
+  } else attach();
+}
+function arAutoRotStop() {
+  if (_arOrientHandler) { window.removeEventListener('deviceorientation', _arOrientHandler); _arOrientHandler = null; }
 }
 // 撮影モード: 'board'=受け入れ後の看板（左下・個体情報）／ 'whiteboard'=引き取り記録（右上のみ）
 let _arMode = 'board';
@@ -3885,6 +3978,7 @@ async function arStart() {
   const cancelBtn = document.querySelector('#arCam .ar-cancel');
   if (cancelBtn) cancelBtn.textContent = _arAfterRegister ? '✓ 完了（次へ）' : '✕ 閉じる';
   document.getElementById('arCam').classList.add('show');
+  _arManualUntil = 0; arAutoRotStart();   // 端末の傾きで縦横を自動判定
   arMsg(whiteboardMode ? '📋 引き取り写真：ホワイトボードと個体を一緒に撮影してください'
     : (_arAfterRegister ? '看板を画角に入れて撮影してください（保存後、完了で次の入力へ）' : ''));
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -3900,10 +3994,10 @@ async function arStart() {
 function arStopStream() { if (_arStream) { _arStream.getTracks().forEach(function (t) { t.stop(); }); _arStream = null; } }
 function arClose() {
   arStopStream();
+  arAutoRotStop();
   // 向きは毎回「縦」に戻す
-  _arRot = 0;
-  const _rb = document.getElementById('arRotBtn'); if (_rb) _rb.textContent = '📐 縦';
-  const _cam = document.getElementById('arCam'); if (_cam) _cam.classList.remove('arrot90', 'arrot270');
+  _arRot = 0; _arManualUntil = 0;
+  arApplyRot();
   const v = document.getElementById('arVideo'); if (v) v.srcObject = null;
   const wb = document.getElementById('arWhiteboard'); if (wb) wb.classList.remove('show');
   const arBoardEl = document.getElementById('arBoard'); if (arBoardEl) arBoardEl.style.display = '';
@@ -3960,8 +4054,10 @@ async function arCapture() {
   const vw = v.videoWidth, vh = v.videoHeight;
   if (!vw || !vh) { arMsg('カメラの準備中です。少し待って撮影してください'); return; }
   // 保存画像を「画面に見えているまま」にする＝ object-fit:cover のトリミングと看板の座標を画面(CSS px)に合わせる。
-  const cw = v.clientWidth || window.innerWidth;
-  const ch = v.clientHeight || window.innerHeight;
+  // 2026-09-14: 横向き（arrot90/270）では #arVideo の箱が 100vh×100vw に入れ替わるため、要素の幅高さを
+  // 使うと縦横が逆になり、保存画像が縦のまま・切り出し位置もずれていた。基準は常に画面（縦見え）の幅高さ。
+  const cw = window.innerWidth || v.clientWidth;
+  const ch = window.innerHeight || v.clientHeight;
   const dpr = Math.min(3, window.devicePixelRatio || 1);   // 端末解像度で鮮明に。3倍で頭打ち（ファイル肥大防止）
   const land = (_arRot === 90 || _arRot === 270);
   // 論理サイズ(CSS px): 縦は cw×ch、横は回転して ch×cw
