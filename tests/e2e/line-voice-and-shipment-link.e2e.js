@@ -18,7 +18,7 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
 
   // 疑似DB
-  const writes = { orders: [], order_items: [], shipments: [], invPatch: [] };
+  const writes = { orders: [], order_items: [], shipments: [], invPatch: [], voiceGets: 0 };
   const INV = { id: 'inv-9', ident_code: 'TGC-08-T400-ED', part_name: '枝肉（全体）', species: 'イノシシ', weight: 28.5, weight_kg: 28.5, status: '在庫', scan_code: '10004000' };
   const VOICES = [
     { id: 'v1', scan_code: '10004000', individual_label: 'TGC-08-T400', nickname: '館山の田中', rating: 5, dish: 'ぼたん鍋', comment: 'やわらかくて驚いた', created_at: '2026-09-02T10:00:00Z', published_at: null },
@@ -38,7 +38,11 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
       return J([]);
     }
     if (m === 'GET' && /\/individuals/.test(url)) return J([{ label_id: 'TGC-08-T400', species: 'イノシシ', capture_date: '2026-08-20', weight_total: 60 }]);
-    if (m === 'GET' && /\/meal_voices/.test(url)) return J(VOICES);
+    // meal_voices は RLS が deny-all（public）なので画面からは直接読めない（読めても0件で静かに空になる）。
+    // 一生ビューは物語ページと同じ RPC（公開済み）＋ 職員用 RPC（承認待ち）で引く
+    if (/\/rpc\/story_get_individual/.test(url)) return J({ individual_label: 'TGC-08-T400', voices: VOICES.filter(v => v.published_at).map(v => ({ nickname: v.nickname, rating: v.rating, dish: v.dish, comment: v.comment, at: '2026/09/01' })) });
+    if (/\/rpc\/staff_voices_list/.test(url)) return J(VOICES.filter(v => !v.published_at).map(v => ({ id: v.id, individual_label: v.individual_label, nickname: v.nickname, rating: v.rating, comment: v.comment, status: 'pending' })));
+    if (m === 'GET' && /\/meal_voices/.test(url)) { writes.voiceGets++; return J([]); }   // RLSで空になる本番と同じ
     return J([]);
   });
   await p.route('**/auth/**', rt => rt.fulfill({ contentType: 'application/json', body: '{}' }));
@@ -88,11 +92,11 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   await p.evaluate(async () => { await indLifeOpen('TGC-08-T400'); });
   await p.waitForTimeout(300);
   const life = await p.evaluate(() => document.getElementById('ind-life-body').innerHTML);
-  ck('声が2件表示される', /館山の田中/.test(life) && /やわらかくて驚いた/.test(life) && /名前なし/.test(life), '');
-  ck('公開/未公開の別が分かる', /未公開/.test(life) && /公開中/.test(life), '');
+  ck('公開済みの声が表示される（物語ページと同じRPC）', /名前なし/.test(life) && /★★★★☆/.test(life), '');
+  ck('未公開の声は本文を出さず、承認待ち件数と行き先を出す', !/やわらかくて驚いた/.test(life) && /承認待ちの感想が 1件/.test(life) && /食べた人の声で確認する/.test(life), '');
   ck('「準備中」の文言が消えている', !/準備中/.test(life), '');
-  ck('「こえ」の段階に件数が出る', /こえ/.test(life) && /2件/.test(life), '');
-  ck('声の取得は個体番号と8桁の両方で引く', true, '');
+  ck('「こえ」の段階に件数（公開1・待ち1）が出る', /こえ/.test(life) && /1件（待ち1）/.test(life), '');
+  ck('meal_voices を画面から直接読まない（RLS deny-all のため）', writes.voiceGets === 0, String(writes.voiceGets));
 
   ck('JSエラーなし', !errs.some(e => /pmLabelHtml|changeStatus|recordDirectShipment|indLife/.test(e)), errs.join(' / '));
   console.log(out.join('\n'));
