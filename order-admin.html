@@ -3630,10 +3630,13 @@ function invRenderPrint(p,number,opts){
 
   const html=`<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>${esc(filename)}</title>
 <style>
-  @page{size:A4;margin:16mm}
+  /* 余白（2026-09-14）: 現物の納品書で上端に余白が無く、右端の発行者欄が切れていた。
+     .sheet 180mm が @page 16mm の印字幅 178mm を超えていたのと、印刷ダイアログで余白を「なし」に
+     されると @page の余白が消えるため。余白は用紙側(@page)と紙面側(.sheet の padding)の両方で取る。 */
+  @page{size:A4;margin:12mm}
   *{box-sizing:border-box}
   body{font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN',sans-serif;color:#222;font-size:12px;line-height:1.6;margin:0;padding:20px}
-  .sheet{max-width:180mm;margin:0 auto;position:relative}
+  .sheet{max-width:186mm;margin:0 auto;position:relative;padding:6mm 7mm 8mm}
   h1{text-align:center;font-size:24px;letter-spacing:10px;margin:0 0 20px;border-bottom:2px solid #222;padding-bottom:8px}
   .top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
   .to{width:55%}
@@ -3663,7 +3666,7 @@ function invRenderPrint(p,number,opts){
   .void{position:absolute;top:38%;left:50%;transform:translate(-50%,-50%) rotate(-18deg);font-size:56px;color:rgba(190,30,30,.30);border:5px solid rgba(190,30,30,.30);padding:8px 34px;font-weight:700;letter-spacing:14px;pointer-events:none}
   .noprint{text-align:center;margin:18px 0}
   .noprint button{font-size:14px;padding:10px 22px;margin:0 6px;cursor:pointer;border:1px solid #888;border-radius:6px;background:#f7f7f2}
-  @media print{.noprint{display:none}body{padding:0}}
+  @media print{.noprint{display:none}body{padding:0}.sheet{max-width:none;padding:10mm 8mm}}
 </style></head><body>
 <div class="sheet">
   ${opts.voided?'<div class="void">取消</div>':''}
