@@ -2074,13 +2074,16 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="form-group"><label>止め刺し者 電話番号</label><input class="form-input" id="cc-f-finisher_tel" inputmode="tel" /></div>
         <div class="form-group"><label>止め刺し方法</label><select class="form-input" id="cc-f-finishing_method"><option value="">（未記入）</option><option>刺殺（竹槍・ナイフなど）</option><option>射殺（銃）</option><option>既に死亡</option></select></div>
         <div class="form-group" style="grid-column:1/-1"><label>その他特記事項</label><input class="form-input" id="cc-f-special_notes" placeholder="例: 協力員等" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>Googleマップの座標を貼り付け（図面用）</label><input class="form-input" id="cc-coord-paste" placeholder="例: 34°57'25.9&quot;N 139°51'46.8&quot;E　または 34.9572, 139.8630" onchange="cityCapCoordPaste()" /></div>
         <div class="form-group"><label>緯度（図面用・任意）</label><input class="form-input" id="cc-f-capture_lat" inputmode="decimal" placeholder="例: 34.98765" /></div>
         <div class="form-group"><label>経度（図面用・任意）</label><input class="form-input" id="cc-f-capture_lng" inputmode="decimal" placeholder="例: 139.87654" /></div>
         <datalist id="cc-hunters"></datalist>
       </div>
-      <div style="font-size:11.5px;color:var(--text3);margin:2px 0 10px;">緯度経度があると2ページ目に地理院地図＋朱色×印の図面が付きます。無いときは任意の地図に×印を手書きしてください。</div>
-      <div class="form-group"><label>写真（複数可。端末で縮小してから使います）</label>
-        <input class="form-input" id="cc-photos" type="file" accept="image/*" multiple onchange="cityCapPickPhotos(this)" />
+      <div style="font-size:11.5px;color:var(--text3);margin:2px 0 10px;">緯度経度があると2ページ目に地理院地図＋朱色×印だけの図面が付きます。Googleマップで場所を長押し→表示される座標（34°57'25.9"N 139°51'46.8"E の形）を貼り付けると自動で入ります。無いときは任意の地図に×印を手書きしてください。</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(200px,100%),1fr));gap:8px 10px;">
+        <div class="form-group"><label>① しっぽを切る前（写真ページの上側）</label><input class="form-input" id="cc-photo-before" type="file" accept="image/*" onchange="cityCapPickPhotos(this,'before')" /></div>
+        <div class="form-group"><label>② しっぽを切った後（写真ページの下側）</label><input class="form-input" id="cc-photo-after" type="file" accept="image/*" onchange="cityCapPickPhotos(this,'after')" /></div>
+        <div class="form-group"><label>③ その他の写真（複数可・次のページ）</label><input class="form-input" id="cc-photo-extra" type="file" accept="image/*" multiple onchange="cityCapPickPhotos(this,'extra')" /></div>
       </div>
       <div id="cc-photo-preview" style="display:flex;gap:12px;flex-wrap:wrap;margin:6px 0 12px;"></div>
       <div id="cc-save-back-row" style="display:none;margin-bottom:10px;"><label style="display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer;"><input type="checkbox" id="cc-save-back" checked> 入力した調査票の項目（小字・体長・箱わな番号・餌・設置日・処理方法・止め刺し者・特記事項）を個体台帳にも保存する</label></div>
@@ -11842,8 +11845,9 @@ async function haccpPackPrint() {
 /* ═══════════ 市役所用票（有害鳥獣捕獲票）作成 ═══════════
    館山市（館山有害鳥獣対策協議会）へ捕獲1頭ごとに出す「有害鳥獣捕獲票」を書類・帳票から作る。
    センターに搬入した個体は検索して転記、搬入していない個体（自家消費・埋却など）は手入力。
-   出力: 1ページ目＝票、2ページ目＝図面（緯度経度があるとき・地理院地図に朱色×印）、
-   3ページ目以降＝写真（横向き・2枚ずつ）。capture-form.html の svBuildCaptureSheet と同じ様式。 */
+   出力（すべてA4縦）: 1ページ目＝票、2ページ目＝図面（緯度経度があるとき・地理院地図に朱色×印だけ）、
+   3ページ目以降＝写真（しっぽを切る前を上・切った後を下、その他は次のページに2枚ずつ）。
+   capture-form.html の svBuildCaptureSheet と同じ様式。 */
 const CITY_CAP_SPECIES = ['イノシシ', 'ニホンジカ', 'キョン', 'ハクビシン', 'アライグマ', 'アカゲザル', 'ニホンザル', 'タヌキ', 'ノウサギ'];
 const CITY_CAP_FIELDS = ['submitter_name', 'species', 'capture_date', 'capture_area', 'capture_koaza', 'sex', 'is_juvenile', 'has_fetus', 'body_length_cm', 'weight_total', 'capture_method', 'capture_method_note', 'bait_type', 'trap_set_date', 'trap_number', 'disposal_method', 'hunter_name', 'hunter_tel', 'finisher_name', 'finisher_tel', 'finishing_method', 'special_notes', 'capture_lat', 'capture_lng'];
 let cityCapSelected = null;   // 検索で選んだ individuals の行（手入力のときは null）
@@ -11863,7 +11867,8 @@ async function cityCapOpen() {
   cityCapSet('finishing_method', '刺殺（竹槍・ナイフなど）');
   cityCapSet('capture_date', new Date().toISOString().slice(0, 10));
   document.getElementById('cc-search').value = '';
-  document.getElementById('cc-photos').value = '';
+  document.getElementById('cc-coord-paste').value = '';
+  ['cc-photo-before', 'cc-photo-after', 'cc-photo-extra'].forEach(id => { document.getElementById(id).value = ''; });
   cityCapRenderSelected(); cityCapRenderPhotos();
   document.getElementById('cityCapModal').style.display = 'block';
   if (!cityCapHunters.length) {
@@ -11935,11 +11940,12 @@ function cityCapPick(i) {
   CITY_CAP_FIELDS.forEach(k => cityCapSet(k, f[k]));
   // センターで撮った写真（capture-photos バケット・看板写真）があれば写真ページの候補にする
   cityCapPhotos = cityCapPhotos.filter(p => !p.fromRecord);
-  [['photo_tail_before', '尾を切る前'], ['photo_tail_after', '尾を切った後'], ['photo_extra', 'その他'], ['image_url', '看板写真']].forEach(([k, label]) => {
+  [['photo_tail_before', 'before'], ['photo_tail_after', 'after'], ['photo_extra', 'extra'], ['image_url', 'extra']].forEach(([k, kind]) => {
     if (!r[k]) return;
     const src = /^https?:/.test(r[k]) ? r[k] : `${SB_URL}/storage/v1/object/public/capture-photos/${r[k]}`;
-    cityCapPhotos.push({ src, name: label, fromRecord: true });
+    cityCapPhotos.push({ src, kind, name: k === 'image_url' ? '看板写真' : CITY_CAP_PHOTO_LABEL[kind], fromRecord: true });
   });
+  document.getElementById('cc-coord-paste').value = '';
   cityCapRenderSelected(); cityCapRenderPhotos();
   const form = document.getElementById('cc-form'); if (form && form.scrollIntoView) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -11970,29 +11976,76 @@ function cityCapCompress(file, maxPx, quality) {
     fr.readAsDataURL(file);
   });
 }
-async function cityCapPickPhotos(input) {
+const CITY_CAP_PHOTO_LABEL = { before: '① しっぽを切る前（上）', after: '② しっぽを切った後（下）', extra: '③ その他' };
+/* kind: before（写真ページの上側）/ after（下側）/ extra（次のページ・複数可）。before/after は1枚ずつ */
+async function cityCapPickPhotos(input, kind) {
   const files = [...(input.files || [])];
+  if (kind !== 'extra') cityCapPhotos = cityCapPhotos.filter(p => p.kind !== kind);
   for (const f of files) {
-    try { cityCapPhotos.push({ src: await cityCapCompress(f, 1600, 0.85), name: f.name }); }
+    try { cityCapPhotos.push({ src: await cityCapCompress(f, 1600, 0.85), name: f.name, kind }); }
     catch (e) { toast(`写真を読み込めませんでした: ${f.name}`, 'error'); }
+    if (kind !== 'extra') break;
   }
   input.value = '';
   cityCapRenderPhotos();
 }
 function cityCapRemovePhoto(i) { cityCapPhotos.splice(i, 1); cityCapRenderPhotos(); }
+/* 写真ページの順: しっぽを切る前 → 切った後 → その他 */
+function cityCapPhotosOrdered() {
+  const order = { before: 0, after: 1, extra: 2 };
+  return cityCapPhotos.slice().sort((a, b) => (order[a.kind] ?? 2) - (order[b.kind] ?? 2));
+}
 function cityCapRenderPhotos() {
   const box = document.getElementById('cc-photo-preview'); if (!box) return;
-  box.innerHTML = cityCapPhotos.map((p, i) => `<div style="position:relative;text-align:center;font-size:11px;color:var(--text2);width:96px;">
-     <img src="${esc2(p.src)}" alt="" style="width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block;">
-     <button type="button" onclick="cityCapRemovePhoto(${i})" title="外す" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:none;background:var(--red);color:#fff;cursor:pointer;font-size:12px;line-height:22px;padding:0;">✕</button>
+  box.innerHTML = cityCapPhotos.map((p, i) => `<div style="position:relative;text-align:center;font-size:11px;color:var(--text2);width:110px;">
+     <img src="${esc2(p.src)}" alt="" style="width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block;margin:0 auto;">
+     <button type="button" onclick="cityCapRemovePhoto(${i})" title="外す" style="position:absolute;top:-6px;right:0;width:22px;height:22px;border-radius:50%;border:none;background:var(--red);color:#fff;cursor:pointer;font-size:12px;line-height:22px;padding:0;">✕</button>
+     <div style="font-weight:600;">${esc2(CITY_CAP_PHOTO_LABEL[p.kind] || '③ その他')}</div>
      <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc2(p.name || '')}</div></div>`).join('')
     || '<div style="font-size:12px;color:var(--text3);">写真なし（写真ページは付きません）</div>';
+}
+/* Googleマップの座標表示（34°57'25.9"N 139°51'46.8"E）や「34.9572, 139.8630」から緯度経度を取り出す */
+function cityCapParseCoord(s) {
+  const t = String(s || '').replace(/[″”]/g, '"').replace(/[′’]/g, "'").replace(/[，、]/g, ',').trim();
+  if (!t) return null;
+  const dms = /(\d+(?:\.\d+)?)\s*°\s*(?:(\d+(?:\.\d+)?)\s*'\s*)?(?:(\d+(?:\.\d+)?)\s*"\s*)?([NSns北南])[\s,]*(\d+(?:\.\d+)?)\s*°\s*(?:(\d+(?:\.\d+)?)\s*'\s*)?(?:(\d+(?:\.\d+)?)\s*"\s*)?([EWew東西])/;
+  const m = t.match(dms);
+  if (m) {
+    const v = (d, mi, se) => Number(d) + (Number(mi) || 0) / 60 + (Number(se) || 0) / 3600;
+    const lat = v(m[1], m[2], m[3]) * (/[Ss南]/.test(m[4]) ? -1 : 1);
+    const lng = v(m[5], m[6], m[7]) * (/[Ww西]/.test(m[8]) ? -1 : 1);
+    return { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6 };
+  }
+  const dec = t.match(/(-?\d+(?:\.\d+)?)[\s,]+(-?\d+(?:\.\d+)?)/);
+  if (dec) {
+    const a = parseFloat(dec[1]), b = parseFloat(dec[2]);
+    if (Math.abs(a) <= 90 && Math.abs(b) <= 180) return { lat: a, lng: b };
+    if (Math.abs(b) <= 90 && Math.abs(a) <= 180) return { lat: b, lng: a };   // 経度,緯度 の順で貼られたとき
+  }
+  return null;
+}
+function cityCapCoordPaste() {
+  const el = document.getElementById('cc-coord-paste');
+  const c = cityCapParseCoord(el.value);
+  if (!c) { if (el.value.trim()) toast('座標を読み取れませんでした（例: 34°57\'25.9"N 139°51\'46.8"E）', 'error'); return; }
+  cityCapSet('capture_lat', c.lat); cityCapSet('capture_lng', c.lng);
+  toast(`緯度 ${c.lat} / 経度 ${c.lng} を図面用に入れました`);
+}
+/* 緯度・経度の欄にそのまま DMS を貼られても拾えるように、票を作るときに正規化する */
+function cityCapLatLng(f) {
+  let lat = parseFloat(f.capture_lat), lng = parseFloat(f.capture_lng);
+  if (!(isFinite(lat) && isFinite(lng)) || /°/.test(f.capture_lat + f.capture_lng)) {
+    const c = cityCapParseCoord(f.capture_lat + ' ' + f.capture_lng) || cityCapParseCoord(f.capture_lat) || cityCapParseCoord(f.capture_lng);
+    if (c) { lat = c.lat; lng = c.lng; }
+  }
+  return isFinite(lat) && isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
 }
 function cityCapReiwa(d) { if (!d) return null; const [y, m, dd] = String(d).split('-').map(Number); return y ? { y: y - 2018, m, d: dd } : null; }
 function cityCapCollect() { const f = {}; CITY_CAP_FIELDS.forEach(k => { f[k] = cityCapVal(k); }); return f; }
 /* 図面（捕獲地点の地図）: 国土地理院の地形図タイルを並べ、捕獲地点に朱色の✕ */
 function cityCapMapPage(f, lat, lng) {
-  const TZ = 256, z = 15, W = 640, H = 750;   // A4縦にちょうど収まる大きさ
+  // 市役所の見本（図面ページ）は地図だけ: 幅177mm×高さ165mm、ページの縦中央。地理院タイルの利用規約上、出典だけ小さく残す
+  const TZ = 256, z = 15, W = 658, H = 624;   // 96dpi → 174mm × 165mm
   const cx = (lng + 180) / 360 * Math.pow(2, z) * TZ;
   const rad = lat * Math.PI / 180;
   const cy = (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2 * Math.pow(2, z) * TZ;
@@ -12001,11 +12054,9 @@ function cityCapMapPage(f, lat, lng) {
   for (let tx = Math.floor(left / TZ); tx <= Math.floor((left + W) / TZ); tx++)
     for (let ty = Math.floor(top / TZ); ty <= Math.floor((top + H) / TZ); ty++)
       tiles += `<img src="https://cyberjapandata.gsi.go.jp/xyz/std/${z}/${tx}/${ty}.png" style="left:${Math.round(tx * TZ - left)}px;top:${Math.round(ty * TZ - top)}px;">`;
-  return `<div class="page">
-    <div style="font-size:14px;font-weight:700;margin-bottom:4px;">捕獲場所（朱色×印）</div>
-    <div style="font-size:11px;margin-bottom:6px;">${esc2(f.capture_area)} ${esc2(f.capture_koaza)}　／　捕獲年月日 ${esc2(f.capture_date)}　／　捕獲者 ${esc2(f.hunter_name)}<br>緯度 ${lat.toFixed(5)} ／ 経度 ${lng.toFixed(5)}</div>
-    <div class="mapbox">${tiles}<div class="xmark" style="left:${W / 2 - 15}px;top:${H / 2 - 20}px;">✕</div></div>
-    <div style="font-size:10px;margin-top:4px;">出典：国土地理院ウェブサイト（地理院タイル）</div>
+  return `<div class="page map-page">
+    <div class="mapbox" style="width:${W}px;height:${H}px;">${tiles}<div class="xmark" style="left:${W / 2 - 15}px;top:${H / 2 - 20}px;">✕</div></div>
+    <div class="src">出典：国土地理院ウェブサイト（地理院タイル）</div>
   </div>`;
 }
 /* 票・図面・写真ページを1つのHTMLにする（印刷はブラウザの「PDFに保存」） */
@@ -12050,23 +12101,29 @@ function cityCapBuildHtml(f, photos) {
     </div>
     <table style="margin-top:6px;"><tr><td style="text-align:center;height:40px;">館山有害鳥獣対策協議会</td><td class="hd" style="width:60px;">確認</td><td style="width:110px;"></td></tr></table>
   </div>`;
-  const lat = parseFloat(f.capture_lat), lng = parseFloat(f.capture_lng);
-  const page2 = isFinite(lat) && isFinite(lng) ? cityCapMapPage(f, lat, lng) : '';
-  const total = Math.ceil((photos || []).length / 2);
+  const ll = cityCapLatLng(f);
+  const page2 = ll ? cityCapMapPage(f, ll.lat, ll.lng) : '';
+  // 写真ページ（A4縦）: しっぽを切る前を上、切った後を下。その他は次のページに2枚ずつ
+  const list = photos || [];
+  const total = Math.ceil(list.length / 2);
   const photoPages = [];
-  for (let i = 0; i < (photos || []).length; i += 2) {
-    const pair = photos.slice(i, i + 2);
-    photoPages.push(`<div class="page photo-page"><div class="photos">${pair.map(p => `<div class="ph"><img src="${E(p.src)}" alt=""></div>`).join('')}</div>
+  for (let i = 0; i < list.length; i += 2) {
+    const pair = list.slice(i, i + 2);
+    photoPages.push(`<div class="page photo-page"><div class="photos">${pair.map(p => `<div class="ph" data-kind="${E(p.kind || 'extra')}"><img src="${E(p.src)}" alt=""></div>`).join('')}</div>
       <div class="cap">有害鳥獣捕獲票 添付写真　捕獲年月日 ${rw ? `令和${rw.y}年${rw.m}月${rw.d}日` : ''}　捕獲者 ${E(f.hunter_name)}${total > 1 ? `　（${i / 2 + 1}/${total}）` : ''}</div></div>`);
   }
   const title = `捕獲票_${(f.capture_date || '').replace(/-/g, '')}_${(f.hunter_name || '捕獲者').replace(/[\\/:*?"<>|]/g, '_')}`;
+  // 余白は用紙側(@page)ではなく紙面側(.page の padding)で取る。印刷ダイアログで余白「なし」にされても
+  // 市役所の見本と同じ余白（上14mm・左右18mm・下18mm）が残る（2026-09-14: 余白ゼロで印刷された）
   const css = `
-    @page { size: A4 portrait; margin: 12mm; }
-    @page land { size: A4 landscape; margin: 10mm; }
+    @page { size: A4 portrait; margin: 0; }
     * { box-sizing: border-box; }
-    body { font-family: 'Noto Sans JP','Hiragino Kaku Gothic ProN',sans-serif; color:#000; font-size:11px; margin:0; padding:8px; background:#fff; }
+    html, body { margin:0; padding:0; background:#e9e9e9; }
+    body { font-family: 'Noto Sans JP','Hiragino Kaku Gothic ProN',sans-serif; color:#000; font-size:11px; }
+    .page { width:210mm; min-height:297mm; padding:14mm 18mm 18mm; margin:0 auto; background:#fff; position:relative; }
+    @media screen { .page { margin:10px auto; box-shadow:0 1px 6px rgba(0,0,0,.25); } }
     .page + .page { page-break-before: always; break-before: page; }
-    .photo-page { page: land; }
+    .map-page, .photo-page { height:296mm; display:flex; flex-direction:column; justify-content:center; align-items:center; }
     .sheet table { width:100%; border-collapse:collapse; }
     .sheet td { border:1px solid #000; padding:5px 6px; font-size:11px; vertical-align:middle; }
     .sheet .hd { width:105px; text-align:center; }
@@ -12074,16 +12131,17 @@ function cityCapBuildHtml(f, photos) {
     .sub { text-align:center; font-size:11px; margin-bottom:6px; }
     .num { width:220px !important; margin-left:auto; margin-bottom:4px; }
     .note { font-size:10px; line-height:1.75; margin-top:8px; }
-    .photos { display:flex; gap:8mm; justify-content:center; align-items:center; height:172mm; }
-    .photos .ph { flex:1 1 0; max-width:50%; height:100%; display:flex; align-items:center; justify-content:center; }
+    .photos { display:flex; flex-direction:column; gap:6mm; width:100%; flex:1 1 0; min-height:0; }
+    .photos .ph { flex:1 1 0; min-height:0; display:flex; align-items:center; justify-content:center; }
     .photos img { max-width:100%; max-height:100%; object-fit:contain; }
-    .cap { font-size:9px; text-align:center; margin-top:3mm; color:#333; }
-    .mapbox { position:relative; width:640px; height:750px; max-width:100%; overflow:hidden; border:1px solid #000; }
+    .cap { font-size:8px; text-align:center; margin-top:3mm; color:#333; }
+    .mapbox { position:relative; max-width:100%; overflow:hidden; border:1px solid #000; }
     .mapbox img { position:absolute; width:256px; height:256px; }
     .xmark { position:absolute; font-size:30px; font-weight:900; color:#e02020; text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 5px #fff; }
+    .src { font-size:7px; color:#555; align-self:flex-end; margin-top:2mm; }
     .noprint { text-align:center; margin:16px 0; }
     .noprint button { font-size:14px; padding:10px 22px; margin:0 6px; cursor:pointer; border:1px solid #888; border-radius:6px; background:#f7f7f2; }
-    @media print { .noprint { display:none } body { padding:0 } }`;
+    @media print { .noprint { display:none } html, body { background:#fff; } }`;
   return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>${E(title)}</title><style>${css}</style></head><body>${page1}${page2}${photoPages.join('')}
 <div class="noprint"><button onclick="window.print()">🖨 PDFに保存 / 印刷</button><button onclick="window.close()">閉じる</button></div></body></html>`;
 }
@@ -12096,8 +12154,8 @@ async function cityCapPrint() {
   if (missing.length && !confirm(`未入力: ${missing.join('・')}\n空欄のまま票を作りますか？`)) return;
   const w = window.open('', '_blank');
   if (!w) { toast('ポップアップがブロックされました。ブラウザの設定で許可してください', 'error'); return; }
-  w.document.open(); w.document.write(cityCapBuildHtml(f, cityCapPhotos)); w.document.close();
-  if (!isFinite(parseFloat(f.capture_lat)) || !isFinite(parseFloat(f.capture_lng))) toast('緯度経度が無いため図面ページは付きません。任意の地図に×印を記入してください', 'info');
+  w.document.open(); w.document.write(cityCapBuildHtml(f, cityCapPhotosOrdered())); w.document.close();
+  if (!cityCapLatLng(f)) toast('緯度経度が無いため図面ページは付きません。任意の地図に×印を記入してください', 'info');
   await cityCapSaveBack(f);
   playFeedbackSound(true);
 }
