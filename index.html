@@ -7812,7 +7812,7 @@ function pmLabelHtml(d) {
     <div class="tmp">保存温度　-18℃以下</div>
     <div class="bc">${d.barcodeSvg}</div>
     ${d.scanCode
-      ? `<div class="cap">${d.qrSvg ? `<div class="qr">${d.qrSvg}</div>` : ''}<div class="txt"><div class="bct">${d.scanCode}</div><div class="id2">${d.identCode}</div>${d.qrSvg ? '<div class="qt">QRで「この肉の物語」・ご感想を</div>' : ''}</div></div>`
+      ? `<div class="cap">${d.qrSvg ? `<div class="qr">${d.qrSvg}</div>` : ''}<div class="txt"><div class="bct">${d.scanCode}</div><div class="id2">${d.identCode}</div>${d.qrSvg ? '<div class="qt">QRで物語を読む・感想を送る</div>' : ''}</div></div>`
       : `<div class="bct">${d.identCode}</div>`}
     ${d.barcodeThin ? '<div class="bcw">※このバーコードは細く読めません。刷り直してください</div>' : ''}
     <div class="mk">館山ジビエセンター<span class="ad">千葉県館山市西長田1163-5</span></div>
