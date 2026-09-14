@@ -1815,6 +1815,11 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         </select></div>
         <div class="form-group" style="margin:0;flex:1;min-width:180px;"><label>検索</label><input class="form-input" id="doc-search" placeholder="帳票名で検索" oninput="renderDocsList()" /></div>
       </div>
+      <!-- 市役所（館山有害鳥獣対策協議会）へ捕獲1頭ごとに出す「有害鳥獣捕獲票」。搬入個体は検索で転記、未搬入は手入力 -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+        <button class="btn btn-primary" id="city-cap-open-btn" onclick="cityCapOpen()">🏛 市役所用票作成（有害鳥獣捕獲票）</button>
+        <span style="font-size:12px;color:var(--text2);">個体を検索（センター搬入済み）か手入力し、写真を付けると「捕獲票＋図面＋写真」を1つの印刷物にします</span>
+      </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
         <button class="btn" onclick="docZipCategory('HACCP・衛生管理')">⬇ HACCP一括ZIP</button>
         <button class="btn" onclick="docZipCategory('労務・社労士')">⬇ 労務一括ZIP</button>
@@ -2029,6 +2034,59 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <button class="btn" onclick="document.getElementById('equipModal').style.display='none'">キャンセル</button>
           <button class="btn btn-primary" onclick="equipSave()">保存</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 市役所用票（有害鳥獣捕獲票）作成 -->
+  <div id="cityCapModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:760px;margin:24px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);">🏛 市役所用票作成（有害鳥獣捕獲票）</div>
+        <button onclick="cityCapClose()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:10px;">館山有害鳥獣対策協議会に捕獲1頭につき1枚出す票です。センターに搬入した個体は検索して転記、搬入していない個体（自家消費・埋却など）は下に手入力してください。写真を付けると票の後ろに写真ページ（横向き・2枚ずつ）が付きます。</div>
+      <div class="form-group" style="margin-bottom:8px;"><label>センターに来た個体を検索（個体番号・通し番号・捕獲者・大字）</label>
+        <div style="display:flex;gap:6px;"><input class="form-input" id="cc-search" placeholder="例: T330 / 538 / 沖 / 出野尾" oninput="cityCapSearchDebounced()" /><button class="btn" type="button" onclick="cityCapSearch()">検索</button></div>
+      </div>
+      <div id="cc-search-results" style="max-height:220px;overflow-y:auto;margin-bottom:6px;"></div>
+      <div id="cc-selected" style="font-size:12.5px;margin-bottom:12px;"></div>
+      <div id="cc-form" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(200px,100%),1fr));gap:8px 10px;">
+        <div class="form-group"><label>捕獲票提出者名</label><input class="form-input" id="cc-f-submitter_name" list="cc-hunters" /></div>
+        <div class="form-group"><label>捕獲個体</label><select class="form-input" id="cc-f-species"><option>イノシシ</option><option>ニホンジカ</option><option>キョン</option><option>ハクビシン</option><option>アライグマ</option><option>アカゲザル</option><option>ニホンザル</option><option>タヌキ</option><option>ノウサギ</option></select></div>
+        <div class="form-group"><label>捕獲年月日</label><input class="form-input" id="cc-f-capture_date" type="date" /></div>
+        <div class="form-group"><label>捕獲場所（大字）</label><input class="form-input" id="cc-f-capture_area" placeholder="例: 出野尾" /></div>
+        <div class="form-group"><label>捕獲場所（小字）</label><input class="form-input" id="cc-f-capture_koaza" /></div>
+        <div class="form-group"><label>性別</label><select class="form-input" id="cc-f-sex"><option value="">（未記入）</option><option>オス</option><option>メス</option></select></div>
+        <div class="form-group"><label>成獣／幼獣</label><select class="form-input" id="cc-f-is_juvenile"><option value="">（未記入）</option><option>成獣</option><option>幼獣</option></select></div>
+        <div class="form-group"><label>胎児</label><select class="form-input" id="cc-f-has_fetus"><option value="">（未記入）</option><option>有</option><option>無</option><option>不明</option></select></div>
+        <div class="form-group"><label>体長（cm）</label><input class="form-input" id="cc-f-body_length_cm" type="number" inputmode="decimal" step="0.1" /></div>
+        <div class="form-group"><label>体重（kg）</label><input class="form-input" id="cc-f-weight_total" type="number" inputmode="decimal" step="0.1" /></div>
+        <div class="form-group"><label>捕獲方法</label><select class="form-input" id="cc-f-capture_method" onchange="cityCapMethodChanged()"><option value="">（未記入）</option><option>銃器</option><option>くくりわな</option><option>箱わな</option><option>その他</option></select></div>
+        <div class="form-group"><label>その他の内容（捕獲方法）</label><input class="form-input" id="cc-f-capture_method_note" /></div>
+        <div class="form-group"><label>餌の種類（箱わなのとき）</label><input class="form-input" id="cc-f-bait_type" placeholder="例: 米ぬか" /></div>
+        <div class="form-group"><label>わな設置日</label><input class="form-input" id="cc-f-trap_set_date" type="date" /></div>
+        <div class="form-group"><label>箱わな番号（市貸与のとき）</label><input class="form-input" id="cc-f-trap_number" placeholder="例: 3－12" /></div>
+        <div class="form-group"><label>捕獲個体の処理方法</label><select class="form-input" id="cc-f-disposal_method"><option>販売（館山ジビエセンター）</option><option>販売（ジビエ堂）</option><option>販売（ヴィルトファクトリー）</option><option>焼却施設搬入</option><option>埋却</option><option>自家消費</option><option>その他</option></select></div>
+        <div class="form-group"><label>捕獲者（わな設置者）氏名</label><input class="form-input" id="cc-f-hunter_name" list="cc-hunters" onchange="cityCapHunterChanged('hunter')" /></div>
+        <div class="form-group"><label>捕獲者 電話番号</label><input class="form-input" id="cc-f-hunter_tel" inputmode="tel" /></div>
+        <div class="form-group"><label>止め刺し者 氏名</label><input class="form-input" id="cc-f-finisher_name" list="cc-hunters" onchange="cityCapHunterChanged('finisher')" /></div>
+        <div class="form-group"><label>止め刺し者 電話番号</label><input class="form-input" id="cc-f-finisher_tel" inputmode="tel" /></div>
+        <div class="form-group"><label>止め刺し方法</label><select class="form-input" id="cc-f-finishing_method"><option value="">（未記入）</option><option>刺殺（竹槍・ナイフなど）</option><option>射殺（銃）</option><option>既に死亡</option></select></div>
+        <div class="form-group" style="grid-column:1/-1"><label>その他特記事項</label><input class="form-input" id="cc-f-special_notes" placeholder="例: 協力員等" /></div>
+        <div class="form-group"><label>緯度（図面用・任意）</label><input class="form-input" id="cc-f-capture_lat" inputmode="decimal" placeholder="例: 34.98765" /></div>
+        <div class="form-group"><label>経度（図面用・任意）</label><input class="form-input" id="cc-f-capture_lng" inputmode="decimal" placeholder="例: 139.87654" /></div>
+        <datalist id="cc-hunters"></datalist>
+      </div>
+      <div style="font-size:11.5px;color:var(--text3);margin:2px 0 10px;">緯度経度があると2ページ目に地理院地図＋朱色×印の図面が付きます。無いときは任意の地図に×印を手書きしてください。</div>
+      <div class="form-group"><label>写真（複数可。端末で縮小してから使います）</label>
+        <input class="form-input" id="cc-photos" type="file" accept="image/*" multiple onchange="cityCapPickPhotos(this)" />
+      </div>
+      <div id="cc-photo-preview" style="display:flex;gap:12px;flex-wrap:wrap;margin:6px 0 12px;"></div>
+      <div id="cc-save-back-row" style="display:none;margin-bottom:10px;"><label style="display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer;"><input type="checkbox" id="cc-save-back" checked> 入力した調査票の項目（小字・体長・箱わな番号・餌・設置日・処理方法・止め刺し者・特記事項）を個体台帳にも保存する</label></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+        <button class="btn" type="button" onclick="cityCapClose()">キャンセル</button>
+        <button class="btn btn-primary" type="button" id="cc-print-btn" onclick="cityCapPrint()">🖨 票を作成（印刷/PDF）</button>
       </div>
     </div>
   </div>
@@ -9722,9 +9780,10 @@ async function cleaningReport() {
   const month = document.getElementById('clean-month').value;
   if (!month) { toast('対象月を選択してください', 'error'); return; }
   try {
-    const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${month}-01T00:00:00&cleaned_at=lte.${month}-31T23:59:59&select=*&order=cleaned_at.asc`);
     const [y, m] = month.split('-').map(Number);
     const daysInMonth = new Date(y, m, 0).getDate();
+    // 末日は月ごとに違う（'-31' 固定だと 30日の月は PostgREST が 400 を返す）
+    const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${month}-01T00:00:00&cleaned_at=lte.${month}-${String(daysInMonth).padStart(2, '0')}T23:59:59&select=*&order=cleaned_at.asc`);
     let rows = '';
     for (let d = 1; d <= daysInMonth; d++) {
       const ds = `${month}-${String(d).padStart(2, '0')}`;
@@ -11132,7 +11191,13 @@ function docMonth() {
   const el = document.getElementById('doc-month');
   return el && el.value ? el.value : new Date().toISOString().slice(0, 7);
 }
-function docMonthRange(m) { return [m + '-01', m + '-31']; }
+/* 月の初日と「その月の実際の末日」。以前は一律 '-31' を返していたため、30日の月（4・6・9・11月）と2月は
+   PostgREST が "date/time field value out of range" (400) を返し、HACCP提出セットや各帳票が「取得失敗」になっていた */
+function docMonthRange(m) {
+  const [y, mo] = String(m).split('-').map(Number);
+  const last = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+  return [m + '-01', m + '-' + String(last).padStart(2, '0')];
+}
 function attHoursOf(a) {
   if (!a.clock_in || !a.clock_out) return 0;
   const [ih, im] = a.clock_in.split(':').map(Number);
@@ -11771,6 +11836,287 @@ async function haccpPackPrint() {
 }
 
 /* ───────── 市役所提出（指定管理 業務報告書） ───────── */
+/* ═══════════ 市役所用票（有害鳥獣捕獲票）作成 ═══════════
+   館山市（館山有害鳥獣対策協議会）へ捕獲1頭ごとに出す「有害鳥獣捕獲票」を書類・帳票から作る。
+   センターに搬入した個体は検索して転記、搬入していない個体（自家消費・埋却など）は手入力。
+   出力: 1ページ目＝票、2ページ目＝図面（緯度経度があるとき・地理院地図に朱色×印）、
+   3ページ目以降＝写真（横向き・2枚ずつ）。capture-form.html の svBuildCaptureSheet と同じ様式。 */
+const CITY_CAP_SPECIES = ['イノシシ', 'ニホンジカ', 'キョン', 'ハクビシン', 'アライグマ', 'アカゲザル', 'ニホンザル', 'タヌキ', 'ノウサギ'];
+const CITY_CAP_FIELDS = ['submitter_name', 'species', 'capture_date', 'capture_area', 'capture_koaza', 'sex', 'is_juvenile', 'has_fetus', 'body_length_cm', 'weight_total', 'capture_method', 'capture_method_note', 'bait_type', 'trap_set_date', 'trap_number', 'disposal_method', 'hunter_name', 'hunter_tel', 'finisher_name', 'finisher_tel', 'finishing_method', 'special_notes', 'capture_lat', 'capture_lng'];
+let cityCapSelected = null;   // 検索で選んだ individuals の行（手入力のときは null）
+let cityCapPhotos = [];       // [{src, name, fromRecord}] src は dataURL か公開URL
+let cityCapHunters = [];
+let cityCapResults = [];
+let cityCapSearchTimer = null;
+
+function cityCapVal(k) { const el = document.getElementById('cc-f-' + k); return el ? String(el.value).trim() : ''; }
+function cityCapSet(k, v) { const el = document.getElementById('cc-f-' + k); if (el) el.value = v == null ? '' : v; }
+
+async function cityCapOpen() {
+  cityCapSelected = null; cityCapPhotos = []; cityCapResults = [];
+  CITY_CAP_FIELDS.forEach(k => cityCapSet(k, ''));
+  cityCapSet('species', 'イノシシ');
+  cityCapSet('disposal_method', '販売（館山ジビエセンター）');
+  cityCapSet('finishing_method', '刺殺（竹槍・ナイフなど）');
+  cityCapSet('capture_date', new Date().toISOString().slice(0, 10));
+  document.getElementById('cc-search').value = '';
+  document.getElementById('cc-photos').value = '';
+  cityCapRenderSelected(); cityCapRenderPhotos();
+  document.getElementById('cityCapModal').style.display = 'block';
+  if (!cityCapHunters.length) {
+    try {
+      cityCapHunters = await sb('GET', 'hunters', null, '?deleted_at=is.null&select=name,phone&order=name.asc&limit=500');
+      document.getElementById('cc-hunters').innerHTML = cityCapHunters.map(h => `<option value="${esc2(h.name)}">`).join('');
+    } catch (e) { /* 捕獲者一覧が取れなくても手入力はできる */ }
+  }
+  cityCapSearch();   // 最近の搬入個体を先に出しておく
+}
+function cityCapClose() { document.getElementById('cityCapModal').style.display = 'none'; }
+function cityCapPhone(name) { const h = cityCapHunters.find(x => x.name === name); return h ? (h.phone || '') : ''; }
+function cityCapHunterChanged(kind) {
+  const name = cityCapVal(kind + '_name');
+  const tel = cityCapPhone(name);
+  if (tel && !cityCapVal(kind + '_tel')) cityCapSet(kind + '_tel', tel);
+  if (kind === 'hunter') {
+    if (!cityCapVal('submitter_name')) cityCapSet('submitter_name', name);
+    if (!cityCapVal('finisher_name')) { cityCapSet('finisher_name', name); if (tel && !cityCapVal('finisher_tel')) cityCapSet('finisher_tel', tel); }
+  }
+}
+function cityCapMethodChanged() { if (cityCapVal('capture_method') !== 'その他') cityCapSet('capture_method_note', ''); }
+function cityCapSearchDebounced() { clearTimeout(cityCapSearchTimer); cityCapSearchTimer = setTimeout(cityCapSearch, 300); }
+async function cityCapSearch() {
+  const box = document.getElementById('cc-search-results');
+  const q = document.getElementById('cc-search').value.trim();
+  const sel = 'select=id,label_id,serial_number,species,capture_date,capture_area,capture_koaza,capture_city,hunter_name,sex,weight_total,body_length_cm,capture_method,finishing_method,finisher_name,has_fetus,is_juvenile,trap_number,bait_type,trap_set_date,disposal_method,submitter_name,special_notes,capture_lat,capture_lng,photo_tail_before,photo_tail_after,photo_extra,image_url';
+  let filter = '';
+  if (q) {
+    const e = encodeURIComponent(q);
+    filter = /^\d+$/.test(q) ? `&or=(serial_number.eq.${q},label_id.ilike.*${e}*)` : `&or=(label_id.ilike.*${e}*,hunter_name.ilike.*${e}*,capture_area.ilike.*${e}*)`;
+  }
+  box.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:6px;">検索中...</div>';
+  try {
+    cityCapResults = await sb('GET', 'individuals', null, `?deleted_at=is.null${filter}&${sel}&order=capture_date.desc,serial_number.desc&limit=15`);
+  } catch (e) { box.innerHTML = `<div style="font-size:12px;color:var(--red);padding:6px;">検索に失敗しました: ${esc2(sbSafeMsg(e))}</div>`; return; }
+  if (!cityCapResults.length) { box.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:6px;">該当する個体がありません（センターに搬入していない個体は下に手入力してください）</div>'; return; }
+  box.innerHTML = cityCapResults.map((r, i) => `<button type="button" class="cc-hit" onclick="cityCapPick(${i})" style="display:block;width:100%;text-align:left;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);cursor:pointer;margin-bottom:4px;font-size:13px;line-height:1.5;">
+      <b>${esc2(r.label_id || '')}</b>${r.serial_number != null ? ` <span style="color:var(--text2);">通し${r.serial_number}</span>` : ''}　${esc2(r.capture_date || '')}　${esc2(r.species || '')}　${esc2(r.hunter_name || '')}　${esc2(r.capture_area || '')}${r.weight_total != null ? `　${r.weight_total}kg` : ''}
+    </button>`).join('');
+}
+/* individuals の値 → 票の選択肢（捕獲票入力の語と市の様式の語が違うところを寄せる） */
+function cityCapFromRecord(r) {
+  const species = r.species === 'シカ' ? 'ニホンジカ' : (r.species || 'イノシシ');
+  const cm = r.capture_method || '';
+  const method = cm === 'くくり罠' ? 'くくりわな' : cm === '箱罠' ? '箱わな' : (cm === '銃' || cm === '銃猟') ? '銃器' : cm ? 'その他' : '';
+  const fm = r.finishing_method || '';
+  const fin = fm === '銃' ? '射殺（銃）' : fm === '既に死亡' ? '既に死亡' : fm ? '刺殺（竹槍・ナイフなど）' : '';
+  const tel = cityCapPhone(r.hunter_name);
+  const finisher = r.finisher_name || r.hunter_name || '';
+  return {
+    submitter_name: r.submitter_name || r.hunter_name || '', species, capture_date: r.capture_date || '',
+    capture_area: r.capture_area || '', capture_koaza: r.capture_koaza || '', sex: r.sex || '',
+    is_juvenile: r.is_juvenile === true ? '幼獣' : r.is_juvenile === false ? '成獣' : '',
+    has_fetus: r.has_fetus === true ? '有' : r.has_fetus === false ? '無' : '',
+    body_length_cm: r.body_length_cm != null ? r.body_length_cm : '', weight_total: r.weight_total != null ? r.weight_total : '',
+    capture_method: method, capture_method_note: method === 'その他' ? cm : '', bait_type: r.bait_type || '',
+    trap_set_date: r.trap_set_date || '', trap_number: r.trap_number || '', disposal_method: r.disposal_method || '販売（館山ジビエセンター）',
+    hunter_name: r.hunter_name || '', hunter_tel: tel, finisher_name: finisher,
+    finisher_tel: finisher === r.hunter_name ? tel : cityCapPhone(finisher),
+    finishing_method: fin, special_notes: r.special_notes || '',
+    capture_lat: r.capture_lat != null ? r.capture_lat : '', capture_lng: r.capture_lng != null ? r.capture_lng : '',
+  };
+}
+function cityCapPick(i) {
+  const r = cityCapResults[i]; if (!r) return;
+  cityCapSelected = r;
+  const f = cityCapFromRecord(r);
+  CITY_CAP_FIELDS.forEach(k => cityCapSet(k, f[k]));
+  // センターで撮った写真（capture-photos バケット・看板写真）があれば写真ページの候補にする
+  cityCapPhotos = cityCapPhotos.filter(p => !p.fromRecord);
+  [['photo_tail_before', '尾を切る前'], ['photo_tail_after', '尾を切った後'], ['photo_extra', 'その他'], ['image_url', '看板写真']].forEach(([k, label]) => {
+    if (!r[k]) return;
+    const src = /^https?:/.test(r[k]) ? r[k] : `${SB_URL}/storage/v1/object/public/capture-photos/${r[k]}`;
+    cityCapPhotos.push({ src, name: label, fromRecord: true });
+  });
+  cityCapRenderSelected(); cityCapRenderPhotos();
+  const form = document.getElementById('cc-form'); if (form && form.scrollIntoView) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function cityCapClearSelected() { cityCapSelected = null; cityCapPhotos = cityCapPhotos.filter(p => !p.fromRecord); cityCapRenderSelected(); cityCapRenderPhotos(); }
+function cityCapRenderSelected() {
+  const el = document.getElementById('cc-selected'); if (!el) return;
+  const save = document.getElementById('cc-save-back-row');
+  if (!cityCapSelected) { el.innerHTML = '<span style="color:var(--text3);">個体は未選択（手入力で作れます）</span>'; if (save) save.style.display = 'none'; return; }
+  const r = cityCapSelected;
+  el.innerHTML = `<span style="color:var(--green);font-weight:600;">選択中: ${esc2(r.label_id || '')}${r.serial_number != null ? `（通し${r.serial_number}）` : ''}</span> <button type="button" class="btn btn-sm" onclick="cityCapClearSelected()">選択を外す</button>`;
+  if (save) save.style.display = '';
+}
+/* 写真は端末側で縮小してから使う（元のままだと1枚3〜5MBあり、印刷HTMLが重くなる） */
+function cityCapCompress(file, maxPx, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const fr = new FileReader();
+    fr.onload = () => { img.src = fr.result; };
+    fr.onerror = () => reject(new Error('read'));
+    img.onload = () => {
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(img.width * scale)); cv.height = Math.max(1, Math.round(img.height * scale));
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      resolve(cv.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => reject(new Error('decode'));
+    fr.readAsDataURL(file);
+  });
+}
+async function cityCapPickPhotos(input) {
+  const files = [...(input.files || [])];
+  for (const f of files) {
+    try { cityCapPhotos.push({ src: await cityCapCompress(f, 1600, 0.85), name: f.name }); }
+    catch (e) { toast(`写真を読み込めませんでした: ${f.name}`, 'error'); }
+  }
+  input.value = '';
+  cityCapRenderPhotos();
+}
+function cityCapRemovePhoto(i) { cityCapPhotos.splice(i, 1); cityCapRenderPhotos(); }
+function cityCapRenderPhotos() {
+  const box = document.getElementById('cc-photo-preview'); if (!box) return;
+  box.innerHTML = cityCapPhotos.map((p, i) => `<div style="position:relative;text-align:center;font-size:11px;color:var(--text2);width:96px;">
+     <img src="${esc2(p.src)}" alt="" style="width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block;">
+     <button type="button" onclick="cityCapRemovePhoto(${i})" title="外す" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:none;background:var(--red);color:#fff;cursor:pointer;font-size:12px;line-height:22px;padding:0;">✕</button>
+     <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc2(p.name || '')}</div></div>`).join('')
+    || '<div style="font-size:12px;color:var(--text3);">写真なし（写真ページは付きません）</div>';
+}
+function cityCapReiwa(d) { if (!d) return null; const [y, m, dd] = String(d).split('-').map(Number); return y ? { y: y - 2018, m, d: dd } : null; }
+function cityCapCollect() { const f = {}; CITY_CAP_FIELDS.forEach(k => { f[k] = cityCapVal(k); }); return f; }
+/* 図面（捕獲地点の地図）: 国土地理院の地形図タイルを並べ、捕獲地点に朱色の✕ */
+function cityCapMapPage(f, lat, lng) {
+  const TZ = 256, z = 15, W = 640, H = 750;   // A4縦にちょうど収まる大きさ
+  const cx = (lng + 180) / 360 * Math.pow(2, z) * TZ;
+  const rad = lat * Math.PI / 180;
+  const cy = (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2 * Math.pow(2, z) * TZ;
+  const left = cx - W / 2, top = cy - H / 2;
+  let tiles = '';
+  for (let tx = Math.floor(left / TZ); tx <= Math.floor((left + W) / TZ); tx++)
+    for (let ty = Math.floor(top / TZ); ty <= Math.floor((top + H) / TZ); ty++)
+      tiles += `<img src="https://cyberjapandata.gsi.go.jp/xyz/std/${z}/${tx}/${ty}.png" style="left:${Math.round(tx * TZ - left)}px;top:${Math.round(ty * TZ - top)}px;">`;
+  return `<div class="page">
+    <div style="font-size:14px;font-weight:700;margin-bottom:4px;">捕獲場所（朱色×印）</div>
+    <div style="font-size:11px;margin-bottom:6px;">${esc2(f.capture_area)} ${esc2(f.capture_koaza)}　／　捕獲年月日 ${esc2(f.capture_date)}　／　捕獲者 ${esc2(f.hunter_name)}<br>緯度 ${lat.toFixed(5)} ／ 経度 ${lng.toFixed(5)}</div>
+    <div class="mapbox">${tiles}<div class="xmark" style="left:${W / 2 - 15}px;top:${H / 2 - 20}px;">✕</div></div>
+    <div style="font-size:10px;margin-top:4px;">出典：国土地理院ウェブサイト（地理院タイル）</div>
+  </div>`;
+}
+/* 票・図面・写真ページを1つのHTMLにする（印刷はブラウザの「PDFに保存」） */
+function cityCapBuildHtml(f, photos) {
+  const CK = on => on ? '■' : '□';
+  const E = esc2;
+  const rw = cityCapReiwa(f.capture_date), ts = cityCapReiwa(f.trap_set_date);
+  const male = f.sex === 'オス', female = f.sex === 'メス', juv = f.is_juvenile === '幼獣';
+  const disp = f.disposal_method || '', isSale = disp.startsWith('販売');
+  const cm = f.capture_method || '', fm = f.finishing_method || '';
+  const era = r => r ? `令和 ${r.y} 年 　${r.m} 月 　${r.d} 日` : '令和 　 年 　 月 　 日';
+  const page1 = `<div class="page sheet">
+    <div class="ttl">有害鳥獣捕獲票</div>
+    <div class="sub">（イノシシ等獣類別捕獲用）</div>
+    <table class="num"><tr><td class="hd" style="width:70px;">捕獲番号</td><td style="height:36px;text-align:right;vertical-align:top;">号<div style="font-size:9px;text-align:center;margin-top:4px;">（事務局で記入）</div></td></tr></table>
+    <div style="font-size:10px;margin-bottom:2px;">※太枠内を記入してください。</div>
+    <table>
+      <tr><td class="hd">箱わな番号<br>（摘要5）</td><td style="width:150px;text-align:right;">${E(f.trap_number)}　番</td><td class="hd">捕獲票提出者名</td><td style="text-align:center;">${E(f.submitter_name || f.hunter_name)}</td></tr>
+      <tr><td class="hd">捕獲個体</td><td colspan="3">${CITY_CAP_SPECIES.slice(0, 5).map(s => `${CK(f.species === s)} ${s}`).join('　　')}<br>${CITY_CAP_SPECIES.slice(5).map(s => `${CK(f.species === s)} ${s}`).join('　　')}</td></tr>
+      <tr><td class="hd">捕獲年月日</td><td colspan="3">${era(rw)}</td></tr>
+      <tr><td class="hd">捕獲場所</td><td colspan="3">（大字）　${E(f.capture_area)}　　　（小字）　${E(f.capture_koaza)}</td></tr>
+      <tr><td class="hd">性別</td><td colspan="3">${CK(male)} オス（${CK(male && juv)} 幼）　${CK(female)} メス（${CK(female && juv)} 幼）　　　胎児：${CK(f.has_fetus === '有')} 有　${CK(f.has_fetus === '無')} 無　${CK(f.has_fetus === '不明')} 不明</td></tr>
+      <tr><td class="hd">体長・体重</td><td colspan="3">　　　　${E(f.body_length_cm)}　cm　　　　　　${E(f.weight_total)}　kg</td></tr>
+      <tr><td class="hd">捕獲方法</td><td colspan="3">${CK(cm === '銃器')} 銃器　　${CK(cm === 'くくりわな')} くくりわな　　${CK(cm === '箱わな')} 箱わな　　${CK(cm === 'その他')} その他（　${E(cm === 'その他' ? f.capture_method_note : '')}　）</td></tr>
+      <tr><td class="hd">餌の種類<br>（摘要5）</td><td colspan="3" style="height:28px;">${E(f.bait_type)}</td></tr>
+      <tr><td class="hd">わな設置日</td><td colspan="3">${era(ts)}</td></tr>
+      <tr><td class="hd">捕獲個体の<br>処理方法</td><td colspan="3">${CK(disp === '焼却施設搬入')} 焼却施設搬入　　${CK(disp === '埋却')} 埋却　　${CK(disp === '自家消費')} 自家消費　　${CK(disp === 'その他')} その他<br>${CK(isSale)} 販売（ ${CK(disp.includes('館山ジビエセンター'))} 館山ジビエセンター　${CK(disp.includes('ジビエ堂'))} ジビエ堂　${CK(disp.includes('ヴィルトファクトリー'))} ヴィルトファクトリー ）</td></tr>
+      <tr><td class="hd">捕獲者<br>（わな設置者）</td><td>氏 名　${E(f.hunter_name)}</td><td class="hd">電話番号</td><td style="text-align:center;">${E(f.hunter_tel)}</td></tr>
+      <tr><td class="hd">止め刺し者</td><td>氏 名　${E(f.finisher_name)}</td><td class="hd">電話番号</td><td style="text-align:center;">${E(f.finisher_tel)}</td></tr>
+      <tr><td class="hd">止め刺し方法</td><td colspan="3">${CK(fm === '射殺（銃）')} 射殺（銃）　　　${CK(fm === '刺殺（竹槍・ナイフなど）')} 刺殺（竹槍・ナイフなど）　　　${CK(fm === '既に死亡')} 既に死亡</td></tr>
+      <tr><td class="hd">その他<br>特記事項</td><td colspan="3" style="height:34px;vertical-align:top;">${E(f.special_notes)}</td></tr>
+    </table>
+    <div class="note">（摘要）<br>
+      1　捕獲1頭につき1枚提出すること<br>
+      2　<b>捕獲後おおむね3日以内に提出すること</b>。ただし、土日および祝日を除く。<br>
+      3　捕獲者及び止め刺し者は、館山市有害鳥獣捕獲員に限る。<br>
+      4　任意の地図に、捕獲場所を朱色×印にて記入すること。<br>
+      5　市から貸与の箱わなで捕獲した場合、<b>番号札（ ）内の数字を記入すること。</b><br>
+      　　例：20220314－（3－12）－217 ⇒ 3－12番<br>
+      6　餌の種類は、箱わなを使用して捕獲した場合に記入すること。<br>
+      7　<b>添付品：捕獲獣の尾（1頭分ずつ、ジプロックに封入して提出すること）</b>
+    </div>
+    <table style="margin-top:6px;"><tr><td style="text-align:center;height:40px;">館山有害鳥獣対策協議会</td><td class="hd" style="width:60px;">確認</td><td style="width:110px;"></td></tr></table>
+  </div>`;
+  const lat = parseFloat(f.capture_lat), lng = parseFloat(f.capture_lng);
+  const page2 = isFinite(lat) && isFinite(lng) ? cityCapMapPage(f, lat, lng) : '';
+  const total = Math.ceil((photos || []).length / 2);
+  const photoPages = [];
+  for (let i = 0; i < (photos || []).length; i += 2) {
+    const pair = photos.slice(i, i + 2);
+    photoPages.push(`<div class="page photo-page"><div class="photos">${pair.map(p => `<div class="ph"><img src="${E(p.src)}" alt=""></div>`).join('')}</div>
+      <div class="cap">有害鳥獣捕獲票 添付写真　捕獲年月日 ${rw ? `令和${rw.y}年${rw.m}月${rw.d}日` : ''}　捕獲者 ${E(f.hunter_name)}${total > 1 ? `　（${i / 2 + 1}/${total}）` : ''}</div></div>`);
+  }
+  const title = `捕獲票_${(f.capture_date || '').replace(/-/g, '')}_${(f.hunter_name || '捕獲者').replace(/[\\/:*?"<>|]/g, '_')}`;
+  const css = `
+    @page { size: A4 portrait; margin: 12mm; }
+    @page land { size: A4 landscape; margin: 10mm; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Noto Sans JP','Hiragino Kaku Gothic ProN',sans-serif; color:#000; font-size:11px; margin:0; padding:8px; background:#fff; }
+    .page + .page { page-break-before: always; break-before: page; }
+    .photo-page { page: land; }
+    .sheet table { width:100%; border-collapse:collapse; }
+    .sheet td { border:1px solid #000; padding:5px 6px; font-size:11px; vertical-align:middle; }
+    .sheet .hd { width:105px; text-align:center; }
+    .ttl { text-align:center; font-size:18px; font-weight:700; }
+    .sub { text-align:center; font-size:11px; margin-bottom:6px; }
+    .num { width:220px !important; margin-left:auto; margin-bottom:4px; }
+    .note { font-size:10px; line-height:1.75; margin-top:8px; }
+    .photos { display:flex; gap:8mm; justify-content:center; align-items:center; height:172mm; }
+    .photos .ph { flex:1 1 0; max-width:50%; height:100%; display:flex; align-items:center; justify-content:center; }
+    .photos img { max-width:100%; max-height:100%; object-fit:contain; }
+    .cap { font-size:9px; text-align:center; margin-top:3mm; color:#333; }
+    .mapbox { position:relative; width:640px; height:750px; max-width:100%; overflow:hidden; border:1px solid #000; }
+    .mapbox img { position:absolute; width:256px; height:256px; }
+    .xmark { position:absolute; font-size:30px; font-weight:900; color:#e02020; text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 5px #fff; }
+    .noprint { text-align:center; margin:16px 0; }
+    .noprint button { font-size:14px; padding:10px 22px; margin:0 6px; cursor:pointer; border:1px solid #888; border-radius:6px; background:#f7f7f2; }
+    @media print { .noprint { display:none } body { padding:0 } }`;
+  return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>${E(title)}</title><style>${css}</style></head><body>${page1}${page2}${photoPages.join('')}
+<div class="noprint"><button onclick="window.print()">🖨 PDFに保存 / 印刷</button><button onclick="window.close()">閉じる</button></div></body></html>`;
+}
+async function cityCapPrint() {
+  const f = cityCapCollect();
+  const missing = [];
+  if (!f.capture_date) missing.push('捕獲年月日');
+  if (!f.hunter_name) missing.push('捕獲者氏名');
+  if (!f.capture_area) missing.push('捕獲場所（大字）');
+  if (missing.length && !confirm(`未入力: ${missing.join('・')}\n空欄のまま票を作りますか？`)) return;
+  const w = window.open('', '_blank');
+  if (!w) { toast('ポップアップがブロックされました。ブラウザの設定で許可してください', 'error'); return; }
+  w.document.open(); w.document.write(cityCapBuildHtml(f, cityCapPhotos)); w.document.close();
+  if (!isFinite(parseFloat(f.capture_lat)) || !isFinite(parseFloat(f.capture_lng))) toast('緯度経度が無いため図面ページは付きません。任意の地図に×印を記入してください', 'info');
+  await cityCapSaveBack(f);
+  playFeedbackSound(true);
+}
+/* 検索で選んだ個体には、票に入れた調査票の項目を保存する（1個体の記録を1本に保つ）。失敗は必ず画面に出す */
+async function cityCapSaveBack(f) {
+  const chk = document.getElementById('cc-save-back');
+  if (!cityCapSelected || !chk || !chk.checked) return;
+  const num = v => { const n = parseFloat(v); return isFinite(n) ? n : null; };
+  const patch = {
+    submitter_name: f.submitter_name || null, capture_koaza: f.capture_koaza || null, body_length_cm: num(f.body_length_cm),
+    is_juvenile: f.is_juvenile === '幼獣' ? true : f.is_juvenile === '成獣' ? false : null,
+    has_fetus: f.has_fetus === '有' ? true : f.has_fetus === '無' ? false : null,
+    trap_number: f.trap_number || null, bait_type: f.bait_type || null, trap_set_date: f.trap_set_date || null,
+    disposal_method: f.disposal_method || null, finisher_name: f.finisher_name || null, special_notes: f.special_notes || null,
+    survey_downloaded_at: new Date().toISOString(),
+  };
+  try {
+    await sb('PATCH', 'individuals', patch, `?id=eq.${encodeURIComponent(cityCapSelected.id)}`);
+    toast(`調査票の項目を ${cityCapSelected.label_id || '個体'} に保存しました`);
+  } catch (e) { toast('個体台帳への保存に失敗しました（票は作成済み）: ' + sbSafeMsg(e), 'error'); }
+}
+
 const CITY_INITIALS = { '大和田': '大', '大橋': '橋' }; // 頭文字が重なる人だけ個別指定
 function cityInitial(name) {
   if (!name) return '';
