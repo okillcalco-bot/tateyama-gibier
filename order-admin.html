@@ -361,6 +361,14 @@ th,td{padding:8px 6px;font-size:.8rem}
     <div class="filter-bar">
       <input class="search-input" type="text" placeholder="名前・コード・電話で検索..." id="custSearch" oninput="renderCustomers()">
       <label style="display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--text2);cursor:pointer;white-space:nowrap;"><input type="checkbox" id="custStarOnly" onchange="custPage.page=0;renderCustomers()"> ⭐ スターのみ</label>
+      <select id="custSort" onchange="custPage.page=0;renderCustomers()" title="並び順" style="font-size:13px;">
+        <option value="star">⭐→実績が多い順</option>
+        <option value="inv">請求書が多い順</option>
+        <option value="ship">発送が多い順</option>
+        <option value="kana_missing">ふりがな未入力→請求書が多い順</option>
+        <option value="code">コード順</option>
+        <option value="name">名前順</option>
+      </select>
       <button class="btn btn-gold btn-sm" onclick="openAddCustomer()">+ 顧客追加</button>
       <button class="btn btn-outline btn-sm" onclick="exportCustomersCSV()">⬇ CSVエクスポート</button>
       <button class="btn btn-outline btn-sm" onclick="document.getElementById('custCsvFile').click()">⬆ CSVインポート</button>
@@ -2123,13 +2131,21 @@ function renderCustomers(){
   if(document.getElementById('custStarOnly')?.checked) filtered=filtered.filter(c=>custStarState(c).on);
   custFiltered=filtered;
   renderPortalPreview();
-  // スター（実績＋手動）を上に、実績の多い順、次にコード順で並べる＝優先メール先が上に来る
+  // 並び順（2026-09-15: ふりがなを台帳から入れる作業のため「請求書が多い順」「ふりがな未入力を先に」を追加）
+  const mode=document.getElementById('custSort')?.value||'star';
+  const byCode=(a,b)=>(a.code||'').localeCompare(b.code||'');
   filtered=filtered.slice().sort((a,b)=>{
     const sa=custStarState(a), sb2=custStarState(b);
+    if(mode==='inv'){ if(sa.inv!==sb2.inv) return sb2.inv-sa.inv; if(sa.ship!==sb2.ship) return sb2.ship-sa.ship; return byCode(a,b); }
+    if(mode==='ship'){ if(sa.ship!==sb2.ship) return sb2.ship-sa.ship; if(sa.inv!==sb2.inv) return sb2.inv-sa.inv; return byCode(a,b); }
+    if(mode==='kana_missing'){ const ka=(a.kana||'').trim()?1:0, kb=(b.kana||'').trim()?1:0; if(ka!==kb) return ka-kb; if(sa.inv!==sb2.inv) return sb2.inv-sa.inv; if(sa.ship!==sb2.ship) return sb2.ship-sa.ship; return byCode(a,b); }
+    if(mode==='code') return byCode(a,b);
+    if(mode==='name') return (a.name||'').localeCompare(b.name||'','ja');
+    // 既定: スター（実績＋手動）を上に、実績の多い順、次にコード順＝優先メール先が上に来る
     if(sa.on!==sb2.on) return sa.on?-1:1;
     const ta=sa.ship+sa.inv, tb=sb2.ship+sb2.inv;
     if(ta!==tb) return tb-ta;
-    return (a.code||'').localeCompare(b.code||'');
+    return byCode(a,b);
   });
   const start=custPage.page*custPage.size;
   const page=filtered.slice(start,start+custPage.size);
@@ -2143,7 +2159,7 @@ function renderCustomers(){
       ${starCell}
       <td style="font-weight:700">${esc(c.code||'')}</td>
       <td>${esc(c.name||'')}</td>
-      <td style="color:var(--text2)">${esc(c.kana||'')}</td>
+      <td><input class="cust-kana-inline" type="text" value="${esc(c.kana||'')}" placeholder="ふりがな" title="ひらがなで入れると、出荷先や請求書の顧客検索でひらがな入力が効きます（入力して欄を出ると保存）" onchange="saveCustomerKana('${c.id}',this)" style="width:120px;font-size:12.5px;padding:3px 6px;border:1px solid ${(c.kana||'').trim()?'var(--border)':'var(--gold)'};border-radius:6px;background:var(--surface);color:var(--text);"></td>
       <td>${esc(c.phone||'')}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.address||'')}</td>
       <td style="font-family:monospace">${esc(c.portal_login_id||c.code||'')}${c.portal_enabled?' <span title="注文サイト利用が有効" style="color:var(--green,#6a9e5a)">🔗</span>':''}</td>
@@ -2210,6 +2226,24 @@ function custStarState(c){
   const auto = ship>0 || inv>0;
   const manual = !!c.is_starred;
   return {ship, inv, auto, manual, on: manual||auto};
+}
+
+/* 名簿の行でふりがなを直接入れて保存する（2026-09-15: 予測変換をひらがなで効かせるため、820件中156件しか無い
+   ふりがなを台帳から埋められるように）。失敗は必ず画面に出し、値を元に戻す */
+async function saveCustomerKana(id, el){
+  const c=allCustomers.find(x=>x.id===id); if(!c) return;
+  const next=(el.value||'').trim(); const prev=c.kana||'';
+  if(next===prev){ el.value=prev; return; }
+  el.disabled=true;
+  try{
+    await sb('PATCH','customers',{kana:next||null},'?id=eq.'+id);
+    c.kana=next||null;
+    el.style.borderColor=next?'var(--green,#6a9e5a)':'var(--gold)';
+    setTimeout(()=>{ if(el.isConnected) el.style.borderColor=next?'var(--border)':'var(--gold)'; },1500);
+  }catch(e){
+    el.value=prev;
+    alert('ふりがなの保存に失敗しました: '+(e&&e.message?e.message:e));
+  }finally{ el.disabled=false; }
 }
 
 /* 行のスターをクリックしたとき：手動フラグ(is_starred)を反転して保存。
