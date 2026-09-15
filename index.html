@@ -2886,6 +2886,7 @@ document.getElementById('ship-direct-code').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); shipDirectScan(); }
 });
 document.getElementById('ship-direct-cust').addEventListener('input', () => { shipDirectUpdateConfirm(); shipActiveSave(); shipDirectFreightAuto(false); });
+document.getElementById('ship-direct-cust').addEventListener('change', () => { shipCustResolveTyped(); });
 // 送料を手で入れたら、実行中の自動計算の結果は捨てる（手入力が最優先）
 document.getElementById('ship-direct-freight')?.addEventListener('input', () => { shipFreightSeq++; shipActiveSave(); });
 document.getElementById('ship-direct-memo').addEventListener('input', shipActiveSave);
@@ -2893,6 +2894,41 @@ document.getElementById('ship-direct-memo').addEventListener('input', shipActive
 /* ── 直販出荷の受け渡し方法と送料 ──
    出荷の大半はこの直販経路を通るため、送料はここで記録しないと請求書・納品書に載らない。 */
 let shipCustAddrMap = {};   // 店名 → 住所（送料の自動計算に使う）
+let shipCustList = [];      // 出荷先候補 [{name, address, readings[]}]（ひらがな・別名で探すため）
+/* 検索用の正規化: 小文字・全角英数→半角・カタカナ→ひらがな・空白除去。
+   「おおばんぶるまい」「オオバンブルマイ」「Oobanburumai」を同じ店に当てるため */
+function kanaKey(s) {
+  return String(s == null ? '' : s).normalize('NFKC').toLowerCase()
+    .replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
+    .replace(/[\s　]/g, '');
+}
+const hiraToKata = s => String(s || '').replace(/[ぁ-ゖ]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60));
+const kataToHira = s => String(s || '').replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
+/* 顧客の「読み」候補: ふりがな・検索エイリアス・店名そのもの をひらがな／カタカナ両方で持つ（店名と同じものは除く） */
+function shipCustReadings(c) {
+  const out = new Set();
+  const add = v => { const t = String(v || '').trim(); if (!t || t === c.name) return; out.add(t); };
+  const srcs = [c.kana, ...(Array.isArray(c.search_aliases) ? c.search_aliases : []), c.name];
+  srcs.forEach(v => { if (!v) return; add(v); add(kataToHira(v)); add(hiraToKata(v)); });
+  return [...out];
+}
+/* 入力欄の文字（ひらがな・別名・一部）を台帳の正式な店名に置き換える。datalist の候補を選ばずに
+   確定してしまった場合や、iPhone（datalist の候補が出ない）向けの保険 */
+function shipCustResolveTyped() {
+  const el = document.getElementById('ship-direct-cust');
+  const typed = (el?.value || '').trim();
+  if (!typed || !shipCustList.length) return null;
+  if (shipCustList.some(c => c.name === typed)) return typed;   // すでに正式名
+  const key = kanaKey(typed);
+  if (!key) return null;
+  const exact = shipCustList.filter(c => kanaKey(c.name) === key || c.readings.some(r => kanaKey(r) === key));
+  const partial = exact.length ? exact : shipCustList.filter(c => kanaKey(c.name).includes(key) || c.readings.some(r => kanaKey(r).includes(key)));
+  if (partial.length !== 1) return null;   // 複数に当たるときは勝手に決めない
+  el.value = partial[0].name;
+  toast(`出荷先を台帳の「${partial[0].name}」にしました`, 'info');
+  shipDirectUpdateConfirm(); shipActiveSave(); shipDirectFreightAuto(false);
+  return partial[0].name;
+}
 let shipFreightSeq = 0;     // 自動計算の世代番号。手入力や再操作があれば古い結果は捨てる
 
 function shipDirectMethodChange() {
@@ -3156,6 +3192,7 @@ async function shipDirectShowPicker(indBase) {
 
 async function shipDirectConfirm() {
   // スタッフキーは求めない（キーが要るのは顧客マスタの操作だけ。2026-08-12）
+  shipCustResolveTyped();   // ひらがな・別名のままなら台帳の正式名に直してから確定する
   const custName = document.getElementById('ship-direct-cust').value.trim();
   const memo = document.getElementById('ship-direct-memo').value.trim();
   const operator = document.getElementById('ship-operator') ? document.getElementById('ship-operator').value : '';
@@ -4173,14 +4210,17 @@ async function loadShipping() {
   // スタッフキーは求めない（キーが要るのは顧客マスタの操作だけ。2026-08-12）
   const container = document.getElementById('ship-orders');
   container.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
-  // 直販の出荷先候補（顧客台帳の名前だけ）。キー未設定の端末では候補が出ないだけで、
-  // 名前を手入力すれば staff_lookup_customer_id が紐付けを解決する
+  // 直販の出荷先候補（顧客台帳）。名前を手入力すれば staff_lookup_customer_id が紐付けを解決する。
+  // 2026-09-15: limit=300 だったため、名前順で301件目以降の顧客（炭火ジビエ&ワイン Oobanburumai など、
+  // 有効820件中218件）が候補に出ず、別名で手入力されて台帳と紐付かない注文ができていた。上限を外し、
+  // ふりがな・検索エイリアス・カタカナ→ひらがな変換を label に持たせて、ひらがなでも予測変換が効くようにした。
   try {
-    const custs = await sb('GET', 'customers', null, '?select=name,address&order=name.asc&limit=300');
+    const custs = await sb('GET', 'customers', null, '?select=name,address,kana,search_aliases&is_active=not.is.false&order=name.asc&limit=3000');
     const dl = document.getElementById('shipCustDatalist');
-    if (dl) dl.innerHTML = custs.map(c => `<option value="${(c.name||'').replace(/"/g,'&quot;')}">`).join('');
+    shipCustList = custs.filter(c => c.name).map(c => ({ name: c.name, address: c.address || '', readings: shipCustReadings(c) }));
+    if (dl) dl.innerHTML = shipCustList.map(c => `<option value="${esc2(c.name)}"${c.readings.length ? ` label="${esc2(c.readings.join(' / '))}"` : ''}>`).join('');
     shipCustAddrMap = {};
-    custs.forEach(c => { if (c.name) shipCustAddrMap[c.name] = c.address || ''; });
+    shipCustList.forEach(c => { shipCustAddrMap[c.name] = c.address; });
   } catch(e) {}
   try {
     // 受注（新規・未対応）も出す。誰でもここから受付→割当→出荷まで進められるようにするため
