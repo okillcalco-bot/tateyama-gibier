@@ -2186,7 +2186,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <div class="form-group" style="margin:0;min-width:95px;"><label>サイズ</label>
             <select class="form-input" id="ship-direct-size" onchange="shipDirectFreightAuto(true)">
               <option value="60">60</option><option value="80">80</option>
-              <option value="100" selected>100</option><option value="140">140</option><option value="160">160</option>
+              <option value="100" selected>100</option><option value="120">120</option><option value="140">140</option><option value="160">160</option>
             </select>
           </div>
           <label style="display:flex;align-items:center;gap:6px;padding-bottom:11px;font-size:14px;white-space:nowrap;">
@@ -2799,7 +2799,7 @@ async function loadBaseOrders() {
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
           <input class="input" id="base-track-${o.unique_key}" placeholder="送り状番号（任意）" style="flex:1;min-width:170px;max-width:260px;">
           <select class="input" id="base-carrier-${o.unique_key}" style="max-width:120px;"><option value="ヤマト">ヤマト</option><option value="佐川">佐川</option></select>
-          <select class="input" id="base-size-${o.unique_key}" style="max-width:80px;"><option value="60">60</option><option value="80">80</option><option value="100" selected>100</option><option value="140">140</option><option value="160">160</option></select>
+          <select class="input" id="base-size-${o.unique_key}" style="max-width:80px;"><option value="60">60</option><option value="80">80</option><option value="100" selected>100</option><option value="120">120</option><option value="140">140</option><option value="160">160</option></select>
           <label style="display:flex;align-items:center;gap:5px;font-size:13px;white-space:nowrap;"><input type="checkbox" id="base-cool-${o.unique_key}" checked> クール</label>
           <input class="input" id="base-freight-${o.unique_key}" type="number" min="0" step="1" inputmode="numeric" placeholder="送料(税抜)" style="max-width:110px;">
           <button class="btn btn-primary btn-sm" onclick="baseOrderShip('${o.unique_key}')">📦 発送処理（在庫を引く）</button>
