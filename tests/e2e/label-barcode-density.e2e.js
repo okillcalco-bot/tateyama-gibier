@@ -69,8 +69,9 @@ const path = require('path');
     return { textLeft: l(document.querySelector('.o')), bcLeft: l(svg), bcWidth: svg ? svg.getBoundingClientRect().width / mm : -1,
       lastBottom: b(document.querySelector('.ad')), labelH: 60 };
   });
-  results.push(['文字はラベル左端から2.5mm以上離れる', geo.textLeft >= 2.4, geo.textLeft.toFixed(2) + 'mm']);
-  results.push(['バーコードSVGも左端から2.5mm以上', geo.bcLeft >= 2.4, geo.bcLeft.toFixed(2) + 'mm']);
+  // 2026-09-15: 2.5mmでも現物（ア017）で「館」の左が欠けた。印字開始はページ左端から約3.5mmのため 4.5mm 以上
+  results.push(['文字はラベル左端から4.5mm以上離れる（印字開始は約3.5mm）', geo.textLeft >= 4.4, geo.textLeft.toFixed(2) + 'mm']);
+  results.push(['バーコードSVGも左端から4.5mm以上', geo.bcLeft >= 4.4, geo.bcLeft.toFixed(2) + 'mm']);
   results.push(['バーコードSVG幅は35mm', Math.abs(geo.bcWidth - 35) < 0.3, geo.bcWidth.toFixed(2) + 'mm']);
   results.push(['最下行（住所）はラベル下端から3mm以上残す', geo.lastBottom > 0 && geo.lastBottom <= 57, geo.lastBottom.toFixed(2) + 'mm']);
   results.push(['8桁キー: 読める判定', out.key.readable === true, '']);

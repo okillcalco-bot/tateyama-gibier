@@ -38,7 +38,7 @@ const path = require('path');
       mmPx,
       bodyH: d.body.getBoundingClientRect().height,
       scrollH: d.body.scrollHeight,
-      ex: box(q('.ex')), tmp: box(q('.tmp')), bc: box(q('.bc')), svg: box(q('.bc svg')),
+      o: box(q('.o')), ex: box(q('.ex')), tmp: box(q('.tmp')), bc: box(q('.bc')), svg: box(q('.bc svg')),
       bct: box(q('.bct')), mk: box(q('.mk')), ad: box(q('.ad')),
       lines: (() => { const o = {}; for (const s of ['.wn', '.qt', '.mk']) { const el = q(s); if (!el) continue; const cs = d.defaultView.getComputedStyle(el); const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.2; o[s] = Math.round(el.getBoundingClientRect().height / lh); } return o; })(),
       clippedX: [...d.querySelectorAll('.wn,.qt,.mk')].filter(el => el.scrollWidth > el.clientWidth + 1).map(el => el.className)
@@ -75,6 +75,11 @@ const path = require('path');
     results.push([`${label}: 消費期限の行が潰れていない`, m.ex.h >= 1.5 * m.mmPx, `${mm(m.ex.h).toFixed(1)}mm`]);
     // 6) 読み取りに効くバー幅は維持（2026-09-12: 左右余白2.5mmのため35mm幅。静穏帯込みで8桁=0.35mm/バー）
     results.push([`${label}: バーコード幅35mmを維持`, Math.abs(mm(m.svg.w) - 35) < 1.5, `${mm(m.svg.w).toFixed(1)}mm`]);
+    // 8) 左端の文字が印字できる位置から始まる。2026-09-15 現物（ア017 枝肉）で左2.5mmでも「館」が欠けた。
+    //    写真をバーコード35mm幅で換算すると印字はページ左端から約3.5mmで始まるため、4.5mm以上を要求する。
+    //    右側はバーコードがページ幅40mmに収まること（右0.5mm）
+    results.push([`${label}: 文字がページ左端から4.5mm以上（印字開始は約3.5mm）`, mm(m.o.left) >= 4.4, `${mm(m.o.left).toFixed(2)}mm`]);
+    results.push([`${label}: バーコードの右端がページ幅40mm内`, mm(m.svg.right) <= 40.05, `${mm(m.svg.right).toFixed(2)}mm`]);
     // 7) バーコード高さは12mmを維持する（2026-09-03にQRの場所を作るため12→9.5mmに縮めたが、
     //    2026-09-08に現物のスキャン失敗（ノクチラボ向け出荷）で発覚。実測すると12mmに戻しても
     //    QR込みで60mmに収まる＝縮める必要が無かったため、元の高さに戻した）
