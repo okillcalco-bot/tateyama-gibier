@@ -82,11 +82,16 @@ const yen=v=>'¥'+Math.round(v).toLocaleString();
 // リンクのトークン（URLのハッシュから読む。サーバに送信されないため安全）
 const token=(()=>{ const m=(location.hash||'').match(/[#&]t=([^&]+)/); return m?decodeURIComponent(m[1]):''; })();
 
-function calc(l){
-  const base=Math.round(N(l.hourly_wage)*N(l.work_hours));
+/* 金額は給与計算（payroll.html の calc）と同じ式にそろえる。
+   2026-09-16: 本人ページだけ 月給・行き先別移動費・勤怠の追加距離 が抜けていて、担当者の画面と金額が食い違っていた */
+function calc(l, trips, attendance){
+  const base=N(l.monthly_salary)?Math.round(N(l.monthly_salary)):Math.round(N(l.hourly_wage)*N(l.work_hours));
   const stop=N(l.stopkill_count)*(N(l.stopkill_unit)||3000);
-  const comm=Math.round(N(l.commute_round_km)*(N(l.commute_yen_per_km)||20)*N(l.commute_count));
-  return {base,stop,comm};
+  const rate=N(l.commute_yen_per_km)||20;
+  const tripSum=(trips||[]).reduce((a,t)=>a+Math.round(N(t.round_km)*(N(t.yen_per_km)||20)*N(t.trip_count)),0);
+  const extraKm=Math.round((attendance||[]).reduce((a,x)=>a+N(x.extra_km),0)*10)/10;
+  const comm=Math.round(N(l.commute_round_km)*rate*N(l.commute_count))+tripSum+Math.round(extraKm*rate);
+  return {base,stop,comm,extraKm,rate};
 }
 
 function attHrs(a){
@@ -101,17 +106,18 @@ function renderSlip(staffName, month, l, trips, attendance){
     area.innerHTML=`<div class="card msg">${esc(month)} の給与データはまだありません。</div>`;
     return;
   }
-  const c=calc(l);
+  const c=calc(l, trips, attendance);
   const commParts=[];
   if(N(l.commute_count)) commParts.push(`センター ${N(l.commute_round_km)}km×${N(l.commute_yen_per_km)||20}円×${N(l.commute_count)}回`);
   (trips||[]).forEach(t=>commParts.push(`${t.destination} ${N(t.round_km)}km×${N(t.yen_per_km)||20}円×${N(t.trip_count)}回`));
+  if(c.extraKm) commParts.push(`勤怠の追加距離 ${c.extraKm}km×${c.rate}円`);
   const other=N(l.other_allowance);
   const pay=c.base+c.stop+c.comm+other;
   const shakai=N(l.health_insurance)+N(l.pension);
   const otherDed=N(l.resident_tax)+N(l.other_deduction);
   const ded=shakai+N(l.employment_insurance)+N(l.income_tax)+otherDed;
   const net=pay-ded;
-  const detail=(attendance||[]).map(a=>`<tr><td>${a.work_date}</td><td>${a.clock_in||'-'}〜${a.clock_out||'-'}</td><td style="text-align:right">${attHrs(a).toFixed(1)}h${(a.break_minutes||0)?`<span style="color:#888;font-size:11px">（休憩${a.break_minutes}分）</span>`:''}</td></tr>`).join('');
+  const detail=(attendance||[]).map(a=>`<tr><td>${a.work_date}</td><td>${a.clock_in||'-'}〜${a.clock_out||'-'}</td><td style="text-align:right">${attHrs(a).toFixed(1)}h${(a.break_minutes||0)?`<span style="color:#888;font-size:11px">（休憩${a.break_minutes}分）</span>`:''}${N(a.extra_km)?`<div style="font-size:11px;color:#555">追加距離 ${N(a.extra_km)}km${a.extra_km_note?`（${esc(a.extra_km_note)}）`:''}</div>`:''}</td></tr>`).join('');
 
   area.innerHTML=`<div class="card">
     <h2>給与明細書　${esc(month.replace('-','年'))}月分</h2>

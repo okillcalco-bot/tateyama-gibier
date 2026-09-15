@@ -53,7 +53,7 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
 <body>
 <header>
   <h1>💴 給与計算</h1>
-  <span class="sub">勤務時間×時給 ＋ 止めさし搬入手当 ＋ 通勤費（往復km×20円×回数）− 控除。どの欄も後から編集できます</span>
+  <span class="sub">勤務時間×時給 ＋ 止めさし搬入手当 ＋ 通勤費（往復km×20円×回数 ＋ 行き先別 ＋ 勤怠の追加距離）− 控除。どの欄も後から編集できます</span>
   <span style="flex:1"></span>
   <button class="btn btn-sm no-print" onclick="window.print()">🖨 印刷</button>
   <a class="btn btn-sm no-print" href="index.html" style="text-decoration:none">← 業務アプリ</a>
@@ -86,7 +86,8 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
   </table>
 </div>
 <div class="hint">
-  ・<b>青字は自動計算</b>（基本給＝時給×時間。月給が入っている人は月給をそのまま基本給にします、止めさし搬入手当＝3000円×回数、通勤費＝往復km×20円×回数）。入力欄はどれも手で直せます<br>
+  ・<b>青字は自動計算</b>（基本給＝時給×時間。月給が入っている人は月給をそのまま基本給にします、止めさし搬入手当＝3000円×回数、通勤費＝往復km×20円×回数 ＋ 行き先別移動費 ＋ 勤怠の「追加距離」km×20円）。入力欄はどれも手で直せます<br>
+  ・<b>追加距離</b>＝業務アプリの「出退勤記録（管理者チェック）」で日ごとに入れた、自宅⇔センター往復以外の移動km。月合計が自動で通勤費に足されます<br>
   ・「勤怠から取込」は打刻記録（<a href="punch.html">punch.html</a>／業務アプリの勤怠）から日数・時間を計算して入れます。通勤回数は日数と同じ値が入ります<br>
   ・🚚ボタンで<b>行き先別の移動費</b>（産廃処理・アワコネ・資材購入など）を人ごとに追加できます。センター以外へ行った日は「通勤回数」を1回減らしてください<br>
   ・📄ボタンで<b>その人の給与明細書</b>を発行できます（印刷・PDF保存→LINEやメールで送付）。明細の発行はこの画面に統一しています<br>
@@ -184,23 +185,27 @@ function tripSum(name){
     .reduce((a,t)=>a+Math.round(N(t.round_km)*(N(t.yen_per_km)||20)*N(t.trip_count)),0);
 }
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* 勤怠に入れた「追加距離」（自宅⇔センター往復以外の移動）の月合計km。2026-09-16: 出退勤記録の行から入れられるようにした */
+function extraKm(name){ return N((attMap[name]||{}).extra_km); }
+function extraKmYen(l){ return Math.round(extraKm(l.staff_name)*(N(l.commute_yen_per_km)||20)); }
 function commTitle(l){
   const parts=['センター '+N(l.commute_round_km)+'km×'+(N(l.commute_yen_per_km)||20)+'円×'+N(l.commute_count)+'回'];
   trips.filter(t=>t.staff_name===l.staff_name)
     .forEach(t=>parts.push(t.destination+' '+N(t.round_km)+'km×'+(N(t.yen_per_km)||20)+'円×'+N(t.trip_count)+'回'));
+  if(extraKm(l.staff_name)) parts.push('勤怠の追加距離 '+extraKm(l.staff_name)+'km×'+(N(l.commute_yen_per_km)||20)+'円');
   return parts.join(' ＋ ');
 }
 function tripLabel(name){
   return trips.filter(t=>t.staff_name===name).map(t=>t.destination+'×'+t.trip_count).join(' ');
 }
 
-/* 行の金額（すべてこの1か所で計算する）。交通費＝センター往復＋行き先別 */
+/* 行の金額（すべてこの1か所で計算する）。交通費＝センター往復＋行き先別＋勤怠の追加距離 */
 function calc(l){
   // 月給者（時給が無く月給が設定されている人）は時間に関係なく月給を基本給にする
   const base=N(l.monthly_salary)?Math.round(N(l.monthly_salary)):Math.round(N(l.hourly_wage)*N(l.work_hours));
   const stop=N(l.stopkill_count)*(N(l.stopkill_unit)||3000);
   const comm=Math.round(N(l.commute_round_km)*(N(l.commute_yen_per_km)||20)*N(l.commute_count))
-            +tripSum(l.staff_name);
+            +tripSum(l.staff_name)+extraKmYen(l);
   const pay=base+stop+comm+N(l.other_allowance);
   const ded=N(l.health_insurance)+N(l.pension)+N(l.employment_insurance)
            +N(l.income_tax)+N(l.resident_tax)+N(l.other_deduction);
@@ -238,7 +243,7 @@ function render(){
     const inp=(f,cls)=>`<input class="${cls||''}${l._dirty?' dirty':''}" value="${l[f]??''}"
       oninput="upd(${i},'${f}',this.value)">`;
     return `<tr>
-      <td>${l.staff_name}${att?`<div class="att">勤怠: <b>${att.days}日 ${att.hours}h</b></div>`:''}</td>
+      <td>${l.staff_name}${att?`<div class="att">勤怠: <b>${att.days}日 ${att.hours}h</b>${N(att.extra_km)?`<br>追加距離 <b>${att.extra_km}km</b>（${att.extra_km_days||''}日）`:''}</div>`:''}</td>
       <td>${inp('hourly_wage')}</td>
       <td>${inp('monthly_salary')}</td>
       <td>${inp('work_days')}</td>
@@ -391,7 +396,7 @@ async function fetchAttendanceRows(l, month){
   const q = l.staff_id
     ? `staff_id=eq.${l.staff_id}`
     : `staff_name=eq.${encodeURIComponent(l.staff_name)}`;
-  const res = await fetch(`${SB_URL}/rest/v1/attendance?${q}&work_date=gte.${month}-01&work_date=lte.${month}-${new Date(month.slice(0, 4), month.slice(5, 7), 0).getDate()}&select=work_date,clock_in,clock_out,break_minutes,note&order=work_date.asc`,
+  const res = await fetch(`${SB_URL}/rest/v1/attendance?${q}&work_date=gte.${month}-01&work_date=lte.${month}-${new Date(month.slice(0, 4), month.slice(5, 7), 0).getDate()}&select=work_date,clock_in,clock_out,break_minutes,note,extra_km,extra_km_note&order=work_date.asc`,
     { headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` } });
   if(!res.ok) return [];
   return res.json();
@@ -408,8 +413,12 @@ function payslipSection(l, month, rows){
   if(N(l.commute_count)) commParts.push(`センター ${N(l.commute_round_km)}km×${N(l.commute_yen_per_km)||20}円×${N(l.commute_count)}回`);
   trips.filter(t=>t.staff_name===l.staff_name)
     .forEach(t=>commParts.push(`${t.destination} ${N(t.round_km)}km×${N(t.yen_per_km)||20}円×${N(t.trip_count)}回`));
+  // 勤怠の追加距離は明細の下段（日別）にも出す。合計は勤怠集計（attMap）が無いときは行から足し上げる
+  const rowsXkm=(rows||[]).reduce((a,r)=>a+N(r.extra_km),0);
+  const xkm=extraKm(l.staff_name)||Math.round(rowsXkm*10)/10;
+  if(xkm) commParts.push(`勤怠の追加距離 ${xkm}km×${N(l.commute_yen_per_km)||20}円`);
   // メモ列は載せない（勤怠のメモは社内の記録用。訂正履歴などは渡す明細に不要）
-  const detail=(rows||[]).map(r=>`<tr><td>${r.work_date}</td><td>${r.clock_in||'-'}〜${r.clock_out||'-'}</td><td style="text-align:right;">${attHrs(r).toFixed(1)}h${(r.break_minutes||0)?`<span style="color:#888;font-size:11px;">（休憩${r.break_minutes}分）</span>`:''}</td></tr>`).join('');
+  const detail=(rows||[]).map(r=>`<tr><td>${r.work_date}</td><td>${r.clock_in||'-'}〜${r.clock_out||'-'}</td><td style="text-align:right;">${attHrs(r).toFixed(1)}h${(r.break_minutes||0)?`<span style="color:#888;font-size:11px;">（休憩${r.break_minutes}分）</span>`:''}${N(r.extra_km)?`<div style="font-size:11px;color:#555;">追加距離 ${N(r.extra_km)}km${r.extra_km_note?`（${esc(r.extra_km_note)}）`:''}</div>`:''}</td></tr>`).join('');
   const shakai=N(l.health_insurance)+N(l.pension);
   const other_ded=N(l.resident_tax)+N(l.other_deduction);
   return `<section class="slip">
@@ -541,7 +550,7 @@ async function payslipPrintAll(){
   // 月の勤怠を1回で取得して人ごとに振り分け
   let attRows=[];
   try{
-    const res=await fetch(`${SB_URL}/rest/v1/attendance?work_date=gte.${month}-01&work_date=lte.${month}-${new Date(month.slice(0, 4), month.slice(5, 7), 0).getDate()}&select=staff_id,staff_name,work_date,clock_in,clock_out,break_minutes,note&order=work_date.asc`,
+    const res=await fetch(`${SB_URL}/rest/v1/attendance?work_date=gte.${month}-01&work_date=lte.${month}-${new Date(month.slice(0, 4), month.slice(5, 7), 0).getDate()}&select=staff_id,staff_name,work_date,clock_in,clock_out,break_minutes,note,extra_km,extra_km_note&order=work_date.asc`,
       { headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` } });
     if(res.ok) attRows=await res.json();
   }catch(e){}
