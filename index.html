@@ -2304,6 +2304,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <div class="pm-opts-row1">
             <button class="pm-toggle-btn" id="pmBoneBtn" onclick="pmToggleBone()">🦴 骨付き: OFF</button>
             <button class="pm-toggle-btn" id="pmRetailBtn" onclick="pmToggleRetail()">🏪 小売: OFF</button>
+            <button class="pm-toggle-btn" id="pmBoneLotBtn" onclick="boneLotOpen()" title="その週に精肉した個体の骨をまとめて1つの在庫（骨ロット）にし、ラベルを1枚出す">🦴 骨をまとめる</button>
           </div>
           <div class="pm-opts-row2">
             <span style="color:var(--text2);font-size:12px;">ランク:</span>
@@ -2392,6 +2393,34 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="pm-footer" id="pmFooter">
       <div class="pm-footer-summary">登録済み <strong id="pmFooterCount">0件</strong> <span id="pmFooterYield"></span></div>
       <button class="pm-finish-btn" id="pmFinishBtn" onclick="pmFinishIndividual()">✅ 全部位完了</button>
+    </div>
+  </div>
+</div>
+
+<!-- 骨ロット: その週に精肉した個体の骨をまとめて1つの在庫にする（2026-09-15 案1）。
+     骨は個体ごとに分けていないため、複数個体→1ロットの線を processing_log で残し、ラベルのQRから全頭の物語に飛べる -->
+<div id="boneLotModal" style="display:none;position:fixed;inset:0;z-index:3100;background:rgba(0,0,0,.72);overflow-y:auto;">
+  <div style="max-width:640px;margin:24px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:20px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <div style="font-size:17px;font-weight:700;color:var(--gold);">🦴 骨をまとめる（骨ロット）</div>
+      <button onclick="boneLotClose()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+    </div>
+    <div style="font-size:12.5px;color:var(--text2);line-height:1.7;margin-bottom:10px;">その週に精肉した個体の骨をまとめて<strong>1つの在庫（骨ロット）</strong>にします。ラベルは1枚、出荷はそのバーコードをスキャン、QRの「この肉の物語」には選んだ個体がすべて載ります。単価は価格マスタの「骨」（¥200/kg）です。</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+      <label style="font-size:13px;">対象の週 <select class="form-input" id="bl-week" style="width:auto;display:inline-block;padding:5px 8px;" onchange="boneLotLoad()"><option value="0">今週</option><option value="1">先週</option><option value="2">先々週</option></select></label>
+      <span id="bl-week-label" style="font-size:12.5px;color:var(--text2);"></span>
+      <span style="font-size:12.5px;color:var(--text2);margin-left:auto;">作業者: <b id="bl-operator"></b></span>
+    </div>
+    <div id="bl-list" style="display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto;margin-bottom:8px;"></div>
+    <div id="bl-summary" style="font-size:13px;color:var(--gold);font-weight:600;margin-bottom:10px;min-height:18px;"></div>
+    <div class="form-group" style="max-width:240px;"><label>骨の重さ（kg・袋込みで量ったら10gを引く）</label><input class="form-input" id="bl-weight" type="number" step="0.001" min="0" inputmode="decimal" placeholder="例: 5.200" style="font-size:20px;font-weight:700;" /></div>
+    <div id="bl-done" style="display:none;margin:10px 0;padding:10px 12px;border:1px solid var(--green);border-radius:var(--radius);background:rgba(106,158,90,.08);font-size:13px;">
+      <div id="bl-done-text" style="font-weight:600;color:var(--green);"></div>
+      <button class="btn btn-sm" type="button" style="margin-top:6px;" onclick="boneLotReprint()">🖨 ラベルを刷り直す</button>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:8px;">
+      <button class="btn" type="button" onclick="boneLotClose()">閉じる</button>
+      <button class="btn btn-primary" type="button" id="bl-submit" onclick="boneLotSubmit()" disabled>🦴 骨ロットを登録してラベル印刷</button>
     </div>
   </div>
 </div>
@@ -7956,7 +7985,10 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight, scan
     qrSvg: (scanCode && /^\d{8}$/.test(String(scanCode))) ? makeQRSVG(storyUrl(scanCode), 9.5) : null
   });
 
-  // ── iframe に書き込んで印刷 ──
+  pmPrintLabelHtml(html);
+}
+/* ラベルHTMLを iframe に書き込んで印刷する（精肉ラベル・骨ロットで共用） */
+function pmPrintLabelHtml(html) {
   const iframe = document.createElement('iframe');
   iframe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;border:none;opacity:0;';
   document.body.appendChild(iframe);
@@ -7970,6 +8002,159 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight, scan
   window.addEventListener('afterprint', () => iframe.remove(), {once:true});
   setTimeout(() => { try { iframe.remove(); } catch(_) {} }, 5000);
 }
+
+/* ═══════════ 骨ロット（複数個体の骨を1つの在庫にまとめる） ═══════════
+   骨は個体ごとに分けていないので、その週に精肉した個体を複数選んで1ロットにする。
+   在庫は individual_id=null・individual_code=lot_code=ident_code（TGC-BN-yymmdd-nn）の1行。
+   個体との線は processing_log（parent=個体番号 → child=ロット）で残す。story_get はこの形で
+   複数個体（blend）を返すので、ラベルのQRから全頭の物語に飛べる（加工品パックと同じ仕組み）。 */
+let boneLotCands = [];   // その週に精肉した個体 [{label_id, species, processing_done_at, weight_total, hunter_name}]
+let boneLotLast = null;  // 直近に登録したロット（刷り直し用）
+function boneLotWeek(back) {
+  const d = new Date(); d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7) - 7 * (back || 0));   // その週の月曜
+  const end = new Date(d); end.setDate(end.getDate() + 7);
+  const f = x => `${x.getMonth() + 1}/${x.getDate()}`;
+  const last = new Date(end); last.setDate(last.getDate() - 1);
+  return { startIso: d.toISOString(), endIso: end.toISOString(), label: `${f(d)}（月）〜${f(last)}（日）` };
+}
+async function boneLotOpen() {
+  if (!pmCurrentOperator) { toast('先に作業者を選んでください', 'error'); return; }
+  document.getElementById('bl-operator').textContent = pmCurrentOperator;
+  document.getElementById('bl-weight').value = '';
+  document.getElementById('bl-done').style.display = 'none';
+  document.getElementById('boneLotModal').style.display = 'block';
+  await boneLotLoad();
+}
+function boneLotClose() { document.getElementById('boneLotModal').style.display = 'none'; }
+async function boneLotLoad() {
+  const back = parseInt(document.getElementById('bl-week').value, 10) || 0;
+  const w = boneLotWeek(back);
+  document.getElementById('bl-week-label').textContent = w.label;
+  const box = document.getElementById('bl-list');
+  box.innerHTML = '<div class="loading"><span class="spin"></span>その週に精肉した個体を探しています...</div>';
+  const sel = 'select=label_id,species,processing_done_at,weight_total,hunter_name';
+  try {
+    // 全部位完了した個体（processing_done_at）に加え、まだ完了していないが部位登録の記録がある個体も出す
+    const [done, logs] = await Promise.all([
+      sb('GET', 'individuals', null, `?deleted_at=is.null&processing_done_at=gte.${w.startIso}&processing_done_at=lt.${w.endIso}&${sel}&order=processing_done_at.desc&limit=200`),
+      sb('GET', 'processing_log', null, `?created_at=gte.${w.startIso}&created_at=lt.${w.endIso}&individual_id=not.is.null&select=individual_id&limit=3000`),
+    ]);
+    const have = new Set(done.map(r => r.label_id));
+    const extra = [...new Set(logs.map(l => l.individual_id))].filter(id => id && !have.has(id));
+    let extraRows = [];
+    if (extra.length) extraRows = await sb('GET', 'individuals', null, `?deleted_at=is.null&label_id=in.(${extra.map(encodeURIComponent).join(',')})&${sel}`);
+    boneLotCands = done.concat(extraRows);
+    if (back === 0 && pmIndividual && pmIndividual.label_id && !boneLotCands.some(c => c.label_id === pmIndividual.label_id)) {
+      boneLotCands.unshift({ label_id: pmIndividual.label_id, species: pmIndividual.species, processing_done_at: null, weight_total: pmIndividual.weight_total, hunter_name: pmIndividual.hunter_name, current: true });
+    }
+  } catch (e) { box.innerHTML = `<div style="color:var(--red);">読み込みに失敗しました: ${esc2(sbSafeMsg(e))}</div>`; boneLotSummary(); return; }
+  if (!boneLotCands.length) { box.innerHTML = '<div style="color:var(--text3);">この週に精肉した個体がありません</div>'; boneLotSummary(); return; }
+  box.innerHTML = boneLotCands.map((c, i) => `<label style="display:flex;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:14px;">
+      <input type="checkbox" class="bl-chk" value="${i}" ${c.species === 'イノシシ' ? 'checked' : ''} onchange="boneLotSummary()" style="width:18px;height:18px;">
+      <b>${esc2(c.label_id)}</b><span style="color:var(--text2);">${esc2(c.species || '')}</span>
+      <span style="color:var(--text3);font-size:12px;">${c.processing_done_at ? fmt(c.processing_done_at.slice(0, 10)) + ' 完了' : (c.current ? '精肉中' : '部位登録あり')}${c.weight_total ? `・${c.weight_total}kg` : ''}${c.hunter_name ? `・${esc2(c.hunter_name)}` : ''}</span>
+    </label>`).join('');
+  boneLotSummary();
+}
+function boneLotSelected() { return [...document.querySelectorAll('.bl-chk:checked')].map(el => boneLotCands[parseInt(el.value, 10)]).filter(Boolean); }
+function boneLotOrigin(ids) { const set = [...new Set(ids.map(kkOriginOf).filter(Boolean))]; return set.length === 1 ? set[0] : '千葉県産'; }
+function boneLotSummary() {
+  const sel = boneLotSelected();
+  const species = [...new Set(sel.map(c => c.species).filter(Boolean))];
+  const el = document.getElementById('bl-summary'), btn = document.getElementById('bl-submit');
+  if (!sel.length) { el.innerHTML = '<span style="color:var(--text3);font-weight:400;">個体を選んでください</span>'; btn.disabled = true; return; }
+  const mixed = species.length > 1;
+  el.innerHTML = `${sel.length}頭 ／ ${esc2(species.join('・'))} ／ ${boneLotOrigin(sel.map(c => c.label_id))}`
+    + (mixed ? ' <span style="color:var(--red);">獣種が混ざっています。同じ獣種だけ選んでください</span>' : '');
+  btn.disabled = mixed;
+}
+/* ラベルの個体番号欄（5pt・印字幅35mm）に収まる文字数で「4頭 T324 M185 T320 T319」のように出す。
+   収まらないときは「T324 M185 ほか3頭」。全角=1・半角=0.55で数え、欄の見出し分を引いた 10.5 文字ぶんまで */
+function boneLotIdsText(ids) {
+  const short = ids.map(x => String(x).replace(/^TGC-\d+-/, ''));
+  const units = s => [...s].reduce((n, ch) => n + (/[ -ÿ｡-ﾟ]/.test(ch) ? 0.55 : 1), 0);
+  const fits = s => units(s) <= 10.5;
+  const all = short.join(' ');
+  if (fits(all)) return `${ids.length}頭 ${all}`;
+  for (let k = short.length - 1; k >= 1; k--) {
+    const s = `${short.slice(0, k).join(' ')} ほか${short.length - k}頭`;
+    if (fits(s)) return `${ids.length}頭 ${s}`;
+  }
+  return `${ids.length}頭`;
+}
+async function boneLotNextCode() {
+  const d = new Date();
+  const base = `TGC-BN-${String(d.getFullYear()).slice(2)}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-`;
+  let n = 0;
+  try {
+    const rows = await sb('GET', 'inventory', null, `?ident_code=like.${encodeURIComponent(base + '*')}&select=ident_code`);
+    n = rows.reduce((m, r) => Math.max(m, parseInt(String(r.ident_code).slice(base.length), 10) || 0), 0);
+  } catch (e) {}
+  return base + String(n + 1).padStart(2, '0');
+}
+async function boneLotSubmit() {
+  const sel = boneLotSelected();
+  const w = parseFloat(document.getElementById('bl-weight').value);
+  if (!sel.length) { toast('個体を選んでください', 'error'); return; }
+  if (!(w > 0)) { toast('骨の重さ（kg）を入力してください', 'error'); return; }
+  if ([...new Set(sel.map(c => c.species))].length > 1) { toast('獣種が混ざっています。同じ獣種だけ選んでください', 'error'); return; }
+  const species = sel[0].species || 'イノシシ';
+  const ids = sel.map(c => c.label_id);
+  const btn = document.getElementById('bl-submit');
+  btn.disabled = true; btn.textContent = '登録中...';
+  try {
+    let code = await boneLotNextCode();
+    const nowIso = new Date().toISOString();
+    const record = {
+      individual_id: null, individual_code: code, species, part_name: '骨', barcode_num: '111',
+      ident_code: code, lot_code: code, weight: w, weight_kg: w, status: '在庫',
+      operator: pmCurrentOperator, processed_by: pmCurrentOperator, processed_at: nowIso,
+      grade: '並', unit_price: 200, tier: 2, process_type: '骨',
+    };
+    const loc = pmGetLocationCode(); if (loc) record.location_code = loc;
+    // 番号が重なったら次の番号で必ず登録する（ラベルだけ出て在庫が無い状態を作らない）
+    let created = null;
+    for (let attempt = 0; ; attempt++) {
+      try { created = await sb('POST', 'inventory', record); break; }
+      catch (e) {
+        if (attempt >= 5 || !/duplicate|unique|23505/i.test(String(e && e.message || e))) throw e;
+        code = code.replace(/(\d+)$/, m => String(parseInt(m, 10) + 1).padStart(2, '0'));
+        record.ident_code = code; record.individual_code = code; record.lot_code = code;
+      }
+    }
+    const scanCode = (Array.isArray(created) && created[0] && created[0].scan_code) || null;
+    // 個体との線: 各個体 → 骨ロット。失敗は画面に出す（在庫は登録済み）
+    try {
+      await sb('POST', 'processing_log', ids.map(id => ({ parent_ident_code: id, child_ident_code: code, weight: null, result_weight_kg: null, process_type: '骨', operator: pmCurrentOperator, individual_id: id })));
+    } catch (e) { toast(`骨ロット ${code} は登録しましたが、個体との紐付けの保存に失敗しました: ` + sbSafeMsg(e), 'error'); }
+    boneLotLast = { code, scanCode, weight: w, species, ids };
+    boneLotPrint(boneLotLast);
+    document.getElementById('bl-done').style.display = '';
+    document.getElementById('bl-done-text').textContent = `${code}（${ids.length}頭・${w.toFixed(3)}kg）を在庫に登録し、ラベルを印刷しました`;
+    toast(`骨ロット ${code} を登録しました（${ids.length}頭・${w.toFixed(3)}kg）`);
+    playFeedbackSound(true);
+  } catch (e) {
+    playFeedbackSound(false);
+    toast('骨ロットの登録に失敗しました: ' + sbSafeMsg(e), 'error');
+    alert('骨ロットを在庫に登録できませんでした。\n理由: ' + sbSafeMsg(e) + '\n\nもう一度「登録」を押してください。');
+  } finally { btn.disabled = false; btn.textContent = '🦴 骨ロットを登録してラベル印刷'; }
+}
+function boneLotLabelHtml(l) {
+  const speciesName = (l.species || '').includes('イノシシ') ? 'イノシシ肉' : (l.species || '').includes('鹿') || l.species === 'シカ' ? '鹿肉' : (l.species || '');
+  const expiry = new Date(); expiry.setFullYear(expiry.getFullYear() + 1);
+  const scanOk = !!(l.scanCode && /^\d{8}$/.test(String(l.scanCode)));
+  const barcodeCode = scanOk ? String(l.scanCode) : shortIdent(l.code);
+  return pmLabelHtml({
+    origin: boneLotOrigin(l.ids), speciesName, labelId: boneLotIdsText(l.ids), partName: '骨',
+    labelWeight: l.weight, expiryStr: expiry.toLocaleDateString('ja-JP'), identCode: l.code,
+    barcodeSvg: makeCode128SVG(barcodeCode), barcodeThin: !labelBarcodeReadable(barcodeCode),
+    scanCode: scanOk ? String(l.scanCode) : null,
+    qrSvg: scanOk ? makeQRSVG(storyUrl(String(l.scanCode)), 9.5) : null,
+  });
+}
+function boneLotPrint(l) { try { pmPrintLabelHtml(boneLotLabelHtml(l)); } catch (e) { toast('ラベル印刷に失敗しました: ' + sbSafeMsg(e), 'error'); } }
+function boneLotReprint() { if (boneLotLast) boneLotPrint(boneLotLast); }
 
 // ── 全部位完了 ──
 // ── 精肉モード：個体の肉ランク・止めさし引取・買取プレビュー ──
