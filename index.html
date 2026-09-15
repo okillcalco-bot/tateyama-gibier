@@ -7825,10 +7825,13 @@ function pmLabelHtml(d) {
     @page { size: 40mm 60mm; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     /* 余白: 2026-09-12 現物で左端の文字（館→宿、消→肖）と最下行の住所が見切れていた。
-       プリンタの印字位置が1〜2mmずれても欠けないよう、左右2.5mm・下3mmの余白を取る。
+       左右2.5mm・下3mmにしたが、2026-09-15 の現物（ア017 枝肉）でもまだ「館」の左が欠けていた。
+       写真を実測すると、印字が始まるのはページ左端から約3.5mm（バーコード35mm幅を物差しにして換算）。
+       そこで左4.5mm・右0.5mmにして内容を2mm右へずらす（右端はバーコードが39.5mmまでで、現物では
+       43mm付近まで印字できているので欠けない）。文字の使える幅は35mmのまま変わらない。
        バーコードは静穏帯込みで35mm幅（8桁キーで0.35mm/バー、静穏帯3.5mm）。 */
     body { width:40mm; height:60mm; font-family:'Meiryo','Yu Gothic',sans-serif;
-           padding:1.8mm 2.5mm 3mm; display:flex; flex-direction:column; overflow:hidden; }
+           padding:1.8mm .5mm 3mm 4.5mm; display:flex; flex-direction:column; overflow:hidden; }
     /* 文字ブロックは縮ませない。バーコードは下の .bc で領域を確保する */
     body > div { flex:none; }
     /* 2026-09-13: 現物（T316 枝肉）で最下行の住所が用紙の下端で切れていた。写真を実測すると
@@ -10698,8 +10701,9 @@ function kkLabelCss() {
   return `
     @page { size: 40mm 60mm; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    /* 左右の余白は精肉ラベル（pmLabelHtml）と同じ理由で左4.5mm・右0.5mm（印字はページ左端から約3.5mmで始まる） */
     .lb { width:40mm; height:60mm; font-family:'Meiryo','Yu Gothic',sans-serif;
-          padding:2.5mm 2.5mm 3mm; display:flex; flex-direction:column; overflow:hidden; page-break-after:always; }
+          padding:2.5mm .5mm 3mm 4.5mm; display:flex; flex-direction:column; overflow:hidden; page-break-after:always; }
     /* 文字ブロックは縮ませない。バーコードは下の .bc で領域を確保する */
     .lb > div { flex:none; }
     .o  { font-size:8.5pt; font-weight:bold; border-bottom:.5pt solid #000; padding-bottom:.4mm; white-space:nowrap; }
