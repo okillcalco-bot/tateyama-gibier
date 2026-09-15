@@ -1733,9 +1733,9 @@ function renderDocCustomerOptions(){
   const sel=document.getElementById('docCustomer');
   if(!sel) return;
   const prevSelected=new Set([...sel.selectedOptions].map(o=>o.value));
-  const search=(document.getElementById('docCustomerSearch')?.value||'').trim().toLowerCase();
+  const search=(document.getElementById('docCustomerSearch')?.value||'').trim();
   const list=search
-    ? docCustomerCandidates.filter(c=>(c.name||'').toLowerCase().includes(search)||(c.code||'').toLowerCase().includes(search)||(c.kana||'').toLowerCase().includes(search))
+    ? docCustomerCandidates.filter(c=>custMatches(c,search))
     : docCustomerCandidates;
   sel.innerHTML=list.map(c=>`<option value="${c.id}">${esc(c.code||'')} ${esc(c.name||'')}</option>`).join('');
   [...sel.options].forEach(o=>{ if(prevSelected.has(o.value)) o.selected=true; });
@@ -1749,16 +1749,15 @@ function populateDocBillToDropdown(){
   if(!dl) return;
   const prevId=document.getElementById('docBillTo').value;
   const custs=allCustomers.slice().sort((a,b)=>(a.code||'').localeCompare(b.code||''));
-  dl.innerHTML=custs.map(c=>`<option value="${esc(c.code)} ${esc(c.name)}">${esc(c.kana||'')}</option>`).join('');
+  dl.innerHTML=custs.map(c=>`<option value="${esc(c.code)} ${esc(c.name)}">${esc(custReadingLabel(c))}</option>`).join('');
   const prevCust=custs.find(c=>c.id===prevId);
   if(prevCust) document.getElementById('docBillToInput').value=`${prevCust.code} ${prevCust.name}`;
 }
 function onDocBillToInput(){
   const v=(document.getElementById('docBillToInput').value||'').trim();
   if(!v){document.getElementById('docBillTo').value='';return;}
-  const lv=v.toLowerCase();
   const c=allCustomers.find(x=>`${x.code} ${x.name}`===v)
-    || allCustomers.find(x=>(x.name||'').toLowerCase().includes(lv)||(x.kana||'').toLowerCase().includes(lv)||(x.code||'').toLowerCase().includes(lv));
+    || allCustomers.find(x=>custMatches(x,v));
   document.getElementById('docBillTo').value=c?c.id:'';
 }
 
@@ -2118,9 +2117,9 @@ function docBatchNext(){
 
 // ── Customers Tab ──
 function renderCustomers(){
-  const search=(document.getElementById('custSearch')?.value||'').toLowerCase();
+  const search=(document.getElementById('custSearch')?.value||'').trim();
   let filtered=allCustomers;
-  if(search) filtered=filtered.filter(c=>(c.name||'').toLowerCase().includes(search)||(c.code||'').toLowerCase().includes(search)||(c.phone||'').includes(search)||(c.kana||'').toLowerCase().includes(search)||(Array.isArray(c.search_aliases)&&c.search_aliases.some(a=>(a||'').toLowerCase().includes(search))));
+  if(search) filtered=filtered.filter(c=>custMatches(c,search));
   if(document.getElementById('custStarOnly')?.checked) filtered=filtered.filter(c=>custStarState(c).on);
   custFiltered=filtered;
   renderPortalPreview();
@@ -2910,7 +2909,7 @@ function populateCustomerDropdowns(){
   const dl=document.getElementById('moCustomerList');
   if(dl){
     const act=allCustomers.filter(c=>c.is_active!==false);
-    const main=act.map(c=>`<option value="${esc(c.code)} ${esc(c.name)}">${esc(c.kana||'')} / ${esc(c.phone||'')}</option>`);
+    const main=act.map(c=>`<option value="${esc(c.code)} ${esc(c.name)}">${esc(custReadingLabel(c))} / ${esc(c.phone||'')}</option>`);
     // 別の読み方・呼び名でも候補に出す（入力すると本人に解決される）
     const alias=[];
     act.forEach(c=>(Array.isArray(c.search_aliases)?c.search_aliases:[]).forEach(a=>{ if(a) alias.push(`<option value="${esc(a)}">→ ${esc(c.code)} ${esc(c.name)}</option>`); }));
@@ -2970,13 +2969,9 @@ function onMoCustomerInput(){
   const v=(document.getElementById('moCustomerInput').value||'').trim();
   const hit=document.getElementById('moCustomerHit');
   if(!v){document.getElementById('moCustomer').value='';hit.textContent='';return;}
-  const lv=v.toLowerCase();
-  // 「コード 名前」完全一致を優先、なければ部分一致（名前・カナ・コード・電話）
+  // 「コード 名前」完全一致を優先、なければ部分一致（名前・カナ・コード・電話・エイリアス。ひらがな／カタカナは同一視）
   let c=allCustomers.find(x=>`${x.code} ${x.name}`===v)
-    || allCustomers.filter(x=>x.is_active!==false).find(x=>
-        (x.name||'').toLowerCase().includes(lv)||(x.kana||'').toLowerCase().includes(lv)||
-        (x.code||'').toLowerCase().includes(lv)||(x.phone||'').includes(v)||
-        (Array.isArray(x.search_aliases)&&x.search_aliases.some(a=>(a||'').toLowerCase().includes(lv))));
+    || allCustomers.filter(x=>x.is_active!==false).find(x=>custMatches(x,v));
   if(c){
     document.getElementById('moCustomer').value=c.id;
     hit.style.color='var(--gold)';
@@ -3172,16 +3167,13 @@ function populateInvCustomerDatalist(){
   const dl=document.getElementById('invCustomerList');
   if(!dl) return;
   dl.innerHTML=allCustomers.filter(c=>c.is_active!==false).map(c=>
-    `<option value="${esc(c.code)} ${esc(c.name)}">${esc(c.kana||'')} / ${esc(c.phone||'')}</option>`).join('');
+    `<option value="${esc(c.code)} ${esc(c.name)}">${esc(custReadingLabel(c))} / ${esc(c.phone||'')}</option>`).join('');
 }
 function onInvCustomerInput(){
   const v=(document.getElementById('invCustomerInput').value||'').trim();
   if(!v){document.getElementById('invCustomerId').value='';return;}
-  const lv=v.toLowerCase();
   const c=allCustomers.find(x=>`${x.code} ${x.name}`===v)
-    || allCustomers.filter(x=>x.is_active!==false).find(x=>
-        (x.name||'').toLowerCase().includes(lv)||(x.kana||'').toLowerCase().includes(lv)||
-        (x.code||'').toLowerCase().includes(lv)||(x.phone||'').includes(v));
+    || allCustomers.filter(x=>x.is_active!==false).find(x=>custMatches(x,v));
   if(c){
     document.getElementById('invCustomerId').value=c.id;
     document.getElementById('invName').value=c.name||'';
@@ -4109,6 +4101,20 @@ function ordStartNotifyLoop(){
 
 // ── Utils ──
 function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+/* 検索用の正規化: 小文字・全角英数→半角・カタカナ→ひらがな・空白除去（2026-09-15: ひらがなでも予測変換が効くように） */
+function kanaKey(s){return String(s==null?'':s).normalize('NFKC').toLowerCase().replace(/[ァ-ヶ]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0x60)).replace(/[\s　]/g,'')}
+function kataToHira(s){return String(s||'').replace(/[ァ-ヶ]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0x60))}
+/* 顧客が検索文字に当たるか（名前・カナ・コード・電話・検索エイリアスを、ひらがな／カタカナ・全角半角の違いを無視して比べる） */
+function custMatches(c,search){
+  const k=kanaKey(search); if(!k) return true;
+  const f=[c.name,c.kana,c.code].concat(Array.isArray(c.search_aliases)?c.search_aliases:[]);
+  return f.some(v=>kanaKey(v).includes(k))||(c.phone||'').includes(search);
+}
+/* datalist の label 用: カナ・電話に加えて店名のひらがな読みも入れる（Chromeは label の部分一致でも候補に出す） */
+function custReadingLabel(c){
+  const parts=[c.kana||'', kataToHira(c.name||'')!==(c.name||'')?kataToHira(c.name||''):'' ].concat(Array.isArray(c.search_aliases)?c.search_aliases:[]).filter(Boolean);
+  return parts.join(' / ');
+}
 function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function pad(n){return String(n).padStart(2,'0')}
 function today(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
