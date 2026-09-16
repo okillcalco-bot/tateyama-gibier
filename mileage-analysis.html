@@ -128,6 +128,13 @@ tr:last-child td { border-bottom:none; }
   </div>
 
   <div class="chart-card chart-full" style="margin-bottom:20px">
+    <div class="chart-header"><div><div class="chart-title">🥩 他の肉との比較（1kg が食卓に届くまでの平均距離）</div>
+      <div class="chart-subtitle">輸入＝輸入相手国のシェア × 産地の代表点からセンターまでの直線距離の加重平均。国産（地域外）＝千葉県以外の主産地のシェア × 距離の加重平均。国産（地域内）＝千葉県の主産地。市場平均＝自給率で国産と輸入を混ぜた値。船・トラックの実際の経路は直線より長いので、どれも「目安」です。</div></div></div>
+    <div id="meatBox" class="muted" style="overflow-x:auto">解析を実行してください。</div>
+    <details style="margin-top:10px"><summary class="muted" style="cursor:pointer">内訳と出どころを見る</summary><div id="meatDetail" style="margin-top:8px;overflow-x:auto"></div></details>
+  </div>
+
+  <div class="chart-card chart-full" style="margin-bottom:20px">
     <div class="chart-header"><div><div class="chart-title">🚚 遠くへ運んだ出荷（上位20）</div>
       <div class="chart-subtitle">距離×重さが大きい順。ここが「フードマイレージを減らせる余地」の候補。</div></div></div>
     <div id="farBox" class="muted" style="overflow-x:auto">解析を実行してください。</div>
@@ -353,6 +360,7 @@ function renderAll(){
   document.getElementById('kpiCo2').textContent=(co2<10?co2.toFixed(2):Math.round(co2).toLocaleString())+' kg';
   const beefCo2=(r.leg2Kg/1000*beefKm*co2b)/1000;
   document.getElementById('kpiCo2Sub').textContent=`同じ ${fmtKg(r.leg2Kg)} kg を輸入牛肉の距離で運ぶと約 ${beefCo2<10?beefCo2.toFixed(1):Math.round(beefCo2).toLocaleString()} kg-CO₂`;
+  renderMeat(perKg&&perKg>0?perKg:null);
 
   // 座標の揃い
   const pct=(a,b)=>b?Math.round(a/b*100)+'%':'—';
@@ -394,6 +402,60 @@ function renderAll(){
   // 出荷別テーブル
   const stateJa={ok:'',no_addr:'住所なし',no_parse:'住所を読めず',not_fetched:'座標未取得',not_found:'見つからず'};
   document.getElementById('orderBody').innerHTML=r.orders.slice(0,60).map(o=>`<tr><td>${esc(o.date||'')}</td><td>${esc(o.code)}</td><td>${esc(o.customer)}</td><td>${esc(o.key||'')} ${stateJa[o.geoState]?`<span class="tag tag-red">${stateJa[o.geoState]}</span>`:''}</td><td class="td-num">${fmtKm(o.km)}</td><td class="td-num">${fmtKg(o.kg)}</td><td class="td-num">${fmtTkm(o.tkm)}</td><td class="muted">${esc(o.channel)}${o.carrier?' / '+esc(o.carrier):''}</td></tr>`).join('')||'<tr><td colspan="8" class="muted">データがありません</td></tr>';
+}
+
+// ───────────── 他の肉との比較（公的統計のシェア × 代表点の直線距離） ─────────────
+// 代表点: 産地の中心あたり（国は主産地、県は県庁所在地または主産地）。距離はセンターからの直線距離。
+const REF_PT = {
+  '豪州（クイーンズランド）':[-23.4,150.5], '豪州（NSW・VIC）':[-34.5,147.0], '米国（中西部）':[41.3,-95.9], '米国（南部）':[33.7,-84.4],
+  'カナダ（アルバータ）':[51.0,-114.1], 'カナダ（マニトバ）':[49.9,-97.1], 'ニュージーランド':[-37.8,175.3], 'メキシコ（ソノラ）':[29.1,-111.0],
+  'スペイン（カタルーニャ）':[41.6,0.6], 'デンマーク':[55.5,9.5], 'ブラジル（パラナ）':[-25.4,-49.3], 'タイ':[13.75,100.5], '中国（山東）':[36.7,117.0], 'チリ':[-33.4,-70.6],
+  '北海道':[42.9,143.2], '鹿児島':[31.6,130.6], '宮崎':[31.9,131.4], '熊本':[32.8,130.7], '岩手':[39.7,141.2], '群馬':[36.4,139.1], '茨城':[36.3,140.4], '栃木':[36.6,139.9],
+  '青森':[40.8,140.7], '長崎':[32.8,129.9], '徳島':[34.1,134.6], '千葉（北総）':[35.75,140.6], '千葉（安房）':[35.05,139.9],
+};
+// シェアは概数（%）。輸入＝財務省 貿易統計 2024年、国産＝農林水産省 畜産統計（肉用牛 令和7年・豚 令和6年・ブロイラー 令和6年）、自給率＝食料需給表（重量ベース、概数）
+const MEAT_REF = [
+  { meat:'牛肉', self:39, imp:[['豪州（クイーンズランド）',45],['米国（中西部）',38],['カナダ（アルバータ）',6],['ニュージーランド',5],['メキシコ（ソノラ）',4]],
+    dom:[['鹿児島',18],['宮崎',12],['北海道',11],['熊本',6],['岩手',4],['栃木',3],['長崎',3],['千葉（安房）',2]], local:'千葉（安房）',
+    src:'輸入: 貿易統計2024（豪州45%・米国38%）／国産: 畜産統計R7 肉用牛飼養頭数（鹿児島18%・宮崎12%・北海道11%・熊本6%）／自給率 約39%' },
+  { meat:'豚肉', self:50, imp:[['カナダ（マニトバ）',25],['米国（中西部）',23],['スペイン（カタルーニャ）',17],['メキシコ（ソノラ）',12],['デンマーク',8],['ブラジル（パラナ）',5],['チリ',4]],
+    dom:[['鹿児島',14],['北海道',9],['宮崎',8],['群馬',7],['千葉（北総）',6],['茨城',5],['栃木',4],['岩手',4],['青森',4]], local:'千葉（北総）',
+    src:'輸入: 貿易統計2024（カナダ25%・米国23%・スペイン17%）／国産: 畜産統計R6 豚飼養頭数（鹿児島14%・北海道9%・宮崎8%・群馬7%・千葉6%）／自給率 約50%' },
+  { meat:'鶏肉', self:65, imp:[['ブラジル（パラナ）',70],['タイ',27],['米国（南部）',2],['中国（山東）',1]],
+    dom:[['鹿児島',22],['宮崎',19],['岩手',17],['青森',7],['北海道',5],['徳島',3],['千葉（北総）',1]], local:'千葉（北総）',
+    src:'輸入: 貿易統計（ブラジル約7割・タイ約3割）／国産: 畜産統計R6 ブロイラー出荷羽数（鹿児島22%・宮崎19%・岩手17%）／自給率 約65%' },
+  { meat:'羊肉（その他）', self:1, imp:[['豪州（NSW・VIC）',60],['ニュージーランド',38]], dom:[['北海道',100]], local:null,
+    src:'輸入: 豪州・NZでほぼ全量／国産はごくわずか（北海道など）／自給率 1%未満' },
+];
+function refHome(){ return D.center || { lat:34.968, lng:139.8535 }; }
+function refKm(name){ const p=REF_PT[name]; return p?kmBetween(refHome(),{lat:p[0],lng:p[1]}):null; }
+function wavg(list){ let s=0,w=0; list.forEach(([name,share])=>{ const km=refKm(name); if(km==null) return; s+=km*share; w+=share; }); return w?s/w:null; }
+function meatRef(){
+  return MEAT_REF.map(m=>{
+    const imp=wavg(m.imp);
+    const domAll=wavg(m.dom);
+    const outside=wavg(m.dom.filter(([n])=>n!==m.local));
+    const local=m.local?refKm(m.local):null;
+    const market=(imp!=null&&domAll!=null)?(m.self/100*domAll+(1-m.self/100)*imp):null;
+    return { meat:m.meat, self:m.self, imp, outside, local, market, src:m.src,
+      parts:[['輸入',m.imp],['国産',m.dom]].map(([k,list])=>[k,list.map(([n,s])=>({name:n,share:s,km:refKm(n)}))]) };
+  });
+}
+function renderMeat(ours){
+  const rows=meatRef();
+  const cols=[['imp','輸入'],['outside','国産（地域外）'],['local','国産（地域内・千葉県産）'],['market','市場平均（自給率で加重）']];
+  const allKm=rows.flatMap(r=>cols.map(c=>r[c[0]])).filter(v=>v!=null).concat(ours!=null?[ours]:[]);
+  const maxLog=Math.log10(Math.max(...allKm,10));
+  const bar=v=>v==null?'':`<span class="bar-line" style="width:${Math.max(2,Math.log10(Math.max(v,1))/maxLog*90).toFixed(0)}px;opacity:.7"></span> `;
+  const cell=v=>v==null?'<td class="td-num muted">—</td>':`<td class="td-num">${bar(v)}${fmtKm(v)} km${ours?`<br><small class="muted">当センターの ${(v/ours)<10?(v/ours).toFixed(1):Math.round(v/ours).toLocaleString()}倍</small>`:''}</td>`;
+  const html=`<table><thead><tr><th>肉</th>${cols.map(c=>`<th class="td-num">${c[1]}</th>`).join('')}<th class="td-num">自給率</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td>${esc(r.meat)}</td>${cols.map(c=>cell(r[c[0]])).join('')}<td class="td-num">${r.self<1?'<1':r.self}%</td></tr>`).join('')}
+    <tr style="background:rgba(232,164,74,.08)"><td><b>当センターのジビエ</b></td><td class="td-num muted">—</td><td class="td-num muted">—</td><td class="td-num"><b>${ours==null?'—':fmtKm(ours)+' km'}</b><br><small class="muted">山→センター→お客さん（実データ）</small></td><td class="td-num muted">—</td><td class="td-num">100%</td></tr>
+  </tbody></table>
+  <div class="muted" style="margin-top:6px">棒は対数目盛（10倍で同じ長さ）。「当センターの○倍」は、うちのジビエ1kgが食卓に届くまでの平均距離に対する倍率です。${ours==null?'うちの距離は座標が揃うと出ます。':''}</div>`;
+  document.getElementById('meatBox').innerHTML=html;
+  document.getElementById('meatDetail').innerHTML=`<table><thead><tr><th>肉</th><th>区分</th><th>内訳（シェア%・センターまでの直線距離 km）</th><th>出どころ</th></tr></thead><tbody>${rows.map(r=>r.parts.map(([k,list],i)=>`<tr>${i===0?`<td rowspan="2">${esc(r.meat)}</td>`:''}<td>${k}</td><td class="muted">${list.map(p=>`${esc(p.name)} ${p.share}%・${fmtKm(p.km)}km`).join('／')}</td>${i===0?`<td rowspan="2" class="muted">${esc(r.src)}</td>`:''}</tr>`).join('')).join('')}</tbody></table>
+  <div class="muted" style="margin-top:6px">国産の内訳は主産地の上位だけを使い、その中のシェアで加重しています（残りの県はこの平均に近いとみなす）。地域内は千葉県の主産地（牛＝安房、豚・鶏＝北総）の1点で代表させています。</div>`;
 }
 
 // ───────────── 座標の取得・保存 ─────────────
