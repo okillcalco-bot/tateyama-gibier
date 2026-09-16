@@ -71,6 +71,18 @@ h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600;
 .room .mark { font-size: 20px; width: 24px; text-align: center; }
 .room input[type=text] { width: 68px; font-family: inherit; font-size: 15px; padding: 6px; border: 1px solid var(--border); border-radius: 8px; margin-left: auto; }
 
+/* 📷 写真を送る（共用スマホ用） */
+.photo-card { margin-top: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 12px; }
+.photo-open { width: 100%; font-family: inherit; font-size: 17px; font-weight: 600; padding: 16px 10px; border-radius: 10px; border: 2px dashed var(--gold2); background: rgba(141,106,29,.06); color: var(--gold); cursor: pointer; }
+.photo-card .hint { font-size: 13px; color: var(--text2); line-height: 1.7; margin: 10px 0; }
+.photo-card select, .photo-card input[type=text] { font-family: inherit; font-size: 16px; padding: 10px; border: 1px solid var(--border); border-radius: 9px; background: #fff; }
+.photo-take { display: inline-block; font-size: 17px; font-weight: 700; padding: 14px 18px; border-radius: 10px; border: 2px solid var(--green); color: var(--green); background: rgba(61,122,52,.08); cursor: pointer; }
+.photo-take input { display: none; }
+.photo-previews { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.photo-previews img { width: 88px; height: 88px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
+.photo-result { margin-top: 10px; padding: 12px; border-radius: 10px; font-size: 15px; line-height: 1.7; border: 2px solid var(--green); background: rgba(61,122,52,.08); color: var(--green); }
+.photo-result.err { border-color: var(--red); background: rgba(185,61,61,.08); color: var(--red); }
+
 .done { text-align: center; padding: 30px 10px; }
 .done .mark { font-size: 64px; }
 .done .msg { font-size: 22px; font-weight: 700; margin: 10px 0 4px; }
@@ -132,6 +144,34 @@ h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600;
 
   <div class="names" id="names"></div>
 
+  <!-- 📷 写真を送る（共用スマホ用。読めなかったラベル・重量物の写真を出荷管理へ届ける） -->
+  <div class="photo-card" id="photo-card">
+    <button type="button" class="photo-open" id="photo-open-btn" onclick="photoToggle()">📷 写真を送る（読めなかったラベル・重量物）</button>
+    <div id="photo-box" style="display:none;">
+      <div class="hint">
+        <strong>使い方：</strong>① 種類を選ぶ → ② 自分の名前を選ぶ → ③ 写真を撮る（何枚でも）→ ④「送る」。<br>
+        送った写真は<strong>業務アプリの出荷管理のいちばん上「📷 現場からの写真」</strong>に届きます。担当者がそこから出荷に足して「対応済み」にします。<br>
+        ・<strong>読めなかったラベル</strong>：ラベル全体（番号と重さ）が写るように撮る<br>
+        ・<strong>重量物</strong>：ラベルか、はかりの表示と一緒に撮る
+      </div>
+      <div class="chips" id="photo-kinds"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px;">
+        <select id="photo-staff"><option value="">名前を選ぶ</option></select>
+        <input type="text" id="photo-note" placeholder="一言（例: にくひろ カタ3枚）" style="flex:1;min-width:180px;">
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px;">
+        <label class="photo-take">📸 写真を撮る／選ぶ<input type="file" id="photo-files" accept="image/*" capture="environment" multiple onchange="photoPick(this)"></label>
+        <span id="photo-count" class="hint" style="margin:0;"></span>
+      </div>
+      <div class="photo-previews" id="photo-previews"></div>
+      <div id="photo-result" class="photo-result" style="display:none;"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+        <button type="button" class="big-btn btn-in" id="photo-send-btn" style="font-size:18px;padding:16px 10px;flex:1;" onclick="photoSend()">📤 送る</button>
+        <button type="button" class="btn-back" style="margin-top:0;" onclick="photoToggle()">閉じる</button>
+      </div>
+    </div>
+  </div>
+
   <div class="panel" id="panel" style="display:none;">
     <div class="who" id="who"></div>
     <div class="state loading" id="state"><span>⏳</span><span>確認中…</span></div>
@@ -172,13 +212,14 @@ h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600;
       </div>
 
       <h3 style="margin-top:16px;">🧹 清掃（できていない所だけチェックを外す）</h3>
-      <div class="hint">最初は<strong>すべて実施済み</strong>になっています。やっていない所だけ押して外してください。</div>
+      <div class="hint">最初は<strong>すべて実施済み</strong>になっています。やっていない所だけ押して外してください。冷蔵・冷凍庫の温度も基準の値が入っています（違うときだけ直す）。</div>
       <div class="rooms" id="room-list"></div>
 
       <h3 style="margin-top:20px;">🧾 施設チェック表（市役所提出用）</h3>
       <div class="hint">
         <strong>問題があった所だけ押して「要改善」に変えてください。</strong>そのとき、気づいたことも書けます。<br>
-        項目名の下に<strong>見るポイント</strong>が書いてあります（温度の基準もそこに出ます）。
+        項目名の下に<strong>見るポイント</strong>が書いてあります。<br>
+        🌡 <strong>温度は基準の値が最初から入っています。</strong>庫内の表示がそれと違うときだけ、その数字に直してください。
       </div>
       <div id="fc-cycles"></div>
       <div style="margin-top:10px;">
@@ -320,7 +361,7 @@ const FACILITY_CHECKS = [
   { c: '日', r: '処理室', i: 'シンク', h: '血液等による汚染がないか' },
   { c: '日', r: '処理室', i: '高圧洗浄機', h: '血液等による汚染がないか' },
   { c: '日', r: '処理室', i: '電気湯沸かし器', h: '60℃以上の温湯が出せるか' },
-  { c: '日', r: '懸吊室', i: 'ユニット冷蔵庫', h: '壁面・床面に汚れはないか、-1℃の設定になっているか', t: 1 },
+  { c: '日', r: '懸吊室', i: 'ユニット冷蔵庫', h: '壁面・床面に汚れはないか、-1℃の設定になっているか', t: 1, d: '-1' },
   { c: '日', r: '懸吊室', i: '単管', h: '血液等による汚染がないか' },
   { c: '日', r: '懸吊室', i: 'S字フック', h: '血液等による汚染がないか' },
   { c: '日', r: '懸吊室', i: 'チェーンブロック', h: '血液等による汚染がないか' },
@@ -335,12 +376,12 @@ const FACILITY_CHECKS = [
   { c: '日', r: 'カット室', i: '金属検出機', h: '正しく作動するか' },
   { c: '日', r: '保管室', i: '壁面', h: '血液等による汚染がないか' },
   { c: '日', r: '保管室', i: '床面', h: '血液等による汚染がないか' },
-  { c: '日', r: '保管室', i: '冷凍庫1（ホシザキ）', h: '-18℃前後になっているか', t: 1 },
-  { c: '日', r: '保管室', i: '冷凍ストッカー1', h: '-20℃前後になっているか', t: 1 },
-  { c: '日', r: '保管室', i: '冷凍ストッカー2', h: '-20℃前後になっているか', t: 1 },
-  { c: '日', r: '保管室', i: '冷凍ストッカー(-60℃)', h: '-60℃前後になっているか', t: 1 },
-  { c: '日', r: '保管室', i: '大型冷蔵冷凍庫1', h: '-20℃前後になっているか', t: 1 },
-  { c: '日', r: '保管室', i: '大型冷凍庫2', h: '-20℃前後になっているか', t: 1 },
+  { c: '日', r: '保管室', i: '冷凍庫1（ホシザキ）', h: '-18℃前後になっているか', t: 1, d: '-18' },
+  { c: '日', r: '保管室', i: '冷凍ストッカー1', h: '-20℃前後になっているか', t: 1, d: '-20' },
+  { c: '日', r: '保管室', i: '冷凍ストッカー2', h: '-20℃前後になっているか', t: 1, d: '-20' },
+  { c: '日', r: '保管室', i: '冷凍ストッカー(-60℃)', h: '-60℃前後になっているか', t: 1, d: '-60' },
+  { c: '日', r: '保管室', i: '大型冷蔵冷凍庫1', h: '-20℃前後になっているか', t: 1, d: '-20' },
+  { c: '日', r: '保管室', i: '大型冷凍庫2', h: '-20℃前後になっているか', t: 1, d: '-20' },
   { c: '日', r: '使用水', i: '色・におい・濁り・味', h: '毎日点検する（食品衛生）' },
   // ── 毎週末（大掃除）──
   { c: '週', r: '駐車場', i: 'グリストラップ', h: 'トラップ内に脂の溜まりがないか' },
@@ -369,7 +410,7 @@ const FC_CYCLES = [
 const ROOMS = [
   { key: '解体室', icon: '🔪', items: ['床・排水溝の洗浄', '懸吊フック・レールの洗浄', '作業台・シンクの洗浄・消毒', 'ナイフ・器具の洗浄（83℃以上の温湯消毒）', '残渣・廃棄物の処理'] },
   { key: '精肉室', icon: '🥩', items: ['床・排水溝の洗浄', '作業台・まな板の洗浄・消毒', 'スライサー等機械の分解洗浄', 'ナイフ・器具の温湯消毒', '包材・資材の整理整頓'] },
-  { key: '冷蔵・冷凍庫', icon: '❄️', items: ['庫内温度の確認・記録', '庫内の整理・清掃', 'ドアパッキン・取手の消毒'], temp: true },
+  { key: '冷蔵・冷凍庫', icon: '❄️', items: ['庫内温度の確認・記録', '庫内の整理・清掃', 'ドアパッキン・取手の消毒'], temp: true, tempDefault: '冷蔵-1 / 冷凍-20' },
   { key: '前室・更衣室', icon: '🚪', items: ['手洗い場の清掃・石鹸/消毒液の補充', '長靴・エプロンの洗浄消毒', '更衣室の整理清掃'] },
   { key: 'トイレ', icon: '🚻', items: ['便器・床の清掃・消毒', '手洗い設備の点検・ペーパー補充'] },
   { key: '施設外周', icon: '🏠', items: ['搬入口まわりの清掃', '防虫・防鼠の点検', '排水・臭気の確認'] },
@@ -383,6 +424,7 @@ let busy = false;
 let loading = false;        // 勤怠データ取得中は打刻させない
 let workPicked = [];        // 今日の作業
 let roomsDone = {};         // 清掃: key -> true(実施)
+let roomTemp = '';          // 清掃「冷蔵・冷凍庫」の温度欄（描き直しても消えないように状態で持つ）
 let adminMode = false;
 let workDate = ymd(new Date());
 
@@ -401,6 +443,7 @@ function goHome() {
   document.getElementById('panel').style.display = 'none';
   document.getElementById('done').style.display = 'none';
   document.getElementById('names').style.display = 'grid';
+  document.getElementById('photo-card').style.display = 'block';
   loadNames();
 }
 
@@ -432,7 +475,7 @@ function renderRooms() {
     return `<div class="room${on ? '' : ' off'}" onclick="toggleRoom('${esc(r.key)}',event)">
       <span class="mark">${on ? '✅' : '⬜'}</span>
       <span>${r.icon} ${esc(r.key)}</span>
-      ${r.temp ? `<input type="text" id="temp-input" placeholder="℃" onclick="event.stopPropagation()" ${on ? '' : 'disabled'}>` : ''}
+      ${r.temp ? `<input type="text" id="temp-input" placeholder="℃" value="${esc(roomTemp)}" title="基準の値が入っています。表示と違うときだけ直してください" onclick="event.stopPropagation()" oninput="roomTemp=this.value" ${on ? '' : 'disabled'}>` : ''}
     </div>`;
   }).join('');
 }
@@ -445,6 +488,8 @@ function resetReport() {
   workPicked = [];
   roomsDone = {};
   ROOMS.forEach(r => roomsDone[r.key] = true);   // 既定は「すべて実施済み」
+  // 温度は基準の値をあらかじめ入れておく（2026-09-16: 温度記録が0件だったため。表示が違うときだけ直す運用）
+  roomTemp = (ROOMS.find(r => r.temp) || {}).tempDefault || '';
   const n = document.getElementById('report-note'); if (n) n.value = '';
   const sk = document.getElementById('stopkill-count'); if (sk) sk.value = '';
   fcReset();
@@ -465,7 +510,11 @@ function fcReset() {
 }
 function fcGet(c) {
   const k = fcKey(c);
-  if (!fcState[k]) fcState[k] = { ng: false, note: '', value: '' };
+  if (!fcState[k]) {
+    // 温度項目は基準の値（d）をあらかじめ入れておく。庫内表示が違うときだけ直す
+    const def = FACILITY_CHECKS.find(x => fcKey(x) === k);
+    fcState[k] = { ng: false, note: '', value: (def && def.d != null) ? String(def.d) : '' };
+  }
   return fcState[k];
 }
 function renderFacilityChecks() {
@@ -535,7 +584,7 @@ async function saveCleaning() {
   if (!done.length) return 0;
   const note = (document.getElementById('report-note').value || '').trim() || null;
   const tempEl = document.getElementById('temp-input');
-  const temp = tempEl ? (tempEl.value || '').trim() : '';
+  const temp = (tempEl ? (tempEl.value || '') : roomTemp).trim();
   // さかのぼり入力のときは、その日の日中の時刻で記録する
   const at = isToday() ? new Date().toISOString() : new Date(workDate + 'T17:00:00').toISOString();
   const rows = done.map(r => ({
@@ -608,6 +657,7 @@ async function select(id) {
   selected = staffList.find(s => String(s.id) === String(id));
   if (!selected) return;
   document.getElementById('names').style.display = 'none';
+  document.getElementById('photo-card').style.display = 'none';
   document.getElementById('done').style.display = 'none';
   document.getElementById('panel').style.display = 'block';
   document.getElementById('who').textContent = `👤 ${selected.name} さん`;
@@ -946,6 +996,116 @@ async function saveReportOnly() {
     showToast(`報告を保存しました（清掃 ${n}か所／施設チェック ${fc}項目）`);
   } catch (e) { beep(false); showToast('報告の保存に失敗しました。通信を確認してください。'); }
   busy = false;
+}
+
+/* ── 📷 写真を送る（共用スマホ用）──
+   2026-09-16: 出荷でバーコードが読めなかった袋や重量物の写真を、チャットに送って手作業で
+   足していた（1日で21枚）。ここから送ると field_photos に溜まり、業務アプリの出荷管理の
+   先頭「現場からの写真」に出る。失敗は必ず画面に出す（送れたつもりで消えるのを防ぐ）。 */
+const PHOTO_KINDS = ['読めなかったラベル', '重量物', 'その他'];
+const PHOTO_BUCKET = 'field-photos';
+let photoKind = PHOTO_KINDS[0];
+let photoFiles = [];       // { file, url }
+let photoBusy = false;
+
+function photoToggle() {
+  const box = document.getElementById('photo-box');
+  const open = box.style.display === 'none';
+  box.style.display = open ? 'block' : 'none';
+  document.getElementById('photo-open-btn').style.display = open ? 'none' : 'block';
+  if (open) {
+    photoRenderKinds();
+    const sel = document.getElementById('photo-staff');
+    if (sel.options.length <= 1) sel.innerHTML = '<option value="">名前を選ぶ</option>' + staffList.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('');
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+function photoRenderKinds() {
+  document.getElementById('photo-kinds').innerHTML = PHOTO_KINDS.map(k =>
+    `<button type="button" class="chip${photoKind === k ? ' on' : ''}" onclick="photoSetKind('${esc(k)}')">${esc(k)}</button>`).join('');
+}
+function photoSetKind(k) { photoKind = k; photoRenderKinds(); }
+function photoPick(input) {
+  const files = Array.from(input.files || []);
+  files.forEach(f => photoFiles.push({ file: f, url: URL.createObjectURL(f) }));
+  input.value = '';
+  photoRenderPreviews();
+}
+function photoRemove(i) { photoFiles.splice(i, 1); photoRenderPreviews(); }
+function photoRenderPreviews() {
+  document.getElementById('photo-previews').innerHTML = photoFiles.map((p, i) =>
+    `<span style="position:relative;"><img src="${p.url}" alt=""><button type="button" onclick="photoRemove(${i})" style="position:absolute;top:-6px;right:-6px;width:24px;height:24px;border-radius:50%;border:none;background:var(--red);color:#fff;font-size:14px;cursor:pointer;">×</button></span>`).join('');
+  document.getElementById('photo-count').textContent = photoFiles.length ? `${photoFiles.length}枚` : '';
+}
+/* 長辺1600pxに縮めてJPEGにする（スマホの写真は3〜5MBあるため。ラベルの文字はこの大きさで十分読める） */
+function photoShrink(file) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const max = 1600, s = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      c.toBlob(b => resolve(b || file), 'image/jpeg', 0.82);
+    };
+    img.onerror = () => resolve(file);
+    img.src = URL.createObjectURL(file);
+  });
+}
+async function photoUpload(blob, path) {
+  const res = await fetch(`${SB_URL}/storage/v1/object/${PHOTO_BUCKET}/${path}`, {
+    method: 'POST',
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'image/jpeg', 'x-upsert': 'true' },
+    body: blob,
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return path;
+}
+function photoShowResult(msg, err) {
+  const el = document.getElementById('photo-result');
+  el.className = 'photo-result' + (err ? ' err' : '');
+  el.innerHTML = msg; el.style.display = 'block';
+}
+async function photoSend() {
+  if (photoBusy) return;
+  const name = document.getElementById('photo-staff').value;
+  const note = (document.getElementById('photo-note').value || '').trim();
+  if (!name) { photoShowResult('⚠️ 名前を選んでください', true); return; }
+  if (!photoFiles.length) { photoShowResult('⚠️ 写真がありません。「📸 写真を撮る／選ぶ」を押してください', true); return; }
+  photoBusy = true;
+  const btn = document.getElementById('photo-send-btn');
+  btn.disabled = true; btn.textContent = '送信中…';
+  const day = ymd(new Date());
+  const sent = []; let failed = 0;
+  for (let i = 0; i < photoFiles.length; i++) {
+    try {
+      const blob = await photoShrink(photoFiles[i].file);
+      const path = `${day}/${Date.now()}-${i}-${Math.random().toString(36).slice(2, 7)}.jpg`;
+      await photoUpload(blob, path);
+      sent.push({ kind: photoKind, note: note || null, staff_name: name, photo_path: path });
+    } catch (e) { failed++; }
+  }
+  let saved = 0;
+  if (sent.length) {
+    try { const rows = await sb('POST', 'field_photos', sent); saved = rows.length; }
+    catch (e) { failed += sent.length; }
+  }
+  btn.disabled = false; btn.textContent = '📤 送る';
+  photoBusy = false;
+  if (saved && !failed) {
+    beep(true);
+    photoShowResult(`✅ ${saved}枚 送りました（${esc(photoKind)}／${esc(name)}）。<br>出荷管理の「📷 現場からの写真」に届いています。`);
+    photoFiles = []; photoRenderPreviews();
+    document.getElementById('photo-note').value = '';
+  } else if (saved) {
+    beep(false);
+    photoShowResult(`⚠️ ${saved}枚は送れましたが、${failed}枚 送れませんでした。電波の良い所でもう一度「送る」を押してください（送れた分は消えています）。`, true);
+    photoFiles = photoFiles.slice(saved); photoRenderPreviews();
+  } else {
+    beep(false);
+    photoShowResult('❌ 送れませんでした。通信を確認して、もう一度「送る」を押してください。写真はこの画面に残っています。', true);
+  }
 }
 
 /* ── 管理者モード（過去日の入力）── */

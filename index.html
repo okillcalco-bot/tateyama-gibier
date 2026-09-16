@@ -2115,6 +2115,20 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 
   <!-- Shipping -->
   <div class="tab-panel" id="panel-shipping">
+    <!-- 📷 現場からの写真（共用スマホの打刻ページ「写真を送る」から届く。読めなかったラベル・重量物） -->
+    <div class="section" id="field-photo-box">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span>📷 現場からの写真（未処理 <span id="fp-count">0</span>件）</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-sm" onclick="fieldPhotosLoad()">🔄 更新</button><button class="btn btn-sm" onclick="fieldPhotosToggleDone()" id="fp-done-btn">対応済みを見る</button></div>
+      </div>
+      <div style="padding:10px 12px;border:1px dashed var(--gold2);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.9;background:var(--surface2);margin-bottom:10px;">
+        📖 <strong style="color:var(--gold);">これは何？</strong> 共用スマホの打刻ページ「📷 写真を送る」から、現場が送った写真です。<br>
+        ・<strong>読めなかったラベル</strong> → 写真の識別コード（例 TGC-08-M168-KT）を下のスキャン欄に打って出荷に足す → 「✅ 対応済み」を押す<br>
+        ・<strong>重量物</strong> → 重さを控えて必要な処理をしたら「✅ 対応済み」<br>
+        ・対応済みにするとき、何をしたか（例: DIR-20260916-091037 に追加）を残せます。誰が処理しても後から追えます
+      </div>
+      <div id="fp-list"><div style="font-size:13px;color:var(--text3);">読み込み中...</div></div>
+    </div>
     <div class="section" id="ship-workbench">
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;"><span>バーコード出荷スキャン（注文あり）</span><div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-sm" id="ord-notify-btn" onclick="ordEnableNotify()">🔔 通知</button><button class="btn btn-sm" onclick="manualOpen('shipping')">📖 使い方</button></div></div>
       <div style="padding:10px 12px;border:1px dashed var(--gold2);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.9;background:var(--surface2);margin-bottom:10px;">
@@ -2733,7 +2747,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'inventory') loadInventory();
     if (btn.dataset.tab === 'individuals') indLoad();
     if (btn.dataset.tab === 'processing') loadProcessingSetup();
-    if (btn.dataset.tab === 'shipping') { loadShipping(); loadBaseOrders(); shipPausedRender(); shipActiveRestore(); setTimeout(maintainShippingScannerFocus, 50); }
+    if (btn.dataset.tab === 'shipping') { loadShipping(); loadBaseOrders(); shipPausedRender(); shipActiveRestore(); fieldPhotosLoad(); setTimeout(maintainShippingScannerFocus, 50); }
     if (btn.dataset.tab === 'punch') loadPunch();
     if (btn.dataset.tab === 'products') loadProducts();
     if (btn.dataset.tab === 'kakou') loadKakou();
@@ -4233,6 +4247,62 @@ async function shipSelectOrder(orderId) {
   const card = document.getElementById(`order-${orderId}`);
   if (card) card.style.outline = '2px solid var(--gold)';
   maintainShippingScannerFocus();
+}
+
+/* ── 📷 現場からの写真（field_photos）──
+   共用スマホの打刻ページ「写真を送る」から届く。読めなかったラベル・重量物の写真を
+   ここで拾って出荷に足し、「対応済み」にする。2026-09-16 */
+const FP_BUCKET = 'field-photos';
+let fpShowDone = false;
+function fpUrl(path) { return `${SB_URL}/storage/v1/object/public/${FP_BUCKET}/${path}`; }
+function fieldPhotosToggleDone() {
+  fpShowDone = !fpShowDone;
+  const b = document.getElementById('fp-done-btn'); if (b) b.textContent = fpShowDone ? '未処理だけ見る' : '対応済みを見る';
+  fieldPhotosLoad();
+}
+async function fieldPhotosLoad() {
+  const list = document.getElementById('fp-list'); if (!list) return;
+  let rows = [];
+  try {
+    rows = await sb('GET', 'field_photos', null,
+      fpShowDone ? '?select=*&order=taken_at.desc&limit=100' : '?resolved_at=is.null&select=*&order=taken_at.desc&limit=100');
+  } catch (err) {
+    list.innerHTML = `<div style="color:var(--red);font-size:13px;">写真の取得に失敗しました: ${esc2(sbSafeMsg(err))}</div>`;
+    return;
+  }
+  const open = rows.filter(r => !r.resolved_at);
+  const cnt = document.getElementById('fp-count'); if (cnt) cnt.textContent = open.length;
+  const box = document.getElementById('field-photo-box');
+  if (box) box.style.borderColor = open.length ? 'var(--gold2)' : '';
+  if (!rows.length) {
+    list.innerHTML = `<div style="font-size:13px;color:var(--text3);">${fpShowDone ? '写真はまだありません' : 'いま未処理の写真はありません'}</div>`;
+    return;
+  }
+  const fmtAt = s => { const d = new Date(s); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+  list.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">` + rows.map(r => `
+    <div class="fp-card" data-id="${r.id}" style="border:1px solid ${r.resolved_at ? 'var(--border)' : 'var(--gold2)'};border-radius:var(--radius);padding:10px;background:var(--surface);display:flex;gap:10px;${r.resolved_at ? 'opacity:.65;' : ''}">
+      <a href="${fpUrl(r.photo_path)}" target="_blank" rel="noopener" title="タップで拡大"><img src="${fpUrl(r.photo_path)}" alt="" style="width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block;"></a>
+      <div style="flex:1;min-width:0;font-size:13px;line-height:1.6;">
+        <div><span class="fp-kind" style="display:inline-block;padding:1px 8px;border-radius:10px;font-weight:700;font-size:12px;background:${r.kind === '読めなかったラベル' ? 'rgba(185,61,61,.12);color:var(--red)' : 'rgba(141,106,29,.12);color:var(--gold)'};">${esc2(r.kind)}</span></div>
+        <div style="color:var(--text2);">${esc2(fmtAt(r.taken_at))} ／ ${esc2(r.staff_name || '-')}</div>
+        ${r.note ? `<div>「${esc2(r.note)}」</div>` : ''}
+        ${r.resolved_at ? `<div style="color:var(--text3);font-size:12px;">✅ ${esc2(fmtAt(r.resolved_at))} ${esc2(r.resolved_by || '')}${r.resolved_note ? '：' + esc2(r.resolved_note) : ''}</div>`
+          : `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-sm btn-primary fp-resolve" onclick="fieldPhotoResolve('${r.id}')">✅ 対応済み</button></div>`}
+      </div>
+    </div>`).join('') + `</div>`;
+}
+async function fieldPhotoResolve(id) {
+  const note = prompt('何をしましたか？（任意。例: DIR-20260916-091037 に追加／重量 2.4kg を控えた）', '');
+  if (note === null) return;
+  try {
+    await sb('PATCH', 'field_photos', {
+      resolved_at: new Date().toISOString(),
+      resolved_by: isAdminRole() ? '管理者' : 'スタッフ',
+      resolved_note: note.trim() || null,
+    }, `?id=eq.${id}`);
+    toast('対応済みにしました');
+    fieldPhotosLoad();
+  } catch (err) { toast('更新に失敗しました: ' + sbSafeMsg(err), 'error'); }
 }
 
 async function loadShipping() {
