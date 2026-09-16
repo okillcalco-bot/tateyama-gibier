@@ -7818,7 +7818,14 @@ function evGeoRender() {
       <button class="btn btn-sm" onclick="evGeoSave('${kind}','${esc2(id || '')}',this)">保存</button>
       ${note ? `<span style="flex-basis:100%;font-size:11px;color:var(--text3);">${esc2(note)}</span>` : ''}
     </div>`;
-  let h = row('center', '', '館山ジビエセンター', evGeo.center, evGeo.center && evGeo.center.note ? evGeo.center.note : '');
+  // 基準は「捕獲地区の概ね中心」。個体ごとのピンポイント（capture_lat/lng）があればそちらを優先する（別枠で取る）
+  let h = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:4px 0 10px;">
+      <button class="btn btn-sm btn-primary" id="ev-geo-auto" onclick="evGeoAuto('event')">🌐 この出店の地区・センター・会場を自動で取得</button>
+      <button class="btn btn-sm" onclick="evGeoAuto('all')">🌐 地区マスタ全部（未設定のみ）</button>
+      <span id="ev-geo-auto-msg" style="font-size:12px;color:var(--text2);"></span>
+      <span style="flex-basis:100%;font-size:11.5px;color:var(--text3);line-height:1.6;">国土地理院の住所検索で、地区（大字）の代表点＝概ね中心を取ります。距離はこの目安で出します。取れなかった地区や直したい所は、右の欄にGoogleマップの座標を貼って保存してください。個体ごとの正確な地点は別枠（捕獲票の緯度経度）で、入っていればそちらを優先します。</span>
+    </div>`;
+  h += row('center', '', '館山ジビエセンター', evGeo.center, evGeo.center && evGeo.center.note ? evGeo.center.note : '');
   if (evCur && evCur.venue_id) h += row('venue', evCur.venue_id, `会場: ${evCur.venue_name || ''}`, evGeo.venue, '');
   else h += `<div style="padding:6px 0;color:var(--text3);">会場: 出店先を選んで「概要を保存」すると、ここに出ます</div>`;
   evGeo.areas.forEach(a => {
@@ -7826,6 +7833,77 @@ function evGeoRender() {
       : `<div style="padding:6px 0;color:var(--red);font-size:12px;">${esc2(a.city + ' ' + a.area)}: 地区マスタに大字が見つかりません（個体の捕獲場所の表記を確認）</div>`;
   });
   box.innerHTML = h || '<div class="empty-state">まだありません</div>';
+}
+/* 国土地理院の住所検索（https://msearch.gsi.go.jp/address-search/AddressSearch?q=）で住所→座標。
+   「千葉県館山市神余」のように市名まで付けて聞き、返ってきた候補のうち市名と大字を含むものを採る。
+   大字の代表点なので「概ね中心」。取れなければ null（黙って別の場所を入れない）。 */
+async function evGeocode(q, mustInclude) {
+  const res = await fetch('https://msearch.gsi.go.jp/address-search/AddressSearch?q=' + encodeURIComponent(q));
+  if (!res.ok) throw new Error('住所検索に失敗 ' + res.status);
+  const list = await res.json();
+  const ok = (list || []).find(f => f && f.geometry && Array.isArray(f.geometry.coordinates)
+    && (mustInclude || []).every(s => String((f.properties || {}).title || '').includes(s)));
+  if (!ok) return null;
+  return { lat: Math.round(ok.geometry.coordinates[1] * 1e6) / 1e6, lng: Math.round(ok.geometry.coordinates[0] * 1e6) / 1e6, title: (ok.properties || {}).title || '' };
+}
+async function evGeoAuto(scope) {
+  const msg = document.getElementById('ev-geo-auto-msg');
+  const say = t => { if (msg) msg.textContent = t; };
+  let done = 0, miss = [], fail = 0;
+  try {
+    // 対象の地区: この出店の地区（未設定のみ）／地区マスタ全部（未設定のみ）
+    let targets;
+    if (scope === 'all') targets = (await sb('GET', 'area_master', null, '?lat=is.null&select=id,city,oaza&order=sort_order')).filter(r => r.oaza);
+    else targets = evGeo.areas.filter(a => a.row && a.row.lat == null).map(a => a.row);
+    // センター・会場（未設定のときだけ）
+    const extra = [];
+    if (scope !== 'all' && !(evGeo.center && evGeo.center.lat != null && !evGeo.center.note)) extra.push({ kind: 'center' });
+    if (scope !== 'all' && evCur && evCur.venue_id && !(evGeo.venue && evGeo.venue.lat != null)) extra.push({ kind: 'venue' });
+    const total = targets.length + extra.length;
+    if (!total) { say('未設定の場所はありません'); return; }
+    say(`0 / ${total} 取得中…`);
+    for (const t of targets) {
+      try {
+        const g = await evGeocode(`千葉県${t.city}${t.oaza}`, [t.city, t.oaza]);
+        if (!g) { miss.push(`${t.city} ${t.oaza}`); }
+        else {
+          await sb('PATCH', 'area_master', { lat: g.lat, lng: g.lng }, `?id=eq.${t.id}`);
+          evGeo.areas.forEach(a => { if (a.row && a.row.id === t.id) { a.row.lat = g.lat; a.row.lng = g.lng; } });
+          done++;
+        }
+      } catch (e) { fail++; }
+      say(`${done + miss.length + fail} / ${total} 取得中…`);
+    }
+    for (const x of extra) {
+      try {
+        if (x.kind === 'center') {
+          const g = await evGeocode('千葉県館山市西長田1163-5', ['館山市', '西長田']) || await evGeocode('千葉県館山市西長田', ['館山市', '西長田']);
+          if (!g) miss.push('センター');
+          else {
+            const val = Object.assign({}, evGeo.center || { name: '館山ジビエセンター' }, { lat: g.lat, lng: g.lng, note: null, src: '国土地理院: ' + g.title });
+            const has = await sb('GET', 'app_settings', null, '?key=eq.center_location&select=key');
+            if (has.length) await sb('PATCH', 'app_settings', { value: val, updated_at: new Date().toISOString() }, '?key=eq.center_location');
+            else await sb('POST', 'app_settings', { key: 'center_location', value: val });
+            evGeo.center = val; done++;
+          }
+        } else {
+          const v = evGeo.venue || {};
+          const q = v.address ? v.address : v.name;
+          const g = q ? await evGeocode(q, []) : null;
+          if (!g) miss.push('会場（住所を出店先マスタに入れるか、座標を貼ってください）');
+          else {
+            await sb('PATCH', 'event_venues', { lat: g.lat, lng: g.lng, updated_at: new Date().toISOString() }, `?id=eq.${evCur.venue_id}`);
+            if (evGeo.venue) { evGeo.venue.lat = g.lat; evGeo.venue.lng = g.lng; } done++;
+          }
+        }
+      } catch (e) { fail++; }
+    }
+    say(`取得 ${done}件${miss.length ? `／見つからず ${miss.length}件（${miss.slice(0, 4).join('・')}${miss.length > 4 ? ' ほか' : ''}）` : ''}${fail ? `／通信失敗 ${fail}件` : ''}`);
+    if (miss.length || fail) toast(`座標を取れなかった場所があります（${miss.length + fail}件）。右の欄に座標を貼って保存してください`, 'error');
+    else toast(`座標を ${done}件 取得しました`);
+    if (scope !== 'all') { evGeoRender(); evSheetRender(); const m2 = document.getElementById('ev-geo-auto-msg'); if (m2) m2.textContent = `取得 ${done}件${miss.length ? '／見つからず ' + miss.length + '件' : ''}`; }
+    else { try { await evGeoLoad(); } catch (e) {} evGeoRender(); evSheetRender(); }
+  } catch (e) { say('取得に失敗: ' + sbSafeMsg(e)); toast('座標の自動取得に失敗しました: ' + sbSafeMsg(e), 'error'); }
 }
 async function evGeoSave(kind, id, btn) {
   const rowEl = btn.closest('.ev-geo-row');
@@ -7915,7 +7993,7 @@ function evIndSheetHtml(rows, title, dateStr, eventId) {
             <b>今日つかう部位</b><span>${esc2(parts || '—')}</span>
           </div>
           <div class="pr"><small>今日の商品</small>${esc2(s.product_note || parts || '—')}</div>
-          <div class="mi">🚚 フードマイレージ　${m.total == null ? '（距離は未設定）' : `<b>${esc2(evFmtKm(m.total))}</b>　山→センター ${esc2(evFmtKm(m.leg1))}${m.leg2 != null ? '、センター→会場 ' + esc2(evFmtKm(m.leg2)) : ''}<br><span style="color:#666;">豪州産の牛肉なら約 7,800 km。</span>`}</div>
+          <div class="mi">🚚 フードマイレージ　${m.total == null ? '（距離は未設定）' : `<b>${esc2(evFmtKm(m.total))}</b>　山→センター ${esc2(evFmtKm(m.leg1))}${m.leg2 != null ? '、センター→会場 ' + esc2(evFmtKm(m.leg2)) : ''}<br><span style="color:#666;">豪州産の牛肉なら約 7,800 km。${(i.capture_lat == null || i.capture_lng == null) ? '獲れた場所は地区のおおよその中心で数えています。' : ''}</span>`}</div>
           <div class="ft">
             <div class="qr">${makeQRSVG(individualEventStoryUrl(label, eventId), 42)}</div>
             <div class="qx"><b>この一頭の記録を見る</b>スマホのカメラを向けてください<br><span class="c">食べた感想を、この一頭の記録の最後の一行に。</span><br>スタンプを押すだけでも残ります</div>

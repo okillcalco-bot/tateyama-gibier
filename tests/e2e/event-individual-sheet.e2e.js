@@ -34,13 +34,22 @@ const AREAS = [{ id: 'a1', city: '館山市', district: '神戸', oaza: '神余'
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   page.on('dialog', async d => { await d.accept(); });
   const db = { center: { name: '館山ジビエセンター', lat: null, lng: null, note: '仮の値。要確認' }, sheets: [], venues: VENUES.map(v => Object.assign({}, v)), areas: AREAS.map(a => Object.assign({}, a)) };
-  const writes = [];
+  const writes = []; const gsiCalls = [];
   await page.route('**/*', r => {
     const u = decodeURIComponent(r.request().url()), m = r.request().method();
     if (u.includes('jsdelivr') || u.includes('cdn')) return r.fulfill({ status: 200, contentType: 'application/javascript', body: 'window.JsBarcode=function(){};' });
     if (u.startsWith('file:')) return r.continue();
     const J = b => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(b) });
     let body = null; try { body = JSON.parse(r.request().postData() || 'null'); } catch (e) {}
+    if (/msearch\.gsi\.go\.jp/.test(u)) {
+      const q = decodeURIComponent((u.split('q=')[1] || ''));
+      gsiCalls.push(q);
+      const hit = (title, lng, lat) => J([{ geometry: { type: 'Point', coordinates: [lng, lat] }, properties: { title } }]);
+      if (/神余/.test(q)) return hit('千葉県館山市神余', 139.8600, 34.9500);
+      if (/上滝田/.test(q)) return hit('千葉県南房総市上滝田', 139.9100, 35.0600);
+      if (/西長田/.test(q)) return hit('千葉県館山市西長田', 139.8535, 34.9680);
+      return J([]);   // やわたんまち（住所なし）は見つからない
+    }
     if (!/\/rest\/v1\//.test(u)) return r.fulfill({ status: 200, body: '[]' });
     if (/\/event_venues/.test(u)) {
       if (m === 'PATCH') { writes.push({ t: 'event_venues', u, body }); const id = (u.match(/id=eq\.([^&]+)/) || [])[1]; Object.assign(db.venues.find(v => v.id === id), body); return J([]); }
@@ -93,13 +102,25 @@ const AREAS = [{ id: 'a1', city: '館山市', district: '神戸', oaza: '神余'
     await page.evaluate(([k, v]) => { const row = document.querySelector(`.ev-geo-row[data-kind="${k}"]`); row.querySelector('.ev-geo-paste').value = v; row.querySelector('button').click(); }, [kind, val]);
     await page.waitForTimeout(300);
   };
+  // 2b) 自動取得（国土地理院）: 未設定の地区・センター・会場をまとめて取る。見つからないものは正直に数える
+  await page.click('#ev-geo-auto');
+  await page.waitForTimeout(800);
+  T('地区は「千葉県＋市＋大字」で問い合わせる', gsiCalls.some(q => q === '千葉県館山市神余') && gsiCalls.some(q => q === '千葉県南房総市上滝田'), JSON.stringify(gsiCalls));
+  const autoAreas = writes.filter(w => w.t === 'area_master');
+  T('取れた地区は area_master に PATCH（神余・上滝田）', autoAreas.length === 2 && autoAreas.some(w => /id=eq\.a1/.test(w.u) && w.body.lat === 34.95) && autoAreas.some(w => /id=eq\.a2/.test(w.u) && w.body.lat === 35.06), JSON.stringify(autoAreas.map(w => [w.u.slice(-8), w.body])));
+  const autoCenter = writes.find(w => w.t === 'app_settings');
+  T('センターは住所（西長田1163-5）から取って app_settings に保存', autoCenter && autoCenter.body.value.lat === 34.968 && /国土地理院/.test(autoCenter.body.value.src || ''), autoCenter && JSON.stringify(autoCenter.body.value));
+  const autoMsg = await page.textContent('#ev-geo-auto-msg');
+  T('会場（住所なし）は見つからずと出す', /見つからず 1件/.test(autoMsg), autoMsg);
+  T('自動取得のあと、地区の中心からの距離が出る（神余→センター 2.1 km）', /山→センター 2\.1 km/.test(await page.textContent('.ev-sheet-card[data-label="TGC-08-T276"]')), '');
+
   await paste('center', '34°58\'04.8"N 139°51\'12.6"E');   // 34.968, 139.8535
   await paste('venue', '34°59\'49.2"N 139°52\'12.0"E');    // 34.997, 139.87
   await page.evaluate(() => { const row = [...document.querySelectorAll('.ev-geo-row[data-kind="area"]')].find(r => /神余/.test(r.textContent)); row.querySelector('.ev-geo-paste').value = '34.95, 139.86'; row.querySelector('button').click(); });
   await page.waitForTimeout(300);
-  const wCenter = writes.find(w => w.t === 'app_settings');
+  const wCenter = writes.filter(w => w.t === 'app_settings').pop();
   const wVenue = writes.find(w => w.t === 'event_venues');
-  const wArea = writes.find(w => w.t === 'area_master');
+  const wArea = writes.filter(w => w.t === 'area_master').pop();
   T('センターの座標は app_settings.center_location に保存', wCenter && Math.abs(wCenter.body.value.lat - 34.968) < 0.001 && Math.abs(wCenter.body.value.lng - 139.8535) < 0.001, wCenter && JSON.stringify(wCenter.body.value));
   T('会場の座標は event_venues に PATCH', wVenue && /id=eq\.v1/.test(wVenue.u) && Math.abs(wVenue.body.lat - 34.997) < 0.001, wVenue && JSON.stringify(wVenue.body));
   T('地区の座標は area_master に PATCH（10進でも貼れる）', wArea && /id=eq\.a1/.test(wArea.u) && wArea.body.lat === 34.95 && wArea.body.lng === 139.86, wArea && JSON.stringify(wArea.body));
