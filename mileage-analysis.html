@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>館山ジビエセンター － フードマイレージ解析（山→センター→お客さん）</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Barlow+Condensed:wght@400;600;700&display=swap');
+:root {
+  --bg:#0f1117; --surface:#1a1e2a; --surface2:#222736; --border:#2e3447;
+  --accent:#e8a44a; --accent2:#c06a2a; --green:#4caf7d; --red:#e05555; --blue:#5a8cd8; --yellow:#f0c040; --purple:#9b7fd4;
+  --text:#e8eaf0; --text2:#8b90a8; --radius:10px;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--text); font-family:'Noto Sans JP',sans-serif; font-size:14px; min-height:100vh; }
+.header { background:var(--surface); border-bottom:2px solid var(--accent); padding:14px 20px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; flex-wrap:wrap; gap:10px; }
+.header-title { font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:700; color:var(--accent); letter-spacing:.05em; }
+.header-sub { font-size:11px; color:var(--text2); margin-top:2px; }
+.nav-links { display:flex; gap:8px; flex-wrap:wrap; }
+.nav-link { background:var(--surface2); border:1px solid var(--border); color:var(--text2); padding:6px 12px; border-radius:6px; text-decoration:none; font-size:12px; }
+.nav-link:hover { color:var(--accent); border-color:var(--accent); }
+.filter-bar { background:var(--surface); border-bottom:1px solid var(--border); padding:12px 20px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.filter-group { display:flex; align-items:center; gap:6px; }
+.filter-label { font-size:12px; color:var(--text2); white-space:nowrap; }
+select, input[type="date"], input[type="number"], input[type="text"] { background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:6px; font-size:13px; font-family:inherit; color-scheme:dark; }
+select:focus, input:focus { outline:none; border-color:var(--accent); }
+.btn { padding:7px 16px; border-radius:6px; border:none; cursor:pointer; font-size:13px; font-family:inherit; font-weight:500; }
+.btn:disabled { opacity:.5; cursor:default; }
+.btn-accent { background:var(--accent); color:#000; }
+.btn-accent:hover { background:var(--accent2); }
+.btn-secondary { background:var(--surface2); color:var(--text2); border:1px solid var(--border); }
+.btn-secondary:hover { color:var(--text); border-color:var(--text2); }
+.btn-sm { padding:4px 10px; font-size:12px; }
+.main { padding:20px; max-width:1400px; margin:0 auto; }
+.status-bar { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px 16px; margin-bottom:16px; font-size:13px; display:none; white-space:pre-wrap; }
+.status-bar.info { border-color:var(--blue); color:var(--blue); display:block; }
+.status-bar.error { border-color:var(--red); color:var(--red); display:block; }
+.status-bar.loading { border-color:var(--accent); color:var(--accent); display:block; }
+.status-bar.warn { border-color:var(--yellow); color:var(--yellow); display:block; }
+.kpi-row { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:20px; }
+.kpi-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px; position:relative; overflow:hidden; }
+.kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--kpi-color,var(--accent)); }
+.kpi-label { font-size:11px; color:var(--text2); letter-spacing:.06em; margin-bottom:6px; }
+.kpi-value { font-family:'Barlow Condensed',sans-serif; font-size:26px; font-weight:700; }
+.kpi-sub { font-size:11px; color:var(--text2); margin-top:4px; line-height:1.5; }
+.charts-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:20px; }
+.chart-full { grid-column:1 / -1; }
+.chart-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px; }
+.chart-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; gap:10px; flex-wrap:wrap; }
+.chart-title { font-size:14px; font-weight:500; }
+.chart-subtitle { font-size:11px; color:var(--text2); margin-top:2px; line-height:1.5; }
+.chart-wrap { position:relative; height:240px; }
+table { width:100%; border-collapse:collapse; }
+th { padding:8px 10px; text-align:left; font-size:11px; color:var(--text2); font-weight:500; letter-spacing:.04em; border-bottom:1px solid var(--border); background:var(--surface2); white-space:nowrap; }
+td { padding:8px 10px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:middle; }
+tr:last-child td { border-bottom:none; }
+.td-num { text-align:right; font-variant-numeric:tabular-nums; font-family:'Barlow Condensed',sans-serif; font-size:15px; }
+.note { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:14px 18px; font-size:12.5px; line-height:1.8; color:var(--text2); margin-bottom:20px; }
+.note b { color:var(--text); }
+.note ul { padding-left:18px; }
+.tag { display:inline-block; padding:1px 7px; border-radius:4px; font-size:11px; background:rgba(232,164,74,.15); color:var(--accent); margin-right:4px; }
+.tag-red { background:rgba(224,85,85,.15); color:var(--red); }
+.tag-green { background:rgba(76,175,125,.15); color:var(--green); }
+.muted { color:var(--text2); font-size:12px; }
+.bar-line { height:10px; border-radius:3px; background:rgba(232,164,74,.85); display:inline-block; vertical-align:middle; }
+.coef { display:flex; gap:10px; flex-wrap:wrap; align-items:center; font-size:12px; color:var(--text2); }
+.coef input { width:90px; }
+@media (max-width:1000px) { .kpi-row { grid-template-columns:repeat(2,1fr); } .charts-grid { grid-template-columns:1fr; } .chart-full { grid-column:1; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">🐗 TATEYAMA GIBIER</div>
+    <div class="header-sub">フードマイレージ解析 ― 山 → センター → お客さん の距離と「t·km」</div>
+  </div>
+  <div class="nav-links">
+    <a href="index.html?tab=analysis" class="nav-link">📈 解析一覧</a>
+    <a href="catch-analysis.html" class="nav-link">🌙 捕獲条件分析</a>
+    <a href="sales-dashboard.html" class="nav-link">📊 売上分析</a>
+    <a href="index.html" class="nav-link">📦 業務アプリ</a>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <div class="filter-group"><span class="filter-label">種類</span><select id="fSpecies"></select></div>
+  <div class="filter-group"><span class="filter-label">期間</span>
+    <input type="date" id="fFrom"><span class="filter-label">〜</span><input type="date" id="fTo"></div>
+  <div class="filter-group"><span class="filter-label">出荷の状態</span>
+    <select id="fStatus"><option value="shipped" selected>出荷・発送済みのみ</option><option value="all">すべての注文</option></select></div>
+  <button class="btn btn-accent" onclick="runAnalysis()">🔍 解析する</button>
+  <button class="btn btn-secondary" onclick="geoFetchAll()" id="btnGeo" disabled>🌐 未取得の座標をまとめて取得</button>
+  <button class="btn btn-secondary" onclick="downloadCsv('orders')" id="btnCsvO" disabled>⬇ 出荷別CSV</button>
+  <button class="btn btn-secondary" onclick="downloadCsv('individuals')" id="btnCsvI" disabled>⬇ 個体別CSV</button>
+  <span class="muted" id="lastUpdated" style="margin-left:auto"></span>
+</div>
+
+<div class="main">
+  <div id="statusBar" class="status-bar"></div>
+
+  <div class="kpi-row">
+    <div class="kpi-card" style="--kpi-color:var(--green)"><div class="kpi-label">🏔 山 → センター</div><div class="kpi-value" id="kpiLeg1">—</div><div class="kpi-sub" id="kpiLeg1Sub">平均 km（頭数で平均）</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--blue)"><div class="kpi-label">🚚 センター → お客さん</div><div class="kpi-value" id="kpiLeg2">—</div><div class="kpi-sub" id="kpiLeg2Sub">平均 km（出荷kgで加重）</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--accent)"><div class="kpi-label">📦 フードマイレージ合計</div><div class="kpi-value" id="kpiTkm">—</div><div class="kpi-sub" id="kpiTkmSub">t·km（重さ×距離）</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--purple)"><div class="kpi-label">🌏 輸入肉と比べると</div><div class="kpi-value" id="kpiRatio">—</div><div class="kpi-sub" id="kpiRatioSub">1kgあたりの距離で比較</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--yellow)"><div class="kpi-label">🌱 CO₂ 参考値</div><div class="kpi-value" id="kpiCo2">—</div><div class="kpi-sub" id="kpiCo2Sub">kg-CO₂（係数は下で変えられます）</div></div>
+  </div>
+
+  <div class="chart-card chart-full" style="margin-bottom:20px">
+    <div class="chart-header"><div><div class="chart-title">📍 座標の揃い（距離を出せる割合）</div>
+      <div class="chart-subtitle">山側は「捕獲地区の概ね中心」（地区マスタの座標）、お客さん側は「住所の市区町村の中心」で数えます。未取得があると、その分は距離に入りません。</div></div>
+      <div class="coef" id="geoStatus"></div></div>
+    <div id="geoBox" class="muted">解析を実行してください。</div>
+  </div>
+
+  <div class="charts-grid" id="chartsGrid"></div>
+
+  <div class="chart-card chart-full" style="margin-bottom:20px">
+    <div class="chart-header"><div><div class="chart-title">🧮 係数（変えると上のKPIが計算し直されます）</div>
+      <div class="chart-subtitle">輸入肉の距離は「この肉の物語」ページと同じ目安。CO₂は国交省「輸送量当たりの二酸化炭素排出量（トンキロ法）」の考え方で、山→センターは自家用の軽トラ、センター→お客さんは宅配便（営業用貨物車）の目安を初期値にしています。実測ではなく参考値です。</div></div></div>
+    <div class="coef">
+      <label>輸入牛肉の距離 <input type="number" id="cBeefKm" value="7800"> km</label>
+      <label>山→センター <input type="number" id="cCo2Leg1" value="1166"> g-CO₂/t·km</label>
+      <label>センター→お客さん <input type="number" id="cCo2Leg2" value="216"> g-CO₂/t·km</label>
+      <button class="btn btn-secondary btn-sm" onclick="renderAll()">再計算</button>
+    </div>
+  </div>
+
+  <div class="chart-card chart-full" style="margin-bottom:20px">
+    <div class="chart-header"><div><div class="chart-title">🚚 遠くへ運んだ出荷（上位20）</div>
+      <div class="chart-subtitle">距離×重さが大きい順。ここが「フードマイレージを減らせる余地」の候補。</div></div></div>
+    <div id="farBox" class="muted" style="overflow-x:auto">解析を実行してください。</div>
+  </div>
+
+  <div class="note" id="litNote">
+    <b>フードマイレージとは</b>：食べ物の「重さ × 運んだ距離」（単位 t·km）。輸入食料に頼るほど大きくなる、という考え方で、日本は世界でも大きい国のひとつと言われています（農林水産省の試算に基づく考え方）。
+    ジビエは「獲れた山 → センター → 食べる人」しか動かないので、この数字がとても小さいのが特徴です。ここではそれを<b>実データで</b>出します。
+    <ul>
+      <li><b>山 → センター</b>：個体ごとの捕獲地区（概ね中心）からセンターまでの直線距離。個体に緯度経度が別枠で入ればそちらを優先します。重さは精肉の重量（在庫として登録された部位の合計）です。</li>
+      <li><b>センター → お客さん</b>：注文の配送先（無ければ顧客台帳の住所）の「市区町村の中心」までの直線距離。重さは出荷した部位の合計です。</li>
+      <li><b>直線距離</b>なので、実際の走行距離（宅配便は集荷→仕分け→配達）はこれより長くなります。比較のための目安です。</li>
+      <li><b>出店・手渡し</b>は配送先が無いので「センター→お客さん」に入りません（出店シートの距離は出店ページで見られます）。</li>
+    </ul>
+    <b>使い方</b>：初回は「🌐 未取得の座標をまとめて取得」で地区と配送先の座標を国土地理院の住所検索から取り込みます（結果は保存され、次回は不要）。見つからなかった場所は下の表に残るので、Google マップの座標を貼って保存できます。
+  </div>
+
+  <div class="chart-card chart-full" style="margin-bottom:20px">
+    <div class="chart-header"><div><div class="chart-title">📋 出荷別データ（先頭60件）</div>
+      <div class="chart-subtitle">CSVで全件をダウンロードできます。</div></div></div>
+    <div style="overflow-x:auto"><table id="orderTable"><thead><tr>
+      <th>出荷日</th><th>注文</th><th>お客さん</th><th>配送先（市区町村）</th><th class="td-num">距離 km</th><th class="td-num">重さ kg</th><th class="td-num">t·km</th><th>経路</th>
+    </tr></thead><tbody id="orderBody"><tr><td colspan="8" class="muted">解析を実行してください。</td></tr></tbody></table></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+const GSI_URL = 'https://msearch.gsi.go.jp/address-search/AddressSearch?q=';
+const SHIPPED_STATUS = ['発送済', '出荷済', '完了', '配達済', '配送済'];
+const BANDS = [{ max: 10, label: '〜10 km（地元）' }, { max: 50, label: '10〜50 km（房総）' }, { max: 100, label: '50〜100 km' }, { max: 300, label: '100〜300 km（首都圏）' }, { max: 1000, label: '300〜1000 km' }, { max: Infinity, label: '1000 km〜' }];
+
+// ───────────── Supabase ─────────────
+function staffKeyGet(){ try { return localStorage.getItem('tg_staff_key') || sessionStorage.getItem('tg_staff_key') || ''; } catch(e){ return ''; } }
+async function sb(table, query='', method='GET', body=null, prefer=''){
+  const headers = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` };
+  const sk = staffKeyGet(); if (sk) headers['x-staff-key'] = sk;
+  if (body) headers['Content-Type'] = 'application/json';
+  if (prefer) headers['Prefer'] = prefer;
+  const res = await fetch(`${SB_URL}/rest/v1/${table}${query}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  if (!res.ok) throw new Error(`${table}: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
+  const t = await res.text(); return t ? JSON.parse(t) : [];
+}
+function showStatus(type, msg){ const el=document.getElementById('statusBar'); el.className='status-bar '+type; el.textContent=msg; if(!type){ el.style.display='none'; } }
+
+// ───────────── 距離・住所 ─────────────
+function kmBetween(a, b){
+  if(!a||!b||a.lat==null||a.lng==null||b.lat==null||b.lng==null) return null;
+  const R=6371, toR=x=>x*Math.PI/180;
+  const dLat=toR(b.lat-a.lat), dLng=toR(b.lng-a.lng);
+  const s=Math.sin(dLat/2)**2+Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dLng/2)**2;
+  return Math.round(2*R*Math.asin(Math.sqrt(s))*10)/10;
+}
+// 住所 → 「都道府県＋市区町村」（座標を引くキー）。番地までは使わない（市区町村の中心で十分な精度）。
+function addrKey(addr){
+  if(!addr) return null;
+  const s=String(addr).replace(/〒?\s*\d{3}[-‐－]?\d{4}/,'').replace(/[\s　]+/g,'');
+  const m=s.match(/^(東京都|北海道|京都府|大阪府|[^\d]{2,3}県)(.*)$/);
+  if(!m) return null;
+  const pref=m[1], rest=m[2]; let city=null;
+  const iShi=rest.indexOf('市'), iGun=rest.indexOf('郡');
+  if(iGun>=0 && (iShi<0 || iGun<iShi)){ const g=rest.match(/^(.+?郡.+?[町村])/); if(g) city=g[1]; }
+  if(!city && iShi>=0){ const g=rest.match(/^(.+?市)(.{1,4}?区)?/); if(g) city=g[1]+(g[2]||''); }
+  if(!city){ const g=rest.match(/^(.+?区)/); if(g) city=g[1]; }
+  if(!city){ const g=rest.match(/^(.+?[町村])/); if(g) city=g[1]; }
+  if(!city) return null;
+  return { pref, city, q: pref+city };
+}
+function parseCoord(s){
+  const m=String(s||'').match(/(-?\d{1,2}\.\d+)[\s,、]+(-?\d{1,3}\.\d+)/);
+  if(!m) return null; const lat=Number(m[1]), lng=Number(m[2]);
+  if(!(lat>20&&lat<50&&lng>120&&lng<155)) return null; return { lat, lng };
+}
+async function geocode(q, mustInclude){
+  const res=await fetch(GSI_URL+encodeURIComponent(q));
+  if(!res.ok) throw new Error('住所検索に失敗 HTTP '+res.status);
+  const list=await res.json();
+  const ok=(list||[]).find(f=>f&&f.geometry&&Array.isArray(f.geometry.coordinates)&&(mustInclude||[]).every(s=>String((f.properties||{}).title||'').includes(s)));
+  if(!ok) return null;
+  return { lat:Math.round(ok.geometry.coordinates[1]*1e6)/1e6, lng:Math.round(ok.geometry.coordinates[0]*1e6)/1e6, title:(ok.properties||{}).title||'' };
+}
+
+// ───────────── データ ─────────────
+const D = { center:null, centerNote:'', areas:[], individuals:[], meatKg:{}, orders:[], items:{}, customers:{}, geo:{} };
+function areaPoint(ind){
+  if(ind.capture_lat!=null&&ind.capture_lng!=null) return { lat:Number(ind.capture_lat), lng:Number(ind.capture_lng), src:'individual', name:`${ind.capture_city||''} ${ind.capture_area||''}` };
+  const area=ind.capture_area||'';
+  const cands=D.areas.filter(a=>(!ind.capture_city||a.city===ind.capture_city)&&(a.oaza===area||a.district===area||(a.oaza&&(area.startsWith(a.oaza)||area.endsWith(a.oaza)))));
+  cands.sort((a,b)=>(b.oaza===area)-(a.oaza===area)||(a.sort_order||0)-(b.sort_order||0));
+  const a=cands[0]; if(!a) return { src:'none', name:`${ind.capture_city||''} ${area}`, area:null };
+  if(a.lat==null||a.lng==null) return { src:'none', name:`${a.city} ${a.oaza}`, area:a };
+  return { lat:Number(a.lat), lng:Number(a.lng), src:'area', name:`${a.city} ${a.oaza}`, area:a };
+}
+async function loadAll(){
+  showStatus('loading','📥 データを読み込み中…');
+  const [settings, areas, inds, inv, orders, items, custs, geo] = await Promise.all([
+    sb('app_settings','?key=eq.center_location&select=value'),
+    sb('area_master','?select=id,city,oaza,district,sort_order,lat,lng&order=sort_order'),
+    sb('individuals','?select=id,label_id,species,capture_date,capture_city,capture_area,capture_lat,capture_lng,weight_total&deleted_at=is.null&capture_date=not.is.null&order=capture_date.asc&limit=20000'),
+    sb('inventory','?select=individual_id,weight_kg,weight&deleted_at=is.null&individual_id=not.is.null&parent_inventory_id=is.null&limit=20000'),
+    sb('orders','?select=id,order_code,order_date,delivery_date,status,customer_id,customer_name,delivery_address,channel,carrier&order=order_date.asc&limit=5000'),
+    sb('order_items','?select=order_id,weight_kg,weight,species&limit=20000'),
+    sb('customers','?select=id,name,address&limit=5000'),
+    sb('geo_cache','?select=q,lat,lng,title,src,fetched_at&limit=5000'),
+  ]);
+  const cv=(settings[0]||{}).value||null;
+  D.center = cv&&cv.lat!=null ? { lat:Number(cv.lat), lng:Number(cv.lng) } : null; D.centerNote = cv&&cv.note ? String(cv.note) : '';
+  D.areas=areas; D.individuals=inds.filter(r=>r.label_id&&!/^TGC-TEST/.test(r.label_id)&&!/^仮/.test(r.label_id));
+  D.meatKg={}; inv.forEach(r=>{ const kg=Number(r.weight_kg??r.weight)||0; D.meatKg[r.individual_id]=(D.meatKg[r.individual_id]||0)+kg; });
+  D.orders=orders.filter(o=>!/練習|テスト/.test(o.channel||'')&&!/^TEST/.test(o.order_code||''));
+  D.items={}; items.forEach(it=>{ const s=D.items[it.order_id]||(D.items[it.order_id]={kg:0,species:{}}); const kg=Number(it.weight_kg??it.weight)||0; s.kg+=kg; s.species[it.species||'不明']=(s.species[it.species||'不明']||0)+kg; });
+  D.customers={}; custs.forEach(c=>D.customers[c.id]=c);
+  D.geo={}; geo.forEach(g=>D.geo[g.q]=g);
+  const bySp={}; D.individuals.forEach(r=>{ bySp[r.species||'不明']=(bySp[r.species||'不明']||0)+1; });
+  const species=Object.keys(bySp).sort((a,b)=>bySp[b]-bySp[a]);
+  const sel=document.getElementById('fSpecies'); sel.innerHTML='<option value="">すべて</option>'+species.map(v=>`<option value="${v}">${v}</option>`).join('');
+  if(species.includes('イノシシ')) sel.value='イノシシ';
+  const f=document.getElementById('fFrom'), t=document.getElementById('fTo');
+  const dates=D.orders.map(o=>o.order_date).filter(Boolean).concat(D.individuals.map(i=>i.capture_date)).sort();
+  if(dates.length){ if(!f.value) f.value=dates[0]; if(!t.value) t.value=dates[dates.length-1]; }
+  document.getElementById('btnGeo').disabled=false;
+  showStatus('', '');
+}
+
+// ───────────── 組み立て ─────────────
+let lastResult=null, charts={};
+function build(){
+  const sp=document.getElementById('fSpecies').value, from=document.getElementById('fFrom').value, to=document.getElementById('fTo').value;
+  const shippedOnly=document.getElementById('fStatus').value==='shipped';
+  const center=D.center;
+  // 個体（山→センター）
+  const inds=D.individuals.filter(i=>(!sp||i.species===sp)&&(!from||i.capture_date>=from)&&(!to||i.capture_date<=to)).map(i=>{
+    const p=areaPoint(i); const km=center?kmBetween(p,center):null; const kg=D.meatKg[i.id]||0;
+    return { label:i.label_id, species:i.species, date:i.capture_date, place:p.name.trim(), src:p.src, area:p.area||null, km, kg, tkm: km!=null?kg/1000*km:null };
+  });
+  return { inds, from, to, sp, shippedOnly };
+}
+function buildOrders(sp, from, to, shippedOnly){
+  const center=D.center;
+  return D.orders.filter(o=>(!from||!o.order_date||o.order_date>=from)&&(!to||!o.order_date||o.order_date<=to)&&(!shippedOnly||SHIPPED_STATUS.includes(o.status))).map(o=>{
+    const c=D.customers[o.customer_id]||null;
+    const addr=o.delivery_address||(c&&c.address)||'';
+    const key=addrKey(addr);
+    const g=key?D.geo[key.q]:null;
+    const p=g&&g.lat!=null?{lat:Number(g.lat),lng:Number(g.lng)}:null;
+    const km=center&&p?kmBetween(center,p):null;
+    const it=D.items[o.id]||{kg:0,species:{}};
+    const kg=sp?(it.species[sp]||0):it.kg;
+    return { id:o.id, code:o.order_code, date:o.order_date, customer:o.customer_name||(c&&c.name)||'', addr, key:key?key.q:null, pref:key?key.pref:null, km, kg, tkm:km!=null?kg/1000*km:null,
+      geoState: !addr?'no_addr':(!key?'no_parse':(!g?'not_fetched':(g.lat==null?'not_found':'ok'))), channel:o.channel||'', carrier:o.carrier||'', status:o.status };
+  }).filter(o=>!sp||o.kg>0);
+}
+function analyze(){
+  const b=build();
+  const inds=b.inds, orders=buildOrders(b.sp,b.from,b.to,b.shippedOnly);
+  const indOk=inds.filter(i=>i.km!=null), indNo=inds.filter(i=>i.km==null);
+  const leg1Mean=indOk.length?indOk.reduce((a,i)=>a+i.km,0)/indOk.length:null;
+  const leg1Kg=indOk.reduce((a,i)=>a+i.kg,0), leg1Tkm=indOk.reduce((a,i)=>a+(i.tkm||0),0);
+  const leg1KgMean=leg1Kg?leg1Tkm/(leg1Kg/1000):null; // kg加重
+  const ordOk=orders.filter(o=>o.km!=null&&o.kg>0), ordNo=orders.filter(o=>o.km==null);
+  const leg2Kg=ordOk.reduce((a,o)=>a+o.kg,0), leg2Tkm=ordOk.reduce((a,o)=>a+o.tkm,0);
+  const leg2KgMean=leg2Kg?leg2Tkm/(leg2Kg/1000):null;
+  // 地区別（頭数・平均km）
+  const byArea={}; inds.forEach(i=>{ const s=byArea[i.place]||(byArea[i.place]={place:i.place,n:0,kmSum:0,kmN:0,kg:0,area:i.area,src:i.src}); s.n++; s.kg+=i.kg; if(i.km!=null){s.kmSum+=i.km;s.kmN++;} });
+  const areas=Object.values(byArea).map(s=>({...s,km:s.kmN?s.kmSum/s.kmN:null})).sort((a,b)=>b.n-a.n);
+  // 距離帯別
+  const bands=BANDS.map(bd=>({label:bd.label,kg:0,n:0}));
+  ordOk.forEach(o=>{ const i=BANDS.findIndex(bd=>o.km<bd.max); bands[i].kg+=o.kg; bands[i].n++; });
+  // 月別
+  const byMonth={}; ordOk.forEach(o=>{ const m=(o.date||'').slice(0,7); const s=byMonth[m]||(byMonth[m]={month:m,kg:0,tkm:0,n:0}); s.kg+=o.kg; s.tkm+=o.tkm; s.n++; });
+  const months=Object.values(byMonth).sort((a,b)=>a.month.localeCompare(b.month)).map(s=>({...s,km:s.kg?s.tkm/(s.kg/1000):null}));
+  // 都道府県別
+  const byPref={}; ordOk.forEach(o=>{ const s=byPref[o.pref]||(byPref[o.pref]={pref:o.pref,kg:0,tkm:0,n:0}); s.kg+=o.kg; s.tkm+=o.tkm; s.n++; });
+  const prefs=Object.values(byPref).sort((a,b)=>b.kg-a.kg).map(s=>({...s,km:s.kg?s.tkm/(s.kg/1000):null}));
+  // チャネル別
+  const byCh={}; ordOk.forEach(o=>{ const k=(o.channel||'不明').replace(/（.*$/,''); const s=byCh[k]||(byCh[k]={ch:k,kg:0,tkm:0,n:0}); s.kg+=o.kg; s.tkm+=o.tkm; s.n++; });
+  const channels=Object.values(byCh).sort((a,b)=>b.kg-a.kg).map(s=>({...s,km:s.kg?s.tkm/(s.kg/1000):null}));
+  // 未取得
+  const missAreas=areas.filter(a=>a.km==null);
+  const missDest={}; ordNo.forEach(o=>{ const k=o.key||o.addr||'(住所なし)'; const s=missDest[k]||(missDest[k]={key:o.key,addr:o.addr,state:o.geoState,n:0,kg:0}); s.n++; s.kg+=o.kg; });
+  const far=ordOk.slice().sort((a,b)=>b.tkm-a.tkm).slice(0,20);
+  return { inds, orders, indOk, indNo, leg1Mean, leg1KgMean, leg1Kg, leg1Tkm, ordOk, ordNo, leg2Kg, leg2Tkm, leg2KgMean, areas, bands, months, prefs, channels, missAreas, missDest:Object.values(missDest).sort((a,b)=>b.kg-a.kg), far };
+}
+async function runAnalysis(){
+  try{
+    lastResult=analyze();
+    renderAll();
+    ['btnCsvO','btnCsvI'].forEach(id=>document.getElementById(id).disabled=false);
+    document.getElementById('lastUpdated').textContent='更新: '+new Date().toLocaleString('ja-JP');
+    const r=lastResult; const probs=[];
+    if(!D.center) probs.push('センターの座標が未設定です（業務アプリ → 出店シート → 距離の設定）。');
+    else if(D.centerNote) probs.push(`センターの座標は「${D.centerNote}」のままです。距離の設定で確認してください。`);
+    if(r.indNo.length) probs.push(`山→センター: ${r.indNo.length}頭（${r.missAreas.length}地区）の座標が未取得。`);
+    if(r.ordNo.length) probs.push(`センター→お客さん: ${r.ordNo.length}件の配送先が未取得。`);
+    if(probs.length) showStatus('warn','⚠ '+probs.join('\n')+'\n「🌐 未取得の座標をまとめて取得」で埋められます（見つからない場所は下の表から手で貼れます）。');
+    else showStatus('info',`✅ 個体 ${r.inds.length}頭・出荷 ${r.orders.length}件を解析しました`);
+  }catch(e){ showStatus('error','解析に失敗しました: '+(e.message||e)); }
+}
+
+// ───────────── 画面 ─────────────
+function fmtKm(v){ return v==null?'—':(v<10?v.toFixed(1):Math.round(v).toLocaleString()); }
+function fmtKg(v){ return v==null?'—':(v<10?v.toFixed(2):v.toFixed(1)); }
+function fmtTkm(v){ return v==null?'—':(v<10?v.toFixed(2):Math.round(v).toLocaleString()); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function renderAll(){
+  const r=lastResult; if(!r) return;
+  const beefKm=Number(document.getElementById('cBeefKm').value)||7800;
+  const co2a=Number(document.getElementById('cCo2Leg1').value)||0, co2b=Number(document.getElementById('cCo2Leg2').value)||0;
+  document.getElementById('kpiLeg1').textContent=r.leg1Mean==null?'—':fmtKm(r.leg1Mean)+' km';
+  document.getElementById('kpiLeg1Sub').textContent=`${r.indOk.length}頭／${r.inds.length}頭で計算（精肉 ${fmtKg(r.leg1Kg)} kg）`;
+  document.getElementById('kpiLeg2').textContent=r.leg2KgMean==null?'—':fmtKm(r.leg2KgMean)+' km';
+  document.getElementById('kpiLeg2Sub').textContent=`${r.ordOk.length}件／${r.orders.length}件で計算（出荷 ${fmtKg(r.leg2Kg)} kg）`;
+  const total=r.leg1Tkm+r.leg2Tkm;
+  document.getElementById('kpiTkm').textContent=fmtTkm(total)+' t·km';
+  document.getElementById('kpiTkmSub').textContent=`山→センター ${fmtTkm(r.leg1Tkm)} ＋ センター→お客さん ${fmtTkm(r.leg2Tkm)}`;
+  const perKg=(r.leg1KgMean!=null||r.leg2KgMean!=null)?(r.leg1KgMean||0)+(r.leg2KgMean||0):null;
+  const ratio=perKg&&perKg>0?beefKm/perKg:null;
+  document.getElementById('kpiRatio').textContent=ratio==null?'—':`約 1/${Math.round(ratio).toLocaleString()}`;
+  document.getElementById('kpiRatioSub').textContent=perKg==null?'座標が揃うと出ます':`1kgあたり 約${fmtKm(perKg)} km ／ 輸入牛肉 ${beefKm.toLocaleString()} km`;
+  const co2=(r.leg1Tkm*co2a+r.leg2Tkm*co2b)/1000;
+  document.getElementById('kpiCo2').textContent=(co2<10?co2.toFixed(2):Math.round(co2).toLocaleString())+' kg';
+  const beefCo2=(r.leg2Kg/1000*beefKm*co2b)/1000;
+  document.getElementById('kpiCo2Sub').textContent=`同じ ${fmtKg(r.leg2Kg)} kg を輸入牛肉の距離で運ぶと約 ${beefCo2<10?beefCo2.toFixed(1):Math.round(beefCo2).toLocaleString()} kg-CO₂`;
+
+  // 座標の揃い
+  const pct=(a,b)=>b?Math.round(a/b*100)+'%':'—';
+  document.getElementById('geoStatus').innerHTML=`<span class="tag tag-green">山側 ${pct(r.indOk.length,r.inds.length)}</span><span class="tag tag-green">お客さん側 ${pct(r.ordOk.length,r.orders.length)}</span>`;
+  const geoRows=[];
+  r.missAreas.forEach(a=>geoRows.push(`<tr><td><span class="tag">地区</span>${esc(a.place)}</td><td class="td-num">${a.n}頭</td><td class="muted">${a.area?'地区マスタに座標なし':'地区マスタに該当なし（捕獲地区の表記を確認）'}</td><td>${a.area?`<input type="text" placeholder="34.98, 139.86 を貼る" data-kind="area" data-id="${a.area.id}" style="width:170px"> <button class="btn btn-secondary btn-sm" onclick="geoSaveManual(this)">保存</button>`:''}</td></tr>`));
+  r.missDest.forEach(d=>geoRows.push(`<tr><td><span class="tag">配送先</span>${esc(d.key||d.addr||'(住所なし)')}</td><td class="td-num">${d.n}件・${fmtKg(d.kg)}kg</td><td class="muted">${{no_addr:'注文にも顧客台帳にも住所がない',no_parse:'住所から市区町村を読めない',not_fetched:'未取得（まとめて取得で埋まる）',not_found:'国土地理院で見つからず'}[d.state]||d.state}</td><td>${d.key?`<input type="text" placeholder="35.46, 139.62 を貼る" data-kind="dest" data-id="${esc(d.key)}" style="width:170px"> <button class="btn btn-secondary btn-sm" onclick="geoSaveManual(this)">保存</button>`:''}</td></tr>`));
+  document.getElementById('geoBox').innerHTML=geoRows.length?`<table><thead><tr><th>場所</th><th class="td-num">件数</th><th>状態</th><th>手で座標を入れる</th></tr></thead><tbody>${geoRows.join('')}</tbody></table>`:'<span class="muted">すべての場所の座標が揃っています。</span>';
+
+  // グラフ
+  Object.values(charts).forEach(c=>{ try{c.destroy();}catch(e){} }); charts={};
+  const grid=document.getElementById('chartsGrid'); grid.innerHTML='';
+  const card=(key,title,sub,labels,values,valueLabel,line,lineLabel)=>{
+    const id='ch_'+key;
+    grid.insertAdjacentHTML('beforeend',`<div class="chart-card"><div class="chart-header"><div><div class="chart-title">${title}</div><div class="chart-subtitle">${sub}</div></div></div><div class="chart-wrap"><canvas id="${id}"></canvas></div></div>`);
+    if(!labels.length){ document.getElementById(id).parentElement.innerHTML='<span class="muted">データがありません</span>'; return; }
+    if(typeof Chart==='undefined'){
+      const mx=Math.max(...values,0.01); const wrap=document.getElementById(id).parentElement; wrap.style.height='auto';
+      wrap.innerHTML=`<table class="fallback-bars">${labels.map((l,i)=>`<tr><td style="white-space:nowrap;padding:3px 6px;font-size:12px;color:var(--text2)">${esc(l)}</td><td style="width:100%;padding:3px 6px"><span class="bar-line" style="width:${(values[i]/mx*100).toFixed(1)}%"></span> <span class="td-num">${values[i].toFixed(1)}</span>${line?` <span class="muted">${lineLabel} ${line[i]==null?'—':line[i].toFixed(1)}</span>`:''}</td></tr>`).join('')}</table>`;
+      return;
+    }
+    const ds=[{ label:valueLabel, data:values.map(v=>+v.toFixed(2)), backgroundColor:'rgba(232,164,74,.85)', borderRadius:4, yAxisID:'y' }];
+    if(line) ds.push({ label:lineLabel, type:'line', data:line.map(v=>v==null?null:+v.toFixed(1)), borderColor:'#5a8cd8', pointRadius:3, borderWidth:1.5, yAxisID:'y2' });
+    const scales={ x:{ ticks:{ color:'#8b90a8', font:{size:10} }, grid:{display:false} }, y:{ beginAtZero:true, ticks:{color:'#8b90a8'}, grid:{color:'#2e3447'}, title:{display:true,text:valueLabel,color:'#8b90a8'} } };
+    if(line) scales.y2={ position:'right', beginAtZero:true, ticks:{color:'#5a8cd8'}, grid:{drawOnChartArea:false}, title:{display:true,text:lineLabel,color:'#5a8cd8'} };
+    charts[key]=new Chart(document.getElementById(id).getContext('2d'),{ type:'bar', data:{ labels, datasets:ds }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:!!line, labels:{color:'#8b90a8'}} }, scales } });
+  };
+  const topAreas=r.areas.slice(0,15);
+  card('area','🏔 捕獲地区別：頭数と センターまでの距離','棒＝頭数、点＝地区中心からセンターまでの km。上位15地区。',topAreas.map(a=>a.place),topAreas.map(a=>a.n),'頭数',topAreas.map(a=>a.km),'km');
+  card('band','📏 距離帯別：どこまで運んでいるか','棒＝その距離帯へ出荷した重さ（kg）。地元で食べられている割合が分かります。',r.bands.map(b=>b.label),r.bands.map(b=>b.kg),'出荷 kg');
+  card('month','🗓 月別：出荷kgと平均距離','棒＝出荷 kg、点＝kg加重の平均距離。遠方向けが増えた月が分かります。',r.months.map(m=>m.month),r.months.map(m=>m.kg),'出荷 kg',r.months.map(m=>m.km),'平均 km');
+  const topPrefs=r.prefs.slice(0,10);
+  card('pref','🗾 都道府県別：出荷kgと距離','棒＝出荷 kg、点＝平均 km。上位10。',topPrefs.map(p=>p.pref),topPrefs.map(p=>p.kg),'出荷 kg',topPrefs.map(p=>p.km),'km');
+  card('channel','🛒 経路別：出荷kgと平均距離','直販・ネットショップ・ポータルなど、注文の入口ごとの距離。',r.channels.map(c=>c.ch),r.channels.map(c=>c.kg),'出荷 kg',r.channels.map(c=>c.km),'平均 km');
+
+  // 遠い出荷
+  document.getElementById('farBox').innerHTML=r.far.length?`<table><thead><tr><th>出荷日</th><th>注文</th><th>お客さん</th><th>配送先</th><th class="td-num">km</th><th class="td-num">kg</th><th class="td-num">t·km</th></tr></thead><tbody>${r.far.map(o=>`<tr><td>${esc(o.date||'')}</td><td>${esc(o.code)}</td><td>${esc(o.customer)}</td><td>${esc(o.key)}</td><td class="td-num">${fmtKm(o.km)}</td><td class="td-num">${fmtKg(o.kg)}</td><td class="td-num">${fmtTkm(o.tkm)}</td></tr>`).join('')}</tbody></table>`:'<span class="muted">距離を出せた出荷がありません。</span>';
+
+  // 出荷別テーブル
+  const stateJa={ok:'',no_addr:'住所なし',no_parse:'住所を読めず',not_fetched:'座標未取得',not_found:'見つからず'};
+  document.getElementById('orderBody').innerHTML=r.orders.slice(0,60).map(o=>`<tr><td>${esc(o.date||'')}</td><td>${esc(o.code)}</td><td>${esc(o.customer)}</td><td>${esc(o.key||'')} ${stateJa[o.geoState]?`<span class="tag tag-red">${stateJa[o.geoState]}</span>`:''}</td><td class="td-num">${fmtKm(o.km)}</td><td class="td-num">${fmtKg(o.kg)}</td><td class="td-num">${fmtTkm(o.tkm)}</td><td class="muted">${esc(o.channel)}${o.carrier?' / '+esc(o.carrier):''}</td></tr>`).join('')||'<tr><td colspan="8" class="muted">データがありません</td></tr>';
+}
+
+// ───────────── 座標の取得・保存 ─────────────
+async function geoFetchAll(){
+  if(!lastResult){ await runAnalysis(); if(!lastResult) return; }
+  const btn=document.getElementById('btnGeo'); btn.disabled=true;
+  const areas=lastResult.missAreas.filter(a=>a.area).map(a=>a.area);
+  const dests=lastResult.missDest.filter(d=>d.key&&d.state==='not_fetched').map(d=>d.key);
+  const total=areas.length+dests.length;
+  if(!total){ showStatus('info','取得できる未取得の場所はありません（見つからなかった場所は手で貼ってください）。'); btn.disabled=false; return; }
+  let done=0, miss=[], fail=[];
+  const say=()=>showStatus('loading',`🌐 座標を取得中… ${done} / ${total}（見つからず ${miss.length}・通信失敗 ${fail.length}）`);
+  say();
+  for(const a of areas){
+    try{
+      const g=await geocode(`千葉県${a.city}${a.oaza}`,[a.city,a.oaza]);
+      if(!g){ miss.push(`${a.city} ${a.oaza}`); }
+      else { await sb('area_master',`?id=eq.${a.id}`,'PATCH',{lat:g.lat,lng:g.lng}); a.lat=g.lat; a.lng=g.lng; }
+    }catch(e){ fail.push(`${a.city} ${a.oaza}: ${e.message||e}`); }
+    done++; say();
+  }
+  for(const q of dests){
+    try{
+      const key=addrKey(q)||{pref:'',city:q};
+      const g=await geocode(q,[key.city]);
+      const row={ q, lat:g?g.lat:null, lng:g?g.lng:null, title:g?g.title:null, src:'gsi', fetched_at:new Date().toISOString() };
+      await sb('geo_cache','','POST',row,'resolution=merge-duplicates');
+      D.geo[q]=row; if(!g) miss.push(q);
+    }catch(e){ fail.push(`${q}: ${e.message||e}`); }
+    done++; say();
+  }
+  btn.disabled=false;
+  lastResult=analyze(); renderAll();
+  const msg=[`🌐 座標の取得が終わりました: ${total}件中 取得 ${total-miss.length-fail.length}・見つからず ${miss.length}・通信失敗 ${fail.length}`];
+  if(miss.length) msg.push('見つからず: '+miss.join('、'));
+  if(fail.length) msg.push('通信失敗: '+fail.slice(0,5).join(' / ')+(fail.length>5?' …':''));
+  showStatus(fail.length?'error':(miss.length?'warn':'info'), msg.join('\n'));
+}
+async function geoSaveManual(btn){
+  const input=btn.previousElementSibling; const c=parseCoord(input.value);
+  if(!c){ showStatus('error','座標の形式が違います。「34.98, 139.86」のように緯度, 経度の順で貼ってください。'); return; }
+  try{
+    if(input.dataset.kind==='area'){
+      await sb('area_master',`?id=eq.${input.dataset.id}`,'PATCH',{lat:c.lat,lng:c.lng});
+      D.areas.forEach(a=>{ if(String(a.id)===String(input.dataset.id)){ a.lat=c.lat; a.lng=c.lng; } });
+    }else{
+      const row={ q:input.dataset.id, lat:c.lat, lng:c.lng, title:null, src:'manual', fetched_at:new Date().toISOString() };
+      await sb('geo_cache','','POST',row,'resolution=merge-duplicates'); D.geo[row.q]=row;
+    }
+    lastResult=analyze(); renderAll(); showStatus('info','✅ 座標を保存しました');
+  }catch(e){ showStatus('error','保存に失敗しました: '+(e.message||e)); }
+}
+
+// ───────────── CSV ─────────────
+function csvOf(kind){
+  const r=lastResult; if(!r) return '';
+  const v=x=>x==null?'':String(x).replace(/"/g,'""'); const q=x=>/[",\n]/.test(String(x??''))?`"${v(x)}"`:v(x);
+  if(kind==='individuals'){
+    const head=['個体番号','種類','捕獲日','捕獲地区','座標の元','センターまでkm','精肉kg','t·km'];
+    return '﻿'+[head.join(',')].concat(r.inds.map(i=>[i.label,i.species,i.date,i.place,{individual:'個体の緯度経度',area:'地区の中心',none:'未取得'}[i.src]||i.src,i.km??'',i.kg.toFixed(2),i.tkm==null?'':i.tkm.toFixed(3)].map(q).join(','))).join('\n');
+  }
+  const head=['出荷日','注文','お客さん','配送先(市区町村)','状態','距離km','重さkg','t·km','経路','配送'];
+  const st={ok:'',no_addr:'住所なし',no_parse:'住所を読めず',not_fetched:'座標未取得',not_found:'見つからず'};
+  return '﻿'+[head.join(',')].concat(r.orders.map(o=>[o.date,o.code,o.customer,o.key,st[o.geoState]??o.geoState,o.km??'',o.kg.toFixed(2),o.tkm==null?'':o.tkm.toFixed(3),o.channel,o.carrier].map(q).join(','))).join('\n');
+}
+function downloadCsv(kind){
+  const csv=csvOf(kind); if(!csv) return;
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`フードマイレージ_${kind==='individuals'?'個体別':'出荷別'}_${document.getElementById('fFrom').value}_${document.getElementById('fTo').value}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+loadAll().then(()=>runAnalysis()).catch(e=>showStatus('error','データを読み込めませんでした: '+(e.message||e)));
+</script>
+</body>
+</html>
