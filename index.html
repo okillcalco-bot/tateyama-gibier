@@ -7746,6 +7746,9 @@ function evAreaKeyOf(ind) { return ind ? ((ind.capture_city || '') + '|' + (ind.
 async function evGeoLoad() {
   evGeo = { center: null, venue: null, areas: [] };
   try { const s = await sb('GET', 'app_settings', null, '?key=eq.center_location&select=value'); evGeo.center = (s[0] && s[0].value) || null; } catch (e) { evGeo.center = null; }
+  // 参考比較の先頭（出典のあるものだけ）。個体シートの「○○なら約 N km（参考値・概算）」に使う
+  try { const r = await sb('GET', 'app_settings', null, '?key=eq.mileage_reference&select=value'); const v = (r[0] && r[0].value) || null;
+    evGeo.ref = (v && Array.isArray(v.items)) ? (v.items.filter(it => it && it.name && Number(it.km) > 0 && it.source)[0] || null) : null; } catch (e) { evGeo.ref = null; }
   if (evCur && evCur.venue_id) {
     const v = evVenues.find(x => x.id === evCur.venue_id);
     if (v) evGeo.venue = v;
@@ -8055,7 +8058,7 @@ function evIndSheetHtml(rows, title, dateStr, eventId) {
             <b>今日つかう部位</b><span>${esc2(parts || '—')}</span>
           </div>
           <div class="pr"><small>今日の商品</small>${esc2(s.product_note || parts || '—')}</div>
-          <div class="mi">🚚 フードマイレージ　${m.total == null ? '（距離は未設定）' : `<b>${esc2(evFmtKm(m.total))}</b>　山→センター ${esc2(evFmtKm(m.leg1))}${m.leg2 != null ? '、センター→会場 ' + esc2(evFmtKm(m.leg2)) : ''}<br><span style="color:#666;">豪州産の牛肉なら約 7,800 km。${(i.capture_lat == null || i.capture_lng == null) ? '獲れた場所は地区のおおよその中心で数えています。' : ''}</span>`}</div>
+          <div class="mi">🚚 このお肉が旅した距離　${m.total == null ? '（距離は未設定）' : `<b>${esc2(evFmtKm(m.total))}</b>　山→センター ${esc2(evFmtKm(m.leg1))}${m.leg2 != null ? '、センター→会場 ' + esc2(evFmtKm(m.leg2)) : '（会場までは未設定）'}<br><span style="color:#666;">${evGeo.ref ? `${esc2(evGeo.ref.name)}なら約 ${Math.round(Number(evGeo.ref.km)).toLocaleString()} km（参考値・概算）。` : ''}${(i.capture_lat == null || i.capture_lng == null) ? '獲れた場所は地区のおおよその中心で数えています。' : ''}</span>`}</div>
           <div class="ft">
             <div class="qr">${makeQRSVG(individualEventStoryUrl(label, eventId), 42)}</div>
             <div class="qx"><b>この一頭の記録を見る</b>スマホのカメラを向けてください<br><span class="c">食べた感想を、この一頭の記録の最後の一行に。</span><br>スタンプを押すだけでも残ります</div>

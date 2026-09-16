@@ -8,7 +8,14 @@ const path = require('path');
 
 const CENTER = { lat: 34.968, lng: 139.8535 };
 const DATA = {
-  app_settings: [{ value: { name: '館山ジビエセンター', lat: CENTER.lat, lng: CENTER.lng } }],
+  app_settings: [
+    { key: 'center_location', value: { name: '館山ジビエセンター', lat: CENTER.lat, lng: CENTER.lng } },
+    { key: 'co2_factors', value: { method: 'トンキロ法（テスト）', items: [
+      { key: 'leg1', name: '山→センター（軽トラ）', value: 1000, unit: 'g-CO2e/t·km', source: 'テスト出典A', sourceUrl: null, updated_at: '2026-01-01', note: '概数' },
+      { key: 'leg2', name: 'センター→お客さん（宅配）', value: 200, unit: 'g-CO2e/t·km', source: 'テスト出典B', sourceUrl: 'https://example.test/b', updated_at: '2026-01-02', note: '' } ] } },
+    { key: 'mileage_reference', value: { title: 'どれくらい近い？ 参考比較', note: '参考値', items: [
+      { name: '豪州産の牛肉', km: 6600, kind: 'estimate', source: '試算', sourceUrl: null, calculationNote: '直線' } ] } },
+  ],
   area_master: [
     { id: 1, city: '館山市', oaza: '神余', district: '神戸', sort_order: 1, lat: 34.95, lng: 139.86 },
     { id: 2, city: '館山市', oaza: '山本', district: '館野', sort_order: 2, lat: null, lng: null },
@@ -60,7 +67,7 @@ async function open(browser, { failTable } = {}) {
     const m = url.match(/\/rest\/v1\/(\w+)(\?.*)?$/);
     if (m) {
       const t = m[1];
-      if (req.method() !== 'GET') { let body = null; try { body = JSON.parse(req.postData() || 'null'); } catch (e) {} calls.push({ kind: req.method(), table: t, query: m[2] || '', body, prefer: req.headers()['prefer'] || '' }); return J([]); }
+      if (req.method() !== 'GET') { let body = null; try { body = JSON.parse(req.postData() || 'null'); } catch (e) {} calls.push({ kind: req.method(), table: t, query: m[2] || '', body, prefer: req.headers()['prefer'] || '' }); return J(t === 'app_settings' ? [{ key: 'x' }] : []); }
       if (failTable === t) return rt.fulfill({ status: 500, contentType: 'text/plain', body: 'boom' });
       return J(DATA[t] || []);
     }
@@ -138,6 +145,43 @@ async function open(browser, { failTable } = {}) {
   ck('画面: 比較表に 輸入／国産（地域外）／国産（地域内）／市場平均 の列と当センターの行', /輸入/.test(meat.box) && /国産（地域外）/.test(meat.box) && /地域内/.test(meat.box) && /市場平均/.test(meat.box) && /当センターのジビエ/.test(meat.box), '');
   ck('画面: 当センターとの倍率が出る', /当センターの [\d,\.]+倍/.test(meat.box), (meat.box.match(/当センターの [\d,\.]+倍/) || [''])[0]);
   ck('画面: 内訳に出どころ（貿易統計・畜産統計）とシェアが出る', /貿易統計/.test(meat.detail) && /畜産統計/.test(meat.detail) && /鹿児島 18%/.test(meat.detail) && /ブラジル（パラナ） 70%/.test(meat.detail), '');
+
+  // ── 指標の分離（輸送距離 km／フードマイレージ t·km／推定CO2）・info・係数と参考比較の読み書き ──
+  const kpi = await page.evaluate(() => ({ labels: [...document.querySelectorAll('.kpi-label')].map(e => e.textContent.trim()), infoBtns: document.querySelectorAll('.kpi-label .info-btn').length,
+    co2: document.getElementById('kpiCo2').textContent, co2sub: document.getElementById('kpiCo2Sub').textContent, ratioSub: document.getElementById('kpiRatioSub').textContent,
+    factorState: document.getElementById('factorState').textContent, factorBox: document.getElementById('factorBox').textContent, refState: document.getElementById('refState').textContent,
+    refRows: document.querySelectorAll('#refBox .ref-row input[data-k="name"]').length, infoHidden: document.getElementById('infoBox').style.display !== 'block' }));
+  ck('KPI: 輸送距離(km)・フードマイレージ(t·km)・推定輸送CO₂(kg-CO₂e) を別の指標として並べる', /輸送距離 山 → センター（km）/.test(kpi.labels[0]) && /輸送距離 センター → お客さん（km）/.test(kpi.labels[1]) && /フードマイレージ（t·km）/.test(kpi.labels[2]) && /推定輸送CO₂（kg-CO₂e）/.test(kpi.labels[4]), kpi.labels.join(' | '));
+  ck('KPI: 5枚すべてに info アイコンがあり、説明は閉じている', kpi.infoBtns === 5 && kpi.infoHidden, String(kpi.infoBtns));
+  ck('CO₂: 係数は app_settings の値（1000／200）で計算され、推定値と明記', Math.abs(parseFloat(kpi.co2) - ((0.0315 * 1000 + (3.5 / 1000 * 58.457) * 200) / 1000)) < 0.01 && /推定値/.test(kpi.co2sub), JSON.stringify([kpi.co2, kpi.co2sub]));
+  ck('参考比較: 先頭の参考値（豪州産の牛肉 6,600 km・参考値・概算）と比べる', /豪州産の牛肉 約6,600 km（参考値・概算）/.test(kpi.ratioSub), kpi.ratioSub);
+  ck('係数の表: 保存済みを使用中、名称・値・単位・出典・更新日が見える', /保存済み/.test(kpi.factorState) && /山→センター（軽トラ）/.test(kpi.factorBox) && /g-CO2e\/t·km/.test(kpi.factorBox) && /テスト出典A/.test(kpi.factorBox) && /2026-01-02/.test(kpi.factorBox), kpi.factorBox.slice(0, 160));
+  ck('参考比較の表: 保存済みを使用中、1行', /保存済み/.test(kpi.refState) && kpi.refRows === 1, JSON.stringify([kpi.refState, kpi.refRows]));
+  await page.click('.info-btn[data-info="co2"]');
+  const info = await page.evaluate(() => ({ shown: document.getElementById('infoBox').style.display === 'block', text: document.getElementById('infoBox').textContent }));
+  ck('info(CO₂): 計算式・対象範囲・係数（値・単位・出典・更新日）が出る', info.shown && /トンキロ法（テスト）/.test(info.text) && /1000 g-CO2e\/t·km/.test(info.text) && /200 g-CO2e\/t·km/.test(info.text) && /テスト出典A/.test(info.text) && /2026-01-01/.test(info.text) && /実測ではない/.test(info.text) && /対象/.test(info.text), info.text.slice(0, 200));
+  await page.click('.info-btn[data-info="tkm"]');
+  const info2 = await page.evaluate(() => document.getElementById('infoBox').textContent);
+  ck('info(t·km): 重量×距離の定義と「生体重量は使わない」', /輸送重量 × 輸送距離/.test(info2) && /生体重量は使わない/.test(info2), info2.slice(0, 120));
+  // 係数を変えて再計算 → 保存
+  await page.fill('#factorBox input[data-fi="0"]', '500');
+  await page.evaluate(() => factorsApply());
+  const co2b = await page.evaluate(() => document.getElementById('kpiCo2').textContent);
+  ck('係数を変えて再計算すると CO₂ が変わる（leg1 1000→500）', Math.abs(parseFloat(co2b) - ((0.0315 * 500 + (3.5 / 1000 * 58.457) * 200) / 1000)) < 0.01, co2b);
+  await page.evaluate(() => factorsSave());
+  await page.waitForTimeout(300);
+  const fsave = calls.filter(c => c.kind === 'PATCH' && c.table === 'app_settings' && /co2_factors/.test(c.query)).pop();
+  ck('係数の保存: app_settings co2_factors に PATCH（値500・更新日が今日）', fsave && fsave.body.value.items[0].value === 500 && fsave.body.value.items[0].updated_at === new Date().toISOString().slice(0, 10) && fsave.body.value.items[1].value === 200, JSON.stringify(fsave && fsave.body.value.items));
+  // 参考比較に行を足して保存（出典なしの行は警告）
+  await page.evaluate(() => refAdd());
+  await page.fill('#refBox input[data-ri="1"][data-k="name"]', '鹿児島県産の豚肉');
+  await page.fill('#refBox input[data-ri="1"][data-k="km"]', '940');
+  await page.evaluate(() => refSave());
+  await page.waitForTimeout(300);
+  const rsave = calls.filter(c => c.kind === 'PATCH' && c.table === 'app_settings' && /mileage_reference/.test(c.query)).pop();
+  const rmsg = await page.evaluate(() => document.getElementById('refMsg').textContent);
+  ck('参考比較の保存: app_settings mileage_reference に PATCH（2行、name/km/source/sourceUrl/calculationNote/kind を持つ）', rsave && rsave.body.value.items.length === 2 && rsave.body.value.items[1].name === '鹿児島県産の豚肉' && rsave.body.value.items[1].km === 940 && ['source', 'sourceUrl', 'calculationNote', 'kind'].every(k => k in rsave.body.value.items[1]), JSON.stringify(rsave && rsave.body.value.items[1]));
+  ck('出典の無い行は警告を出す（保存はする）', /揃っていない行が 1 件/.test(rmsg) && /保存しました/.test(rmsg), rmsg);
 
   // ── まとめて取得（地理院→保存） ──
   await page.evaluate(() => geoFetchAll());

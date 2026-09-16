@@ -65,6 +65,15 @@ tr:last-child td { border-bottom:none; }
 .bar-line { height:10px; border-radius:3px; background:rgba(232,164,74,.85); display:inline-block; vertical-align:middle; }
 .coef { display:flex; gap:10px; flex-wrap:wrap; align-items:center; font-size:12px; color:var(--text2); }
 .coef input { width:90px; }
+.info-btn { background:none; border:1px solid var(--border); color:var(--text2); border-radius:50%; width:18px; height:18px; font-size:11px; cursor:pointer; line-height:1; padding:0; margin-left:4px; vertical-align:middle; font-family:inherit; }
+.info-btn:hover { color:var(--accent); border-color:var(--accent); }
+.info-box { background:var(--surface2); border:1px solid var(--accent); border-radius:var(--radius); padding:14px 18px; font-size:12.5px; line-height:1.8; color:var(--text2); margin-bottom:20px; display:none; white-space:pre-wrap; }
+.info-box b { color:var(--text); }
+.factor-row { display:grid; grid-template-columns:minmax(180px,1.2fr) 100px 90px minmax(200px,2fr) 100px; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); font-size:12px; }
+.factor-row input { width:100%; }
+.ref-row { display:grid; grid-template-columns:minmax(140px,1fr) 80px minmax(200px,2fr) minmax(120px,1fr) minmax(160px,1.5fr) 40px; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); font-size:12px; }
+.ref-row input { width:100%; }
+@media (max-width:800px) { .factor-row, .ref-row { grid-template-columns:1fr 1fr; } }
 @media (max-width:1000px) { .kpi-row { grid-template-columns:repeat(2,1fr); } .charts-grid { grid-template-columns:1fr; } .chart-full { grid-column:1; } }
 </style>
 </head>
@@ -100,12 +109,13 @@ tr:last-child td { border-bottom:none; }
   <div id="statusBar" class="status-bar"></div>
 
   <div class="kpi-row">
-    <div class="kpi-card" style="--kpi-color:var(--green)"><div class="kpi-label">🏔 山 → センター</div><div class="kpi-value" id="kpiLeg1">—</div><div class="kpi-sub" id="kpiLeg1Sub">平均 km（頭数で平均）</div></div>
-    <div class="kpi-card" style="--kpi-color:var(--blue)"><div class="kpi-label">🚚 センター → お客さん</div><div class="kpi-value" id="kpiLeg2">—</div><div class="kpi-sub" id="kpiLeg2Sub">平均 km（出荷kgで加重）</div></div>
-    <div class="kpi-card" style="--kpi-color:var(--accent)"><div class="kpi-label">📦 フードマイレージ合計</div><div class="kpi-value" id="kpiTkm">—</div><div class="kpi-sub" id="kpiTkmSub">t·km（重さ×距離）</div></div>
-    <div class="kpi-card" style="--kpi-color:var(--purple)"><div class="kpi-label">🌏 輸入肉と比べると</div><div class="kpi-value" id="kpiRatio">—</div><div class="kpi-sub" id="kpiRatioSub">1kgあたりの距離で比較</div></div>
-    <div class="kpi-card" style="--kpi-color:var(--yellow)"><div class="kpi-label">🌱 CO₂ 参考値</div><div class="kpi-value" id="kpiCo2">—</div><div class="kpi-sub" id="kpiCo2Sub">kg-CO₂（係数は下で変えられます）</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--green)"><div class="kpi-label">🏔 輸送距離 山 → センター（km）<button type="button" class="info-btn" data-info="leg1" onclick="showInfo('leg1')" title="計算式・対象範囲">i</button></div><div class="kpi-value" id="kpiLeg1">—</div><div class="kpi-sub" id="kpiLeg1Sub">平均 km（頭数で平均）</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--blue)"><div class="kpi-label">🚚 輸送距離 センター → お客さん（km）<button type="button" class="info-btn" data-info="leg2" onclick="showInfo('leg2')" title="計算式・対象範囲">i</button></div><div class="kpi-value" id="kpiLeg2">—</div><div class="kpi-sub" id="kpiLeg2Sub">平均 km（出荷kgで加重）</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--accent)"><div class="kpi-label">📦 フードマイレージ（t·km）<button type="button" class="info-btn" data-info="tkm" onclick="showInfo('tkm')" title="計算式・対象範囲">i</button></div><div class="kpi-value" id="kpiTkm">—</div><div class="kpi-sub" id="kpiTkmSub">輸送重量 × 輸送距離</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--purple)"><div class="kpi-label">🌏 参考比較（1kgあたりの距離）<button type="button" class="info-btn" data-info="ratio" onclick="showInfo('ratio')" title="計算式・対象範囲">i</button></div><div class="kpi-value" id="kpiRatio">—</div><div class="kpi-sub" id="kpiRatioSub">参考値・概算との比較</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--yellow)"><div class="kpi-label">🌱 推定輸送CO₂（kg-CO₂e）<button type="button" class="info-btn" data-info="co2" onclick="showInfo('co2')" title="計算式・対象範囲・係数">i</button></div><div class="kpi-value" id="kpiCo2">—</div><div class="kpi-sub" id="kpiCo2Sub">推定値（トンキロ法）。実測ではありません</div></div>
   </div>
+  <div id="infoBox" class="info-box"></div>
 
   <div class="chart-card chart-full" style="margin-bottom:20px">
     <div class="chart-header"><div><div class="chart-title">📍 座標の揃い（距離を出せる割合）</div>
@@ -117,13 +127,26 @@ tr:last-child td { border-bottom:none; }
   <div class="charts-grid" id="chartsGrid"></div>
 
   <div class="chart-card chart-full" style="margin-bottom:20px">
-    <div class="chart-header"><div><div class="chart-title">🧮 係数（変えると上のKPIが計算し直されます）</div>
-      <div class="chart-subtitle">輸入肉の距離は「この肉の物語」ページと同じ目安。CO₂は国交省「輸送量当たりの二酸化炭素排出量（トンキロ法）」の考え方で、山→センターは自家用の軽トラ、センター→お客さんは宅配便（営業用貨物車）の目安を初期値にしています。実測ではなく参考値です。</div></div></div>
-    <div class="coef">
-      <label>輸入牛肉の距離 <input type="number" id="cBeefKm" value="7800"> km</label>
-      <label>山→センター <input type="number" id="cCo2Leg1" value="1166"> g-CO₂/t·km</label>
-      <label>センター→お客さん <input type="number" id="cCo2Leg2" value="216"> g-CO₂/t·km</label>
-      <button class="btn btn-secondary btn-sm" onclick="renderAll()">再計算</button>
+    <div class="chart-header"><div><div class="chart-title">🧮 CO₂ 排出係数（名称・値・単位・出典・更新日）</div>
+      <div class="chart-subtitle">推定輸送CO₂はトンキロ法（輸送重量 t × 輸送距離 km × 排出原単位）。係数はここに保存され（app_settings co2_factors）、ページに埋め込んでいません。値を変えて「再計算」で上のKPIが変わり、「保存」で次回以降も使われます。</div></div>
+      <div id="factorState" class="muted"></div></div>
+    <div id="factorBox"></div>
+    <div class="coef" style="margin-top:10px">
+      <button class="btn btn-secondary btn-sm" onclick="factorsApply()">再計算</button>
+      <button class="btn btn-accent btn-sm" onclick="factorsSave()">保存</button>
+      <span class="muted" id="factorMsg"></span>
+    </div>
+  </div>
+
+  <div class="chart-card chart-full" style="margin-bottom:20px">
+    <div class="chart-header"><div><div class="chart-title">🌏 参考比較の値（消費者向け「この肉の物語」に出るもの）</div>
+      <div class="chart-subtitle">「どれくらい近い？ 参考比較」に並ぶ比較対象。名前・距離・出典・出典URL・計算の注記を持ち、出典の無い行は消費者向けには出ません。すべて「一般的な輸送距離の参考値・概算」として表示されます。</div></div>
+      <div id="refState" class="muted"></div></div>
+    <div id="refBox"></div>
+    <div class="coef" style="margin-top:10px">
+      <button class="btn btn-secondary btn-sm" onclick="refAdd()">＋ 行を足す</button>
+      <button class="btn btn-accent btn-sm" onclick="refSave()">保存</button>
+      <span class="muted" id="refMsg"></span>
     </div>
   </div>
 
@@ -233,7 +256,7 @@ function areaPoint(ind){
 async function loadAll(){
   showStatus('loading','📥 データを読み込み中…');
   const [settings, areas, inds, inv, orders, items, custs, geo] = await Promise.all([
-    sb('app_settings','?key=eq.center_location&select=value'),
+    sb('app_settings','?key=in.(center_location,co2_factors,mileage_reference)&select=key,value'),
     sb('area_master','?select=id,city,oaza,district,sort_order,lat,lng&order=sort_order'),
     sb('individuals','?select=id,label_id,species,capture_date,capture_city,capture_area,capture_lat,capture_lng,weight_total&deleted_at=is.null&capture_date=not.is.null&order=capture_date.asc&limit=20000'),
     sb('inventory','?select=individual_id,weight_kg,weight&deleted_at=is.null&individual_id=not.is.null&parent_inventory_id=is.null&limit=20000'),
@@ -242,8 +265,15 @@ async function loadAll(){
     sb('customers','?select=id,name,address&limit=5000'),
     sb('geo_cache','?select=q,lat,lng,title,src,fetched_at&limit=5000'),
   ]);
-  const cv=(settings[0]||{}).value||null;
+  const byKey={}; (settings||[]).forEach(s=>{ if(s&&s.key) byKey[s.key]=s.value; });
+  const cv=byKey.center_location||null;
   D.center = cv&&cv.lat!=null ? { lat:Number(cv.lat), lng:Number(cv.lng) } : null; D.centerNote = cv&&cv.note ? String(cv.note) : '';
+  // CO2係数・参考比較は app_settings から。無ければ既定値（画面に「既定値（未保存）」と出す）
+  D.factorsFromDb = !!(byKey.co2_factors&&Array.isArray(byKey.co2_factors.items));
+  D.factors = D.factorsFromDb ? JSON.parse(JSON.stringify(byKey.co2_factors)) : JSON.parse(JSON.stringify(FACTORS_DEFAULT));
+  D.refFromDb = !!(byKey.mileage_reference&&Array.isArray(byKey.mileage_reference.items));
+  D.ref = D.refFromDb ? JSON.parse(JSON.stringify(byKey.mileage_reference)) : JSON.parse(JSON.stringify(REF_DEFAULT));
+  renderFactors(); renderRef();
   D.areas=areas; D.individuals=inds.filter(r=>r.label_id&&!/^TGC-TEST/.test(r.label_id)&&!/^仮/.test(r.label_id));
   D.meatKg={}; inv.forEach(r=>{ const kg=Number(r.weight_kg??r.weight)||0; D.meatKg[r.individual_id]=(D.meatKg[r.individual_id]||0)+kg; });
   D.orders=orders.filter(o=>!/練習|テスト/.test(o.channel||'')&&!/^TEST/.test(o.order_code||''));
@@ -343,8 +373,8 @@ function fmtTkm(v){ return v==null?'—':(v<10?v.toFixed(2):Math.round(v).toLoca
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function renderAll(){
   const r=lastResult; if(!r) return;
-  const beefKm=Number(document.getElementById('cBeefKm').value)||7800;
-  const co2a=Number(document.getElementById('cCo2Leg1').value)||0, co2b=Number(document.getElementById('cCo2Leg2').value)||0;
+  const refFirst=(refItemsValid()[0]||{}); const beefKm=Number(refFirst.km)||0; const beefName=refFirst.name||'参考値';
+  const co2a=factorValue('leg1'), co2b=factorValue('leg2');
   document.getElementById('kpiLeg1').textContent=r.leg1Mean==null?'—':fmtKm(r.leg1Mean)+' km';
   document.getElementById('kpiLeg1Sub').textContent=`${r.indOk.length}頭／${r.inds.length}頭で計算（精肉 ${fmtKg(r.leg1Kg)} kg）`;
   document.getElementById('kpiLeg2').textContent=r.leg2KgMean==null?'—':fmtKm(r.leg2KgMean)+' km';
@@ -353,13 +383,13 @@ function renderAll(){
   document.getElementById('kpiTkm').textContent=fmtTkm(total)+' t·km';
   document.getElementById('kpiTkmSub').textContent=`山→センター ${fmtTkm(r.leg1Tkm)} ＋ センター→お客さん ${fmtTkm(r.leg2Tkm)}`;
   const perKg=(r.leg1KgMean!=null||r.leg2KgMean!=null)?(r.leg1KgMean||0)+(r.leg2KgMean||0):null;
-  const ratio=perKg&&perKg>0?beefKm/perKg:null;
+  const ratio=perKg&&perKg>0&&beefKm>0?beefKm/perKg:null;
   document.getElementById('kpiRatio').textContent=ratio==null?'—':`約 1/${Math.round(ratio).toLocaleString()}`;
-  document.getElementById('kpiRatioSub').textContent=perKg==null?'座標が揃うと出ます':`1kgあたり 約${fmtKm(perKg)} km ／ 輸入牛肉 ${beefKm.toLocaleString()} km`;
+  document.getElementById('kpiRatioSub').textContent=perKg==null?'座標が揃うと出ます':(beefKm>0?`1kgあたり 約${fmtKm(perKg)} km ／ ${beefName} 約${beefKm.toLocaleString()} km（参考値・概算）`:'参考比較の値が未設定です');
   const co2=(r.leg1Tkm*co2a+r.leg2Tkm*co2b)/1000;
   document.getElementById('kpiCo2').textContent=(co2<10?co2.toFixed(2):Math.round(co2).toLocaleString())+' kg';
   const beefCo2=(r.leg2Kg/1000*beefKm*co2b)/1000;
-  document.getElementById('kpiCo2Sub').textContent=`同じ ${fmtKg(r.leg2Kg)} kg を輸入牛肉の距離で運ぶと約 ${beefCo2<10?beefCo2.toFixed(1):Math.round(beefCo2).toLocaleString()} kg-CO₂`;
+  document.getElementById('kpiCo2Sub').textContent=`推定値（トンキロ法）。`+(beefKm>0?`同じ ${fmtKg(r.leg2Kg)} kg を ${beefName} の距離（参考値）で運ぶと約 ${beefCo2<10?beefCo2.toFixed(1):Math.round(beefCo2).toLocaleString()} kg-CO₂e`:'実測ではありません');
   renderMeat(perKg&&perKg>0?perKg:null);
 
   // 座標の揃い
@@ -456,6 +486,70 @@ function renderMeat(ours){
   document.getElementById('meatBox').innerHTML=html;
   document.getElementById('meatDetail').innerHTML=`<table><thead><tr><th>肉</th><th>区分</th><th>内訳（シェア%・センターまでの直線距離 km）</th><th>出どころ</th></tr></thead><tbody>${rows.map(r=>r.parts.map(([k,list],i)=>`<tr>${i===0?`<td rowspan="2">${esc(r.meat)}</td>`:''}<td>${k}</td><td class="muted">${list.map(p=>`${esc(p.name)} ${p.share}%・${fmtKm(p.km)}km`).join('／')}</td>${i===0?`<td rowspan="2" class="muted">${esc(r.src)}</td>`:''}</tr>`).join('')).join('')}</tbody></table>
   <div class="muted" style="margin-top:6px">国産の内訳は主産地の上位だけを使い、その中のシェアで加重しています（残りの県はこの平均に近いとみなす）。地域内は千葉県の主産地（牛＝安房、豚・鶏＝北総）の1点で代表させています。</div>`;
+}
+
+// ───────────── CO2係数・参考比較（app_settings）・指標の説明 ─────────────
+// 係数と比較値はページに埋め込まず app_settings から読む。無いときだけ既定値（画面に「既定値（未保存）」と出す）
+const FACTORS_DEFAULT={ method:'トンキロ法（輸送重量 t × 輸送距離 km × 排出原単位）', items:[
+  {key:'leg1',name:'山→センター（自家用の軽トラック）',value:1166,unit:'g-CO2e/t·km',source:'国土交通省「輸送量当たりの二酸化炭素排出量」自家用貨物車（概数）',sourceUrl:null,updated_at:'2026-09-16',note:'概数。実測ではない'},
+  {key:'leg2',name:'センター→お客さん（宅配便＝営業用貨物車）',value:216,unit:'g-CO2e/t·km',source:'国土交通省「輸送量当たりの二酸化炭素排出量」営業用貨物車（概数）',sourceUrl:null,updated_at:'2026-09-16',note:'概数。宅配便は集荷・仕分けを経由するため実距離は直線より長い'} ] };
+const REF_DEFAULT={ title:'どれくらい近い？ 参考比較', note:'一般的な輸送距離の参考値・概算です。', items:[
+  {name:'豪州産の牛肉',km:6600,kind:'estimate',source:'館山ジビエセンター試算（主産地: クイーンズランド州）',sourceUrl:null,calculationNote:'産地の代表点〜館山ジビエセンターの大円距離（直線）の概算'} ] };
+function factorItem(key){ return (((D.factors||{}).items)||[]).find(i=>i&&i.key===key)||null; }
+function factorValue(key){ const it=factorItem(key); return it?(Number(it.value)||0):0; }
+function refItemsValid(){ return (((D.ref||{}).items)||[]).filter(i=>i&&i.name&&Number(i.km)>0&&i.source); }
+function renderFactors(){
+  const items=((D.factors||{}).items)||[];
+  document.getElementById('factorState').textContent=D.factorsFromDb?'保存済みの係数を使用中':'既定値（未保存）を使用中';
+  document.getElementById('factorBox').innerHTML=`<div class="factor-row" style="color:var(--text2)"><span>名称</span><span>値</span><span>単位</span><span>出典・注記</span><span>更新日</span></div>`
+    +items.map((it,i)=>`<div class="factor-row"><span>${esc(it.name)}<br><small class="muted">${esc(it.key)}</small></span><input type="number" step="any" data-fi="${i}" value="${esc(it.value)}"><span>${esc(it.unit)}</span><span class="muted">${esc(it.source||'')}${it.note?'／'+esc(it.note):''}${it.sourceUrl?` <a href="${esc(it.sourceUrl)}" target="_blank" rel="noopener" style="color:var(--blue)">URL</a>`:''}</span><span class="muted">${esc(it.updated_at||'')}</span></div>`).join('');
+}
+function factorsApply(){
+  document.querySelectorAll('#factorBox input[data-fi]').forEach(inp=>{ const it=D.factors.items[Number(inp.dataset.fi)]; if(!it) return; const v=Number(inp.value);
+    if(Number.isFinite(v)&&v!==Number(it.value)){ it.value=v; it.updated_at=new Date().toISOString().slice(0,10); } });
+  renderFactors(); renderAll();
+}
+async function settingSave(key, value){
+  const r=await sb('app_settings',`?key=eq.${key}`,'PATCH',{value},'return=representation');
+  if(!Array.isArray(r)||!r.length) throw new Error('設定行が無いため保存できません（migrations/20260916_story_mileage_pack_reference_co2.sql が未適用）');
+}
+async function factorsSave(){
+  factorsApply(); const msg=document.getElementById('factorMsg');
+  try{ await settingSave('co2_factors', D.factors); D.factorsFromDb=true; renderFactors(); msg.textContent='✅ 保存しました'; }
+  catch(e){ msg.textContent='⚠ 保存に失敗: '+(e.message||e); }
+}
+function renderRef(){
+  const items=((D.ref||{}).items)||[];
+  document.getElementById('refState').textContent=D.refFromDb?'保存済みの値を使用中':'既定値（未保存）を使用中';
+  document.getElementById('refBox').innerHTML=`<div class="ref-row" style="color:var(--text2)"><span>名前</span><span>距離 km</span><span>出典（必須）</span><span>出典URL</span><span>計算の注記</span><span></span></div>`
+    +items.map((it,i)=>`<div class="ref-row"><input type="text" data-ri="${i}" data-k="name" value="${esc(it.name||'')}"><input type="number" step="any" data-ri="${i}" data-k="km" value="${esc(it.km??'')}"><input type="text" data-ri="${i}" data-k="source" value="${esc(it.source||'')}" placeholder="無いと消費者向けには出ません"><input type="text" data-ri="${i}" data-k="sourceUrl" value="${esc(it.sourceUrl||'')}"><input type="text" data-ri="${i}" data-k="calculationNote" value="${esc(it.calculationNote||'')}"><button type="button" class="btn btn-secondary btn-sm" onclick="refDel(${i})">✕</button></div>`).join('');
+}
+function refCollect(){
+  const items=(((D.ref||{}).items)||[]).map(it=>Object.assign({kind:'estimate'},it));
+  document.querySelectorAll('#refBox input[data-ri]').forEach(inp=>{ const it=items[Number(inp.dataset.ri)]; if(!it) return; const k=inp.dataset.k; it[k]= k==='km' ? Number(inp.value) : (inp.value.trim()||null); });
+  D.ref=Object.assign({title:'どれくらい近い？ 参考比較'},D.ref||{},{items});
+}
+function refAdd(){ refCollect(); D.ref.items.push({name:'',km:null,kind:'estimate',source:'',sourceUrl:null,calculationNote:''}); renderRef(); }
+function refDel(i){ refCollect(); D.ref.items.splice(i,1); renderRef(); }
+async function refSave(){
+  refCollect(); const msg=document.getElementById('refMsg');
+  const bad=D.ref.items.filter(it=>!it.name||!(Number(it.km)>0)||!it.source);
+  const warn=bad.length?`⚠ 名前・距離・出典が揃っていない行が ${bad.length} 件（保存はしますが、消費者向けには出ません） `:'';
+  try{ await settingSave('mileage_reference', D.ref); D.refFromDb=true; renderRef(); msg.textContent=warn+'✅ 保存しました'; renderAll(); }
+  catch(e){ msg.textContent='⚠ 保存に失敗: '+(e.message||e); }
+}
+function showInfo(key){
+  const f1=factorItem('leg1'), f2=factorItem('leg2'); const ref=refItemsValid()[0];
+  const T={
+    leg1:`<b>輸送距離 山 → センター（km）</b>\n計算式: 個体ごとに、捕獲地点（個体の緯度経度 → 無ければ捕獲地区の概ね中心＝地区マスタの座標）とセンターの座標の大円距離（直線）。\n表示値: 座標を出せた個体の単純平均（頭数で平均）。\n対象: 期間・種類のフィルタに合う個体。座標の無い個体は含めない（件数を併記）。\n注意: 直線距離で、実走行距離ではない。地図上の推定であり実測値ではない。`,
+    leg2:`<b>輸送距離 センター → お客さん（km）</b>\n計算式: 注文ごとに、センターの座標と配送先（注文の配送先住所 → 無ければ顧客台帳の住所）の「市区町村の中心」の大円距離。\n表示値: 出荷 kg で加重した平均（Σ kg×km ÷ Σ kg）。\n対象: 出荷・発送済みの注文（フィルタで変更可）。出店・手渡しは配送先が無いので含まない。\n注意: 市区町村の中心で代表させた推定。宅配便の実経路（集荷・仕分け）はこれより長い。`,
+    tkm:`<b>フードマイレージ（t·km）</b>\n定義: 輸送重量 × 輸送距離。距離（km）とは別の指標。\n計算式: 山→センター Σ(個体の精肉 kg ÷ 1000 × 山→センター km) ＋ センター→お客さん Σ(出荷 kg ÷ 1000 × センター→お客さん km)。\n重さ: 精肉重量（在庫として登録された部位の合計）と出荷重量。生体重量は使わない。\n対象・注意: 座標のある個体・注文のみ。距離は直線の推定。`,
+    ratio:`<b>参考比較（1kgあたりの距離）</b>\n計算式: うちの 1kg あたり距離 ＝ 山→センターの kg 加重平均 km ＋ センター→お客さんの kg 加重平均 km。\n比較対象: 参考比較の値の先頭（現在: ${ref?esc(ref.name)+' 約'+Number(ref.km).toLocaleString()+' km':'未設定'}）。\n注意: 比較値は「一般的な輸送距離の参考値・概算」（産地の代表点〜センターの直線距離）で、確定値ではない。出典は下の「参考比較の値」に記載。`,
+    co2:`<b>推定輸送CO₂（kg-CO₂e）</b>\n方法: ${esc((D.factors||{}).method||'トンキロ法')}。\n計算式: 山→センター t·km × ${f1?esc(f1.value)+' '+esc(f1.unit):'—'} ＋ センター→お客さん t·km × ${f2?esc(f2.value)+' '+esc(f2.unit):'—'} → g を kg に換算。\n係数の出典: ${f1?esc(f1.source):'—'}（更新 ${f1?esc(f1.updated_at||''):''}）／${f2?esc(f2.source):'—'}（更新 ${f2?esc(f2.updated_at||''):''}）。\n対象: フードマイレージと同じ（座標のある個体・注文）。\n注意: 推定値であり実測ではない。輸送分のみで、生産・加工・冷蔵冷凍の排出は含まない。係数は下の表で変更・保存できる。`,
+  };
+  const box=document.getElementById('infoBox');
+  if(box.dataset.key===key&&box.style.display==='block'){ box.style.display='none'; box.dataset.key=''; return; }
+  box.innerHTML=T[key]||''; box.dataset.key=key; box.style.display='block';
 }
 
 // ───────────── 座標の取得・保存 ─────────────
