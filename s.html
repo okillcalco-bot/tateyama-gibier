@@ -36,6 +36,7 @@
   .row .v{font-weight:600}
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
   .chip{font-size:12px;background:var(--moss-soft);color:var(--moss);border-radius:999px;padding:3px 10px}
+  #stamps .chip.on{background:var(--moss)!important;color:#fff!important;border-color:var(--moss)!important}
   .safe{background:var(--moss-soft);border:1px solid var(--moss);border-radius:10px;padding:10px 13px;font-size:13px;color:var(--moss)}
   label{display:block;font-size:13px;color:var(--ink2);margin:12px 0 5px}
   input,textarea,select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:9px;
@@ -106,13 +107,62 @@ let story=null, rating=0;
 const code=param('c').replace(/[^0-9]/g,'');
 const label=param('i').replace(/[^0-9A-Za-z\-぀-ヿ一-鿿]/g,'').slice(0,40);
 const eventId=param('e').replace(/[^0-9a-fA-F-]/g,'').slice(0,36);
-const mode = eventId ? 'event' : (code ? 'pack' : (label ? 'individual' : 'none'));
+// ?i=個体番号&e=出店ID … 出店の個体シートのQR（会場までの距離と、その出店の「今日の商品」「ひとこと」も出す）
+const mode = (eventId && !label) ? 'event' : (code ? 'pack' : (label ? 'individual' : 'none'));
 const byIndividual = mode==='individual';
 
 function fetchStory(){
   if(mode==='event')      return rpc('story_get_event',{p_event_id:eventId});
-  if(mode==='individual') return rpc('story_get_individual',{p_label:label});
+  if(mode==='individual') return rpc('story_get_individual',{p_label:label, p_event_id: eventId||null});
   return rpc('story_get',{p_code:code});
+}
+
+/* ── フードマイレージ ──
+   ジビエは「獲れた山 → センター → 会場（お手元）」しか動かない。輸入肉との差を距離で見せる。
+   比べる数字は目安（産地の主要港〜東京港のおおよその航路距離） */
+const FAR_FOODS=[{name:'豪州産の牛肉',km:7800},{name:'米国産の豚肉',km:9000},{name:'チリ産の豚肉',km:17000}];
+const STAMPS=['うまい！','くさみゼロ','やわらかい','子どもが完食','また食べたい','初めて食べた'];
+let picked=new Set();
+function fmtKm(v){ return v==null?'—':(Number(v)<10?Number(v).toFixed(1):Math.round(Number(v)).toLocaleString())+' km'; }
+function mileageHtml(m){
+  if(!m) return '';
+  const cap=m.capture||{}, hasCap=cap.lat!=null&&cap.lng!=null, center=m.center||{}, hasCenter=center.lat!=null&&center.lng!=null;
+  const venue=m.venue||null;
+  const total=m.total_km!=null?Number(m.total_km):null;
+  let body='';
+  if(!hasCap||!hasCenter){
+    body=`<div style="font-size:13px;color:var(--ink2);">${!hasCap?'獲れた地区の位置がまだ登録されていないため、距離を出せません。':'センターの位置がまだ登録されていません。'}<br>このお肉が館山・南房総の山から来ていることは変わりません。</div>`;
+  }else{
+    const legs=[`<div class="row"><span class="k">獲れた山→センター</span><span class="v">${fmtKm(m.leg1_km)}</span></div>`];
+    if(venue) legs.push(`<div class="row"><span class="k">センター→${esc(venue.name||'会場')}</span><span class="v">${venue.lat!=null?fmtKm(m.leg2_km):'（会場の位置が未登録）'}</span></div>`);
+    const maxKm=FAR_FOODS[FAR_FOODS.length-1].km;
+    const bar=(name,km,mine)=>`<div style="margin-top:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:12.5px;${mine?'font-weight:700;color:var(--moss);':'color:var(--ink2);'}"><span>${esc(name)}</span><span>${mine?fmtKm(km):'約 '+Math.round(km).toLocaleString()+' km'}</span></div>
+        <div style="height:9px;background:var(--line);border-radius:5px;overflow:hidden;"><div style="height:100%;width:${Math.max(1.5,Math.min(100,km/maxKm*100))}%;background:${mine?'var(--moss)':'var(--ink3)'};border-radius:5px;"></div></div>
+      </div>`;
+    const ratio=total>0?Math.round(FAR_FOODS[0].km/total):null;
+    body=`${legs.join('')}
+      <div class="row" style="border-bottom:none;"><span class="k">合計</span><span class="v" style="font-size:20px;color:var(--moss);">${fmtKm(total)}</span></div>
+      ${bar('このお肉',total,true)}${FAR_FOODS.map(f=>bar(f.name,f.km,false)).join('')}
+      <div style="font-size:12.5px;color:var(--ink2);margin-top:10px;line-height:1.7;">
+        ${ratio?`${esc(FAR_FOODS[0].name)}と比べて、移動距離は <b>約${ratio.toLocaleString()}分の1</b>。`:''}
+        軽トラで運んだ燃料はガソリン <b>約${(total/15).toFixed(1)} L</b>（15 km/L として）。輸入肉の距離は目安です。
+      </div>`;
+  }
+  return `<div class="card"><h2><span class="ic">🚚</span>フードマイレージ</h2>
+    <div style="font-size:13px;color:var(--ink2);margin:-6px 0 8px;">このお肉が、どれだけの距離を運ばれてきたか。</div>
+    <button type="button" class="send" id="mileBtn" style="margin-top:0;background:var(--gold-soft);color:var(--gold);border:1px solid var(--gold);" onclick="toggleMileage()">🚚 距離を見る</button>
+    <div id="mileBody" style="display:none;margin-top:10px;">${body}</div>
+  </div>`;
+}
+function toggleMileage(){
+  const b=document.getElementById('mileBody'), btn=document.getElementById('mileBtn');
+  const open=b.style.display==='none'; b.style.display=open?'block':'none';
+  btn.textContent=open?'閉じる':'🚚 距離を見る';
+}
+function toggleStamp(s){ if(picked.has(s)) picked.delete(s); else picked.add(s); paintStamps(); }
+function paintStamps(){
+  document.querySelectorAll('#stamps button').forEach(b=>b.classList.toggle('on', picked.has(b.dataset.s)));
 }
 
 async function load(){
@@ -204,10 +254,15 @@ function render(){
     </div>`;
   }else if(i){
     // 個体から開いたとき（出店シートのQRなど）。パックではなく一頭を見出しにする
+    const sh=story.sheet||{}, ev=story.event||null;
     h+=`<div class="card prod">
+      ${story.photo?`<img src="${esc(story.photo)}" alt="" style="width:100%;max-height:260px;object-fit:cover;border-radius:10px;margin-bottom:12px;display:block;">`:''}
       <div class="nm">${esc(i.place||'—')} の一頭</div>
       <div class="kg">${esc(i.species||'')}${i.sex?`（${esc(i.sex)}）`:''}${i.weight_total?` ${esc(i.weight_total)} kg`:''}</div>
       <div class="cd">${esc(i.label||'')}</div>
+      ${sh.story_text?`<div style="margin-top:12px;font-size:14.5px;line-height:1.8;text-align:left;">${esc(sh.story_text)}</div>`:''}
+      ${sh.product_note?`<div class="chips" style="justify-content:center;margin-top:10px;"><span class="chip">今日の商品：${esc(sh.product_note)}</span></div>`:''}
+      ${ev?`<div class="cd" style="margin-top:8px;">${esc(ev.venue||'')}${ev.date?' '+esc(ev.date):''}</div>`:''}
     </div>`;
   }
 
@@ -245,6 +300,7 @@ function render(){
         <div class="safe">放射性物質検査：<b>${esc(i.radiation_result)}</b>${i.radiation_date?`<br><span style="font-size:12px;">検査日 ${esc(i.radiation_date)}</span>`:''}</div>
       </div>`;
     }
+    if(story.mileage) h+=mileageHtml(story.mileage);
   }
 
   if(parts.length){
@@ -253,34 +309,43 @@ function render(){
     </div>`;
   }
 
+  /* 感想。特典は付けない。「あなたの一言が、この一頭の記録の最後の行になる」ことが意味。
+     書かなくてもスタンプ1つで残せる。送るとその場で掲載され、何人目かが分かる（2026-09-16） */
+  const vc=story.voice_count!=null?Number(story.voice_count):voices.length;
   h+=`<div class="card">
-    <h2><span class="ic">💬</span>召し上がった感想をお聞かせください</h2>
-    <div style="font-size:13px;color:var(--ink2);margin-bottom:6px;">いただいた声は、${blend?'この商品':'この一頭'}の記録として残ります。<br>センターで確認したのち、このページに掲載させていただきます。</div>
+    <h2><span class="ic">💬</span>${blend?'この商品':'この一頭'}の記録の、最後の一行を</h2>
+    <div style="font-size:13.5px;color:var(--ink2);margin-bottom:6px;line-height:1.8;">
+      山で獲れて、さばかれて、いまあなたの前にあります。この一頭の記録は、食べた人の一言で終わります。<br>
+      獲った猟師と、さばいた私たちが読みます。送るとすぐこのページに載ります${vc?`（これまでに ${vc}人）`:''}。
+    </div>
+    <label>ひとことスタンプ（押すだけ）</label>
+    <div class="chips" id="stamps">${STAMPS.map(s=>`<button type="button" class="chip" data-s="${esc(s)}" onclick="toggleStamp('${esc(s)}')" style="border:1px solid var(--line);background:var(--bg);color:var(--ink2);cursor:pointer;font-size:14px;padding:8px 12px;font-family:inherit;">${esc(s)}</button>`).join('')}</div>
     <label>おいしさ</label>
     <div class="stars" id="stars">${[1,2,3,4,5].map(n=>`<button type="button" data-n="${n}" onclick="setRating(${n})">★</button>`).join('')}</div>
     <label for="dish">どんな料理にしましたか（任意）</label>
-    <input id="dish" maxlength="120" placeholder="例: ぼたん鍋、カレー">
-    <label for="comment">感想（任意）</label>
+    <input id="dish" maxlength="120" placeholder="例: 串焼き、ぼたん鍋、カレー">
+    <label for="comment">ひとこと（任意）</label>
     <textarea id="comment" maxlength="1000" placeholder="味わい、驚いたこと、どなたと召し上がったか など"></textarea>
     <label for="nickname">お名前・ニックネーム（任意）</label>
     <input id="nickname" maxlength="60" placeholder="例: 館山の田中">
-    <button class="send" id="send" onclick="send()">${blend?'この商品':'この一頭'}に感想を残す</button>
+    <button class="send" id="send" onclick="send()">${blend?'この商品':'この一頭'}の記録に一行残す</button>
     <div class="msg" id="msg"></div>
   </div>`;
 
   if(voices.length){
-    h+=`<div class="card"><h2><span class="ic">🍽</span>${blend?'この商品':'この一頭'}を召し上がった方の声</h2>
+    h+=`<div class="card"><h2><span class="ic">🍽</span>${blend?'この商品':'この一頭'}を食べた人の声${vc?`（${vc}人）`:''}</h2>
       ${voices.map(v=>`<div class="voice">
         <div class="top"><span class="nm">${esc(v.nickname||'名前なし')}</span>
           ${v.rating?`<span style="color:var(--gold)">${'★'.repeat(v.rating)}</span>`:''}
           ${v.dish?`<span>${esc(v.dish)}</span>`:''}<span style="margin-left:auto">${esc(v.at||'')}</span></div>
+        ${(v.stamps&&v.stamps.length)?`<div class="chips" style="margin-top:4px;">${v.stamps.map(s=>`<span class="chip">${esc(s)}</span>`).join('')}</div>`:''}
         ${v.comment?`<div class="cm">${esc(v.comment)}</div>`:''}
       </div>`).join('')}
     </div>`;
   }
 
   document.getElementById('main').innerHTML=h;
-  paintStars();
+  paintStars(); paintStamps();
 }
 
 function setRating(n){ rating=(rating===n?0:n); paintStars(); }
@@ -293,21 +358,23 @@ function paintStars(){
 async function send(){
   const btn=document.getElementById('send'), msg=document.getElementById('msg');
   const comment=document.getElementById('comment').value.trim();
-  if(!rating && !comment){ msg.style.color='var(--gold)'; msg.textContent='星か感想のどちらかを入れてください。'; return; }
+  const stamps=[...picked];
+  if(!rating && !comment && !stamps.length){ msg.style.color='var(--gold)'; msg.textContent='スタンプ・星・ひとことのどれか1つで大丈夫です。'; return; }
   btn.disabled=true; msg.style.color='var(--ink2)'; msg.textContent='送信しています…';
   try{
     const r=byIndividual
       ? await rpc('story_add_voice_individual',{
           p_label:label, p_nickname:document.getElementById('nickname').value,
-          p_rating:rating||null, p_dish:document.getElementById('dish').value, p_comment:comment})
+          p_rating:rating||null, p_dish:document.getElementById('dish').value, p_comment:comment, p_stamps:stamps})
       : await rpc('story_add_voice',{
           p_code:code, p_nickname:document.getElementById('nickname').value,
-          p_rating:rating||null, p_dish:document.getElementById('dish').value, p_comment:comment});
+          p_rating:rating||null, p_dish:document.getElementById('dish').value, p_comment:comment, p_stamps:stamps});
     if(r && r.ok){
       msg.style.color='var(--moss)';
-      const thanks='ありがとうございました。'+(story&&story.blend?'この商品':'この一頭')+'の記録に残りました。センターで確認のうえ掲載します。';
+      const nth=r.voice_count?`この一頭を食べた ${r.voice_count}人目の声として、`:'';
+      const thanks='ありがとうございます。'+nth+(story&&story.blend?'この商品':'この一頭')+'の記録に、いま一行が加わりました。';
       msg.textContent=thanks;
-      story=await fetchStory(); rating=0; render();
+      story=await fetchStory(); rating=0; picked=new Set(); render();
       const m2=document.getElementById('msg');
       if(m2){ m2.style.color='var(--moss)'; m2.textContent=thanks; }
     }else{

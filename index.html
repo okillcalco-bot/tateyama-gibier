@@ -753,6 +753,24 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         </table></div>
       </div>
 
+      <!-- 個体シート（A4横・1個体1枚）: 今日の商品・ひとこと・写真は後から設定できる。QRはその一頭＋この出店へ -->
+      <div class="section" id="ev-sheet-sec">
+        <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <span>&#x1F4C4; 個体シート（A4横・1個体1枚）<span style="font-size:12px;color:var(--text3);font-weight:400;">（会場で「いま食べているのはどんな一頭か」を見せる）</span></span>
+          <button class="btn btn-sm btn-primary" onclick="evIndSheetPrint()">&#x1F5A8; 個体シートを印刷（全頭）</button>
+        </div>
+        <div style="padding:10px 12px;border:1px dashed var(--gold2);border-radius:var(--radius);font-size:12.5px;color:var(--text2);line-height:1.9;background:var(--surface2);margin-bottom:10px;">
+          📖 <strong style="color:var(--gold);">使い方</strong>　一頭ごとに「今日の商品」（例: 串焼き＝モモ）と「ひとこと」を入れて保存。写真は看板写真などを選ぶと載ります（無ければ写真なしで印刷）。<br>
+          QRを読むと、その一頭の記録・フードマイレージ・感想欄が開きます。距離は下の「距離の設定」で座標を入れると出ます。
+        </div>
+        <div id="ev-sheet-list"></div>
+      </div>
+
+      <div class="section" id="ev-geo-sec">
+        <div class="section-title">&#x1F4CD; 距離の設定（フードマイレージ）<span style="font-size:12px;color:var(--text3);font-weight:400;">　Googleマップで場所を長押し → 出た座標をそのまま貼る（例: 34°57'25.9"N 139°51'46.8"E）</span></div>
+        <div id="ev-geo-list" style="font-size:13px;"></div>
+      </div>
+
       <div class="section">
         <div id="ev-d-total" style="font-size:14px;line-height:2;"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
@@ -7091,6 +7109,9 @@ async function evOpen(id) {
     document.getElementById('ev-view-detail').style.display = '';
     evFillHead();
     evRenderItems();
+    // 個体シートの設定と距離の設定（失敗しても出店の画面は使えるようにする。失敗は表示する）
+    try { await evSheetLoad(); await evGeoLoad(); } catch (e) { toast('個体シート/距離の設定の読み込みに失敗: ' + sbSafeMsg(e), 'error'); }
+    evSheetRender(); evGeoRender();
   } catch (e) { alert('開けませんでした：' + (e && e.message || e)); }
 }
 
@@ -7101,7 +7122,7 @@ async function evLoadIndCache() {
     const chunk = labels.slice(i, i + 80).map(l => '"' + encodeURIComponent(String(l).replace(/"/g, '')) + '"').join(',');
     const got = await sb('GET', 'individuals', null,
       `?label_id=in.(${chunk})&deleted_at=is.null` +
-      `&select=label_id,species,sex,weight_total,capture_date,capture_city,capture_area,capture_method,radiation_test_date,radiation_result,processing_done_at`);
+      `&select=label_id,species,sex,weight_total,capture_date,capture_city,capture_area,capture_method,radiation_test_date,radiation_result,processing_done_at,capture_lat,capture_lng,image_url`);
     got.forEach(g => { evIndCache[g.label_id] = g; });
   }
 }
@@ -7373,6 +7394,8 @@ async function evPickAdd() {
     evItems = await sb('GET', 'sale_event_items', null, `?event_id=eq.${evCur.id}&select=*&order=kind,created_at`);
     await evLoadIndCache();
     evRenderItems();
+    try { await evGeoLoad(); } catch (e) {}
+    evGeoRender(); evSheetRender();
     toast(`${all.length}点を追加しました`);
   } catch (e) { alert('追加できませんでした：' + (e && e.message || e)); }
 }
@@ -7639,6 +7662,277 @@ function evPrint() {
     <div class="gr">${pg.map(evCardHtml).join('')}</div>
   </div>`).join('');
   evPrintDoc(evSheetCss(), body);
+}
+
+/* ── 個体シート（A4横・1個体1枚）と、その設定（今日の商品・ひとこと・写真）── 2026-09-16
+   やわたんまち等で「いま食べているのがどんな一頭か」を1枚で見せる。QRは ?i=個体&e=出店 で、
+   その一頭の記録・フードマイレージ（獲れた山→センター→会場）・感想欄が開く。
+   商品や写真は出店の準備中でも当日でも後から入れられる（sale_event_sheets に出店×個体で保存）。 */
+let evSheets = {};      // label → sale_event_sheets の行
+let evGeo = { center: null, venue: null, areas: [] };   // 距離の設定（センター・会場・地区の座標）
+const EV_SHEET_BUCKET = 'field-photos';
+function evSheetPhotoUrl(p) { return p ? `${SB_URL}/storage/v1/object/public/${EV_SHEET_BUCKET}/${p}` : ''; }
+
+async function evSheetLoad() {
+  evSheets = {};
+  if (!evCur) return;
+  const rows = await sb('GET', 'sale_event_sheets', null, `?event_id=eq.${evCur.id}&select=*`);
+  rows.forEach(r => { evSheets[r.label_id] = r; });
+}
+// 個体の獲れた地区に対応する地区マスタの行（大字が一致するもの）
+function evAreaKeyOf(ind) { return ind ? ((ind.capture_city || '') + '|' + (ind.capture_area || '')) : ''; }
+async function evGeoLoad() {
+  evGeo = { center: null, venue: null, areas: [] };
+  try { const s = await sb('GET', 'app_settings', null, '?key=eq.center_location&select=value'); evGeo.center = (s[0] && s[0].value) || null; } catch (e) { evGeo.center = null; }
+  if (evCur && evCur.venue_id) {
+    const v = evVenues.find(x => x.id === evCur.venue_id);
+    if (v) evGeo.venue = v;
+    else { const got = await sb('GET', 'event_venues', null, `?id=eq.${evCur.venue_id}&select=id,name,lat,lng`); evGeo.venue = got[0] || null; }
+  }
+  const keys = [...new Set(evCardRows().map(r => evAreaKeyOf(r.ind)).filter(k => k && k !== '|'))];
+  if (keys.length) {
+    const areas = [...new Set(keys.map(k => k.split('|')[1]))].map(a => '"' + encodeURIComponent(a.replace(/"/g, '')) + '"').join(',');
+    const rows = await sb('GET', 'area_master', null, `?oaza=in.(${areas})&select=id,city,district,oaza,lat,lng&order=sort_order`);
+    evGeo.areas = keys.map(k => {
+      const [city, area] = k.split('|');
+      const row = rows.find(r => r.oaza === area && r.city === city) || rows.find(r => r.oaza === area) || null;
+      return { key: k, city, area, row };
+    });
+  }
+}
+// 2点間の距離（km）。DB側の tgc_km と同じ大円距離
+function evKm(a, b) {
+  if (!a || !b || a.lat == null || a.lng == null || b.lat == null || b.lng == null) return null;
+  const R = 6371, toR = x => x * Math.PI / 180;
+  const dLat = toR(b.lat - a.lat), dLng = toR(b.lng - a.lng);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(s)) * 10) / 10;
+}
+// 個体ごとのフードマイレージ（捕獲地→センター→会場）。座標が無い区間は null
+function evMileageOf(ind) {
+  const cap = ind && ind.capture_lat != null && ind.capture_lng != null ? { lat: +ind.capture_lat, lng: +ind.capture_lng }
+    : (() => { const a = evGeo.areas.find(x => x.key === evAreaKeyOf(ind)); return a && a.row && a.row.lat != null ? { lat: +a.row.lat, lng: +a.row.lng } : null; })();
+  const center = evGeo.center && evGeo.center.lat != null ? { lat: +evGeo.center.lat, lng: +evGeo.center.lng } : null;
+  const venue = evGeo.venue && evGeo.venue.lat != null ? { lat: +evGeo.venue.lat, lng: +evGeo.venue.lng } : null;
+  const leg1 = evKm(cap, center), leg2 = evKm(center, venue);
+  return { leg1, leg2, total: leg1 == null ? null : Math.round((leg1 + (leg2 || 0)) * 10) / 10 };
+}
+function evFmtKm(v) { return v == null ? '—' : (v < 10 ? v.toFixed(1) : Math.round(v).toLocaleString()) + ' km'; }
+
+function evSheetRender() {
+  const box = document.getElementById('ev-sheet-list'); if (!box) return;
+  const rows = evCardRows();
+  if (!rows.length) { box.innerHTML = '<div class="empty-state">一頭ずつ分かるお肉を先に「＋ 在庫から選ぶ」で入れてください。</div>'; return; }
+  box.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px;">` + rows.map(r => {
+    const i = r.ind || {}; const s = evSheets[r.label] || {};
+    const m = evMileageOf(i);
+    const photo = s.photo_path ? evSheetPhotoUrl(s.photo_path) : (i.image_url || '');
+    const parts = r.packs.map(p => p.part_name).filter((v, k, a) => a.indexOf(v) === k).join('・');
+    return `<div class="ev-sheet-card" data-label="${esc2(r.label)}" style="border:1px solid var(--border);border-radius:var(--radius);padding:10px;background:var(--surface);">
+      <div style="display:flex;gap:10px;align-items:flex-start;">
+        <div style="flex:0 0 84px;">
+          ${photo ? `<img src="${esc2(photo)}" alt="" style="width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block;">`
+                  : `<div style="width:84px;height:84px;border-radius:8px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text3);text-align:center;">写真<br>なし</div>`}
+          <label class="btn btn-sm" style="display:block;text-align:center;margin-top:6px;padding:4px 6px;font-size:11px;cursor:pointer;">📷 写真<input type="file" accept="image/*" class="ev-sheet-photo" style="display:none;" onchange="evSheetPhoto(this,'${esc2(r.label)}')"></label>
+        </div>
+        <div style="flex:1;min-width:0;font-size:12.5px;line-height:1.6;">
+          <div style="font-weight:700;color:var(--gold);">${esc2(r.label)}</div>
+          <div>${esc2(((i.capture_city || '') + ' ' + (i.capture_area || '')).trim() || '（場所の記録なし）')}${i.capture_date ? ' ・ ' + esc2(evJp(i.capture_date)) : ''}</div>
+          <div style="color:var(--text2);">部位: ${esc2(parts || '—')}</div>
+          <div style="color:var(--text2);">🚚 ${m.total == null ? '距離: 未設定（下の「距離の設定」へ）' : `距離 ${evFmtKm(m.total)}（山→センター ${evFmtKm(m.leg1)}${m.leg2 != null ? `、センター→会場 ${evFmtKm(m.leg2)}` : ''}）`}</div>
+        </div>
+      </div>
+      <input class="form-input ev-sheet-product" placeholder="今日の商品（例: 串焼き＝モモ）" value="${esc2(s.product_note || '')}" style="margin-top:8px;padding:6px 8px;font-size:13px;">
+      <textarea class="form-input ev-sheet-story" rows="2" placeholder="ひとこと（例: 神余の栗林で獲れた、脂ののった一頭）" style="margin-top:6px;padding:6px 8px;font-size:13px;">${esc2(s.story_text || '')}</textarea>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:6px;">
+        <button class="btn btn-sm btn-primary ev-sheet-save" onclick="evSheetSave('${esc2(r.label)}')">保存</button>
+        <button class="btn btn-sm" onclick="evIndSheetPrint('${esc2(r.label)}')">🖨 この1枚</button>
+        <span class="ev-sheet-msg" style="font-size:11px;color:var(--text3);"></span>
+      </div>
+    </div>`;
+  }).join('') + `</div>`;
+}
+async function evSheetSave(label, extra) {
+  const card = document.querySelector(`.ev-sheet-card[data-label="${CSS.escape(label)}"]`);
+  const msg = card ? card.querySelector('.ev-sheet-msg') : null;
+  const body = Object.assign({
+    event_id: evCur.id, label_id: label,
+    product_note: card ? (card.querySelector('.ev-sheet-product').value.trim() || null) : null,
+    story_text: card ? (card.querySelector('.ev-sheet-story').value.trim() || null) : null,
+    updated_at: new Date().toISOString(),
+  }, extra || {});
+  if (evSheets[label] && evSheets[label].photo_path && body.photo_path === undefined) body.photo_path = evSheets[label].photo_path;
+  try {
+    const rows = await evSheetUpsert(body);
+    evSheets[label] = (rows && rows[0]) || Object.assign({}, evSheets[label] || {}, body);
+    if (msg) msg.textContent = '保存しました';
+    toast(`${label} のシート設定を保存しました`);
+  } catch (e) { if (msg) msg.textContent = '保存に失敗'; toast('保存に失敗しました: ' + sbSafeMsg(e), 'error'); }
+}
+// 出店×個体で1行（同じ組み合わせは上書き）
+async function evSheetUpsert(body) {
+  const res = await fetch(`${SB_URL}/rest/v1/sale_event_sheets?on_conflict=event_id,label_id`, {
+    method: 'POST',
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation,resolution=merge-duplicates' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const t = await res.text(); return t ? JSON.parse(t) : [];
+}
+async function evSheetPhoto(input, label) {
+  const f = input.files && input.files[0]; if (!f) return;
+  try {
+    const blob = await evShrinkImage(f);
+    const path = `sheet/${evCur.id}/${label.replace(/[^\w-]/g, '_')}-${Date.now()}.jpg`;
+    const res = await fetch(`${SB_URL}/storage/v1/object/${EV_SHEET_BUCKET}/${path}`, {
+      method: 'POST', headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'image/jpeg', 'x-upsert': 'true' }, body: blob,
+    });
+    if (!res.ok) throw new Error(await res.text());
+    await evSheetSave(label, { photo_path: path });
+    evSheetRender();
+  } catch (e) { toast('写真の保存に失敗しました: ' + sbSafeMsg(e), 'error'); }
+  input.value = '';
+}
+function evShrinkImage(file) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const max = 1600, s = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      c.toBlob(b => resolve(b || file), 'image/jpeg', 0.85);
+    };
+    img.onerror = () => resolve(file);
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+/* 距離の設定: センター・会場・（この出店の個体の）地区の座標。Googleマップの座標をそのまま貼る */
+function evGeoRender() {
+  const box = document.getElementById('ev-geo-list'); if (!box) return;
+  const row = (kind, id, name, pt, note) => `<div class="ev-geo-row" data-kind="${kind}" data-id="${esc2(id || '')}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 0;border-bottom:1px dashed var(--border);">
+      <span style="flex:0 0 200px;font-weight:600;">${esc2(name)}</span>
+      <span style="flex:0 0 150px;color:${pt && pt.lat != null ? 'var(--text2)' : 'var(--red)'};font-size:12px;">${pt && pt.lat != null ? `${(+pt.lat).toFixed(5)}, ${(+pt.lng).toFixed(5)}` : '未設定'}</span>
+      <input class="form-input ev-geo-paste" placeholder="座標を貼る（34°57'25.9&quot;N 139°51'46.8&quot;E）" style="flex:1;min-width:220px;padding:5px 8px;font-size:12.5px;">
+      <button class="btn btn-sm" onclick="evGeoSave('${kind}','${esc2(id || '')}',this)">保存</button>
+      ${note ? `<span style="flex-basis:100%;font-size:11px;color:var(--text3);">${esc2(note)}</span>` : ''}
+    </div>`;
+  let h = row('center', '', '館山ジビエセンター', evGeo.center, evGeo.center && evGeo.center.note ? evGeo.center.note : '');
+  if (evCur && evCur.venue_id) h += row('venue', evCur.venue_id, `会場: ${evCur.venue_name || ''}`, evGeo.venue, '');
+  else h += `<div style="padding:6px 0;color:var(--text3);">会場: 出店先を選んで「概要を保存」すると、ここに出ます</div>`;
+  evGeo.areas.forEach(a => {
+    h += a.row ? row('area', a.row.id, `${a.city} ${a.area}`, a.row, '')
+      : `<div style="padding:6px 0;color:var(--red);font-size:12px;">${esc2(a.city + ' ' + a.area)}: 地区マスタに大字が見つかりません（個体の捕獲場所の表記を確認）</div>`;
+  });
+  box.innerHTML = h || '<div class="empty-state">まだありません</div>';
+}
+async function evGeoSave(kind, id, btn) {
+  const rowEl = btn.closest('.ev-geo-row');
+  const c = cityCapParseCoord(rowEl.querySelector('.ev-geo-paste').value);
+  if (!c) { toast('座標を読み取れませんでした（例: 34°57\'25.9"N 139°51\'46.8"E）', 'error'); return; }
+  try {
+    if (kind === 'center') {
+      const val = Object.assign({}, evGeo.center || { name: '館山ジビエセンター' }, { lat: c.lat, lng: c.lng, note: null });
+      const has = await sb('GET', 'app_settings', null, '?key=eq.center_location&select=key');
+      if (has.length) await sb('PATCH', 'app_settings', { value: val, updated_at: new Date().toISOString() }, '?key=eq.center_location');
+      else await sb('POST', 'app_settings', { key: 'center_location', value: val });
+      evGeo.center = val;
+    } else if (kind === 'venue') {
+      await sb('PATCH', 'event_venues', { lat: c.lat, lng: c.lng, updated_at: new Date().toISOString() }, `?id=eq.${id}`);
+      if (evGeo.venue) { evGeo.venue.lat = c.lat; evGeo.venue.lng = c.lng; }
+      const v = evVenues.find(x => x.id === id); if (v) { v.lat = c.lat; v.lng = c.lng; }
+    } else {
+      await sb('PATCH', 'area_master', { lat: c.lat, lng: c.lng }, `?id=eq.${id}`);
+      evGeo.areas.forEach(a => { if (a.row && a.row.id === id) { a.row.lat = c.lat; a.row.lng = c.lng; } });
+    }
+    toast(`座標を保存しました（${c.lat}, ${c.lng}）`);
+    evGeoRender(); evSheetRender();
+  } catch (e) { toast('座標の保存に失敗しました: ' + sbSafeMsg(e), 'error'); }
+}
+
+/* 印刷: 個体シート（A4横・1個体1枚） */
+function individualEventStoryUrl(labelId, eventId) {
+  return individualStoryUrl(labelId) + (eventId ? '&e=' + encodeURIComponent(eventId) : '');
+}
+function evIndSheetCss() {
+  return `
+    @page { size: A4 landscape; margin: 10mm; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Meiryo','Yu Gothic',sans-serif; color:#111; background:#fff; }
+    .pg { width:277mm; height:190mm; display:flex; flex-direction:column; page-break-after:always; border:.6mm solid #8a7648; border-radius:4mm; padding:8mm 10mm; }
+    .pg:last-child { page-break-after:auto; }
+    .hd { display:flex; align-items:baseline; gap:4mm; }
+    .hd .eb { font-size:10pt; letter-spacing:.2em; color:#8a7648; }
+    .hd .t { font-size:22pt; font-weight:bold; }
+    .hd .d { margin-left:auto; font-size:10pt; color:#444; }
+    .bd { flex:1 1 auto; display:flex; gap:8mm; margin-top:5mm; min-height:0; }
+    .ph { flex:0 0 96mm; display:flex; flex-direction:column; gap:3mm; min-height:0; }
+    .ph img { width:96mm; height:104mm; object-fit:cover; border-radius:3mm; border:.3mm solid #cbbf9c; display:block; }
+    .ph .noimg { width:96mm; height:104mm; border-radius:3mm; border:.3mm dashed #cbbf9c; display:flex; align-items:center; justify-content:center; color:#999; font-size:11pt; text-align:center; line-height:1.8; }
+    .ph .st { font-size:11.5pt; line-height:1.7; }
+    .in { flex:1 1 auto; display:flex; flex-direction:column; min-width:0; }
+    .in .pl { font-size:28pt; font-weight:bold; line-height:1.2; }
+    .in .dt { font-size:13pt; margin-top:2mm; }
+    .fa { display:grid; grid-template-columns:auto 1fr; gap:1.2mm 5mm; font-size:11pt; margin-top:5mm; line-height:1.5; }
+    .fa b { color:#666; font-weight:normal; font-size:9.5pt; }
+    .pr { margin-top:5mm; padding:3mm 4mm; background:#f6f1e3; border-radius:2.5mm; font-size:13pt; }
+    .pr small { display:block; font-size:9pt; color:#666; }
+    .mi { margin-top:4mm; font-size:10.5pt; line-height:1.6; }
+    .mi b { font-size:15pt; color:#3c6b4a; }
+    .ft { margin-top:auto; display:flex; align-items:center; gap:6mm; padding-top:4mm; border-top:.3mm dashed #cbbf9c; }
+    .ft .qr svg { display:block; width:42mm !important; height:42mm !important; }
+    .ft .qx { font-size:11pt; line-height:1.7; }
+    .ft .qx b { font-size:14pt; display:block; }
+    .ft .qx .c { color:#3c6b4a; font-weight:bold; }
+    .ft .ct { margin-left:auto; align-self:flex-end; font-size:8.5pt; color:#666; text-align:right; line-height:1.6; }
+  `;
+}
+function evIndSheetHtml(rows, title, dateStr, eventId) {
+  return rows.map(r => {
+    const i = r.ind || {}; const s = evSheets[r.label] || {};
+    const label = i.label_id || r.label;
+    const aging = evAgingDays(i.capture_date, i.processing_done_at);
+    const parts = r.packs.map(p => p.part_name).filter((v, k, a) => a.indexOf(v) === k).join('・');
+    const place = ((i.capture_city || '') + ' ' + (i.capture_area || '')).trim();
+    const m = evMileageOf(i);
+    const photo = s.photo_path ? evSheetPhotoUrl(s.photo_path) : (i.image_url || '');
+    const story = s.story_text || `${i.capture_date ? evJp(i.capture_date) + '、' : ''}${place ? place + 'の山で' : ''}${i.capture_method ? i.capture_method + 'にかかった' : '獲れた'}${i.weight_total ? i.weight_total + 'kgの' : ''}${i.sex ? i.sex + 'の' : ''}${i.species || ''}です。${i.processing_done_at ? '館山ジビエセンターで' + evJp(evDateOnly(i.processing_done_at)) + 'にさばきました。' : ''}`;
+    return `<div class="pg">
+      <div class="hd"><span class="eb">館山ジビエセンター</span><span class="t">${esc2(title || '本日の一頭')}</span><span class="d">${esc2(dateStr || '')}</span></div>
+      <div class="bd">
+        <div class="ph">
+          ${photo ? `<img src="${esc2(photo)}" alt="">` : `<div class="noimg">${esc2(place || '館山・南房総')}<br>の山で獲れた一頭</div>`}
+          <div class="st">${esc2(story)}</div>
+        </div>
+        <div class="in">
+          <div class="pl">${esc2(place || '（場所の記録なし）')} の一頭</div>
+          <div class="dt">${esc2(i.species || r.species || '')}${i.sex ? '・' + esc2(i.sex) : ''}${i.weight_total ? '　' + esc2(i.weight_total) + ' kg' : ''}　<span style="font-family:monospace;color:#8a7648;">${esc2(label)}</span></div>
+          <div class="fa">
+            <b>獲れた日</b><span>${i.capture_date ? esc2(evJp(i.capture_date)) : '—'}${i.capture_method ? '（' + esc2(i.capture_method) + '）' : ''}</span>
+            <b>さばいた日</b><span>${i.processing_done_at ? esc2(evJp(evDateOnly(i.processing_done_at))) + (aging != null ? `（${aging}日ねかせて）` : '') : '—'}</span>
+            <b>放射性物質検査</b><span>${i.radiation_result ? esc2(i.radiation_result) + (i.radiation_test_date ? `（${esc2(evJp(i.radiation_test_date))}）` : '') : '—'}</span>
+            <b>今日つかう部位</b><span>${esc2(parts || '—')}</span>
+          </div>
+          <div class="pr"><small>今日の商品</small>${esc2(s.product_note || parts || '—')}</div>
+          <div class="mi">🚚 フードマイレージ　${m.total == null ? '（距離は未設定）' : `<b>${esc2(evFmtKm(m.total))}</b>　山→センター ${esc2(evFmtKm(m.leg1))}${m.leg2 != null ? '、センター→会場 ' + esc2(evFmtKm(m.leg2)) : ''}<br><span style="color:#666;">豪州産の牛肉なら約 7,800 km。</span>`}</div>
+          <div class="ft">
+            <div class="qr">${makeQRSVG(individualEventStoryUrl(label, eventId), 42)}</div>
+            <div class="qx"><b>この一頭の記録を見る</b>スマホのカメラを向けてください<br><span class="c">食べた感想を、この一頭の記録の最後の一行に。</span><br>スタンプを押すだけでも残ります</div>
+            <div class="ct">館山ジビエセンター（合同会社アルコ）<br>千葉県館山市西長田1163-5</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function evIndSheetPrint(onlyLabel) {
+  let rows = evCardRows();
+  if (onlyLabel) rows = rows.filter(r => r.label === onlyLabel);
+  if (!rows.length) { alert('一頭ずつ分かるお肉がまだありません。'); return; }
+  const title = (evCur && (evCur.title || evCur.venue_name)) || '本日の一頭';
+  const dateStr = evCur ? evJp(evCur.event_date) : '';
+  evPrintDoc(evIndSheetCss(), evIndSheetHtml(rows, title, dateStr, evCur && evCur.id));
 }
 
 /* ── 印刷: 会場に貼る「一覧QR」のポスター ── */

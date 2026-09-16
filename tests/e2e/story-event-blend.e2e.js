@@ -137,8 +137,8 @@ async function open(query, reply) {
     T('入っている頭はタップで詳細へ',
       links.includes('?i=TGC-08-M159') && links.includes('?i=TGC-08-M160'), links.join(','));
     T('全頭の検査結果をまとめて出す', /2頭すべて 検出下限値以下/.test(txt), '');
-    T('感想の見出しを「この商品」にする', /この商品に感想を残す/.test(txt), '');
-    T('寄せられた声も「この商品」にする', /この商品を召し上がった方の声/.test(txt), '');
+    T('感想の見出しを「この商品」にする', /この商品の記録に一行残す/.test(txt), '');
+    T('寄せられた声も「この商品」にする', /この商品を食べた人の声/.test(txt), '');
     T('部位一覧は出さない（混ざると意味が無い）', !/この一頭から採れた部位/.test(txt), '');
     T('pageerrorなし(4)', errors.length === 0, errors.join(' / '));
     await browser.close();
@@ -150,7 +150,7 @@ async function open(query, reply) {
     const txt = await page.$eval('#main', el => el.textContent.replace(/\s+/g, ' '));
     T('1頭のパックは一頭の記録を出す', /このお肉になった一頭/.test(txt) && /TGC-08-T276/.test(txt), '');
     T('1頭のパックに混在の断りは出さない', !/特定できません/.test(txt), '');
-    T('感想の見出しは「この一頭」', /この一頭に感想を残す/.test(txt), '');
+    T('感想の見出しは「この一頭」', /この一頭の記録に一行残す/.test(txt), '');
     T('部位一覧は出す', /この一頭から採れた部位/.test(txt), '');
     T('pageerrorなし(5)', errors.length === 0, errors.join(' / '));
     await browser.close();
