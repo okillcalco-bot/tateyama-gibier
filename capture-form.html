@@ -393,11 +393,16 @@ textarea { min-height: 80px; resize: vertical; }
 /* 看板つきカメラ（AR風・カメラ映像の左下に看板を重ねて撮影） */
 #arCam { display: none; position: fixed; inset: 0; z-index: 10000; background: #000; }
 #arCam.show { display: block; }
-#arVideo { width: 100%; height: 100%; object-fit: cover; background: #000; }
-/* 横向き保存プレビュー：映像だけ回して、看板(#arBoard/#arWhiteboard)は正立のまま＝保存画像と一致 */
-#arCam.arrot90 #arVideo, #arCam.arrot270 #arVideo { width: 100vh; height: 100vw; position: absolute; top: 50%; left: 50%; }
-#arCam.arrot90 #arVideo { transform: translate(-50%, -50%) rotate(90deg); }
-#arCam.arrot270 #arVideo { transform: translate(-50%, -50%) rotate(-90deg); }
+/* 2026-09-16: cover（画面いっぱいに拡大して端を切る）をやめ contain（カメラの全フレームを見せる）にする。
+   引き取り写真で顔が切れた（プレビューと保存画像で切り出し範囲が違い、しかも両方とも端を捨てていた）。
+   見えているもの＝保存されるもの＝カメラの全フレーム。黒い余白は出るが、顔・個体・看板が必ず入る。 */
+#arVideo { width: 100%; height: 100%; object-fit: contain; background: #000; }
+/* 横向き保存プレビュー：映像は回さず（端末を横に構えれば映像はそのまま横に見える）、看板だけを回す。
+   #arOverlay が保存画像の座標系（横なら 100vh×100vw）＝看板の位置が保存画像と一致する */
+#arOverlay { position: absolute; inset: 0; pointer-events: none; }
+#arCam.arrot90 #arOverlay, #arCam.arrot270 #arOverlay { width: 100vh; height: 100vw; inset: auto; position: absolute; top: 50%; left: 50%; }
+#arCam.arrot90 #arOverlay { transform: translate(-50%, -50%) rotate(90deg); }
+#arCam.arrot270 #arOverlay { transform: translate(-50%, -50%) rotate(-90deg); }
 #arBoard { position: absolute; left: 12px; bottom: 108px; max-width: 74%; background: rgba(0,0,0,.62); color: #fff; border-radius: 12px; padding: 10px 14px; line-height: 1.35; text-shadow: 0 1px 2px rgba(0,0,0,.8); }
 #arBoard .ar-code { font-size: clamp(20px, 6vw, 34px); font-weight: 800; letter-spacing: .02em; }
 #arBoard .ar-line { font-size: clamp(13px, 3.6vw, 19px); font-weight: 600; }
@@ -1085,8 +1090,10 @@ textarea { min-height: 80px; resize: vertical; }
 <!-- 看板つきカメラ（AR風）: カメラ映像の左下に看板を重ねて撮影→端末保存 -->
 <div id="arCam">
   <video id="arVideo" autoplay playsinline muted></video>
-  <div id="arBoard"></div>
-  <div id="arWhiteboard"></div>
+  <div id="arOverlay">
+    <div id="arBoard"></div>
+    <div id="arWhiteboard"></div>
+  </div>
   <div id="arMsg"></div>
   <div class="ar-bar">
     <button type="button" class="ar-btn ar-cancel" onclick="arClose()">✕ 閉じる</button>
@@ -4072,37 +4079,35 @@ async function arCapture() {
   const v = document.getElementById('arVideo');
   const vw = v.videoWidth, vh = v.videoHeight;
   if (!vw || !vh) { arMsg('カメラの準備中です。少し待って撮影してください'); return; }
-  // 保存画像を「画面に見えているまま」にする＝ object-fit:cover のトリミングと看板の座標を画面(CSS px)に合わせる。
-  // 2026-09-14: 横向き（arrot90/270）では #arVideo の箱が 100vh×100vw に入れ替わるため、要素の幅高さを
-  // 使うと縦横が逆になり、保存画像が縦のまま・切り出し位置もずれていた。基準は常に画面（縦見え）の幅高さ。
+  // 保存画像＝「画面に見えているまま」。2026-09-16: cover（拡大して端を切る）をやめ、カメラの全フレームを
+  // contain で収める。以前は プレビュー（要素の箱基準）と保存（画面基準）で切り出し範囲が食い違い、
+  // 横向きのとき保存画像の上下が大きく欠けた（9/15 の引き取り写真で顔が切れた）。
+  // いまは プレビューも保存も「全フレーム」なので、画角に入っていれば必ず写る。
   const cw = window.innerWidth || v.clientWidth;
   const ch = window.innerHeight || v.clientHeight;
-  const dpr = Math.min(3, window.devicePixelRatio || 1);   // 端末解像度で鮮明に。3倍で頭打ち（ファイル肥大防止）
   const land = (_arRot === 90 || _arRot === 270);
+  const lay = arFrameLayout(vw, vh, cw, ch);
+  // 出力の密度: 映像の実解像度を活かす（論理1pxあたり k px。最大辺 2000px に抑えてファイル肥大を防ぐ）
+  const k = Math.min(lay.k, 2000 / Math.max(cw, ch));
   // 論理サイズ(CSS px): 縦は cw×ch、横は回転して ch×cw
   const logW = land ? ch : cw, logH = land ? cw : ch;
-  const outW = Math.round(logW * dpr), outH = Math.round(logH * dpr);
+  const outW = Math.round(logW * k), outH = Math.round(logH * k);
   const cv = document.getElementById('arCanvas');
   cv.width = outW; cv.height = outH;
   const ctx = cv.getContext('2d');
-  // cover トリミング: 画面に映っている映像の可視領域だけを切り出す（縦見え cw×ch 基準）
-  const coverScale = Math.max(cw / vw, ch / vh);
-  const sW = cw / coverScale, sH = ch / coverScale;
-  const sx = (vw - sW) / 2, sy = (vh - sH) / 2;
-  // 映像を描く。横向き指定時は、縦見えを±90°回して横向き画像にする（iPhoneは画面が回らないため）。
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, outW, outH);
+  // 映像を全フレーム描く（縦見え cw×ch の中に contain）。横向き指定時は ±90°回して横向き画像にする。
   ctx.save();
   if (land) {
     ctx.translate(outW / 2, outH / 2);
     ctx.rotate(_arRot * Math.PI / 180);
-    ctx.translate(-cw * dpr / 2, -ch * dpr / 2);
-    ctx.drawImage(v, sx, sy, sW, sH, 0, 0, cw * dpr, ch * dpr);
-  } else {
-    ctx.drawImage(v, sx, sy, sW, sH, 0, 0, outW, outH);
+    ctx.translate(-cw * k / 2, -ch * k / 2);
   }
+  ctx.drawImage(v, 0, 0, vw, vh, lay.x * k, lay.y * k, lay.w * k, lay.h * k);
   ctx.restore();
-  // 看板/ホワイトボードは最終フレームに正立で描く（横なら landscape の logW×logH 座標）。
+  // 看板/ホワイトボードは最終フレームに正立で描く（横なら landscape の logW×logH 座標＝#arOverlay と同じ）。
   ctx.save();
-  ctx.scale(dpr, dpr);
+  ctx.scale(k, k);
   if (_arMode === 'whiteboard') arDrawWhiteboard(ctx, logW, logH, arWhiteboardData(_boardRec));
   else arDrawBoard(ctx, logW, logH, arBoardData(_boardRec));
   ctx.restore();
@@ -4119,10 +4124,25 @@ async function arCapture() {
   if (AR_IS_IOS) arMsg('「写真に保存」を選んでください（カメラロールに入ります）');
   let how = 'downloaded';
   try { how = await arSaveToDevice(blob, fname); } catch (e) {}
-  arMsg(how === 'canceled' ? '保存をキャンセルしました' : '✅ 保存しました');
+  arMsg(how === 'canceled' ? '保存をキャンセルしました' : '✅ 端末に保存しました。サーバーへ送信中…');
 
-  // 2) サーバーにも保存（市役所提出用に個体へ紐づけ）。端末には保存済みなので失敗しても致命ではない。
-  try { await arUploadPhoto(blob); } catch (e) {}
+  // 2) サーバーにも保存（市役所提出用に個体へ紐づけ）。
+  // 2026-09-16: 失敗を握り潰していたため、公開からの全件（0件）が保存されていないことに1か月以上気づけなかった。
+  // 失敗は必ず画面に出す（端末には保存済みなので、あとから「写真を送る」や再撮影で補える）。
+  try {
+    await arUploadPhoto(blob);
+    if (how !== 'canceled') arMsg('✅ 保存しました（端末とサーバーの両方）');
+  } catch (e) {
+    arMsg('⚠️ サーバーへの保存に失敗しました（端末には保存済み）。電波の良い所でもう一度撮るか、写真を担当者へ送ってください');
+    _arLastUploadError = String((e && e.message) || e);
+  }
+}
+let _arLastUploadError = null;
+// 全フレームを cw×ch（縦見えの画面）に contain で収めたときの位置と大きさ。k は「論理1pxあたりの映像px」
+function arFrameLayout(vw, vh, cw, ch) {
+  const fit = Math.min(cw / vw, ch / vh);
+  const w = vw * fit, h = vh * fit;
+  return { x: (cw - w) / 2, y: (ch - h) / 2, w: w, h: h, k: Math.max(1, Math.min(3, vw / w)) };
 }
 // 撮影画像をサーバー(capture-photosバケット)へ保存し、登録済み個体なら image_url に紐づける
 async function arUploadPhoto(blob) {
