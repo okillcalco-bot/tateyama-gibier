@@ -118,47 +118,104 @@ function fetchStory(){
 }
 
 /* ── フードマイレージ ──
-   ジビエは「獲れた山 → センター → 会場（お手元）」しか動かない。輸入肉との差を距離で見せる。
-   比べる数字は目安（産地の主要港〜東京港のおおよその航路距離） */
-const FAR_FOODS=[{name:'豪州産の牛肉',km:7800},{name:'米国産の豚肉',km:9000},{name:'チリ産の豚肉',km:17000}];
+   「距離（km）」と「フードマイレージ（重量 × 距離 ＝ kg・km）」は別の指標として扱う。
+   距離: 捕獲地点 → 館山ジビエセンター（→ 販売・提供地点。分かるときだけ）。
+   フードマイレージ: 商品（パック）の実重量が分かるときだけ、商品重量 × 移動距離 で出す。生体重量は使わない。
+   参考比較の値は app_settings.mileage_reference（管理画面で編集）。出典の無い値は出さない。 */
+const REF_DEFAULT={ title:'どれくらい近い？ 参考比較',
+  note:'一般的な輸送距離の参考値・概算です。産地の代表点から館山ジビエセンターまでの直線距離で、実際の船・トラックの経路はこれより長くなります。',
+  items:[
+    {name:'豪州産の牛肉',km:6600,kind:'estimate',source:'館山ジビエセンター試算（主産地: クイーンズランド州）',sourceUrl:null,calculationNote:'産地の代表点〜館山ジビエセンターの大円距離（直線）の概算'},
+    {name:'米国産の豚肉',km:9800,kind:'estimate',source:'館山ジビエセンター試算（主産地: 中西部）',sourceUrl:null,calculationNote:'産地の代表点〜館山ジビエセンターの大円距離（直線）の概算'},
+    {name:'チリ産の豚肉',km:17200,kind:'estimate',source:'館山ジビエセンター試算（産地の代表点: サンティアゴ周辺）',sourceUrl:null,calculationNote:'産地の代表点〜館山ジビエセンターの大円距離（直線）の概算'},
+  ]};
+let REF=REF_DEFAULT;
+async function loadReference(){
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/app_settings?key=eq.mileage_reference&select=value`,{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
+    if(r.ok){ const j=await r.json(); if(j&&j[0]&&j[0].value&&Array.isArray(j[0].value.items)) REF=j[0].value; }
+  }catch(e){ /* 取れなければ既定値のまま（表示は「参考値・概算」のまま） */ }
+}
+// 出典（source）の無い値は確定値として見せない
+function refItems(){ return (REF.items||[]).filter(it=>it&&it.name&&Number(it.km)>0&&it.source); }
 const STAMPS=['うまい！','くさみゼロ','やわらかい','子どもが完食','また食べたい','初めて食べた'];
 let picked=new Set();
-function fmtKm(v){ return v==null?'—':(Number(v)<10?Number(v).toFixed(1):Math.round(Number(v)).toLocaleString())+' km'; }
+function fmtKm(v){ return v==null?'—':(Number(v)<100?Number(v).toFixed(1):Math.round(Number(v)).toLocaleString())+' km'; }
+// フードマイレージ（kg・km）。重量か距離が無ければ null（0 にしない）
+function foodMileageKgKm(kg, km){ const w=Number(kg), d=Number(km); if(!(w>0)||!(d>0)) return null; return Math.round(w*d*10)/10; }
+// 表示用の形に揃える。将来: 販売店までの距離・輸送手段・CO2・市内消費率などはここに足す
+function buildMileageModel(m, product){
+  if(!m) return null;
+  const cap=m.capture||{}, center=m.center||{}, venue=m.venue||null;
+  const hasCap=cap.lat!=null&&cap.lng!=null, hasCenter=center.lat!=null&&center.lng!=null;
+  const leg1=(hasCap&&hasCenter&&m.leg1_km!=null)?Number(m.leg1_km):null;
+  const hasVenue=!!(venue&&venue.lat!=null&&venue.lng!=null&&m.leg2_km!=null);
+  const leg2=hasVenue?Number(m.leg2_km):null;
+  const legs=[{key:'capture-center',from:'捕獲地点',to:'館山ジビエセンター',km:leg1}];
+  if(venue) legs.push({key:'center-venue',from:'館山ジビエセンター',to:venue.name||'販売・提供地点',km:leg2});
+  const totalKm=leg1==null?null:(hasVenue?Math.round((leg1+leg2)*10)/10:leg1);
+  const productKg=(product&&product.kg!=null&&Number(product.kg)>0)?Number(product.kg):null; // 商品の実重量だけ。生体重量は使わない
+  return { legs, leg1, leg2, hasCap, hasCenter, hasVenue, venueName:venue?(venue.name||''):null, totalKm,
+    complete:hasVenue, captureSrc:cap.src||null, productKg, kgKm:foodMileageKgKm(productKg,totalKm), transport:null, co2:null };
+}
+function cityOf(place){ const m=String(place||'').match(/^(.+?)(市|町|村)/); return m?m[1]:''; }
 function mileageHtml(m){
-  if(!m) return '';
-  const cap=m.capture||{}, hasCap=cap.lat!=null&&cap.lng!=null, center=m.center||{}, hasCenter=center.lat!=null&&center.lng!=null;
-  const venue=m.venue||null;
-  const total=m.total_km!=null?Number(m.total_km):null;
-  let body='';
-  if(!hasCap||!hasCenter){
-    body=`<div style="font-size:13px;color:var(--ink2);">${!hasCap?'獲れた地区の位置がまだ登録されていないため、距離を出せません。':'センターの位置がまだ登録されていません。'}<br>このお肉が館山・南房総の山から来ていることは変わりません。</div>`;
+  const model=buildMileageModel(m, story&&story.product);
+  if(!model) return '';
+  const ind=(story&&story.individual)||{};
+  const city=cityOf(ind.place)||'館山';
+  const items=refItems();
+  let dist='';
+  if(!model.hasCap||!model.hasCenter){
+    dist=`<div style="font-size:13px;color:var(--ink2);">${!model.hasCap?'獲れた地区の位置がまだ登録されていないため、距離を出せません。':'センターの位置がまだ登録されていません。'}<br>このお肉が館山・南房総の山から来ていることは変わりません。</div>`;
   }else{
-    const legs=[`<div class="row"><span class="k">獲れた山→センター</span><span class="v">${fmtKm(m.leg1_km)}</span></div>`];
-    if(venue) legs.push(`<div class="row"><span class="k">センター→${esc(venue.name||'会場')}</span><span class="v">${venue.lat!=null?fmtKm(m.leg2_km):'（会場の位置が未登録）'}</span></div>`);
-    const maxKm=FAR_FOODS[FAR_FOODS.length-1].km;
-    const bar=(name,km,mine)=>`<div style="margin-top:8px;">
-        <div style="display:flex;justify-content:space-between;font-size:12.5px;${mine?'font-weight:700;color:var(--moss);':'color:var(--ink2);'}"><span>${esc(name)}</span><span>${mine?fmtKm(km):'約 '+Math.round(km).toLocaleString()+' km'}</span></div>
+    dist=`<div style="font-size:13px;color:var(--ink2);margin:-6px 0 4px;">このお肉が旅した距離</div>
+      ${model.legs.map(l=>`<div class="row"><span class="k" style="flex:0 0 auto;">${esc(l.from)} → ${esc(l.to)}</span><span class="v" style="margin-left:auto;">${l.km!=null?fmtKm(l.km):'（位置が未登録）'}</span></div>`).join('')}
+      ${model.complete
+        ? `<div class="row" style="border-bottom:none;"><span class="k">合計</span><span class="v" style="font-size:20px;color:var(--moss);margin-left:auto;">${fmtKm(model.totalKm)}</span></div>`
+        : `<div class="row" style="border-bottom:none;"><span class="k" style="flex:0 0 auto;">捕獲地点 → 館山ジビエセンター まで</span><span class="v" style="font-size:20px;color:var(--moss);margin-left:auto;">${fmtKm(model.totalKm)}</span></div>
+           <div style="font-size:12px;color:var(--ink3);">販売・提供地点までの距離は、まだ含まれていません。</div>`}
+      ${model.captureSrc==='area'?'<div style="font-size:12px;color:var(--ink3);">獲れた場所は捕獲地区のおおよその中心で数えています。</div>':''}`;
+  }
+  const info=`<details id="mileInfo" style="margin-top:10px;"><summary style="cursor:pointer;font-size:13px;color:var(--gold);">ⓘ フードマイレージって？</summary>
+    <div style="font-size:13.5px;color:var(--ink2);line-height:1.8;margin-top:8px;padding:12px;background:var(--bg);border-radius:10px;">
+      食べ物が「どれくらいの量を、どれくらいの距離運ばれてきたか」を見るための指標です。<br>
+      <b>フードマイレージ ＝ 食品の重量 × 輸送距離</b><br>
+      一般に、生産地から食卓までの距離が短いほど、輸送に伴う環境負荷を小さくできる可能性があります。<br>
+      館山ジビエは、館山周辺で捕獲された野生動物を館山ジビエセンターで食肉にしています。<br>
+      <span style="font-size:12px;color:var(--ink3);">※フードマイレージは輸送に関する指標であり、生産・加工・冷蔵冷凍などを含む食品全体の環境負荷を表すものではありません。</span>
+    </div></details>`;
+  const strict=model.kgKm!=null?`<div class="row" id="mileKgKm" style="margin-top:8px;border-top:1px dashed var(--line);border-bottom:none;padding-top:10px;"><span class="k" style="flex:0 0 auto;">この商品のフードマイレージ</span><span class="v" style="margin-left:auto;">${model.kgKm.toLocaleString()} kg・km</span></div>
+      <div style="font-size:12px;color:var(--ink3);">商品重量 ${model.productKg.toFixed(2)} kg × 移動距離 ${fmtKm(model.totalKm)}${model.complete?'':'（捕獲地点→センターまで）'}</div>`:'';
+  let cmp='', btn='';
+  if(model.totalKm!=null&&items.length){
+    const maxKm=Math.max(...items.map(f=>Number(f.km)));
+    const bar=(name,km,mine,note)=>`<div style="margin-top:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:12.5px;${mine?'font-weight:700;color:var(--moss);':'color:var(--ink2);'}"><span>${esc(name)}</span><span>${mine?fmtKm(km):'約 '+Math.round(km).toLocaleString()+' km'}${note?` <span style="font-size:11px;color:var(--ink3);">${esc(note)}</span>`:''}</span></div>
         <div style="height:9px;background:var(--line);border-radius:5px;overflow:hidden;"><div style="height:100%;width:${Math.max(1.5,Math.min(100,km/maxKm*100))}%;background:${mine?'var(--moss)':'var(--ink3)'};border-radius:5px;"></div></div>
       </div>`;
-    const ratio=total>0?Math.round(FAR_FOODS[0].km/total):null;
-    body=`${legs.join('')}
-      <div class="row" style="border-bottom:none;"><span class="k">合計</span><span class="v" style="font-size:20px;color:var(--moss);">${fmtKm(total)}</span></div>
-      ${bar('このお肉',total,true)}${FAR_FOODS.map(f=>bar(f.name,f.km,false)).join('')}
-      <div style="font-size:12.5px;color:var(--ink2);margin-top:10px;line-height:1.7;">
-        ${ratio?`${esc(FAR_FOODS[0].name)}と比べて、移動距離は <b>約${ratio.toLocaleString()}分の1</b>。`:''}
-        軽トラで運んだ燃料はガソリン <b>約${(total/15).toFixed(1)} L</b>（15 km/L として）。${cap.src==='area'?'獲れた場所は捕獲地区のおおよその中心で数えています。':''}輸入肉の距離は目安です。
-      </div>`;
+    const first=items[0]; const ratio=model.totalKm>0?Math.round(Number(first.km)/model.totalKm):null;
+    cmp=`<div id="mileBody" style="display:none;margin-top:10px;">
+      <div style="font-size:14px;font-weight:700;">${esc(REF.title||'どれくらい近い？ 参考比較')}</div>
+      <div style="font-size:12px;color:var(--ink3);">${esc(REF.note||'一般的な輸送距離の参考値・概算です。')}</div>
+      ${bar('このお肉'+(model.complete?'':'（センターまで）'),model.totalKm,true,'')}${items.map(f=>bar(f.name,Number(f.km),false,f.kind==='estimate'?'参考値・概算':'')).join('')}
+      ${ratio?`<div style="font-size:12.5px;color:var(--ink2);margin-top:10px;">${esc(first.name)}（参考値）と比べて、移動距離は <b>約${ratio.toLocaleString()}分の1</b>。</div>`:''}
+      <details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12px;color:var(--ink3);">出典と注記</summary>
+        <ul style="font-size:12px;color:var(--ink3);padding-left:18px;margin:6px 0 0;">${items.map(f=>`<li>${esc(f.name)}：${esc(f.source)}${f.calculationNote?'／'+esc(f.calculationNote):''}${f.sourceUrl?` <a href="${esc(f.sourceUrl)}" target="_blank" rel="noopener">出典</a>`:''}</li>`).join('')}</ul></details>
+    </div>`;
+    btn=`<button type="button" class="send" id="mileBtn" style="margin-top:12px;background:var(--gold-soft);color:var(--gold);border:1px solid var(--gold);" onclick="toggleMileage()">どれくらい近い？ 参考比較を見る</button>`;
   }
-  return `<div class="card"><h2><span class="ic">🚚</span>フードマイレージ</h2>
-    <div style="font-size:13px;color:var(--ink2);margin:-6px 0 8px;">このお肉が、どれだけの距離を運ばれてきたか。</div>
-    <button type="button" class="send" id="mileBtn" style="margin-top:0;background:var(--gold-soft);color:var(--gold);border:1px solid var(--gold);" onclick="toggleMileage()">🚚 距離を見る</button>
-    <div id="mileBody" style="display:none;margin-top:10px;">${body}</div>
-  </div>`;
+  const msg=`<div id="mileMsg" style="margin-top:16px;text-align:center;">
+      <div style="font-size:20px;font-weight:700;color:var(--moss);line-height:1.5;">この一頭は、${esc(city)}の山から${model.leg1!=null?`<span style="white-space:nowrap;">${fmtKm(model.leg1)}</span>`:''}。</div>
+      <div style="font-size:13.5px;color:var(--ink2);margin-top:6px;line-height:1.8;">遠くから運ばれてきた食材ではなく、<br>この地域に生きていた命を、この地域で食材にしています。</div>
+    </div>`;
+  return `<div class="card"><h2><span class="ic">🚚</span>フードマイレージ</h2>${dist}${info}${strict}${btn}${cmp}${msg}</div>`;
 }
 function toggleMileage(){
   const b=document.getElementById('mileBody'), btn=document.getElementById('mileBtn');
+  if(!b||!btn) return;
   const open=b.style.display==='none'; b.style.display=open?'block':'none';
-  btn.textContent=open?'閉じる':'🚚 距離を見る';
+  btn.textContent=open?'閉じる':'どれくらい近い？ 参考比較を見る';
 }
 function toggleStamp(s){ if(picked.has(s)) picked.delete(s); else picked.add(s); paintStamps(); }
 function paintStamps(){
@@ -175,7 +232,7 @@ async function load(){
     sub.textContent='いま並んでいるお肉が、どこで獲れた一頭か';
   }
   try{
-    story=await fetchStory();
+    [story]=await Promise.all([fetchStory(), loadReference()]);
   }catch(e){
     box.innerHTML='<div class="center">うまく読み込めませんでした。時間をおいてお試しください。</div>'; return;
   }
