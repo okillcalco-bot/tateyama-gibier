@@ -123,6 +123,22 @@ async function open(browser, { failTable } = {}) {
   ck('画面: 出荷別テーブル5行、遠い出荷に横浜', ui1.rows === 5 && /横浜の店/.test(ui1.far), String(ui1.rows));
   ck('画面: まとめて取得ボタンが押せる', ui1.geoBtn === false, '');
 
+  // ── 他の肉との比較（公的統計のシェア × 代表点の直線距離） ──
+  const meat = await page.evaluate(() => ({ rows: meatRef().map(r => ({ meat: r.meat, imp: r.imp, outside: r.outside, local: r.local, market: r.market, self: r.self })),
+    beefAus: refKm('豪州（クイーンズランド）'), chibaHokuso: refKm('千葉（北総）'), kagoshima: refKm('鹿児島'), beefDomAll: wavg(MEAT_REF[0].dom), beefImp: wavg(MEAT_REF[0].imp),
+    box: document.getElementById('meatBox').textContent, boxHtml: document.getElementById('meatBox').innerHTML, detail: document.getElementById('meatDetail').textContent }));
+  const beef = meat.rows[0], pork = meat.rows[1], chicken = meat.rows[2], lamb = meat.rows[3];
+  ck('比較: 4種（牛・豚・鶏・羊）ある', meat.rows.map(r => r.meat).join() === '牛肉,豚肉,鶏肉,羊肉（その他）', meat.rows.map(r => r.meat).join());
+  ck('比較: 代表点の距離が妥当（豪州QLD 6,500〜7,500 km・千葉北総 90〜130 km・鹿児島 850〜1,000 km）', meat.beefAus > 6500 && meat.beefAus < 7500 && meat.chibaHokuso > 90 && meat.chibaHokuso < 130 && meat.kagoshima > 850 && meat.kagoshima < 1000, JSON.stringify([meat.beefAus, meat.chibaHokuso, meat.kagoshima]));
+  ck('比較: 牛肉の輸入は豪州45%・米国38%の加重で 7,000〜9,000 km', beef.imp > 7000 && beef.imp < 9000, String(beef.imp));
+  ck('比較: 国産（地域外）は主産地の加重で 牛 600〜1,000 km・豚 500〜900 km', beef.outside > 600 && beef.outside < 1000 && pork.outside > 500 && pork.outside < 900, JSON.stringify([beef.outside, pork.outside]));
+  ck('比較: 地域内は千葉県産（牛＝安房 <30 km・豚鶏＝北総 90〜130 km）', beef.local < 30 && pork.local > 90 && pork.local < 130 && chicken.local === pork.local, JSON.stringify([beef.local, pork.local, chicken.local]));
+  ck('比較: 市場平均は自給率で加重（牛: 0.39×国産全体 + 0.61×輸入）', Math.abs(beef.market - (0.39 * meat.beefDomAll + 0.61 * meat.beefImp)) < 1e-6 && beef.market > beef.outside && beef.market < beef.imp && chicken.imp > beef.imp, JSON.stringify([beef.market, meat.beefDomAll, meat.beefImp, chicken.imp]));
+  ck('比較: 羊は地域内が無い（—）', lamb.local === null && lamb.self === 1, JSON.stringify(lamb));
+  ck('画面: 比較表に 輸入／国産（地域外）／国産（地域内）／市場平均 の列と当センターの行', /輸入/.test(meat.box) && /国産（地域外）/.test(meat.box) && /地域内/.test(meat.box) && /市場平均/.test(meat.box) && /当センターのジビエ/.test(meat.box), '');
+  ck('画面: 当センターとの倍率が出る', /当センターの [\d,\.]+倍/.test(meat.box), (meat.box.match(/当センターの [\d,\.]+倍/) || [''])[0]);
+  ck('画面: 内訳に出どころ（貿易統計・畜産統計）とシェアが出る', /貿易統計/.test(meat.detail) && /畜産統計/.test(meat.detail) && /鹿児島 18%/.test(meat.detail) && /ブラジル（パラナ） 70%/.test(meat.detail), '');
+
   // ── まとめて取得（地理院→保存） ──
   await page.evaluate(() => geoFetchAll());
   await page.waitForTimeout(800);
