@@ -1202,14 +1202,33 @@ async function refreshIndividualNumber() {
       nextSerial = Math.max(dbNext, lsVal);
     }
   } else {
+    // キョン・シカ・アライグマ等（通し番号＝管理番号）。2026-09-16: イノシシと同じく DB の最大+1 を正にする。
+    // それまでは端末カウンタを優先していたため、別の端末で登録が進むと使用済みの番号（例: キ058）を
+    // 提案し、保存時に「既に登録されています」で止まっていた（キョン登録が止まった事故）。
+    // 端末カウンタはオフライン（DB読取失敗）のときの重複回避にだけ使う。
     const lsKey = `tgc_next_serial_${prefix}`;
-    nextSerial = parseInt(localStorage.getItem(lsKey) || '0');
-    if (!nextSerial || nextSerial < 1) {
+    let dbNext = 1, dbOk = false;
+    try {
+      const rows = await sb('GET', 'individuals', null,
+        `?label_id=like.TGC-08-${prefix}*&deleted_at=is.null&select=serial_number,label_id&order=serial_number.desc.nullslast&limit=1`);
+      if (rows.length > 0) {
+        const fromLabel = parseInt(String(rows[0].label_id || '').replace(`TGC-08-${prefix}`, ''), 10);
+        dbNext = Math.max(rows[0].serial_number || 0, isNaN(fromLabel) ? 0 : fromLabel) + 1;
+      }
+      dbOk = true;
+    } catch(e) { dbNext = 1; }
+    if (dbOk) {
+      // DBが読めた＝DB最大+1が正（実際の採番はDBトリガが確定する）。未送信キューの同じ獣種のぶんだけ進めて表示。
+      let qN = 0;
       try {
-        const rows = await sb('GET', 'individuals', null,
-          `?label_id=like.TGC-08-${prefix}*&deleted_at=is.null&select=serial_number&order=serial_number.desc&limit=1`);
-        nextSerial = rows.length > 0 ? (rows[0].serial_number || 0) + 1 : 1;
-      } catch(e) { nextSerial = 1; }
+        const q = JSON.parse(localStorage.getItem('tgc_queue') || '[]') || [];
+        qN = q.filter(r => r && r.label_id === ('AUTO-' + prefix)).length;
+      } catch (e) {}
+      nextSerial = dbNext + qN;
+      localStorage.setItem(lsKey, String(dbNext));   // 古い端末カウンタはDBに合わせて自己修復
+    } else {
+      const lsVal = parseInt(localStorage.getItem(lsKey) || '0') || 0;
+      nextSerial = Math.max(dbNext, lsVal, 1);
     }
   }
 
