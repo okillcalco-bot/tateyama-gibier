@@ -62,7 +62,7 @@ const STORY = {
   // 3) 星も感想も無いと送れない
   await page.click('#send');
   await page.waitForTimeout(200);
-  results.push(['未入力は送信を止める', /どちらかを入れて/.test(await page.$eval('#msg', el => el.innerText)) && posted === null, '']);
+  results.push(['未入力は送信を止める', /どれか1つで大丈夫/.test(await page.$eval('#msg', el => el.innerText)) && posted === null, '']);
 
   // 4) 星＋感想を送れる
   await page.click('#stars button[data-n="4"]');
@@ -74,7 +74,7 @@ const STORY = {
   results.push(['感想を送信できる', posted && posted.p_code === '10000783' && posted.p_rating === 4
     && posted.p_dish === 'カレー' && /子どもがよく食べました/.test(posted.p_comment) && posted.p_nickname === 'テスト太郎',
     JSON.stringify(posted)]);
-  results.push(['送信後にお礼を出す', /ありがとうございました/.test(await page.$eval('#msg', el => el.innerText)), '']);
+  results.push(['送信後にお礼を出す', /ありがとうございます/.test(await page.$eval('#msg', el => el.innerText)), '']);
   results.push(['送信後に物語を読み直す', storyCalls >= 2, String(storyCalls)]);
 
   // 5) 見つからない番号

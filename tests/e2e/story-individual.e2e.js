@@ -88,7 +88,7 @@ async function open(query, opts) {
     T('個体番号を渡す', post && post.body.p_label === 'TGC-08-T276', post && post.body.p_label);
     T('星と感想を渡す', post && post.body.p_rating === 4 && post.body.p_comment === 'とても美味しかった', '');
     T('パック用の投稿RPCは呼ばない', !calls.some(c => c.fn === 'story_add_voice'), '');
-    T('承認してから載ることを伝える', /センターで確認のうえ掲載します/.test(await page.$eval('#msg', el => el.textContent)),
+    T('送るとすぐ載ることを伝える（2026-09-16 即掲載に変更）', /いま一行が加わりました/.test(await page.$eval('#msg', el => el.textContent)),
       await page.$eval('#msg', el => el.textContent));
     T('pageerrorなし(2)', errors.length === 0, errors.join(' / '));
     await browser.close();
