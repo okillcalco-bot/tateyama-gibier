@@ -772,8 +772,13 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div class="section">
         <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
           <span>&#x1F33F; 一頭ずつ分かるお肉<span style="font-size:12px;color:var(--text3);font-weight:400;">（精肉のパック・1パック＝1頭）</span></span>
-          <button class="btn btn-sm btn-primary" id="ev-add-ind" onclick="evPickOpen()">＋ 在庫から選ぶ</button>
+          <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <input class="form-input" id="ev-scan" type="text" inputmode="numeric" autocomplete="off" placeholder="📷 バーコードを読む（8桁 or 個体番号）→ Enter" style="width:min(300px,70vw);padding:6px 10px;font-size:13px;" onkeydown="if(event.key==='Enter'){event.preventDefault();evScanAdd();}">
+            <button class="btn btn-sm" id="ev-scan-btn" onclick="evScanAdd()">追加</button>
+            <button class="btn btn-sm btn-primary" id="ev-add-ind" onclick="evPickOpen()">＋ 在庫から選ぶ</button>
+          </span>
         </div>
+        <div id="ev-scan-msg" style="font-size:12.5px;min-height:18px;margin:-4px 0 6px;color:var(--text2);"></div>
         <div style="overflow-x:auto;"><table>
           <thead><tr><th>個体番号</th><th>獲れた場所</th><th>部位</th><th>重量</th><th>円/kg</th><th>金額</th><th>売れた</th><th></th></tr></thead>
           <tbody id="ev-d-ind-body"></tbody>
@@ -6983,7 +6988,8 @@ function evListRender() {
       <td>${s.ind ? s.ind + '頭' : '-'}</td>
       <td>${s.lot ? s.lot + '個' : '-'}</td>
       <td style="white-space:nowrap;">${ev.status === '実績確定' ? evYen(s.total) : '<span style="color:var(--text3);">—</span>'}</td>
-      <td><button class="btn btn-sm btn-primary" style="padding:3px 10px;font-size:12px;white-space:nowrap;" onclick="evOpen('${ev.id}')">開く</button></td>
+      <td style="white-space:nowrap;"><button class="btn btn-sm btn-primary" style="padding:3px 10px;font-size:12px;white-space:nowrap;" onclick="evOpen('${ev.id}')">開く</button>
+        ${ev.status === '準備中' ? `<button class="btn btn-sm btn-danger" style="padding:3px 8px;font-size:11px;margin-left:4px;" onclick="evDeleteEventById('${ev.id}')">削除</button>` : ''}</td>
     </tr>`;
   }).join('');
 }
@@ -7207,12 +7213,15 @@ function evFillHead() {
      <span class="badge badge-${badge[e.status] || 'gray'}">${esc2(e.status)}</span>`;
 
   const locked = e.status !== '準備中';
-  ['ev-add-ind', 'ev-add-lot', 'ev-add-other'].forEach(id => {
+  ['ev-add-ind', 'ev-add-lot', 'ev-add-other', 'ev-scan', 'ev-scan-btn'].forEach(id => {
     const b = document.getElementById(id); if (b) b.disabled = locked;
   });
+  const sm = document.getElementById('ev-scan-msg');
+  if (sm) sm.textContent = locked ? '' : 'ラベルのバーコードを読むか、8桁の番号か個体番号（例: TGC-08-T276）を入れて Enter。続けて読めます。';
   const act = document.getElementById('ev-d-actions');
   act.innerHTML =
-    e.status === '準備中' ? `<button class="btn btn-primary" onclick="evTakeout()">🚚 持ち出しを確定</button>`
+    e.status === '準備中' ? `<button class="btn btn-primary" onclick="evTakeout()">🚚 持ち出しを確定</button>
+        <button class="btn btn-danger" onclick="evDeleteEvent()">🗑 この出店を削除</button>`
     : e.status === '持ち出し済' ? `<button class="btn btn-primary" onclick="evSettle()">💰 売上を確定</button>
         <button class="btn" onclick="evReopen()">↩ 準備中に戻す</button>`
     : `<button class="btn" onclick="evReopen()">↩ 確定を取り消す</button>`;
@@ -7281,9 +7290,9 @@ function evRenderItems() {
       <td style="white-space:nowrap;">${evYen(i.amount)}</td>
       <td style="text-align:center;"><input type="checkbox" ${evNum(i.qty_sold) > 0 ? 'checked' : ''}
             ${sellable ? '' : 'disabled'} onchange="evItemPatch('${i.id}','qty_sold', this.checked ? ${evNum(i.qty_taken) || 1} : 0)"></td>
-      <td>${canEdit ? `<button class="btn btn-sm btn-danger" style="padding:2px 8px;font-size:11px;" onclick="evItemDelete('${i.id}')">外す</button>` : ''}</td>
+      <td>${(canEdit || sellable) ? `<button class="btn btn-sm btn-danger" style="padding:2px 8px;font-size:11px;" onclick="evItemDelete('${i.id}')">外す</button>` : ''}</td>
     </tr>`;
-  }).join('') : `<tr><td colspan="8" class="empty-state">まだありません${canEdit ? '。「＋ 在庫から選ぶ」で追加します。' : ''}</td></tr>`;
+  }).join('') : `<tr><td colspan="8" class="empty-state">まだありません${canEdit ? '。バーコードを読むか「＋ 在庫から選ぶ」で追加します。' : ''}</td></tr>`;
 
   const lots = evItems.filter(i => i.kind !== 'inventory');
   const lb = document.getElementById('ev-d-lot-body');
@@ -7304,7 +7313,7 @@ function evRenderItems() {
             ${canEdit || sellable ? '' : 'disabled'} onchange="evItemPatch('${i.id}','unit_price',this.value)">
         <span style="font-size:11px;color:var(--text3);">${i.price_basis === 'kg' ? '円/kg' : '円/個'}</span></td>
       <td style="white-space:nowrap;">${evYen(i.amount)}</td>
-      <td>${canEdit ? `<button class="btn btn-sm btn-danger" style="padding:2px 8px;font-size:11px;" onclick="evItemDelete('${i.id}')">外す</button>` : ''}</td>
+      <td>${(canEdit || sellable) ? `<button class="btn btn-sm btn-danger" style="padding:2px 8px;font-size:11px;" onclick="evItemDelete('${i.id}')">外す</button>` : ''}</td>
     </tr>`).join('') : `<tr><td colspan="9" class="empty-state">まだありません${canEdit ? '。「＋ 加工品から選ぶ」で追加します。' : ''}</td></tr>`;
 
   // 合計
@@ -7364,11 +7373,81 @@ async function evItemPatch(id, field, value) {
 }
 
 async function evItemDelete(id) {
+  const it = evItems.find(x => x.id === id);
+  if (!it) return;
   try {
+    // 持ち出し済のあとに外すときは、引当済にしたパックを在庫に戻してから明細を消す（二重に出せない状態を残さない）
+    if (evCur && evCur.status === '持ち出し済') {
+      if (evNum(it.qty_sold) > 0 || evNum(it.qty_sample) > 0) { alert('売れた数・試食が入っています。先に 0 にしてから外してください。'); return; }
+      if (!confirm(`「${it.individual_label || it.item_name || ''}」を外します。${it.inventory_id ? 'このパックは在庫に戻ります。' : ''}よろしいですか？`)) return;
+      if (it.inventory_id) {
+        const back = await sb('PATCH', 'inventory', { status: '在庫', updated_at: new Date().toISOString() }, `?id=eq.${it.inventory_id}&status=eq.${encodeURIComponent('引当済')}`);
+        if (!Array.isArray(back) || !back.length) {
+          const cur = await sb('GET', 'inventory', null, `?id=eq.${it.inventory_id}&select=status`);
+          const st = cur[0] ? cur[0].status : '不明';
+          if (st !== '在庫') { alert(`このパックは「${st}」になっているため、在庫に戻せませんでした。明細は外していません。`); return; }
+        }
+      }
+    }
     await sb('DELETE', 'sale_event_items', null, `?id=eq.${id}`);
     evItems = evItems.filter(x => x.id !== id);
     evRenderItems();
+    try { evSheetRender(); evGeoRender(); } catch (e) {}
   } catch (e) { alert('外せませんでした：' + (e && e.message || e)); }
+}
+
+/* ── バーコードで一頭ものを追加 ──
+   ラベルの8桁（scan_code）か個体管理番号（ident_code）を読む。精肉のパック（tier 2・在庫・個体あり）だけ。
+   見つからない・在庫でない・もう入っている、はすべて画面に出す（黙って何もしない、を作らない） */
+async function evScanAdd() {
+  const inp = document.getElementById('ev-scan'), msg = document.getElementById('ev-scan-msg');
+  if (!inp || !evCur) return;
+  const say = (t, bad) => { if (msg) { msg.textContent = t; msg.style.color = bad ? 'var(--red)' : 'var(--green)'; } if (bad) { try { playFeedbackSound(false); } catch (e) {} } };
+  const raw = (inp.value || '').trim();
+  if (!raw) { say('バーコードか番号を読んでください。', true); return; }
+  if (evCur.status !== '準備中') { say('準備中の出店だけ追加できます。', true); return; }
+  const digits = raw.replace(/[^0-9]/g, '');
+  const byScan = /^[0-9]{6,10}$/.test(raw.replace(/\s/g, '')) && digits.length >= 6;
+  const key = byScan ? digits : raw.toUpperCase().replace(/[^0-9A-Z\-]/g, '');
+  const q = byScan ? `scan_code=eq.${encodeURIComponent(key)}` : `ident_code=eq.${encodeURIComponent(key)}`;
+  try {
+    const rows = await sb('GET', 'inventory', null,
+      `?${q}&deleted_at=is.null&select=id,ident_code,scan_code,individual_id,species,part_name,weight,weight_kg,status,tier,processed_at&limit=1`);
+    const p = rows[0];
+    if (!p) { say(`「${raw}」のパックが見つかりません。番号を確認してください。`, true); inp.select(); return; }
+    if (evItems.some(i => i.inventory_id === p.id)) { say(`${p.ident_code} はもう入っています。`, true); inp.value = ''; inp.focus(); return; }
+    if (p.status !== '在庫') { say(`${p.ident_code} は「${p.status}」のため持ち出せません。`, true); inp.select(); return; }
+    if (!p.individual_id || p.tier !== 2) { say(`${p.ident_code} は一頭ものの精肉パックではありません（小分け・加工品は「＋ 加工品から選ぶ」から）。`, true); inp.select(); return; }
+    const last = evItems.filter(i => i.kind === 'inventory' && evNum(i.unit_price) > 0).slice(-1)[0];
+    const price = last ? evNum(last.unit_price) : (parseInt((document.getElementById('ev-pick-price') || {}).value || '0', 10) || 0);
+    await sb('POST', 'sale_event_items', {
+      event_id: evCur.id, kind: 'inventory', inventory_id: p.id, ident_code: p.ident_code,
+      individual_label: p.individual_id, species: p.species, part_name: p.part_name, item_name: null,
+      weight_kg: evNum(p.weight != null ? p.weight : p.weight_kg),
+      qty_taken: 1, qty_sold: 0, price_basis: 'kg', unit_price: price,
+      lot_code: null, match_key: null, member_labels: null, note: null
+    });
+    evItems = await sb('GET', 'sale_event_items', null, `?event_id=eq.${evCur.id}&select=*&order=kind,created_at`);
+    await evLoadIndCache();
+    evRenderItems();
+    try { await evGeoLoad(); } catch (e) {}
+    evGeoRender(); evSheetRender();
+    try { playFeedbackSound(true); } catch (e) {}
+    say(`✅ ${p.ident_code}（${p.part_name || ''} ${evNum(p.weight != null ? p.weight : p.weight_kg).toFixed(2)}kg）を追加しました${price ? `。単価 ${price} 円/kg（前の行と同じ。表で直せます）` : '。単価は表で入れてください'}`);
+    inp.value = ''; inp.focus();
+  } catch (e) { say('追加できませんでした：' + (e && e.message || e), true); }
+}
+
+async function evDeleteEventById(id) {
+  const ev = evEvents.find(x => x.id === id);
+  if (!ev) return;
+  if (ev.status !== '準備中') { alert('先に開いて「確定を取り消す」で準備中に戻してください（在庫を元に戻すため）。'); return; }
+  if (!confirm(`${ev.venue_name} ${ev.event_date} の出店を削除しますか？\n持っていくものの記録も消えます。`)) return;
+  try {
+    await sb('PATCH', 'sale_events', { deleted_at: new Date().toISOString() }, `?id=eq.${id}`);
+    toast('出店を削除しました');
+    await loadEventSheet();
+  } catch (e) { alert('削除できませんでした：' + (e && e.message || e)); }
 }
 
 /* ── 在庫から一頭ものを選ぶ ── */
