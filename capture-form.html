@@ -3850,6 +3850,7 @@ function arApplyRot() {
   // プレビュー映像も回して見た目を近づける（対応環境のみ）。看板は正立のまま＝保存画像と一致
   const cam = document.getElementById('arCam');
   if (cam) { cam.classList.remove('arrot90', 'arrot270'); if (_arRot === 90) cam.classList.add('arrot90'); else if (_arRot === 270) cam.classList.add('arrot270'); }
+  arOverlayFit();   // 看板の入れ物を映像の枠に合わせ直す（向きが変わると枠の縦横も入れ替わる）
 }
 // 「📐 向き」ボタン：縦→横①→横②を巡回（自動検出の上書き用）。保存する写真が横向きになり、看板は正立で合成される。
 function arToggleRot() {
@@ -4013,6 +4014,9 @@ async function arStart() {
   try {
     _arStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: _arFacing }, audio: false });
     const v = document.getElementById('arVideo'); v.srcObject = _arStream; await v.play().catch(function () {});
+    // 映像の大きさが分かったら、看板の入れ物を映像の枠に合わせる（画面の回転・リサイズでも合わせ直す）
+    if (!v._arFitBound) { v.addEventListener('loadedmetadata', arOverlayFit); v.addEventListener('resize', arOverlayFit); window.addEventListener('resize', arOverlayFit); v._arFitBound = true; }
+    arOverlayFit();
   } catch (e) {
     arMsg('カメラを開けませんでした（カメラの許可が必要です。HTTPSでのみ動作）');
   }
@@ -4025,6 +4029,7 @@ function arClose() {
   _arRot = 0; _arManualUntil = 0;
   arApplyRot();
   const v = document.getElementById('arVideo'); if (v) v.srcObject = null;
+  arOverlayFit();   // 映像が無くなったので枠合わせを解除（次回は開いた映像に合わせ直す）
   const wb = document.getElementById('arWhiteboard'); if (wb) wb.classList.remove('show');
   const arBoardEl = document.getElementById('arBoard'); if (arBoardEl) arBoardEl.style.display = '';
   document.getElementById('arCam').classList.remove('show');
@@ -4087,29 +4092,31 @@ async function arCapture() {
   const ch = window.innerHeight || v.clientHeight;
   const land = (_arRot === 90 || _arRot === 270);
   const lay = arFrameLayout(vw, vh, cw, ch);
+  // 2026-09-17: 保存するのは「映像の枠」だけ。画面の黒い余白は入れない。看板もこの枠の中に描く。
+  // 以前は画面全体（黒帯込み）を保存し、看板を画面基準の位置に描いていたため、看板が映像の外（黒帯）に出た。
   // 出力の密度: 映像の実解像度を活かす（論理1pxあたり k px。最大辺 2000px に抑えてファイル肥大を防ぐ）
-  const k = Math.min(lay.k, 2000 / Math.max(cw, ch));
-  // 論理サイズ(CSS px): 縦は cw×ch、横は回転して ch×cw
-  const logW = land ? ch : cw, logH = land ? cw : ch;
+  const k = Math.min(lay.k, 2000 / Math.max(lay.w, lay.h));
+  // 論理サイズ(CSS px)＝枠の大きさ。横は回転して 枠の高さ×枠の幅
+  const logW = land ? lay.h : lay.w, logH = land ? lay.w : lay.h;
   const outW = Math.round(logW * k), outH = Math.round(logH * k);
   const cv = document.getElementById('arCanvas');
   cv.width = outW; cv.height = outH;
   const ctx = cv.getContext('2d');
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, outW, outH);
-  // 映像を全フレーム描く（縦見え cw×ch の中に contain）。横向き指定時は ±90°回して横向き画像にする。
+  // 映像を全フレーム描く（枠いっぱい）。横向き指定時は ±90°回して横向き画像にする。
   ctx.save();
   if (land) {
     ctx.translate(outW / 2, outH / 2);
     ctx.rotate(_arRot * Math.PI / 180);
-    ctx.translate(-cw * k / 2, -ch * k / 2);
+    ctx.translate(-lay.w * k / 2, -lay.h * k / 2);
   }
-  ctx.drawImage(v, 0, 0, vw, vh, lay.x * k, lay.y * k, lay.w * k, lay.h * k);
+  ctx.drawImage(v, 0, 0, vw, vh, 0, 0, lay.w * k, lay.h * k);
   ctx.restore();
-  // 看板/ホワイトボードは最終フレームに正立で描く（横なら landscape の logW×logH 座標＝#arOverlay と同じ）。
+  // 看板/ホワイトボードは枠の中に正立で描く（枠の端から 12px。プレビューの #arOverlay も枠に合わせてある）。
   ctx.save();
   ctx.scale(k, k);
-  if (_arMode === 'whiteboard') arDrawWhiteboard(ctx, logW, logH, arWhiteboardData(_boardRec));
-  else arDrawBoard(ctx, logW, logH, arBoardData(_boardRec));
+  if (_arMode === 'whiteboard') arDrawWhiteboard(ctx, logW, logH, arWhiteboardData(_boardRec), 12);
+  else arDrawBoard(ctx, logW, logH, arBoardData(_boardRec), 12);
   ctx.restore();
 
   const stamp = ((_boardRec && _boardRec.label_id) || 'photo').replace(/[^\w-]/g, '_');
@@ -4144,6 +4151,36 @@ function arFrameLayout(vw, vh, cw, ch) {
   const w = vw * fit, h = vh * fit;
   return { x: (cw - w) / 2, y: (ch - h) / 2, w: w, h: h, k: Math.max(1, Math.min(3, vw / w)) };
 }
+// いまの映像の枠（画面の中で映像が実際に見えている範囲）。映像がまだ無ければ known=false
+function arFrameRect() {
+  const v = document.getElementById('arVideo');
+  const vw = v ? v.videoWidth : 0, vh = v ? v.videoHeight : 0;
+  const cw = window.innerWidth || (v && v.clientWidth) || 0, ch = window.innerHeight || (v && v.clientHeight) || 0;
+  if (!vw || !vh || !cw || !ch) return { x: 0, y: 0, w: cw, h: ch, cw: cw, ch: ch, known: false };
+  const lay = arFrameLayout(vw, vh, cw, ch);
+  return { x: lay.x, y: lay.y, w: lay.w, h: lay.h, cw: cw, ch: ch, known: true };
+}
+// 看板の入れ物（#arOverlay）を映像の枠に合わせる。看板が黒い余白（枠の外）に出ないようにする（2026-09-17）。
+// 縦: 入れ物＝枠そのもの。横: 入れ物は回っているので 幅=枠の高さ・高さ=枠の幅（中央寄せは CSS の translate）。
+// 看板の下の余白は、枠の下端が画面のボタン列に重なるぶんだけ増やす（ボタンに隠れない）。保存画像では 12px。
+function arOverlayFit() {
+  const ov = document.getElementById('arOverlay'); if (!ov) return;
+  const f = arFrameRect();
+  const land = (_arRot === 90 || _arRot === 270);
+  const board = document.getElementById('arBoard'), wb = document.getElementById('arWhiteboard');
+  if (!f.known) {
+    ov.style.left = ov.style.top = ov.style.width = ov.style.height = '';
+    if (board) board.style.bottom = ''; if (wb) wb.style.top = '';
+    return;
+  }
+  if (land) { ov.style.left = '50%'; ov.style.top = '50%'; ov.style.width = f.h + 'px'; ov.style.height = f.w + 'px'; }
+  else { ov.style.left = f.x + 'px'; ov.style.top = f.y + 'px'; ov.style.width = f.w + 'px'; ov.style.height = f.h + 'px'; }
+  const barTop = f.ch - 108;                       // 下のボタン列の上端（画面基準・縦のときだけ気にする）
+  const overlapBottom = land ? 0 : Math.max(0, (f.y + f.h) - barTop);
+  if (board) board.style.bottom = Math.max(12, overlapBottom + 12) + 'px';
+  const overlapTop = land ? 0 : Math.max(0, 52 - f.y);   // 上のメッセージ（top:14）に重ならないぶん
+  if (wb) wb.style.top = Math.max(12, overlapTop) + 'px';
+}
 // 撮影画像をサーバー(capture-photosバケット)へ保存し、登録済み個体なら image_url に紐づける
 async function arUploadPhoto(blob) {
   const r = _boardRec || {};
@@ -4175,7 +4212,7 @@ async function arUploadPhoto(blob) {
 // 看板をcanvasの左下に描く（プレビュー #arBoard と“見た目そのまま”一致させる。座標系は画面と同じCSS px）
 // CSS: #arBoard { left:12px; bottom:108px; max-width:74%; padding:10px 14px; border-radius:12px; line-height:1.35;
 //       .ar-code font clamp(20px,6vw,34px)/800  .ar-line clamp(13px,3.6vw,19px)/600(値は800) }
-function arDrawBoard(ctx, W, H, d) {
+function arDrawBoard(ctx, W, H, d, bottomGap) {
   const clampPx = function (mn, vw, mx) { return Math.max(mn, Math.min(mx, W * vw / 100)); };
   const codeF = clampPx(20, 6, 34), lineF = clampPx(13, 3.6, 19);
   const padX = 14, padY = 10, rr = 12, lh = 1.35;
@@ -4192,7 +4229,7 @@ function arDrawBoard(ctx, W, H, d) {
   const codeH = d.code ? codeF * lh : 0;
   const boxH = padY * 2 + codeH + d.lines.length * (lineF * lh);
   const x = 12;
-  const y = Math.max(12, H - 108 - boxH);
+  const y = Math.max(12, H - (bottomGap == null ? 108 : bottomGap) - boxH);
   ctx.fillStyle = 'rgba(0,0,0,0.62)';
   ctx.beginPath();
   ctx.moveTo(x + rr, y);
@@ -4219,7 +4256,7 @@ function arDrawBoard(ctx, W, H, d) {
 // 引き取り用ホワイトボードをcanvasの右上に描く（プレビュー #arWhiteboard と“見た目そのまま”一致。座標系は画面と同じCSS px）
 // CSS: #arWhiteboard { right:12px; top:52px; max-width:60%; padding:10px 13px; border:3px; radius:12px; line-height:1.5;
 //       .wb-title clamp(13px,3.8vw,18px)/900  .wb-line clamp(12px,3.2vw,16px)/700 }
-function arDrawWhiteboard(ctx, W, H, d) {
+function arDrawWhiteboard(ctx, W, H, d, topGap) {
   const clampPx = function (mn, vw, mx) { return Math.max(mn, Math.min(mx, W * vw / 100)); };
   const titleF = clampPx(13, 3.8, 18), lineF = clampPx(12, 3.2, 16);
   const padX = 13, padY = 10, rr = 12, lh = 1.5;
@@ -4234,7 +4271,7 @@ function arDrawWhiteboard(ctx, W, H, d) {
   const titleH = titleF * lh + 5 + 3;   // margin-bottom:5 + padding-bottom:3（下線分）
   const boxH = padY * 2 + titleH + d.lines.length * (lineF * lh);
   const x = W - boxW - 12;
-  const y = 52;
+  const y = topGap == null ? 52 : topGap;
   // 枠（白ボード）
   ctx.fillStyle = '#ffffff';
   ctx.strokeStyle = '#d7dce2'; ctx.lineWidth = 3;
