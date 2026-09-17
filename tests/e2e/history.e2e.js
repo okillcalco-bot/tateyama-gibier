@@ -75,6 +75,29 @@ ROWS.push(mk(7,90,{ m:6, species:'キョン', weight:8, buyback:1000, label_id:'
   const re2 = await page.evaluate(() => document.getElementById('reMsg').textContent);
   T('再取込の失敗は画面に出る', /取込に失敗/.test(re2) && /timeout/.test(re2), re2);
   T('pageerrorなし', errors.length === 0, errors.join(' / '));
+  await ctx.close();
+
+  // 1000行の壁（2026-09-17）: 令和3〜8 各250頭＝1500頭を、サーバーが1000行で切っても全年度そろう
+  //   （直す前は年度昇順の先頭1000行＝令和3〜5の途中までしか出ず「917頭・令和5年度（進行中）」に見えた）
+  const BIG = []; for (let y = 3; y <= 8; y++) for (let i = 1; i <= 250; i++) BIG.push(mk(y, i, { m: 4 + (i % 12), src: y === 8 ? 'current' : 'history' }));
+  const ctx2 = await browser.newContext(); await ctx2.addInitScript(() => sessionStorage.setItem('tg_role_v1', 'admin'));
+  const page2 = await ctx2.newPage(); const err2 = []; page2.on('pageerror', e => err2.push(e.message)); const reqs2 = [];
+  await page2.route('**/*', r => {
+    const u = decodeURIComponent(r.request().url());
+    if (u.startsWith('file:')) return r.continue();
+    if (/cdnjs|fonts\./.test(u)) return r.fulfill({ status: 200, contentType: 'application/javascript', body: '' });
+    const m = u.match(/v_individuals_all\?(.*)$/);
+    if (m) { const p = new URLSearchParams(m[1]); const lim = Math.min(Number(p.get('limit') || 1000), 1000), off = Number(p.get('offset') || 0); reqs2.push(lim + '@' + off); return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(BIG.slice(off, off + lim)) }); }
+    return r.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await page2.goto('file://' + path.resolve(__dirname, '../../history.html'));
+  await page2.waitForTimeout(1200);
+  const big = await page2.evaluate(() => ({ chips: [...document.querySelectorAll('#yearChips .chip')].map(c => c.textContent), updated: document.getElementById('lastUpdated').textContent, n: D.all.length }));
+  T('1500頭（令和3〜8）: サーバーが1000行で切っても 2回に分けて全部読む', reqs2.join() === '1000@0,1000@1000' && big.n === 1500, JSON.stringify(reqs2) + ' n=' + big.n);
+  T('年度チップが令和3〜8まで全部出る（令和5で止まらない）', big.chips.join() === '令和3,令和4,令和5,令和6,令和7,令和8', big.chips.join());
+  T('1500頭を表示', /1500頭/.test(big.updated), big.updated);
+  T('pageerrorなし(1500頭)', err2.length === 0, err2.join(' / '));
+  await ctx2.close();
 
   let pass = 0;
   for (const [n, ok, got] of results) { console.log((ok ? 'PASS' : 'FAIL') + ' : ' + n + (got ? '  [' + got.slice(0, 220) + ']' : '')); if (ok) pass++; }

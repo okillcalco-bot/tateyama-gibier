@@ -2664,7 +2664,28 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
 
+// PostgREST は1回の応答を最大1000行で切る（max-rows）。limit にそれより大きい数を書いても1000行しか来ない
+// （過年度ページが令和5の途中で止まって見えた原因・2026-09-17）。limit>1000 の GET は 1000行ずつ offset を進めて全部つなぐ。
+const SB_PAGE = 1000;
+async function sbPaged(query, fetchOnce){
+  const m = /([?&])limit=(\d+)/.exec(query || '');
+  const want = m ? Number(m[2]) : 0;
+  if (!(want > SB_PAGE) || /[?&]offset=/.test(query)) return fetchOnce(query);
+  const out = []; let offset = 0;
+  for (;;) {
+    const lim = Math.min(SB_PAGE, want - out.length);
+    const rows = await fetchOnce(query.replace(/([?&])limit=\d+/, `$1limit=${lim}&offset=${offset}`));
+    if (!Array.isArray(rows)) return rows;
+    out.push(...rows);
+    if (rows.length !== lim || out.length >= want) return out;   // 1000行そろわなければ最後のページ
+    offset += rows.length;
+  }
+}
 async function sb(method, table, body, query = '', opts = {}) {
+  if (method === 'GET') return sbPaged(query, q => sbOnce(method, table, body, q, opts));
+  return sbOnce(method, table, body, query, opts);
+}
+async function sbOnce(method, table, body, query = '', opts = {}) {
   const headers = {
     'apikey': SB_KEY,
     'Authorization': `Bearer ${SB_KEY}`,

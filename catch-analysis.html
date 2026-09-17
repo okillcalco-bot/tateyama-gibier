@@ -163,7 +163,24 @@ const OPEN_METEO_FORECAST = 'https://api.open-meteo.com/v1/forecast';
 
 // ───────────── Supabase ─────────────
 function staffKeyGet(){ try { return localStorage.getItem('tg_staff_key') || sessionStorage.getItem('tg_staff_key') || ''; } catch(e){ return ''; } }
-async function sb(table, query=''){
+// PostgREST は1回の応答を最大1000行で切る（max-rows）。limit>1000 の GET は 1000行ずつ offset を進めて全部つなぐ（2026-09-17）。
+const SB_PAGE = 1000;
+async function sbPaged(query, fetchOnce){
+  const m = /([?&])limit=(\d+)/.exec(query || '');
+  const want = m ? Number(m[2]) : 0;
+  if (!(want > SB_PAGE) || /[?&]offset=/.test(query)) return fetchOnce(query);
+  const out = []; let offset = 0;
+  for (;;) {
+    const lim = Math.min(SB_PAGE, want - out.length);
+    const rows = await fetchOnce(query.replace(/([?&])limit=\d+/, `$1limit=${lim}&offset=${offset}`));
+    if (!Array.isArray(rows)) return rows;
+    out.push(...rows);
+    if (rows.length !== lim || out.length >= want) return out;   // 1000行そろわなければ最後のページ
+    offset += rows.length;
+  }
+}
+async function sb(table, query=''){ return sbPaged(query, q => sbOnce(table, q)); }
+async function sbOnce(table, query=''){
   const headers = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` };
   const sk = staffKeyGet(); if (sk) headers['x-staff-key'] = sk;
   const res = await fetch(`${SB_URL}/rest/v1/${table}${query}`, { headers });
