@@ -803,6 +803,37 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         </table></div>
       </div>
 
+      <!-- 委託販売（ニイチク直売会など）: 主催者の売上報告（税抜・消費税・手数料）から、手数料を引いた額の請求書を出す。2026-09-17 -->
+      <div id="ev-consign-link" style="display:none;margin:-4px 0 12px;"><button class="btn btn-sm" onclick="evConsignShow()">&#x1F9FE; 委託販売（売上報告→請求書）として扱う</button></div>
+      <div class="section" id="ev-consign-sec" style="display:none;">
+        <div class="section-title">&#x1F9FE; 委託販売の売上報告 → 請求書<span style="font-size:12px;color:var(--text3);font-weight:400;">　主催者の報告どおりに入れる。ご請求金額 ＝ 売上合計（税込） − 手数料</span></div>
+        <div class="form-grid">
+          <div class="form-group"><label>請求先（宛名）<span style="color:var(--text3);font-size:11px;">（出店先に覚えます）</span></label><input class="form-input" id="ev-cs-billto" placeholder="例: 株式会社◯◯"></div>
+          <div class="form-group"><label>請求先の住所</label><input class="form-input" id="ev-cs-addr" placeholder="〒 住所"></div>
+          <div class="form-group"><label>売上額（税抜・円）</label><input class="form-input" type="number" id="ev-cs-ex" oninput="evConsignCalc()"></div>
+          <div class="form-group"><label>消費税（8%・円）</label><input class="form-input" type="number" id="ev-cs-tax" oninput="evConsignCalc()"></div>
+          <div class="form-group"><label>手数料（円）</label><input class="form-input" type="number" id="ev-cs-fee" oninput="evConsignCalc()"></div>
+          <div class="form-group"><label>手数料率（%）<span style="color:var(--text3);font-size:11px;">（手数料を入れると自動。率を変えると手数料を計算）</span></label><input class="form-input" type="number" step="0.1" id="ev-cs-pct" onchange="evConsignPctChange()"></div>
+          <div class="form-group"><label>発行日</label><input class="form-input" type="date" id="ev-cs-date"></div>
+          <div class="form-group"><label>お支払期限</label><input class="form-input" type="date" id="ev-cs-due"></div>
+          <div class="form-group" style="grid-column:1/-1;"><label>件名</label><input class="form-input" id="ev-cs-subject"></div>
+          <div class="form-group" style="grid-column:1/-1;"><label>備考<span style="color:var(--text3);font-size:11px;">（請求書に載る）</span></label><input class="form-input" id="ev-cs-memo" placeholder="例: 8月29日 即売会分。売上合計から販売手数料を差し引いた額をご請求します。"></div>
+        </div>
+        <div id="ev-cs-calc-note" style="font-size:12px;color:var(--red);min-height:16px;"></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 10px;">
+          <div style="flex:1 1 140px;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);"><div style="font-size:11.5px;color:var(--text3);">売上合計（税込）</div><div id="ev-cs-total" style="font-size:16px;font-weight:600;">¥0</div></div>
+          <div style="flex:1 1 140px;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);"><div style="font-size:11.5px;color:var(--text3);">手数料</div><div id="ev-cs-fee-view" style="font-size:16px;font-weight:600;">¥0</div></div>
+          <div style="flex:1 1 140px;padding:9px 11px;border:1px solid var(--gold2);border-radius:var(--radius);background:var(--surface2);"><div style="font-size:11.5px;color:var(--text3);">ご請求金額</div><div id="ev-cs-bill" style="font-size:18px;font-weight:700;color:var(--gold);">¥0</div></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button class="btn btn-sm" onclick="evConsignFromItems()">明細から計算</button>
+          <button class="btn" onclick="evConsignSave()">報告の数字を保存</button>
+          <button class="btn btn-primary" onclick="evConsignIssue()">&#x1F9FE; 請求書を発行</button>
+          <span id="ev-cs-msg" style="font-size:12px;color:var(--text3);"></span>
+        </div>
+        <div id="ev-cs-doc" style="margin-top:10px;font-size:13px;line-height:2;"></div>
+      </div>
+
       <!-- 個体シート（A4横・1個体1枚）: 今日の商品・ひとこと・写真は後から設定できる。QRはその一頭＋この出店へ -->
       <div class="section" id="ev-sheet-sec">
         <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
@@ -2632,7 +2663,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
 
-async function sb(method, table, body, query = '') {
+async function sb(method, table, body, query = '', opts = {}) {
   const headers = {
     'apikey': SB_KEY,
     'Authorization': `Bearer ${SB_KEY}`,
@@ -2644,7 +2675,8 @@ async function sb(method, table, body, query = '') {
   const res = await fetch(`${SB_URL}/rest/v1/${table}${query}`, {
     method,
     headers,
-    body: body ? JSON.stringify(body) : undefined
+    body: body ? JSON.stringify(body) : undefined,
+    ...opts
   });
   if (!res.ok) throw new Error(await res.text());
   const t = await res.text();
@@ -2805,7 +2837,9 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     if (!btn.dataset.tab) return; // <a>のナビリンク（注文管理など）はそのままページ遷移
     // 台帳（捕獲者・顧客・スタッフ）は管理者のみ閲覧可（口座・個人情報・給与を含むため）
-    if (['hunters', 'customers', 'staff', 'equipment'].includes(btn.dataset.tab) && !requireAdmin('台帳の閲覧')) return;
+    // 解析（過年度・買取金額・LCA・売上）も管理者のみ（口座・経営の数字を含むため）2026-09-17
+    const adminTabs = { hunters: '台帳の閲覧', customers: '台帳の閲覧', staff: '台帳の閲覧', equipment: '台帳の閲覧', analysis: '解析の閲覧' };
+    if (adminTabs[btn.dataset.tab] && !requireAdmin(adminTabs[btn.dataset.tab])) return;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
@@ -7181,6 +7215,8 @@ async function evOpen(id) {
     document.getElementById('ev-view-detail').style.display = '';
     evFillHead();
     evRenderItems();
+    evConsignForced = false;
+    evConsignRender().catch(e => toast('委託販売の欄を表示できませんでした: ' + sbSafeMsg(e), 'error'));
     // 個体シートの設定と距離の設定（失敗しても出店の画面は使えるようにする。失敗は表示する）
     try { await evSheetLoad(); await evGeoLoad(); } catch (e) { toast('個体シート/距離の設定の読み込みに失敗: ' + sbSafeMsg(e), 'error'); }
     evSheetRender(); evGeoRender();
@@ -7259,6 +7295,7 @@ async function evSaveHead() {
     const rows = await sb('GET', 'sale_events', null, `?id=eq.${evCur.id}&select=*`);
     evCur = rows[0];
     evFillHead(); evRenderItems();
+    evConsignRender().catch(e => toast('委託販売の欄を表示できませんでした: ' + sbSafeMsg(e), 'error'));
     document.getElementById('ev-d-saved').textContent = '保存しました';
     toast('保存しました');
   } catch (e) { alert('保存できませんでした：' + (e && e.message || e)); }
@@ -7777,6 +7814,196 @@ function evCardRows() {
   });
   return [...byInd.values()];
 }
+
+/* ── 委託販売の売上報告 → 請求書（2026-09-17）──
+   ニイチク直売会のように商品を預けて主催者が売り、後日「売上報告」（税抜売上・消費税8%・手数料）が届く出店。
+   ご請求金額 ＝ 売上合計（税込） − 手数料。請求書は受発注管理の請求書（documents, INV-YYYYMM-NNN）と
+   同じ書式・同じ採番で作るので、印刷・入金・取消は受発注管理の「請求書作成 → 請求書一覧」からもできる。
+   請求先（宛名・住所・手数料率）は出店先マスタ（event_venues）に覚え、次回から入った状態で開く。 */
+let evConsignDoc = null;      // 紐付いている請求書（documents の行）
+let evConsignForced = false;  // 委託販売でない出店先でも「委託販売として扱う」を押したら欄を出す
+function evYmd(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+function evConsignVenue() { return evCur ? (evVenues.find(v => v.id === evCur.venue_id) || null) : null; }
+function evConsignEnabled() {
+  if (!evCur) return false;
+  const v = evConsignVenue();
+  return !!((v && v.consignment) || evCur.consign_sales_ex != null || evCur.consign_doc_id || evConsignForced);
+}
+function evConsignShow() { evConsignForced = true; evConsignRender().catch(e => toast('委託販売の欄を表示できませんでした: ' + sbSafeMsg(e), 'error')); }
+
+async function evConsignRender() {
+  const sec = document.getElementById('ev-consign-sec'), link = document.getElementById('ev-consign-link');
+  if (!evCur) return;
+  const on = evConsignEnabled();
+  sec.style.display = on ? '' : 'none';
+  link.style.display = on ? 'none' : '';
+  if (!on) return;
+  const v = evConsignVenue() || {};
+  const set = (id, val) => { document.getElementById(id).value = val == null ? '' : val; };
+  set('ev-cs-billto', v.bill_to || ''); set('ev-cs-addr', v.bill_to_address || '');
+  set('ev-cs-ex', evCur.consign_sales_ex); set('ev-cs-tax', evCur.consign_tax); set('ev-cs-fee', evCur.consign_fee);
+  set('ev-cs-pct', v.commission_pct);
+  const d = evCur.event_date ? new Date(evCur.event_date + 'T00:00:00') : new Date();
+  set('ev-cs-subject', `${d.getMonth() + 1}月${d.getDate()}日 ${evCur.title || evCur.venue_name || ''} 売上（委託販売）`);
+  const t = new Date();
+  set('ev-cs-date', evYmd(t)); set('ev-cs-due', evYmd(new Date(t.getFullYear(), t.getMonth() + 2, 0)));
+  set('ev-cs-memo', '');
+  document.getElementById('ev-cs-msg').textContent = '';
+  evConsignCalc();
+  await evConsignLoadDoc();
+}
+
+function evConsignVals() {
+  const n = id => { const v = (document.getElementById(id).value || '').trim(); return v === '' ? null : Math.round(Number(v)); };
+  const ex = n('ev-cs-ex'), tax = n('ev-cs-tax'), fee = n('ev-cs-fee');
+  const total = (ex || 0) + (tax || 0);
+  return { ex, tax, fee, total, bill: total - (fee || 0) };
+}
+function evConsignCalc() {
+  const { ex, tax, fee, total, bill } = evConsignVals();
+  const pctEl = document.getElementById('ev-cs-pct');
+  if (ex && fee != null && document.activeElement !== pctEl) pctEl.value = (fee / ex * 100).toFixed(1).replace(/\.0$/, '');
+  document.getElementById('ev-cs-total').textContent = evYen(total);
+  document.getElementById('ev-cs-fee-view').textContent = evYen(fee || 0);
+  document.getElementById('ev-cs-bill').textContent = evYen(bill);
+  document.getElementById('ev-cs-calc-note').textContent =
+    (ex != null && tax != null && Math.floor(ex * 0.08) !== tax) ? `消費税が税抜の8%（${evYen(Math.floor(ex * 0.08))}）と合いません。報告書の数字を確かめてください（合わないままでは発行できません）。` : '';
+}
+function evConsignPctChange() {
+  const { ex } = evConsignVals();
+  const pct = Number(document.getElementById('ev-cs-pct').value);
+  if (ex && pct >= 0) document.getElementById('ev-cs-fee').value = Math.round(ex * pct / 100);
+  evConsignCalc();
+}
+function evConsignFromItems() {
+  // 明細の金額は税込の売価。税抜 = 税込 ÷ 1.08（四捨五入）、消費税 = その差。手数料 = 税抜 × 率
+  const total = evItems.reduce((a, i) => a + evNum(i.amount), 0);
+  if (!total) { alert('明細の金額がまだありません。売れた数と単価を入れてください。'); return; }
+  const ex = Math.round(total / 1.08), tax = total - ex;
+  document.getElementById('ev-cs-ex').value = ex;
+  document.getElementById('ev-cs-tax').value = tax;
+  const pct = Number(document.getElementById('ev-cs-pct').value);
+  if (pct > 0) document.getElementById('ev-cs-fee').value = Math.round(ex * pct / 100);
+  evConsignCalc();
+}
+
+async function evConsignSaveVenue() {
+  const v = evConsignVenue();
+  if (!v) return;
+  const g = id => (document.getElementById(id).value || '').trim();
+  const pct = g('ev-cs-pct') === '' ? null : Number(g('ev-cs-pct'));
+  const patch = { consignment: true, bill_to: g('ev-cs-billto') || null, bill_to_address: g('ev-cs-addr') || null, commission_pct: pct, updated_at: new Date().toISOString() };
+  await sb('PATCH', 'event_venues', patch, `?id=eq.${v.id}`);
+  Object.assign(v, patch);
+}
+async function evConsignSave() {
+  if (!evCur) return;
+  const { ex, tax, fee } = evConsignVals();
+  const msg = document.getElementById('ev-cs-msg');
+  try {
+    await sb('PATCH', 'sale_events', { consign_sales_ex: ex, consign_tax: tax, consign_fee: fee, updated_at: new Date().toISOString() }, `?id=eq.${evCur.id}`);
+    Object.assign(evCur, { consign_sales_ex: ex, consign_tax: tax, consign_fee: fee });
+    await evConsignSaveVenue();
+    msg.style.color = ''; msg.textContent = '保存しました';
+    toast('売上報告を保存しました');
+  } catch (e) { msg.style.color = 'var(--red)'; msg.textContent = '保存できませんでした: ' + sbSafeMsg(e); }
+}
+
+// 請求番号は受発注管理の請求書と同じ INV-YYYYMM-NNN（発行日の月・documents 全体で連番）。HTTPキャッシュは使わない
+async function evConsignNumber(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const prefix = `INV-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}-`;
+  const rows = await sb('GET', 'documents', null, `?doc_number=like.${prefix}*&select=doc_number`, { cache: 'no-store' });
+  let max = 0;
+  rows.forEach(r => { const m = (r.doc_number || '').match(/-(\d+)$/); if (m) max = Math.max(max, parseInt(m[1], 10)); });
+  return prefix + String(max + 1).padStart(3, '0');
+}
+
+async function evConsignIssue() {
+  if (!evCur) return;
+  const g = id => (document.getElementById(id).value || '').trim();
+  const { ex, tax, fee, total, bill } = evConsignVals();
+  const msg = document.getElementById('ev-cs-msg');
+  if (!g('ev-cs-billto')) { alert('請求先（宛名）を入れてください。'); return; }
+  if (ex == null || tax == null) { alert('売上報告の「売上額（税抜）」と「消費税」を入れてください。'); return; }
+  if (Math.floor(ex * 0.08) !== tax) { alert(`消費税 ${evYen(tax)} が税抜 ${evYen(ex)} の8%（${evYen(Math.floor(ex * 0.08))}）と合いません。\n報告書の数字を確かめてから発行してください。`); return; }
+  if (bill < 0) { alert('手数料が売上合計より大きくなっています。'); return; }
+  if (evCur.consign_doc_id && evConsignDoc && evConsignDoc.status !== '取消') {
+    alert(`この出店の請求書はもう発行しています（${evConsignDoc.doc_number}）。\n直すときは受発注管理の「請求書一覧」で取消してから、ここで発行し直してください。`); return;
+  }
+  const pctTxt = ex && fee ? `${(fee / ex * 100).toFixed(1).replace(/\.0$/, '')}%` : '';
+  if (!confirm(`請求書を発行します。\n\n宛名: ${g('ev-cs-billto')} 御中\n売上合計（税込）${evYen(total)} − 手数料 ${evYen(fee || 0)} = ご請求金額 ${evYen(bill)}\n\n発行すると請求番号が確定します。よろしいですか？`)) return;
+  // 印刷ウィンドウは押した直後に開いておく（通信のあとに開くとブラウザにブロックされる）
+  const w = window.open('', '_blank');
+  try {
+    let settings = {};
+    try { const s = await sb('GET', 'app_settings', null, '?key=eq.invoice&select=value'); settings = (s[0] && s[0].value) || {}; }
+    catch (e) { toast('発行者情報（app_settings.invoice）を読めませんでした。発行者欄が空の請求書になります: ' + sbSafeMsg(e), 'error'); }
+    try { await evConsignSaveVenue(); } catch (e) { toast('請求先を出店先に覚えられませんでした: ' + sbSafeMsg(e), 'error'); }
+    const d = evCur.event_date ? new Date(evCur.event_date + 'T00:00:00') : null;
+    const dayLabel = d ? `${d.getMonth() + 1}月${d.getDate()}日` : '';
+    const lines = [{ name: `${dayLabel} ${evCur.title || evCur.venue_name || ''} 売上（税抜）`.trim(), qty: null, unit: '', price: null, tax: 8, amount: ex }];
+    if (fee) lines.push({ name: `販売手数料${pctTxt ? '（' + pctTxt + '）' : ''} 差引`, qty: null, unit: '', price: null, tax: 0, amount: -fee });
+    const snap = {
+      name: g('ev-cs-billto'), honorific: '御中', address: g('ev-cs-addr'), subject: g('ev-cs-subject'),
+      date: g('ev-cs-date') || evYmd(new Date()), due: g('ev-cs-due') || '', memo: g('ev-cs-memo'),
+      customer_id: null, order_ids: [], type: '請求書', proviso: '', bank: settings.bank || '',
+      issuer: { issuer_name: settings.issuer_name, issuer_sub: settings.issuer_sub, postal: settings.postal, address: settings.address, tel: settings.tel, email: settings.email, reg_number: settings.reg_number },
+      seal: settings.seal_data_url || '', lines, sale_event_id: evCur.id
+    };
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const number = await evConsignNumber(snap.date);
+      const header = {
+        doc_type: '請求書', doc_number: number, customer_id: null, issue_date: snap.date, due_date: snap.due || null,
+        total_amount: bill, tax_amount: tax, status: '発行済', billing_status: '未入金',
+        partner_name: snap.name, subject: snap.subject || null, honorific: '御中', partner_address: snap.address || null,
+        memo: snap.memo || null, source: 'sale_event', snapshot: snap
+      };
+      let rows;
+      try { rows = await sb('POST', 'documents', [header]); }
+      catch (e) { if (/23505|duplicate|doc_number/.test(String(e.message || ''))) continue; throw e; }
+      const docId = rows[0] && rows[0].id;
+      if (!docId) throw new Error('documents の登録結果が空でした');
+      try {
+        await sb('POST', 'document_items', lines.map((l, i) => ({ document_id: docId, line_no: i + 1, name: l.name, quantity: null, unit: null, unit_price: null, tax_rate: l.tax, amount: l.amount })));
+      } catch (e) { alert('明細の保存に失敗しました（請求書 ' + number + ' のヘッダーは保存済み）: ' + sbSafeMsg(e)); }
+      try {
+        await sb('PATCH', 'sale_events', { consign_doc_id: docId, consign_sales_ex: ex, consign_tax: tax, consign_fee: fee, updated_at: new Date().toISOString() }, `?id=eq.${evCur.id}`);
+        Object.assign(evCur, { consign_doc_id: docId, consign_sales_ex: ex, consign_tax: tax, consign_fee: fee });
+      } catch (e) { alert('出店と請求書の紐付けに失敗しました（請求書 ' + number + ' は発行済み。受発注管理の請求書一覧にはあります）: ' + sbSafeMsg(e)); }
+      if (w) w.location = 'order-admin.html?print=' + encodeURIComponent(docId);
+      msg.style.color = ''; msg.textContent = `請求書 ${number} を発行しました`;
+      toast(`請求書 ${number} を発行しました`);
+      await evConsignLoadDoc();
+      return;
+    }
+    throw new Error('請求番号の採番が競合しました。もう一度「請求書を発行」を押してください。');
+  } catch (e) {
+    if (w) { try { w.close(); } catch (_) {} }
+    msg.style.color = 'var(--red)'; msg.textContent = '発行できませんでした: ' + sbSafeMsg(e);
+    alert('請求書を発行できませんでした：' + sbSafeMsg(e));
+  }
+}
+
+async function evConsignLoadDoc() {
+  const box = document.getElementById('ev-cs-doc');
+  evConsignDoc = null;
+  if (!evCur || !evCur.consign_doc_id) { box.innerHTML = '<span style="color:var(--text3);">請求書はまだ発行していません。</span>'; return; }
+  try {
+    const rows = await sb('GET', 'documents', null, `?id=eq.${evCur.consign_doc_id}&select=id,doc_number,issue_date,due_date,total_amount,tax_amount,status,billing_status`);
+    const r = rows[0];
+    if (!r) { box.innerHTML = '<span style="color:var(--red);">紐付いた請求書が見つかりません（消された可能性があります）。発行し直せます。</span>'; return; }
+    evConsignDoc = r;
+    const st = r.status === '取消' ? '取消' : (r.billing_status || r.status || '');
+    const cls = r.status === '取消' ? 'red' : (r.billing_status === '入金済' ? 'green' : 'blue');
+    box.innerHTML = `請求書 <strong>${esc2(r.doc_number)}</strong>　発行日 ${esc2(r.issue_date || '')}　ご請求金額 <strong>${evYen(r.total_amount)}</strong>（内消費税 ${evYen(r.tax_amount)}）
+      <span class="badge badge-${cls}">${esc2(st)}</span>
+      <button class="btn btn-sm" onclick="evConsignPrint('${r.id}')">&#x1F5A8; 印刷 / PDF</button>
+      <a class="btn btn-sm" href="order-admin.html#invoice" target="_blank" rel="noopener">入金・取消は請求書一覧へ</a>
+      ${r.status === '取消' ? '<span style="color:var(--text3);font-size:12px;">（取消済み。発行し直せます）</span>' : ''}`;
+  } catch (e) { box.innerHTML = `<span style="color:var(--red);">請求書の状態を読めませんでした: ${esc2(sbSafeMsg(e))}</span>`; }
+}
+function evConsignPrint(id) { window.open('order-admin.html?print=' + encodeURIComponent(id), '_blank'); }
 
 function evPrintDoc(css, body) {
   const iframe = document.createElement('iframe');

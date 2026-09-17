@@ -13,7 +13,8 @@ const INPUT_R5 = { heads:603, heads_boar:518, meat_kg:7802, box_traps:1, rice_br
 
 (async () => {
   const browser = await chromium.launch({ executablePath: process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
-  const page = await browser.newContext().then(c => c.newPage());
+  const ctx = await browser.newContext(); await ctx.addInitScript(() => sessionStorage.setItem('tg_role_v1', 'admin')); // 管理者専用ページ
+  const page = await ctx.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   const calls = []; let failView = false;
   await page.route('**/*', r => {

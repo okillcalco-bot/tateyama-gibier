@@ -56,6 +56,8 @@ tr:last-child td { border-bottom:none; }
 .up { color:var(--green); } .down { color:var(--red); }
 @media (max-width:1000px) { .charts-grid { grid-template-columns:1fr; } .chart-full { grid-column:1; } }
 </style>
+<script src="admin-gate.js"></script>
+<script>if(!window.adminGate){document.addEventListener("DOMContentLoaded",function(){document.body.innerHTML='<div style="padding:24px;font-family:sans-serif;">管理者確認の部品（admin-gate.js）を読み込めなかったため、このページは開けません。再読み込みしてください。 <a href="index.html">業務アプリへ戻る</a></div>';});}</script>
 </head>
 <body>
 <div class="header">
@@ -263,7 +265,7 @@ async function reimport(){
     await load();
   } catch(e) { msg.textContent = '⚠ 取込に失敗: ' + (e.message||e); }
 }
-load();
+adminGate(load);
 </script>
 </body>
 </html>

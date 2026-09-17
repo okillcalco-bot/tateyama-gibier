@@ -61,6 +61,8 @@ tr:last-child td { border-bottom:none; }
 .bar-line { height:12px; border-radius:3px; display:inline-block; vertical-align:middle; }
 @media (max-width:1000px) { .kpi-row { grid-template-columns:repeat(2,1fr); } }
 </style>
+<script src="admin-gate.js"></script>
+<script>if(!window.adminGate){document.addEventListener("DOMContentLoaded",function(){document.body.innerHTML='<div style="padding:24px;font-family:sans-serif;">管理者確認の部品（admin-gate.js）を読み込めなかったため、このページは開けません。再読み込みしてください。 <a href="index.html">業務アプリへ戻る</a></div>';});}</script>
 </head>
 <body>
 <div class="header">
@@ -281,7 +283,7 @@ async function init(){
   sel.addEventListener('change', () => { curYear = Number(sel.value); renderInputs(); calcAndRender(); });
   renderCoef(); renderInputs(); calcAndRender();
 }
-init();
+adminGate(init);
 </script>
 </body>
 </html>

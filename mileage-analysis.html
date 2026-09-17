@@ -76,6 +76,8 @@ tr:last-child td { border-bottom:none; }
 @media (max-width:800px) { .factor-row, .ref-row { grid-template-columns:1fr 1fr; } }
 @media (max-width:1000px) { .kpi-row { grid-template-columns:repeat(2,1fr); } .charts-grid { grid-template-columns:1fr; } .chart-full { grid-column:1; } }
 </style>
+<script src="admin-gate.js"></script>
+<script>if(!window.adminGate){document.addEventListener("DOMContentLoaded",function(){document.body.innerHTML='<div style="padding:24px;font-family:sans-serif;">管理者確認の部品（admin-gate.js）を読み込めなかったため、このページは開けません。再読み込みしてください。 <a href="index.html">業務アプリへ戻る</a></div>';});}</script>
 </head>
 <body>
 
@@ -623,7 +625,7 @@ function downloadCsv(kind){
   a.download=`フードマイレージ_${kind==='individuals'?'個体別':'出荷別'}_${document.getElementById('fFrom').value}_${document.getElementById('fTo').value}.csv`;
   document.body.appendChild(a); a.click(); a.remove();
 }
-loadAll().then(()=>runAnalysis()).catch(e=>showStatus('error','データを読み込めませんでした: '+(e.message||e)));
+adminGate(()=>loadAll().then(()=>runAnalysis()).catch(e=>showStatus('error','データを読み込めませんでした: '+(e.message||e))));
 </script>
 </body>
 </html>

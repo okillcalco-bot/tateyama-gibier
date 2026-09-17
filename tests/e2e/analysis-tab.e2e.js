@@ -5,11 +5,12 @@
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
 
-async function open(browser, { query = '', failGeo = false } = {}) {
+async function open(browser, { query = '', failGeo = false, role = 'admin' } = {}) {
   const ctx = await browser.newContext();
-  await ctx.addInitScript(() => { sessionStorage.setItem('tg_access_v1', 'ok'); sessionStorage.setItem('tg_role_v1', 'admin'); });
+  await ctx.addInitScript(r => { sessionStorage.setItem('tg_access_v1', 'ok'); sessionStorage.setItem('tg_role_v1', r); }, role);
   const page = await ctx.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message));
+  page.dialogs = []; page.on('dialog', async d => { page.dialogs.push(d.message()); await d.dismiss(); });
   await page.route('**/*', rt => {
     const url = decodeURIComponent(rt.request().url());
     const J = (x, st) => rt.fulfill({ status: st || 200, contentType: 'application/json', body: JSON.stringify(x) });
@@ -59,6 +60,16 @@ async function open(browser, { query = '', failGeo = false } = {}) {
   ck('?tab=analysis で直接開ける', ui2.active, '');
   ck('準備状況の取得失敗は画面に出る（握り潰さない）', /取得できませんでした/.test(ui2.geo), ui2.geo);
   ck('pageerrorなし(直接開く)', p2.errors.length === 0, p2.errors.join(' / '));
+  await p2.page.context().close();
+
+  // 解析は管理者だけ（2026-09-17）: スタッフのセッションで押すと管理者コードを聞かれ、やめると開かない
+  const p3 = await open(browser, { role: 'staff' });
+  await p3.page.click('.tab-btn[data-tab="analysis"]');
+  await p3.page.waitForTimeout(400);
+  const ui3 = await p3.page.evaluate(() => document.getElementById('panel-analysis').classList.contains('active'));
+  ck('スタッフのセッションでは管理者コードを聞かれる（「解析の閲覧」）', p3.page.dialogs.length === 1 && /解析の閲覧/.test(p3.page.dialogs[0]) && /管理者コード/.test(p3.page.dialogs[0]), p3.page.dialogs.join(' | '));
+  ck('コードを入れずにやめると解析パネルは開かない', !ui3, '');
+  ck('pageerrorなし(スタッフ)', p3.errors.length === 0, p3.errors.join(' / '));
 
   let pass = 0;
   for (const [name, ok, got] of results) { console.log((ok ? 'PASS' : 'FAIL') + ' : ' + name + (got ? '  [' + String(got).slice(0, 220) + ']' : '')); if (ok) pass++; }

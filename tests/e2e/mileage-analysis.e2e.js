@@ -54,7 +54,8 @@ const GSI = {
 };
 
 async function open(browser, { failTable } = {}) {
-  const page = await browser.newContext().then(c => c.newPage());
+  const ctx = await browser.newContext(); await ctx.addInitScript(() => sessionStorage.setItem('tg_role_v1', 'admin')); // 管理者専用ページ
+  const page = await ctx.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   const calls = [];
   await page.route('**/*', rt => {

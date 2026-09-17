@@ -992,6 +992,9 @@ function rankLabel(r){return RANK_LABEL[r]||'スタンダード';}
 
 // ── Init ──
 async function init(){
+  // ?print=<documents.id>: 書類の印刷専用（業務アプリの出店から開く）。管理画面の読み込みはしない
+  const printId=new URLSearchParams(location.search).get('print');
+  if(printId){ await invPrintStandalone(printId); return; }
   try{
     // RLS引き締め後は、スタッフキーが無いと顧客・注文が読めない（空になる）ため先に確認する
     if(!staffKeyGet()) await staffKeyEnsure();
@@ -3626,6 +3629,24 @@ function invClearLinked(){ invLinkedOrderIds=[]; invUpdateLinkedNote(); }
 
 // ── 印刷（発行・再印刷・プレビュー共通。ペイロードから描画＝発行後はスナップショットで不変） ──
 function invRenderPrint(p,number,opts){
+  const html=invPrintHtml(p,number,opts);
+  const w=window.open('','_blank');
+  if(!w){alert('ポップアップがブロックされました。ブラウザの設定で許可してください。');return}
+  w.document.open(); w.document.write(html); w.document.close();
+}
+/* 業務アプリ（出店の委託販売など）から発行した請求書を、この画面の書式でそのまま印刷する:
+   order-admin.html?print=<documents.id> → 画面全体をその書類にする（スタッフキーの入力は不要） 2026-09-17 */
+async function invPrintStandalone(id){
+  try{
+    const rows=await sb('GET','documents','',`?id=eq.${encodeURIComponent(id)}&select=id,doc_number,doc_type,status,snapshot`);
+    const r=rows[0];
+    if(!r){document.body.innerHTML='<p style="padding:24px">この書類が見つかりません（id: '+esc(id)+'）。</p>';return}
+    if(!r.snapshot){document.body.innerHTML='<p style="padding:24px">この書類には印刷用データがありません。</p>';return}
+    const html=invPrintHtml(r.snapshot,r.doc_number,{voided:r.status==='取消'});
+    document.open(); document.write(html); document.close();
+  }catch(e){document.body.innerHTML='<p style="padding:24px;color:#a00">書類を読み込めませんでした: '+esc(String(e.message||e))+'</p>'}
+}
+function invPrintHtml(p,number,opts){
   opts=opts||{};
   const c=invCalcLines(p.lines);
   const d=new Date((p.date||today())+'T00:00:00');
@@ -3740,9 +3761,7 @@ function invRenderPrint(p,number,opts){
 </div>
 </body></html>`;
 
-  const w=window.open('','_blank');
-  if(!w){alert('ポップアップがブロックされました。ブラウザの設定で許可してください。');return}
-  w.document.open(); w.document.write(html); w.document.close();
+  return html;
 }
 
 function invPreview(){

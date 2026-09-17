@@ -16,7 +16,8 @@ ROWS.push(mk(7,90,{ m:6, species:'キョン', weight:8, buyback:1000, label_id:'
 
 (async () => {
   const browser = await chromium.launch({ executablePath: process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
-  const page = await browser.newContext().then(c => c.newPage());
+  const ctx = await browser.newContext(); await ctx.addInitScript(() => sessionStorage.setItem('tg_role_v1', 'admin')); // 管理者専用ページ
+  const page = await ctx.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   const calls = []; let rpcFail = false;
   await page.route('**/*', r => {

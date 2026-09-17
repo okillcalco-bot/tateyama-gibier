@@ -158,6 +158,8 @@ tr:hover td { background: var(--surface2); }
   .chart-full { grid-column: 1; }
 }
 </style>
+<script src="admin-gate.js"></script>
+<script>if(!window.adminGate){document.addEventListener("DOMContentLoaded",function(){document.body.innerHTML='<div style="padding:24px;font-family:sans-serif;">管理者確認の部品（admin-gate.js）を読み込めなかったため、このページは開けません。再読み込みしてください。 <a href="index.html">業務アプリへ戻る</a></div>';});}</script>
 </head>
 <body>
 
@@ -812,7 +814,7 @@ document.addEventListener('DOMContentLoaded', () => {
   Chart.defaults.color = '#8b90a8';
   Chart.defaults.font.family = "'Noto Sans JP', sans-serif";
 
-  staffKeyEnsure().then(() => loadAll());
+  adminGate(() => staffKeyEnsure().then(() => loadAll()));
 });
 </script>
 </body>

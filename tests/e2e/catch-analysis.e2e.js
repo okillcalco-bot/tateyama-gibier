@@ -58,7 +58,8 @@ const path = require('path');
   };
 
   // ── ページ1：通常経路 ──
-  const page = await browser.newContext().then(c => c.newPage());
+  const ctx = await browser.newContext(); await ctx.addInitScript(() => sessionStorage.setItem('tg_role_v1', 'admin')); // 管理者専用ページ
+  const page = await ctx.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await setupRoutes(page);
   await page.goto('file://' + path.resolve(__dirname, '../../catch-analysis.html'));
@@ -136,7 +137,8 @@ const path = require('path');
   await page.close();
 
   // ── ページ2：気象APIが落ちる経路 ──
-  const page2 = await browser.newContext().then(c => c.newPage());
+  const ctx2 = await browser.newContext(); await ctx2.addInitScript(() => sessionStorage.setItem('tg_role_v1', 'admin'));
+  const page2 = await ctx2.newPage();
   const errors2 = []; page2.on('pageerror', e => errors2.push(e.message));
   await setupRoutes(page2, { weatherFails: true });
   await page2.goto('file://' + path.resolve(__dirname, '../../catch-analysis.html'));
