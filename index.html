@@ -11635,6 +11635,9 @@ async function kkSubmit() {
     const batchCode = `TGC-${pc}B-${date}-${String(start).padStart(3, '0')}`;
     const nowIso = new Date().toISOString();
     const firstParentId = kkMaterials[0].id;
+    // 等級: inventory.grade の DB 既定値が「上」なので、書かないと加工品が全部「上」になる（2026-09-18 ミンチ肉99件が上だった）。
+    // ミンチ肉は並のみ。スライスは原料ブロックの等級を引き継ぐ（複数原料なら最初の1点）。
+    const packGrade = pc === 'MI' ? '並' : (kkMaterials[0].grade || '並');
 
     // 1. 完成パックを在庫登録（個数分・固有コード）
     const packs = [];
@@ -11651,6 +11654,7 @@ async function kkSubmit() {
         weight: packW,
         weight_kg: packW,
         status: '在庫',
+        grade: packGrade,
         operator: operator,
         processed_by: operator,
         processed_at: nowIso,
@@ -11962,6 +11966,7 @@ async function kkRepackOpen(batchCode) {
       batchCode,
       species: p.species || '',
       prodName: p.process_type || p.part_name || '',
+      grade: p.grade || null,   // 追加パックは既存パックと同じ等級
       parent_inventory_id: p.parent_inventory_id || null,
       location_code: p.location_code || null,
       origin
@@ -12007,6 +12012,7 @@ async function kkRepackSubmit() {
         weight: w,
         weight_kg: w,
         status: '在庫',
+        grade: pc === 'MI' ? '並' : (b.grade || '並'),   // ミンチ肉は並のみ。DB既定「上」に落ちないよう明示
         operator: operator,
         processed_by: operator,
         processed_at: nowIso,
