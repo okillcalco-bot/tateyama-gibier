@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>館山ジビエセンター － 公的データ解析（千葉県・館山市・南房総市・国勢調査 × うちのデータ）</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Barlow+Condensed:wght@400;600;700&display=swap');
+:root {
+  --bg:#0f1117; --surface:#1a1e2a; --surface2:#222736; --border:#2e3447;
+  --accent:#e8a44a; --accent2:#c06a2a; --green:#4caf7d; --red:#e05555; --blue:#5a8cd8; --yellow:#f0c040; --purple:#9b7fd4;
+  --text:#e8eaf0; --text2:#8b90a8; --radius:10px;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--text); font-family:'Noto Sans JP',sans-serif; font-size:14px; min-height:100vh; }
+.header { background:var(--surface); border-bottom:2px solid var(--accent); padding:14px 20px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; flex-wrap:wrap; gap:10px; }
+.header-title { font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:700; color:var(--accent); letter-spacing:.05em; }
+.header-sub { font-size:11px; color:var(--text2); margin-top:2px; }
+.nav-links { display:flex; gap:8px; flex-wrap:wrap; }
+.nav-link { background:var(--surface2); border:1px solid var(--border); color:var(--text2); padding:6px 12px; border-radius:6px; text-decoration:none; font-size:12px; }
+.nav-link:hover { color:var(--accent); border-color:var(--accent); }
+.main { padding:20px; max-width:1400px; margin:0 auto; }
+.status-bar { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px 16px; margin-bottom:16px; font-size:13px; display:none; white-space:pre-wrap; }
+.status-bar.info { border-color:var(--blue); color:var(--blue); display:block; }
+.status-bar.error { border-color:var(--red); color:var(--red); display:block; }
+.status-bar.loading { border-color:var(--accent); color:var(--accent); display:block; }
+.toc { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:18px; }
+.toc a { background:var(--surface2); border:1px solid var(--border); color:var(--text2); padding:4px 10px; border-radius:999px; text-decoration:none; font-size:12px; }
+.toc a.done { border-color:var(--green); color:var(--green); }
+.toc a.partial { border-color:var(--yellow); color:var(--yellow); }
+.toc a.todo { border-color:var(--border); color:var(--text2); opacity:.8; }
+.sec { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px; margin-bottom:20px; }
+.sec-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; margin-bottom:6px; }
+.sec-title { font-size:16px; font-weight:600; }
+.sec-q { font-size:12.5px; color:var(--text2); line-height:1.7; margin-bottom:10px; }
+.sec-q b { color:var(--text); }
+.finding { background:rgba(232,164,74,.08); border-left:3px solid var(--accent); padding:10px 14px; border-radius:6px; font-size:13.5px; line-height:1.8; margin:10px 0 14px; }
+.finding.warn { border-left-color:var(--yellow); background:rgba(240,192,64,.08); }
+.finding.todo { border-left-color:var(--text2); background:rgba(139,144,168,.08); color:var(--text2); }
+.badge { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:600; }
+.badge-green { background:rgba(76,175,125,.18); color:var(--green); }
+.badge-yellow { background:rgba(240,192,64,.18); color:var(--yellow); }
+.badge-gray { background:rgba(139,144,168,.18); color:var(--text2); }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.chart-card { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:14px; }
+.chart-title { font-size:13px; font-weight:500; margin-bottom:2px; }
+.chart-subtitle { font-size:11px; color:var(--text2); margin-bottom:8px; line-height:1.5; }
+.chart-wrap { position:relative; height:240px; }
+table { width:100%; border-collapse:collapse; }
+th { padding:7px 9px; text-align:left; font-size:11px; color:var(--text2); font-weight:500; letter-spacing:.04em; border-bottom:1px solid var(--border); background:var(--surface2); white-space:nowrap; }
+td { padding:6px 9px; border-bottom:1px solid var(--border); font-size:13px; }
+tr:last-child td { border-bottom:none; }
+.td-num { text-align:right; font-variant-numeric:tabular-nums; font-family:'Barlow Condensed',sans-serif; font-size:15px; }
+.muted { color:var(--text2); font-size:12px; }
+.src { font-size:11px; color:var(--text2); margin-top:10px; line-height:1.7; }
+.src a { color:var(--blue); }
+.bar-line { height:9px; border-radius:3px; background:rgba(232,164,74,.85); display:inline-block; vertical-align:middle; }
+.tbl-wrap { overflow-x:auto; }
+.risk { color:var(--red); font-weight:600; }
+.up { color:var(--green); } .down { color:var(--red); }
+@media (max-width:1000px) { .grid2 { grid-template-columns:1fr; } }
+</style>
+<script src="admin-gate.js"></script>
+<script>if(!window.adminGate){document.addEventListener("DOMContentLoaded",function(){document.body.innerHTML='<div style="padding:24px;font-family:sans-serif;">管理者確認の部品（admin-gate.js）を読み込めなかったため、このページは開けません。再読み込みしてください。 <a href="index.html">業務アプリへ戻る</a></div>';});}</script>
+</head>
+<body>
+<div class="header">
+  <div>
+    <div class="header-title">🐗 TATEYAMA GIBIER</div>
+    <div class="header-sub">公的データ解析 ― 県・市・国の公表資料をうちのデータ（個体・捕獲者・出荷）と突き合わせる</div>
+  </div>
+  <div class="nav-links">
+    <a href="index.html?tab=analysis" class="nav-link">📈 解析一覧</a>
+    <a href="history.html" class="nav-link">📚 過年度</a>
+    <a href="catch-analysis.html" class="nav-link">🌙 捕獲条件分析</a>
+    <a href="mileage-analysis.html" class="nav-link">🚚 フードマイレージ</a>
+    <a href="index.html" class="nav-link">📦 業務アプリ</a>
+  </div>
+</div>
+
+<div class="main">
+  <div id="statusBar" class="status-bar loading">読み込み中…</div>
+  <div class="toc" id="toc"></div>
+  <div id="sections"></div>
+  <div class="sec" id="srcBox">
+    <div class="sec-title" style="margin-bottom:8px">🗂 取り込んだ公的データ（出どころ・取得日）</div>
+    <div class="muted" style="margin-bottom:8px">数字は <code>public_stats</code>（DB）に1表で入っています。元の PDF・Excel は <code>public_files</code> に残してあります。更新するときは <code>data/public_stats.csv</code> を差し替えて <code>tgc_import_public_stats()</code> を実行。</div>
+    <div class="tbl-wrap" id="srcTable"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+const COLORS = ['#e8a44a','#5a8cd8','#4caf7d','#9b7fd4','#e05555','#f0c040','#c06a2a','#5ad8c8','#d85ab0','#8bc34a'];
+const MO = [4,5,6,7,8,9,10,11,12,1,2,3];
+function staffKeyGet(){ try { return localStorage.getItem('tg_staff_key') || sessionStorage.getItem('tg_staff_key') || ''; } catch(e){ return ''; } }
+async function sb(table, query='', method='GET', body=null){
+  const headers = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` };
+  const sk = staffKeyGet(); if (sk) headers['x-staff-key'] = sk;
+  if (body) headers['Content-Type'] = 'application/json';
+  const res = await fetch(`${SB_URL}/rest/v1/${table}${query}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  if (!res.ok) throw new Error(`${table}: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
+  const t = await res.text(); return t ? JSON.parse(t) : [];
+}
+function showStatus(type, msg){ const el=document.getElementById('statusBar'); el.className='status-bar '+type; el.textContent=msg; if(!type){ el.style.display='none'; } }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function n0(v){ return v==null||isNaN(v) ? '—' : Math.round(Number(v)).toLocaleString(); }
+function n1(v){ return v==null||isNaN(v) ? '—' : (Math.round(Number(v)*10)/10).toLocaleString(); }
+function pct(a,b){ return (b>0 && a!=null) ? Math.round(a/b*1000)/10 : null; }
+function fyLabel(y){ if (y==null) return '—'; if (y>=1) return '令和'+y; if (y===0) return '平成30'; return '平成'+(y+30); }
+function yLabel(y){ return y+'年'; }
+function pearson(xs, ys){ const n=xs.length; if(n<3) return null; const mx=xs.reduce((a,b)=>a+b,0)/n, my=ys.reduce((a,b)=>a+b,0)/n; let sxy=0,sxx=0,syy=0; for(let i=0;i<n;i++){ sxy+=(xs[i]-mx)*(ys[i]-my); sxx+=(xs[i]-mx)**2; syy+=(ys[i]-my)**2; } return (sxx&&syy) ? Math.round(sxy/Math.sqrt(sxx*syy)*100)/100 : null; }
+
+const D = { ps: [], src: [], inds: [], hunters: [], dist: {}, orders: [], shipped: [], radOwn: [], customers: [], latlng: 0 };
+let charts = {};
+function P(dataset, f){ return D.ps.filter(r => r.dataset === dataset && (!f || f(r))); }
+function sum(arr, key){ return arr.reduce((a, r) => a + (Number(key ? r[key] : r) || 0), 0); }
+function byKey(arr, kf){ const m = {}; arr.forEach(r => { const k = kf(r); (m[k] = m[k] || []).push(r); }); return m; }
+
+async function loadAll(){
+  const [ps, src, inds, hunters, dist] = await Promise.all([
+    sb('public_stats', '?select=dataset,fiscal_year,cal_year,month,city,area,category,metric,value,unit&limit=20000'),
+    sb('v_public_sources', '?select=dataset,source,source_url,fetched_at,rows_n,y_from,y_to&order=dataset'),
+    sb('v_individuals_all', '?select=label_id,fiscal_year,species,capture_date,city,area,hunter_name,weight&limit=20000'),
+    sb('hunters', '?select=name,city,trap_area&deleted_at=is.null&limit=2000'),
+    sb('tateyama_districts', '?select=oaza,district&limit=500'),
+  ]);
+  D.ps = ps.map(r => ({ ...r, value: r.value == null ? null : Number(r.value) })); D.src = src; D.inds = inds.map(r => ({ ...r, month: r.capture_date ? Number(r.capture_date.slice(5,7)) : null })); D.hunters = hunters;
+  dist.forEach(d => { D.dist[d.oaza] = d.district; });
+  // 任意（失敗しても他の解析は出す）
+  const opt = async (label, fn) => { try { await fn(); } catch (e) { D.errors = D.errors || []; D.errors.push(label + ': ' + (e.message || e)); } };
+  await Promise.all([
+    opt('注文', async () => { D.orders = await sb('orders', '?select=order_date,status,order_items(amount,weight_kg,weight)&order=order_date.asc&limit=5000'); }),
+    opt('出荷', async () => { D.shipped = await sb('inventory', '?select=updated_at,weight_kg,weight,species&status=eq.出荷済&deleted_at=is.null&limit=20000'); }),
+    opt('放射能', async () => { D.radOwn = await sb('individuals', '?select=radiation_test_date,radiation_result,capture_city&radiation_test_date=not.is.null&deleted_at=is.null&limit=20000'); }),
+    opt('顧客', async () => { D.customers = await sb('customers', '?select=address&limit=5000'); }),
+    opt('緯度経度', async () => { D.latlng = (await sb('individuals', '?select=label_id&capture_lat=not.is.null&deleted_at=is.null&limit=20000')).length; }),
+  ]);
+}
+
+// ── 描画の部品 ──
+function section(id, title, q, status){
+  const cls = status === 'done' ? 'badge-green' : status === 'partial' ? 'badge-yellow' : 'badge-gray';
+  const txt = status === 'done' ? '実データで出せた' : status === 'partial' ? '一部（足りないものあり）' : '未着手（理由あり）';
+  document.getElementById('sections').insertAdjacentHTML('beforeend', `<div class="sec" id="sec-${id}"><div class="sec-head"><div class="sec-title">${title}</div><span class="badge ${cls}">${txt}</span></div><div class="sec-q">${q}</div><div id="body-${id}"></div></div>`);
+  document.getElementById('toc').insertAdjacentHTML('beforeend', `<a href="#sec-${id}" class="${status}">${title.replace(/^[^ ]+ /,'')}</a>`);
+  return document.getElementById('body-' + id);
+}
+function chart(el, key, title, sub, labels, datasets, opts){
+  const id = 'ch_' + key;
+  el.insertAdjacentHTML('beforeend', `<div class="chart-card"><div class="chart-title">${title}</div><div class="chart-subtitle">${sub}</div><div class="chart-wrap"><canvas id="${id}"></canvas></div></div>`);
+  const wrap = document.getElementById(id).parentElement;
+  if (!labels.length) { wrap.innerHTML = '<span class="muted">データがありません</span>'; return; }
+  if (typeof Chart === 'undefined') {
+    wrap.style.height = 'auto';
+    const mx = Math.max(0.01, ...datasets.flatMap(d => d.data.filter(v => v != null)));
+    wrap.innerHTML = `<table class="fallback-bars">${labels.map((l,i)=>`<tr><td style="white-space:nowrap;padding:3px 6px;font-size:12px;color:var(--text2)">${esc(l)}</td><td style="width:100%;padding:3px 6px">${datasets.map(d=>`<div><span class="bar-line" style="width:${((d.data[i]||0)/mx*100).toFixed(1)}%;background:${d.backgroundColor||d.borderColor}"></span> <span class="td-num">${d.data[i]==null?'—':d.data[i]}</span> <span class="muted">${esc(d.label)}</span></div>`).join('')}</td></tr>`).join('')}</table>`;
+    return;
+  }
+  const yAxes = { y: { beginAtZero:true, ticks:{color:'#8b90a8'}, grid:{color:'#2e3447'} } };
+  if (opts && opts.y2) yAxes.y2 = { position:'right', beginAtZero:true, ticks:{color:'#8b90a8'}, grid:{display:false} };
+  charts[key] = new Chart(document.getElementById(id).getContext('2d'), { type: (opts && opts.type) || 'bar', data: { labels, datasets }, options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display: datasets.length > 1, labels:{ color:'#8b90a8' } } }, scales: Object.assign({ x:{ stacked: !!(opts&&opts.stacked), ticks:{ color:'#8b90a8', font:{size:10} }, grid:{display:false} } }, yAxes) } });
+}
+function table(el, heads, rows, opts){
+  el.insertAdjacentHTML('beforeend', `<div class="tbl-wrap"><table><thead><tr>${heads.map((h,i)=>`<th${i?' class="td-num"':''}>${h}</th>`).join('')}</tr></thead><tbody>${rows.length ? rows.map(r=>`<tr>${r.map((c,i)=>`<td${i?' class="td-num"':''}>${c==null?'—':c}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${heads.length}" class="muted">データがありません</td></tr>`}</tbody></table></div>${opts&&opts.note?`<div class="muted" style="margin-top:6px">${opts.note}</div>`:''}`);
+}
+function finding(el, html, kind){ el.insertAdjacentHTML('beforeend', `<div class="finding${kind?' '+kind:''}">${html}</div>`); }
+function sources(el, datasets){
+  const s = D.src.filter(x => datasets.includes(x.dataset));
+  if (!s.length) { el.insertAdjacentHTML('beforeend', `<div class="src">出どころ: <span class="muted">まだ取り込んでいません</span></div>`); return; }
+  el.insertAdjacentHTML('beforeend', `<div class="src">出どころ: ${s.map(x => `<a href="${esc(x.source_url||'#')}" target="_blank" rel="noopener">${esc(x.source)}</a>（取得 ${String(x.fetched_at||'').slice(0,10)}）`).join(' ／ ')}</div>`);
+}
+
+// ── うちのデータの集計 ──
+function ownBoar(city, fy){ return D.inds.filter(r => r.species==='イノシシ' && (!city || r.city===city) && (fy==null || r.fiscal_year===fy)); }
+function pub(dataset, fy, city, area, cat, metric, month){ const r = D.ps.find(x => x.dataset===dataset && (fy==null || x.fiscal_year===fy) && (city==null || x.city===city) && (area==null || x.area===area) && (cat==null || x.category===cat) && (metric==null || x.metric===metric) && (month==null || x.month===month)); return r ? r.value : null; }
+function pubSum(dataset, f){ return sum(P(dataset, f), 'value'); }
+
+// 1) 搬入率
+function s1(){
+  const el = section('intake', '🐗 1. 市の捕獲頭数 × センター搬入頭数 ＝ 搬入率', '<b>解析すると出るかも:</b> 館山・南房総で獲れたイノシシのうち何割がセンターに来ているか。周辺市の増減から翌年の搬入見込み。<br>市の数字は「有害鳥獣捕獲」の報告値（館山市: 市内捕獲状況、南房総市: 年度別有害鳥獣捕獲数）。うちの数字は台帳の受入頭数（イノシシ）。', 'done');
+  const years = [3,4,5,6,7,8];
+  const rows = [];
+  const chartT = { l: [], city: [], own: [] };
+  years.forEach(y => {
+    const tCity = pubSum('tateyama_capture_species', r => r.fiscal_year===y && r.category==='イノシシ');
+    const tOwn = ownBoar('館山市', y).length;
+    const mCity = pub('minamiboso_capture_species', y, '南房総市', null, 'イノシシ', '捕獲頭数');
+    const mOwn = ownBoar('南房総市', y).length;
+    rows.push([fyLabel(y)+'年度'+(y===8?'（進行中）':''), tCity ? n0(tCity) : '<span class="muted">未公表</span>', n0(tOwn), tCity ? pct(tOwn,tCity)+'%' : '—', mCity ? n0(mCity) : '<span class="muted">未公表</span>', n0(mOwn), mCity ? pct(mOwn,mCity)+'%' : '—']);
+    if (tCity) { chartT.l.push(fyLabel(y)); chartT.city.push(tCity); chartT.own.push(tOwn); }
+  });
+  const r7 = pct(ownBoar('館山市',7).length, pubSum('tateyama_capture_species', r => r.fiscal_year===7 && r.category==='イノシシ'));
+  const r6 = pct(ownBoar('館山市',6).length, pubSum('tateyama_capture_species', r => r.fiscal_year===6 && r.category==='イノシシ'));
+  const m7 = pct(ownBoar('南房総市',7).length, pub('minamiboso_capture_species', 7, '南房総市', null, 'イノシシ', '捕獲頭数'));
+  const trend = [2,3,4,5,6,7].map(y => ({ y, v: pubSum('tateyama_capture_species', r => r.fiscal_year===y && r.category==='イノシシ') })).filter(x => x.v);
+  const tv = trend.map(x => x.v); const tmin = tv.length ? Math.min(...tv) : 0, tmax = tv.length ? Math.max(...tv) : 0;
+  const m6 = pub('minamiboso_capture_species', 6, '南房総市', null, 'イノシシ', '捕獲頭数');
+  finding(el, `館山市で有害捕獲されたイノシシのうちセンターに来たのは <b>令和6年度 ${r6==null?'—':r6+'%'} → 令和7年度 ${r7==null?'—':r7+'%'}</b>。市の捕獲は年によって ${n0(tmin)}〜${n0(tmax)} 頭と大きく振れる（${trend.map(x=>`${fyLabel(x.y)} ${n0(x.v)}`).join(' → ')}）。南房総市は令和7年度分の市の公表がまだなので搬入率は出せない（令和6年度の市の捕獲は${n0(m6)}頭、うちの受入は${ownBoar('南房総市',6).length}頭）。<br><span class="muted">翌年の見込み: 搬入率が今の水準（${r7==null?'—':r7+'%'}）なら、令和8年度の館山市分は市の捕獲が ${n0(tmin)}〜${n0(tmax)} 頭の幅として ${r7 && tmin ? Math.round(tmin*r7/100)+'〜'+Math.round(tmax*r7/100) : '—'} 頭。</span>`);
+  table(el, ['年度','館山市 有害捕獲','うち搬入','搬入率','南房総市 有害捕獲','うち搬入','搬入率'], rows, { note: '館山市 令和8年度の月別は市の公表待ち。搬入率は「市の捕獲＝有害捕獲のみ」なので、狩猟期に猟で獲れた分は分母に入っていない。' });
+  const g = document.createElement('div'); g.className='grid2'; el.appendChild(g);
+  chart(g, 'intake_y', '年度別: 市の捕獲頭数と搬入頭数（館山市）', '棒＝市の有害捕獲（イノシシ）、線＝センター搬入', chartT.l, [{ label:'市の捕獲', data: chartT.city, backgroundColor: COLORS[1] }, { label:'センター搬入', data: chartT.own, backgroundColor: COLORS[0] }]);
+  // 月別 R7
+  const mo = MO.map(m => pub('tateyama_capture_species', 7, '館山市', null, 'イノシシ', '捕獲頭数', m) || 0);
+  const mown = MO.map(m => ownBoar('館山市', 7).filter(r => r.month===m).length);
+  chart(g, 'intake_m', '月別（令和7年度・館山市）: 市の捕獲と搬入', '山の位置が同じか。夏（7〜8月）の幼獣が多い月は搬入率が下がる', MO.map(m=>m+'月'), [{ label:'市の捕獲', data: mo, backgroundColor: COLORS[1] }, { label:'センター搬入', data: mown, backgroundColor: COLORS[0] }]);
+  // 地区別
+  const dists = ['豊房','神戸','九重','那古','館野','館山','西岬','船形','富崎','北条'];
+  const drows = dists.map(d => {
+    const c = pubSum('tateyama_boar_district', r => r.fiscal_year===7 && r.area===d);
+    const o = ownBoar('館山市', 7).filter(r => D.dist[r.area]===d).length;
+    const o8 = ownBoar('館山市', 8).filter(r => D.dist[r.area]===d).length;
+    return { d, c, o, o8, p: pct(o, c) };
+  }).sort((a,b)=> b.c - a.c);
+  const unmapped = ownBoar('館山市', 7).filter(r => !D.dist[r.area]).length;
+  const low = drows.filter(x => x.c >= 100 && x.p != null && x.p < 20);
+  finding(el, `地区別（令和7年度）: 市の捕獲が多いのに搬入率が低い地区 ＝ <b>${low.length ? low.map(x=>`${x.d}（市 ${x.c}頭・搬入 ${x.o}頭・${x.p}%）`).join('、') : 'なし'}</b>。ここは捕獲者と組む余地が大きい。${unmapped ? `<span class="muted">（旧町村地区に割り当てられなかった個体 ${unmapped} 頭）</span>` : ''}`, low.length ? 'warn' : '');
+  table(el, ['旧町村地区','市の捕獲（R7）','センター搬入（R7）','搬入率','搬入（R8 進行中）'], drows.map(x => [x.d, n0(x.c), n0(x.o), x.p==null?'—':x.p+'%', n0(x.o8)]), { note: '地区＝館山市の旧10町村。うちの個体は大字（例: 茂名→神戸、神余→豊房）で割り当て。' });
+  sources(el, ['tateyama_capture_species','tateyama_boar_district','minamiboso_capture_species']);
+}
+
+// 2) 被害額
+function s2(){
+  const el = section('damage', '🌾 2. 農作物の鳥獣被害額 × 捕獲・搬入', '<b>解析すると出るかも:</b> 被害が大きいのに搬入が少ない地区＝捕獲者と組む余地。捕獲が増えた翌年に被害が減っているか。', 'done');
+  const cities = ['館山市','南房総市','鴨川市','鋸南町'];
+  const yrs = [1,2,3,4,5,6,7];
+  const dmg = (c,y) => pub('chiba_damage_city', y, c, null, '全鳥獣', '被害金額');
+  const g = document.createElement('div'); g.className='grid2'; el.appendChild(g);
+  chart(g, 'dmg_city', '被害金額（全鳥獣・千円）安房4市町', '令和6年度以降は調査要領の改正で前と単純比較できない（県の注記）', yrs.map(y=>fyLabel(y)), cities.map((c,i)=>({ label:c, data: yrs.map(y=>dmg(c,y)), borderColor: COLORS[i], backgroundColor: COLORS[i], fill:false, tension:.2 })), { type:'line' });
+  const byrs = [-11,-10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2];
+  chart(g, 'dmg_boar', 'イノシシによる被害金額（千円）平成19〜令和2', '県の管理計画 表2。南房総市が県内で最も大きかった時期から減り、館山市は令和元・2年度に増加', byrs.map(y=>fyLabel(y)), ['館山市','南房総市'].map((c,i)=>({ label:c, data: byrs.map(y=>pub('chiba_boar_damage_city', y, c, null, 'イノシシ', '被害金額')), backgroundColor: COLORS[i] })));
+  // 捕獲(前年)と被害(当年) 館山市
+  const pairs = [];
+  for (let y=2; y<=7; y++) { const cap = pubSum('tateyama_capture_species', r => r.fiscal_year===y-1 && r.category==='イノシシ'); const d = dmg('館山市', y); if (cap && d != null) pairs.push({ y, cap, d }); }
+  const r = pearson(pairs.map(p=>p.cap), pairs.map(p=>p.d));
+  const own7 = { '館山市': ownBoar('館山市',7).length, '南房総市': ownBoar('南房総市',7).length, '鴨川市': 0, '鋸南町': 0 };
+  const per = cities.map(c => ({ c, d: dmg(c,7), o: own7[c] })).sort((a,b)=> (b.d||0)-(a.d||0));
+  finding(el, `令和7年度の被害額は <b>${per.map(x=>`${x.c} ${n0(x.d)}千円`).join('、')}</b>。センター搬入（イノシシ）は ${per.map(x=>`${x.c} ${x.o}頭`).join('、')}。<b>鴨川市・鋸南町は被害があるのに搬入ゼロ</b>＝受け入れ範囲を広げるなら候補（全頭検査は継続が必要）。<br>館山市で「前年の市の捕獲頭数」と「当年の被害額」の相関は r = <b>${r==null?'—':r}</b>（${pairs.length}年分）。${r!=null && r<-0.3 ? '捕獲が多い翌年は被害が減る向き。' : r!=null && r>0.3 ? '捕獲が多い翌年に被害も多い（被害が多い年に捕獲を増やしている＝原因と結果が逆の可能性）。' : '年数が少なく、はっきりした関係はまだ出ない。'}`);
+  table(el, ['年度','館山市 被害額（千円）','前年の市の捕獲（頭）','南房総市 被害額','鴨川市','鋸南町'], yrs.map(y => [fyLabel(y)+'年度', n0(dmg('館山市',y)), n0(pubSum('tateyama_capture_species', r => r.fiscal_year===y-1 && r.category==='イノシシ')||null), n0(dmg('南房総市',y)), n0(dmg('鴨川市',y)), n0(dmg('鋸南町',y))]));
+  sources(el, ['chiba_damage_city','chiba_boar_damage_city','chiba_damage_species']);
+}
+
+// 3) 国勢調査
+function s3(){
+  const el = section('census', '👥 3. 国勢調査（大字別の人口・高齢化率）× 捕獲者・捕獲地区', '<b>解析すると出るかも:</b> 地区ごとの高齢化率と捕獲者数・捕獲数の関係。5〜10年後に捕獲者が途切れる地区。', 'partial');
+  const cities = ['館山市','南房総市'];
+  const rows = [];
+  cities.forEach(city => {
+    const areas = [...new Set(P('census_oaza', r => r.city===city && r.area!=='全市').map(r => r.area))];
+    areas.forEach(a => {
+      const pop = pub('census_oaza', null, city, a, null, '人口'); const old = pub('census_oaza', null, city, a, null, '65歳以上'); const work = pub('census_oaza', null, city, a, null, '15〜64歳');
+      const key = a.replace(/[０-９0-9]+丁目$/, '');
+      const hunters = D.hunters.filter(h => (h.trap_area||'').includes(city + key) || (h.trap_area||'').startsWith(key) || ((h.city||'')===city && (h.trap_area||'').includes(key))).length;
+      const c7 = D.inds.filter(r => r.city===city && r.area===key && r.fiscal_year===7).length;
+      const c8 = D.inds.filter(r => r.city===city && r.area===key && r.fiscal_year===8).length;
+      if (!pop) return;
+      rows.push({ city, a, pop, old, work, oldPct: pct(old, pop), hunters, c7, c8 });
+    });
+  });
+  const active = rows.filter(r => r.c7 + r.c8 > 0).sort((a,b) => (b.c7+b.c8) - (a.c7+a.c8));
+  const risk = active.filter(r => r.oldPct >= 45 && r.hunters <= 1);
+  const allOld = rows.filter(r => r.pop >= 50);
+  const corr = pearson(active.map(r => r.oldPct), active.map(r => r.c7));
+  finding(el, `捕獲がある大字 ${active.length} のうち、<b>高齢化率45%以上で捕獲者が1人以下の大字は ${risk.length}</b>（${risk.slice(0,8).map(r=>`${r.a} ${r.oldPct}%・${r.c7+r.c8}頭`).join('、')}${risk.length>8?' …':''}）。ここは5〜10年で捕獲が途切れる候補。<br>高齢化率と捕獲頭数（R7）の相関 r = <b>${corr==null?'—':corr}</b>。<span class="muted">捕獲者の年齢は台帳に無いので「地区の高齢化率」で代用。捕獲者マスタに生年（年代）を1列足せば、本人の年齢で出せる。</span>`, risk.length ? 'warn' : '');
+  table(el, ['市','大字','人口（2020）','65歳以上','高齢化率','捕獲者数','捕獲 R7','捕獲 R8'], active.slice(0, 40).map(r => [r.city, r.a, n0(r.pop), n0(r.old), (r.oldPct==null?'—':r.oldPct+'%') + (r.oldPct>=45 && r.hunters<=1 ? ' <span class="risk">⚠</span>' : ''), n0(r.hunters), n0(r.c7), n0(r.c8)]), { note: `捕獲のある大字 上位40。捕獲者数は捕獲者マスタの「罠の地区」に大字名を含む人数。人口50人以上の大字の高齢化率の中央値: ${allOld.length ? (allOld.map(r=>r.oldPct).sort((a,b)=>a-b)[Math.floor(allOld.length/2)]) + '%' : '—'}` });
+  sources(el, ['census_oaza']);
+}
+
+// 4) 農林業センサス
+function s4(){
+  const el = section('census_agri', '🌱 4. 農林業センサス（農業集落別・耕作放棄地）', '<b>解析すると出るかも:</b> 耕作放棄地率の高い集落ほど出没・捕獲が多いか → 罠を重点的にかける地区。', 'todo');
+  finding(el, `<b>今回は取り込んでいません。</b> 2020年農林業センサスの農業集落別データは e-Stat で「農業集落」単位（大字と一致しない）で配布され、集落境界データと組で扱う必要があり、この解析タブの範囲では重すぎると判断しました。代わりに、県の「イノシシ棲み家撲滅特別対策事業（耕作放棄地の刈払い）」の事例集を <code>public_files</code> に置けるので、必要なら地区名を手で起こします。<br><span class="muted">やるなら: e-Stat「2020年農林業センサス 農業集落別統計」→ 館山市・南房総市の集落 → 「耕地面積」「荒廃農地」列を <code>public_stats</code>（dataset=agri_census_village）に起こし、集落名を大字に寄せる。</span>`, 'todo');
+}
+
+// 5) 狩猟免許
+function s5(){
+  const el = section('license', '🎫 5. 狩猟免許・狩猟者登録 × 捕獲者台帳', '<b>解析すると出るかも:</b> 担い手の減少ペースと、センターへの搬入が何年もつか。若手の登録が増えているか。', 'partial');
+  const yrs = [2005,2010,2015,2018,2019,2020,2021];
+  const grp = ['20～29歳','30～39歳','40～49歳','50～59歳','60歳以上'];
+  const g = document.createElement('div'); g.className='grid2'; el.appendChild(g);
+  chart(g, 'lic_nat', '全国の狩猟免許所持者数（年代別・人）', '環境省。60歳以上が6割。40歳代以下は2015年以降増えている', yrs.map(String), grp.map((k,i)=>({ label:k, data: yrs.map(y => pub('license_national_age', null, '全国', null, k, '免許所持者数') != null ? (D.ps.find(r=>r.dataset==='license_national_age'&&r.cal_year===y&&r.category===k)||{}).value : null), backgroundColor: COLORS[i] })), { stacked:true });
+  // うちの担い手
+  const fys = [3,4,5,6,7,8];
+  const own = fys.map(y => { const rows = D.inds.filter(r => r.fiscal_year===y && r.hunter_name); const by = byKey(rows, r => r.hunter_name); const arr = Object.values(by).map(a => a.length).sort((a,b)=>b-a); const top10 = arr.slice(0,10).reduce((a,b)=>a+b,0); return { y, hunters: arr.length, heads: rows.length, top10pct: pct(top10, rows.length), one: arr.filter(v=>v===1).length }; });
+  chart(g, 'lic_own', 'センターに持ち込んだ捕獲者の数（年度）', '棒＝人数、線＝上位10人が占める頭数の割合（%）', own.map(o=>fyLabel(o.y)), [{ label:'捕獲者数', data: own.map(o=>o.hunters), backgroundColor: COLORS[0] }, { label:'上位10人の割合%', data: own.map(o=>o.top10pct), borderColor: COLORS[1], backgroundColor: COLORS[1], type:'line', yAxisID:'y2', fill:false }], { y2:true });
+  const last = own[own.length-2] || own[own.length-1];
+  const chibaPeak = pub('license_chiba', null, '千葉県', null, '合計', '免許所持者数');
+  finding(el, `千葉県の狩猟免許所持者は <b>昭和53年 20,653人 → 令和2年 6,578人</b>（3分の1以下）。ただし わな猟は 268人 → 2,992人 に増え、新規取得は毎年約450人・平均年齢50歳以下（県の管理計画）。<br>うちに持ち込む捕獲者は ${own.map(o=>`${fyLabel(o.y)} ${o.hunters}人`).join('、')}。<b>${fyLabel(last.y)}年度は上位10人で頭数の ${last.top10pct}%</b> を占め、1頭だけの人が ${last.one} 人。「何年もつか」は捕獲者の年齢が台帳に無いので出せない（生年を1列足せば、上位10人の年齢構成で出る）。`);
+  table(el, ['年度','捕獲者数','頭数','上位10人の割合','1頭だけの人'], own.map(o => [fyLabel(o.y)+'年度', n0(o.hunters), n0(o.heads), o.top10pct==null?'—':o.top10pct+'%', n0(o.one)]));
+  sources(el, ['license_national_age','license_chiba']);
+}
+
+// 6) 国土数値情報
+function s6(){
+  const el = section('ksj', '🗺 6. 国土数値情報（土地利用・森林・道路）× 個体の緯度経度', '<b>解析すると出るかも:</b> 「よく獲れる場所の型」：森林と畑の境目からの距離、集落からの距離、標高。', 'todo');
+  finding(el, `個体の緯度経度が入っているのは <b>${D.latlng} 頭</b>（台帳全体のうち）。地区の概ね中心（area_master）の座標は ${'国土地理院'}から取れているが、大字の中心では「森と畑の境目からの距離」は出せない。<br><span class="muted">やるなら: 捕獲票の入力で「罠の場所」をスマホの位置情報から1タップで入れる欄を足す（capture_lat/lng は列としてある）。100頭たまったら国土数値情報の土地利用メッシュ（100m）と突き合わせる。</span>`, 'todo');
+}
+
+// 7) 気象・月齢
+function s7(){
+  const el = section('weather', '🌙 7. 気象・月齢（稼働中）', '<b>解析すると出るかも:</b> 稼働中。次は罠の設置数（日別）を記録すると「罠1基あたりの捕獲率」で条件を正しく比べられる。', 'done');
+  finding(el, `<a href="catch-analysis.html" style="color:var(--blue)">捕獲条件分析</a> で月齢・雨・気温・気圧・風と捕獲数を突き合わせています（Open-Meteo）。罠の設置数はまだ記録していないので、「条件が良い日」と「罠が多い日」を分けられません。`);
+}
+
+// 8) ドングリ
+function s8(){
+  const el = section('acorn', '🌰 8. ドングリ（堅果類）の豊凶 × 秋冬の捕獲数・体重', '<b>解析すると出るかも:</b> 凶作の年は秋の出没と捕獲が増え、体重が落ちるか。', 'partial');
+  const fys = [3,4,5,6,7];
+  const rows = fys.map(y => { const a = D.inds.filter(r => r.species==='イノシシ' && r.fiscal_year===y && [10,11,12].includes(r.month) && r.weight>0); const s = D.inds.filter(r => r.species==='イノシシ' && r.fiscal_year===y && [4,5,6,7,8,9].includes(r.month) && r.weight>0); return { y, n: a.length, w: a.length ? sum(a,'weight')/a.length : null, ws: s.length ? sum(s,'weight')/s.length : null, city: pubSum('tateyama_capture_species', r => r.fiscal_year===y && r.category==='イノシシ' && [10,11,12].includes(r.month)) }; });
+  finding(el, `<b>千葉県は堅果類の豊凶調査を公表していません</b>（群馬・栃木・富山などは毎年公表）。代わりに「秋（10〜12月）に搬入されたイノシシの平均体重」を年ごとに並べました。体重が落ちた年＝山に餌が少なかった年、の目安になります: ${rows.filter(r=>r.w).map(r=>`${fyLabel(r.y)} ${n1(r.w)}kg（${r.n}頭）`).join('、')}。<span class="muted">県の森林研究所や猟友会に豊凶の聞き取り値を1つ入れれば、この表と突き合わせられます。</span>`);
+  table(el, ['年度','秋の搬入（頭）','秋の平均体重（kg）','春夏の平均体重（kg）','館山市の秋の捕獲（市の報告・頭）'], rows.map(r => [fyLabel(r.y)+'年度', n0(r.n), n1(r.w), n1(r.ws), n0(r.city||null)]));
+}
+
+// 9) CO2
+function s9(){
+  const el = section('co2', '🚚 9. 輸送のCO₂原単位／フードマイレージ（稼働中）', '<b>解析すると出るかも:</b> 稼働中。輸入肉と比べた「1kgあたりの距離」とCO₂。', 'done');
+  finding(el, `<a href="mileage-analysis.html" style="color:var(--blue)">フードマイレージ解析</a> と <a href="lca.html" style="color:var(--blue)">猪肉のLCA</a> で係数（国交省トンキロ法・IDEA）を使っています。`);
+}
+
+// 10) 観光
+function s10(){
+  const el = section('tourism', '🏖 10. 観光入込・宿泊客数（安房地域・月別）× 出荷・出店', '<b>解析すると出るかも:</b> 来客が多い月と直販・出店の売上の関係 → 在庫を持つ時期と量の計画。', 'partial');
+  const months = [1,2,3,4,5,6,7,8,9,10,11,12];
+  const t23 = months.map(m => pub('tourism_awa_month', null, '安房地域', null, null, '宿泊客数', m) == null ? null : (D.ps.find(r=>r.dataset==='tourism_awa_month'&&r.cal_year===2023&&r.month===m)||{}).value);
+  const t24 = months.map(m => (D.ps.find(r=>r.dataset==='tourism_awa_month'&&r.cal_year===2024&&r.month===m)||{}).value ?? null);
+  const ship = {}; D.shipped.forEach(r => { const k = String(r.updated_at||'').slice(0,7); ship[k] = (ship[k]||0) + (Number(r.weight_kg ?? r.weight) || 0); });
+  const shipKeys = Object.keys(ship).sort();
+  const g = document.createElement('div'); g.className='grid2'; el.appendChild(g);
+  chart(g, 'tour', '安房地域の宿泊客数（月別・人泊）', '千葉県観光入込調査。8月が突出、3月と7月が次', months.map(m=>m+'月'), [{ label:'2023年', data:t23, backgroundColor: COLORS[1] }, { label:'2024年', data:t24, backgroundColor: COLORS[0] }]);
+  chart(g, 'ship', 'センターの出荷量（月別・kg・出荷済の在庫）', '在庫の更新月で集計。まだ月数が少ない', shipKeys, [{ label:'出荷kg', data: shipKeys.map(k=>Math.round(ship[k])), backgroundColor: COLORS[2] }]);
+  const peak = months.map((m,i)=>({m, v:(t24[i]||0)})).sort((a,b)=>b.v-a.v).slice(0,3).map(x=>x.m+'月');
+  finding(el, `安房地域の宿泊客は <b>${peak.join('・')}</b> が多く、8月は他の月の1.5〜2倍。出荷の月別は ${shipKeys.length} か月分しか無いので、来客との関係はまだ出ません。<span class="muted">1年分たまったら「8月前に在庫を積む量」を出す。出店の売上（sale_events）も同じ月別に並べます。</span>`);
+  sources(el, ['tourism_awa_month','tourism_awa_year']);
+}
+
+// 11) 放射性物質
+function s11(){
+  const el = section('radiation', '☢ 11. イノシシ肉の放射性物質検査結果（県公表・施設別）× 当センターの記録', '<b>解析すると出るかも:</b> 館山・南房総の「検出下限値以下」が何年続いているか＝全頭検査の解除見込み（他市の解除時の推移と比べる）。', 'done');
+  const fys = [3,4,5,6,7,8];
+  const rowOf = (city) => fys.map(y => { const n = pubSum('radiation_facility', r => r.fiscal_year===y && r.city===city && r.metric==='検体数'); const d = pubSum('radiation_facility', r => r.fiscal_year===y && r.city===city && r.metric==='検出あり'); return { y, n, d }; });
+  const cities = ['館山市','南房総市','勝浦市','大多喜町','茂原市','いすみ市','君津市','木更津市','富津市'];
+  const data = {}; cities.forEach(c => { data[c] = rowOf(c); });
+  const tm = fys.reduce((a,y) => a + data['館山市'][fys.indexOf(y)].n + data['南房総市'][fys.indexOf(y)].n, 0);
+  const tdet = fys.reduce((a,y) => a + data['館山市'][fys.indexOf(y)].d + data['南房総市'][fys.indexOf(y)].d, 0);
+  const own = D.radOwn.length, ownLow = D.radOwn.filter(r => /下限|不検出|ND/.test(r.radiation_result||'')).length;
+  finding(el, `県が公表している施設別の検査結果（令和3〜8年度）で、<b>館山市産・南房総市産のイノシシ肉 ${n0(tm)} 検体のうち、数値が出た（検出下限値を超えた）検体は ${tdet} 件</b>。解除済みの勝浦市・大多喜町（令和6年7月解除）・茂原市（令和7年10月）・いすみ市（令和8年7月）も解除前の数年は検出ゼロだったので、館山・南房総も「安定して低水準」の実績はそろっています。解除は県が国に申請して決まるもので、当センターの検査記録（${own}件・うち下限値以下 ${ownLow}件）はその根拠資料になります。<br><span class="muted">君津市・木更津市・富津市産は今も毎年数十件の検出（基準値100Bq/kg未満が多い）があり、解除の見込みが立ちにくい。</span>`);
+  table(el, ['産地','令和3','令和4','令和5','令和6','令和7','令和8（6月末）'], cities.map(c => [c + (['勝浦市','大多喜町','茂原市','いすみ市'].includes(c) ? ' <span class="badge badge-green">解除済</span>' : ''), ...data[c].map(x => x.n ? `${n0(x.n)}<span class="muted">件</span> <span class="${x.d?'risk':'muted'}">検出${x.d}</span>` : '—')]), { note: '件＝検体数、検出＝数値が出た検体（基準値超えではない）。産地は県の表の「産地」列。' });
+  sources(el, ['radiation_facility']);
+}
+
+// 12) 経済センサス・家計調査
+function s12(){
+  const el = section('econ', '🍽 12. 経済センサス（飲食店数）／家計調査（食肉支出）× 顧客の所在地', '<b>解析すると出るかも:</b> 飲食店が多いのに顧客がいないエリア＝営業先候補。出荷先の都道府県ごとの需要の大きさ。', 'partial');
+  const pref = {}; D.customers.forEach(c => { const m = String(c.address||'').match(/(北海道|東京都|京都府|大阪府|.{2,3}県)/); const k = m ? m[1] : '不明'; pref[k] = (pref[k]||0)+1; });
+  const rows = Object.entries(pref).sort((a,b)=>b[1]-a[1]);
+  finding(el, `<b>経済センサス・家計調査はまだ取り込んでいません</b>（e-Stat の該当表を特定して CSV で落とす作業が残っています。API キーが要らない file-download の形で取れることは国勢調査で確認済み）。今出せるのは顧客台帳の都道府県別の分布: ${rows.slice(0,5).map(r=>`${r[0]} ${r[1]}件`).join('、')}。<span class="muted">飲食店数（市区町村別）と並べると「飲食店は多いのに顧客ゼロ」の市が出る。</span>`);
+  table(el, ['都道府県','顧客数'], rows.slice(0, 12).map(r => [r[0], n0(r[1])]));
+}
+
+// 13) 食肉卸売価格
+function s13(){
+  const el = section('price', '🥩 13. 食肉の卸売価格（豚・牛の月別相場）× 部位別の販売単価', '<b>解析すると出るかも:</b> ジビエの値付けが相場とどう動いているか、値上げ・値下げの根拠。', 'done');
+  const pr = P('meat_price_month').sort((a,b)=> (a.cal_year-b.cal_year) || (a.month-b.month));
+  const keys = [...new Set(pr.map(r => `${r.cal_year}-${String(r.month).padStart(2,'0')}`))];
+  const pork = keys.map(k => (pr.find(r => `${r.cal_year}-${String(r.month).padStart(2,'0')}`===k && /豚/.test(r.category))||{}).value ?? null);
+  const beef = keys.map(k => (pr.find(r => `${r.cal_year}-${String(r.month).padStart(2,'0')}`===k && /牛/.test(r.category))||{}).value ?? null);
+  const own = {}; D.orders.forEach(o => { if (/キャンセル/.test(o.status||'')) return; const k = String(o.order_date||'').slice(0,7); (o.order_items||[]).forEach(i => { const kg = Number(i.weight_kg ?? i.weight)||0, amt = Number(i.amount)||0; if (kg>0 && amt>0) { own[k] = own[k] || { kg:0, amt:0 }; own[k].kg += kg; own[k].amt += amt; } }); });
+  const ownKeys = Object.keys(own).sort();
+  const g = document.createElement('div'); g.className='grid2'; el.appendChild(g);
+  chart(g, 'price', '豚・牛の枝肉卸売価格（円/kg・月別）', 'alic 畜産物の卸売価格（東京・大阪）。豚は夏に高く冬に安い', keys, [{ label:'豚枝肉（極上・上）', data: pork, borderColor: COLORS[0], backgroundColor: COLORS[0], fill:false, tension:.2 }, { label:'牛枝肉（加重平均）', data: beef, borderColor: COLORS[1], backgroundColor: COLORS[1], fill:false, tension:.2, yAxisID:'y2' }], { type:'line', y2:true });
+  chart(g, 'ownprice', 'センターの販売単価（円/kg・注文明細の加重平均）', '受発注管理の注文（キャンセル除く）。まだ月数が少ない', ownKeys, [{ label:'円/kg', data: ownKeys.map(k => Math.round(own[k].amt/own[k].kg)), backgroundColor: COLORS[2] }]);
+  const lastPork = pork.filter(v=>v!=null).slice(-1)[0], lastBeef = beef.filter(v=>v!=null).slice(-1)[0];
+  const lastOwn = ownKeys.length ? Math.round(own[ownKeys[ownKeys.length-1]].amt/own[ownKeys[ownKeys.length-1]].kg) : null;
+  finding(el, `直近の相場は <b>豚枝肉 ${n0(lastPork)} 円/kg、牛枝肉 ${n0(lastBeef)} 円/kg</b>（枝肉＝骨付き。精肉に直すと豚は1.3〜1.5倍）。センターの販売単価は <b>${n0(lastOwn)} 円/kg</b>（${ownKeys.slice(-1)[0]||'—'}）。豚の相場が上がる夏に合わせて値上げしても割高感が出にくい、という見方ができる。<span class="muted">部位別（ロース・モモ・ミンチ）の単価と豚の部分肉相場を並べるのが次の一手。</span>`);
+  sources(el, ['meat_price_month']);
+}
+
+function renderSources(){
+  const s = D.src;
+  document.getElementById('srcTable').innerHTML = `<table><thead><tr><th>dataset</th><th>出どころ</th><th class="td-num">行数</th><th>年</th><th>取得日</th></tr></thead><tbody>${s.map(x => `<tr><td><code>${esc(x.dataset)}</code></td><td><a href="${esc(x.source_url||'#')}" target="_blank" rel="noopener" style="color:var(--blue)">${esc(x.source)}</a></td><td class="td-num">${n0(x.rows_n)}</td><td>${x.y_from==null?'—':esc(x.y_from)+'〜'+esc(x.y_to)}</td><td>${String(x.fetched_at||'').slice(0,10)}</td></tr>`).join('')}</tbody></table>`;
+}
+
+async function init(){
+  try {
+    showStatus('loading', '公的データとうちのデータを読み込んでいます…');
+    await loadAll();
+    document.getElementById('sections').innerHTML = ''; document.getElementById('toc').innerHTML = '';
+    [s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13].forEach(f => { try { f(); } catch (e) { document.getElementById('sections').insertAdjacentHTML('beforeend', `<div class="sec"><div class="finding warn">この項目の描画に失敗: ${esc(e.message||e)}</div></div>`); } });
+    renderSources();
+    const n = D.ps.length;
+    showStatus(D.errors && D.errors.length ? 'info' : '', `公的データ ${n.toLocaleString()} 行・個体 ${D.inds.length.toLocaleString()} 頭を読み込みました。` + (D.errors && D.errors.length ? '\n一部のうちのデータが読めませんでした: ' + D.errors.join(' / ') : ''));
+  } catch (e) { showStatus('error', 'データを読み込めませんでした: ' + (e.message || e)); }
+}
+adminGate(init);
+</script>
+</body>
+</html>

@@ -91,7 +91,7 @@ begin
   select * into r from extensions.http_get(p_url);
   if r.status <> 200 then return jsonb_build_object('ok', false, 'status', r.status); end if;
   create temp table _ps on commit drop as
-    select c[1] dataset, c[2] source, c[3] source_url, nullif(c[4],'')::int fiscal_year, nullif(c[5],'')::int cal_year, nullif(c[6],'')::int month,
+    select c[1] dataset, c[2] source, c[3] source_url, nullif(c[4],'')::int fiscal_year, nullif(c[5],'')::int cal_year, nullif(c[6],'')::int as month,
            nullif(c[7],'') city, nullif(c[8],'') area, nullif(c[9],'') category, c[10] metric, nullif(c[11],'')::numeric value, nullif(c[12],'') unit, nullif(c[13],'') note
     from tgc_csv_rows(r.content) c where c[1] <> 'dataset' and array_length(c,1) >= 13;
   select array_agg(distinct dataset) into ds from _ps;
@@ -101,3 +101,9 @@ begin
   get diagnostics n = row_count;
   return jsonb_build_object('ok', true, 'rows', n, 'datasets', ds);
 end $$;
+
+-- 出どころ一覧（解析ページの「出典」欄用）
+create or replace view v_public_sources as
+select dataset, source, source_url, max(fetched_at) fetched_at, count(*) rows_n, min(coalesce(fiscal_year, cal_year)) y_from, max(coalesce(fiscal_year, cal_year)) y_to
+from public_stats group by dataset, source, source_url;
+grant select on v_public_sources to anon, authenticated;

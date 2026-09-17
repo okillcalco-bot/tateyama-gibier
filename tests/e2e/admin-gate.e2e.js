@@ -8,7 +8,7 @@
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
 
-const PAGES = ['history.html', 'buyback.html', 'lca.html', 'mileage-analysis.html', 'catch-analysis.html', 'sales-dashboard.html'];
+const PAGES = ['history.html', 'buyback.html', 'lca.html', 'mileage-analysis.html', 'catch-analysis.html', 'sales-dashboard.html', 'public-analysis.html'];
 
 async function open(browser, file, { admin = false, blockGate = false } = {}) {
   const ctx = await browser.newContext();

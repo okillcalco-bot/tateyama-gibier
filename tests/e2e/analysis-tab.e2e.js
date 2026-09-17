@@ -44,11 +44,11 @@ async function open(browser, { query = '', failGeo = false, role = 'admin' } = {
     geo: document.getElementById('an-geo-status').textContent,
   }));
   ck('タブを押すと解析パネルが開く', ui.active, '');
-  ck('解析ページへのリンク（捕獲条件・フードマイレージ・売上・過年度・買取・LCA）', ui.links.join() === 'catch-analysis.html,mileage-analysis.html,sales-dashboard.html,history.html,buyback.html,lca.html', ui.links.join());
+  ck('解析ページへのリンク（公的データ・捕獲条件・フードマイレージ・売上・過年度・買取・LCA）', ui.links.join() === 'public-analysis.html,catch-analysis.html,mileage-analysis.html,sales-dashboard.html,history.html,buyback.html,lca.html', ui.links.join());
   ck('公的データの一覧が12件以上', ui.rows >= 12, String(ui.rows));
   ck('一覧の列は「公的データ／出どころ／組み合わせる／解析すると出るかも／準備」', ui.heads.length === 5 && /公的データ/.test(ui.heads[0]) && /出どころ/.test(ui.heads[1]) && /出るかも/.test(ui.heads[3]) && /準備/.test(ui.heads[4]), ui.heads.join('|'));
   ck('人口統計・生産年齢人口・捕獲頭数・被害額・観光・放射性物質 が候補に入っている', ['国勢調査', '生産年齢人口', '捕獲頭数', '被害額', '観光入込', '放射性物質', '狩猟免許', '国土数値情報'].every(s => ui.text.includes(s)), '');
-  ck('準備の状態が3種（今すぐ可／要るもの／稼働中）で出る', /今すぐ可/.test(ui.text) && /が要る/.test(ui.text) && /稼働中/.test(ui.text), '');
+  ck('準備の状態が3種（取込済／要るもの／稼働中）で出る', /取込済/.test(ui.text) && /が要る/.test(ui.text) && /稼働中/.test(ui.text) && !/今すぐ可/.test(ui.text), '');
   ck('座標の準備: 地区 1／3・配送先 1件（見つからず 1）・センター仮の値', /捕獲地区 1／3地区/.test(ui.geo) && /配送先 1件（見つからず 1）/.test(ui.geo) && /仮の値/.test(ui.geo), ui.geo);
   ck('pageerrorなし', errors.length === 0, errors.join(' / '));
   await page.context().close();

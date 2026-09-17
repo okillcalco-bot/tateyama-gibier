@@ -546,6 +546,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div class="section-title">📈 解析ページ</div>
       <p style="font-size:12px;color:var(--text2);margin:0 0 10px;">どれも「1個体の一生が1本の線」（生態 → 個体 → 精肉 → 加工 → 販売 → 食べた人の声）を外から見るためのページです。数字は目安として使い、判断は現場の実感と合わせてください。</p>
       <div class="card-row" id="an-cards">
+        <a class="card" href="public-analysis.html" style="text-decoration:none;color:inherit;display:block;border-color:var(--gold2);"><div class="card-label">公的データ</div><div class="card-value" style="font-size:20px;">🗂 公的データ解析</div><div class="card-sub">下の一覧の「取込済」を実データで解析。搬入率・被害×搬入・高齢化×捕獲者・放射能の解除見込み・相場×販売単価。</div></a>
         <a class="card" href="catch-analysis.html" style="text-decoration:none;color:inherit;display:block;"><div class="card-label">生態</div><div class="card-value" style="font-size:20px;">🌙 捕獲条件分析</div><div class="card-sub">月の満ち欠け・天気（雨・気温・気圧・風）と捕獲数の関係。気象は Open-Meteo から自動取得。</div></a>
         <a class="card" href="mileage-analysis.html" style="text-decoration:none;color:inherit;display:block;"><div class="card-label">販売・輸送</div><div class="card-value" style="font-size:20px;">🚚 フードマイレージ解析</div><div class="card-sub">山→センター→お客さんの距離と t·km。輸入肉との比較、CO₂参考値、遠くへ運んだ出荷。</div></a>
         <a class="card" href="sales-dashboard.html" style="text-decoration:none;color:inherit;display:block;"><div class="card-label">販売</div><div class="card-value" style="font-size:20px;">📊 売上分析</div><div class="card-sub">部位別・顧客別・月別の売上と単価。</div></a>
@@ -557,24 +558,24 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     </div>
     <div class="section">
       <div class="section-title">🗂 公的データで解析できそうなこと（これを解析すれば、これが出るかも）</div>
-      <p style="font-size:12px;color:var(--text2);margin:0 0 10px;">ネットで公開されている統計・調査のうち、うちのデータ（個体・捕獲者・出荷・声）と突き合わせると意味が出そうなものです。「準備」が「今すぐ可」のものは、公表資料の数字を1表に入れれば解析ページを足せます。</p>
+      <p style="font-size:12px;color:var(--text2);margin:0 0 10px;">ネットで公開されている統計・調査のうち、うちのデータ（個体・捕獲者・出荷・声）と突き合わせると意味が出そうなものです。「取込済」は <a href="public-analysis.html" style="color:var(--gold);">公的データ解析</a> で実データを出しています（2026-09-17）。</p>
       <div style="overflow-x:auto;">
       <table id="an-public-table">
         <thead><tr><th>公的データ</th><th>出どころ</th><th>組み合わせるうちのデータ</th><th>解析すると出るかも</th><th>準備</th></tr></thead>
         <tbody>
-          <tr><td>市町村別 イノシシ捕獲頭数（年度別）</td><td>千葉県（鳥獣捕獲実績）・館山市／南房総市の公表資料</td><td>個体台帳の搬入頭数</td><td>館山・南房総で獲れたうち何割がセンターに来ているか（<b>搬入率</b>）。周辺市の増減から翌年の搬入見込み。</td><td><span class="badge badge-green">今すぐ可</span></td></tr>
-          <tr><td>農作物の鳥獣被害額（市町村別・年度別）</td><td>千葉県 農林水産部（鳥獣被害状況）</td><td>捕獲地区・頭数</td><td>被害が大きいのに搬入が少ない地区＝捕獲者と組む余地。捕獲が増えた翌年に被害が減っているか。</td><td><span class="badge badge-green">今すぐ可</span></td></tr>
-          <tr><td>国勢調査 小地域集計（大字別の人口・年齢構成・生産年齢人口）</td><td>総務省統計局 e-Stat</td><td>捕獲者台帳（地区・年齢）・捕獲地区</td><td>地区ごとの高齢化率と捕獲者数・捕獲数の関係。<b>5〜10年後に捕獲者が途切れる地区</b>の予測。</td><td><span class="badge badge-green">今すぐ可</span></td></tr>
-          <tr><td>農林業センサス 農業集落別（耕作放棄地・農家数・年齢）</td><td>農林水産省 e-Stat</td><td>捕獲地区・頭数</td><td>耕作放棄地率の高い集落ほど出没・捕獲が多いか → 罠を重点的にかける地区。</td><td><span class="badge badge-green">今すぐ可</span></td></tr>
-          <tr><td>狩猟免許・狩猟者登録（年齢別・年度別）</td><td>千葉県（狩猟関係の統計）</td><td>捕獲者台帳</td><td>担い手の減少ペースと、センターへの搬入が何年もつか。若手の登録が増えているか。</td><td><span class="badge badge-green">今すぐ可</span></td></tr>
-          <tr><td>国土数値情報（土地利用メッシュ・森林・人口集中地区・道路）</td><td>国土交通省 国土数値情報ダウンロードサービス</td><td>個体の緯度経度（別枠で集める）</td><td>「よく獲れる場所の型」：森林と畑の境目からの距離、集落からの距離、標高。</td><td><span class="badge badge-gold">個体の地点が要る</span></td></tr>
+          <tr><td>市町村別 イノシシ捕獲頭数（年度別）</td><td>千葉県（鳥獣捕獲実績）・館山市／南房総市の公表資料</td><td>個体台帳の搬入頭数</td><td>館山・南房総で獲れたうち何割がセンターに来ているか（<b>搬入率</b>）。周辺市の増減から翌年の搬入見込み。</td><td><span class="badge badge-green">取込済 → 搬入率</span></td></tr>
+          <tr><td>農作物の鳥獣被害額（市町村別・年度別）</td><td>千葉県 農林水産部（鳥獣被害状況）</td><td>捕獲地区・頭数</td><td>被害が大きいのに搬入が少ない地区＝捕獲者と組む余地。捕獲が増えた翌年に被害が減っているか。</td><td><span class="badge badge-green">取込済 → 被害×搬入</span></td></tr>
+          <tr><td>国勢調査 小地域集計（大字別の人口・年齢構成・生産年齢人口）</td><td>総務省統計局 e-Stat</td><td>捕獲者台帳（地区・年齢）・捕獲地区</td><td>地区ごとの高齢化率と捕獲者数・捕獲数の関係。<b>5〜10年後に捕獲者が途切れる地区</b>の予測。</td><td><span class="badge badge-green">取込済 → 高齢化×捕獲者</span></td></tr>
+          <tr><td>農林業センサス 農業集落別（耕作放棄地・農家数・年齢）</td><td>農林水産省 e-Stat</td><td>捕獲地区・頭数</td><td>耕作放棄地率の高い集落ほど出没・捕獲が多いか → 罠を重点的にかける地区。</td><td><span class="badge badge-gold">未着手（集落単位で重い）</span></td></tr>
+          <tr><td>狩猟免許・狩猟者登録（年齢別・年度別）</td><td>千葉県（狩猟関係の統計）</td><td>捕獲者台帳</td><td>担い手の減少ペースと、センターへの搬入が何年もつか。若手の登録が増えているか。</td><td><span class="badge badge-green">取込済（全国・県）</span></td></tr>
+          <tr><td>国土数値情報（土地利用メッシュ・森林・人口集中地区・道路）</td><td>国土交通省 国土数値情報ダウンロードサービス</td><td>個体の緯度経度（別枠で集める）</td><td>「よく獲れる場所の型」：森林と畑の境目からの距離、集落からの距離、標高。</td><td><span class="badge badge-gold">個体の緯度経度が要る</span></td></tr>
           <tr><td>気象・月齢</td><td>気象庁／Open-Meteo（捕獲条件分析で使用中）</td><td>捕獲日</td><td>稼働中。次は<b>罠の設置数（日別）</b>を記録すると「罠1基あたりの捕獲率」で条件を正しく比べられる。</td><td><span class="badge badge-gold">罠設置数の記録が要る</span></td></tr>
-          <tr><td>ドングリ（堅果類）の豊凶調査</td><td>千葉県／県の林業・環境研究機関の公表資料</td><td>秋冬の捕獲数・体重・肉ランク</td><td>凶作の年は秋の出没と捕獲が増え、体重が落ちるか（クマで実績あり、イノシシは仮説）。</td><td><span class="badge badge-green">今すぐ可（年1値）</span></td></tr>
+          <tr><td>ドングリ（堅果類）の豊凶調査</td><td>千葉県／県の林業・環境研究機関の公表資料</td><td>秋冬の捕獲数・体重・肉ランク</td><td>凶作の年は秋の出没と捕獲が増え、体重が落ちるか（クマで実績あり、イノシシは仮説）。</td><td><span class="badge badge-gold">県の公表なし（秋の体重で代用）</span></td></tr>
           <tr><td>貨物輸送の CO₂ 排出原単位（トンキロ法）／フードマイレージの試算</td><td>国土交通省・環境省／農林水産省</td><td>出荷の距離・重さ</td><td>フードマイレージ解析で使用中。輸入肉と比べた「1kgあたりの距離」と CO₂。</td><td><span class="badge badge-blue">稼働中</span></td></tr>
-          <tr><td>観光入込客数（市町村別・月別）／イベント来場者数</td><td>千葉県（観光入込調査）・館山市</td><td>出店の売上・声の件数・月別出荷</td><td>来客が多い月と直販・出店の売上の関係 → 在庫を持つ時期と量の計画。</td><td><span class="badge badge-green">今すぐ可</span></td></tr>
-          <tr><td>イノシシ肉の放射性物質検査結果（市町村別・公表）</td><td>千葉県（食品の放射性物質検査結果）</td><td>当センターの検査記録</td><td>館山・南房総の「検出下限値以下」が何年続いているか＝<b>全頭検査の解除見込み</b>（他市の解除時の推移と比べる）。</td><td><span class="badge badge-green">今すぐ可</span></td></tr>
-          <tr><td>経済センサス（市区町村別の飲食店数）／家計調査（食肉への支出）</td><td>総務省統計局 e-Stat</td><td>顧客台帳の所在地・出荷先</td><td>飲食店が多いのに顧客がいないエリア＝営業先候補。出荷先の都道府県ごとの需要の大きさ。</td><td><span class="badge badge-green">今すぐ可</span></td></tr>
-          <tr><td>食肉の卸売価格（豚肉・牛肉の月別相場）</td><td>農林水産省（食肉流通統計）・日本食肉流通センター</td><td>部位別の販売単価・売上</td><td>ジビエの値付けが相場とどう動いているか、値上げ・値下げの根拠。</td><td><span class="badge badge-green">今すぐ可</span></td></tr>
+          <tr><td>観光入込客数（市町村別・月別）／イベント来場者数</td><td>千葉県（観光入込調査）・館山市</td><td>出店の売上・声の件数・月別出荷</td><td>来客が多い月と直販・出店の売上の関係 → 在庫を持つ時期と量の計画。</td><td><span class="badge badge-green">取込済（安房・月別）</span></td></tr>
+          <tr><td>イノシシ肉の放射性物質検査結果（市町村別・公表）</td><td>千葉県（食品の放射性物質検査結果）</td><td>当センターの検査記録</td><td>館山・南房総の「検出下限値以下」が何年続いているか＝<b>全頭検査の解除見込み</b>（他市の解除時の推移と比べる）。</td><td><span class="badge badge-green">取込済 → 解除見込み</span></td></tr>
+          <tr><td>経済センサス（市区町村別の飲食店数）／家計調査（食肉への支出）</td><td>総務省統計局 e-Stat</td><td>顧客台帳の所在地・出荷先</td><td>飲食店が多いのに顧客がいないエリア＝営業先候補。出荷先の都道府県ごとの需要の大きさ。</td><td><span class="badge badge-gold">一部（顧客の分布のみ）</span></td></tr>
+          <tr><td>食肉の卸売価格（豚肉・牛肉の月別相場）</td><td>農林水産省（食肉流通統計）・日本食肉流通センター</td><td>部位別の販売単価・売上</td><td>ジビエの値付けが相場とどう動いているか、値上げ・値下げの根拠。</td><td><span class="badge badge-green">取込済（alic 月別）</span></td></tr>
         </tbody>
       </table>
       </div>
