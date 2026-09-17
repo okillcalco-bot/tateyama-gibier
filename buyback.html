@@ -180,7 +180,8 @@ tr:last-child td { border-bottom:none; }
         <div class="muted" id="rulesState"></div></div>
       <div class="note" style="margin-bottom:14px">
         <b>式</b>：買取価格 ＝ 体重（kg・切り捨て）× 単価 × 歩留まり係数 − 現場引取（あれば）。0円が下限（差額の請求はしない）。<br>
-        イノシシ・メスは肉ランク（脂の厚み）で単価が変わり、オスは一律。歩留まり率 ＝ 精肉した肉の重量 ÷ 体重（精肉登録から自動計算）。<br>
+        イノシシ・メスは肉ランク（脂の厚み）で単価が変わり、オスは一律。歩留まり率 ＝ 精肉した肉の重量 ÷ 体重（精肉登録から自動計算。<b>ペットフード用（あり・なし）・内臓・骨は肉の重量に入れない</b>）。<br>
+        ランクは個体に紐付く（受入時の肉ランク）。精肉で部位ごとに違うランクが付いたときは<b>一番多いランク</b>で計算し、下の注意欄に誰がいつ付けたかを出す。<br>
         シカは一律単価 × 歩留まり係数。中型獣（キョン・アライグマ・ハクビシン・タヌキ・ノウサギ）は1頭いくら。
       </div>
       <div class="rule-grid" id="rulesForm"></div>
@@ -282,7 +283,7 @@ function calcOne(rules, ind, meatKg){
 }
 
 // ───────────── データ ─────────────
-const D = { inds:[], meat:{}, hunters:{}, result:null, run:null };
+const D = { inds:[], meat:{}, grades:{}, hunters:{}, result:null, run:null };
 function periodDates(){
   const y = parseInt(document.getElementById('fYear').value,10), h = document.getElementById('fHalf').value;
   const g = 2018 + y;   // 令和y年 = 西暦 2018+y
@@ -311,15 +312,40 @@ async function init(){
 async function loadPeriod(from, to){
   const inds = await sb('individuals', `?select=id,label_id,species,capture_date,capture_city,capture_area,hunter_name,purchase_payee,sex,weight_total,meat_rank,yield_rate,stopkill_pickup,intake_method,processing_done_at,buyback_amount&deleted_at=is.null&capture_date=gte.${from}&capture_date=lte.${to}&order=capture_date.asc,label_id.asc&limit=5000`);
   const list = inds.filter(i => i.label_id && /^TGC-\d{2}-/.test(i.label_id) && !/^TGC-TEST/.test(i.label_id));
-  const meat = {};
+  const meat = {}, grades = {};
   if (list.length) {
-    const inv = await sb('inventory', `?select=individual_id,weight,weight_kg&deleted_at=is.null&tier=eq.2&individual_id=not.is.null&limit=20000`);
-    inv.forEach(v => { meat[v.individual_id] = (meat[v.individual_id]||0) + (Number(v.weight != null ? v.weight : v.weight_kg)||0); });
+    const inv = await sb('inventory', `?select=individual_id,part_name,weight,weight_kg,grade,processed_by,operator,processed_at,created_at&deleted_at=is.null&tier=eq.2&individual_id=not.is.null&limit=20000`);
+    inv.forEach(v => {
+      if (isNonMeatPart(v.part_name)) return;   // ペットフード用（あり・なし）・内臓・骨は歩留まりに入れない（2026-09-18 沖）
+      meat[v.individual_id] = (meat[v.individual_id]||0) + (Number(v.weight != null ? v.weight : v.weight_kg)||0);
+      (grades[v.individual_id] || (grades[v.individual_id] = [])).push({ part: v.part_name, grade: v.grade || '並', by: v.processed_by || v.operator || '', at: (v.processed_at || v.created_at || '').slice(0,10) });
+    });
   }
-  return { list, meat };
+  return { list, meat, grades };
 }
-function compute(list, meat, rules, adjustments){
-  const items = list.map(i => Object.assign({ label:i.label_id, capture_date:i.capture_date, city:i.capture_city, area:i.capture_area, hunter:i.hunter_name, payee:(i.purchase_payee||i.hunter_name||'（捕獲者未記入）').trim(), sex:i.sex, meat_rank:i.meat_rank, processing_done_at:i.processing_done_at }, calcOne(rules, i, meat[i.label_id]||0)));
+// 歩留まりに入れない部位: ペットフード用（あり・なし）/ PFあり・PFナシ / 内臓 / 骨（骨付き肉は肉なので入れる）
+function isNonMeatPart(name){ const n = String(name||''); return /ペットフード|^PF|内臓|^骨$|^骨（|^骨\(|ガラ/.test(n); }
+// 個体のランク: 部位ごとのランクで一番多いもの（同数なら受入時の肉ランク、それも無ければ低い方）。
+// 上・極上は個体に紐付くもので後付けでは変わらない前提だが、部位だけ上にすることもあるので多数決にする（2026-09-18 沖）
+const RANK_ORDER = { '並':0, '上':1, '極上':2 };
+function rankOfParts(parts, intakeRank){
+  if (!parts || !parts.length) return null;
+  const cnt = {}; parts.forEach(p => { cnt[p.grade] = (cnt[p.grade]||0) + 1; });
+  const max = Math.max(...Object.values(cnt)); const top = Object.keys(cnt).filter(k => cnt[k] === max);
+  if (top.length === 1) return top[0];
+  if (intakeRank && top.includes(intakeRank)) return intakeRank;
+  return top.sort((a,b)=>(RANK_ORDER[a]??0)-(RANK_ORDER[b]??0))[0];
+}
+function compute(list, meat, rules, adjustments, grades){
+  grades = grades || D.grades || {};
+  const items = list.map(i => {
+    const parts = grades[i.label_id] || [];
+    const partRank = rankOfParts(parts, i.meat_rank);
+    const rankUsed = i.species === 'イノシシ' ? (partRank || i.meat_rank || null) : null;
+    const changed = parts.filter(p => p.grade !== (i.meat_rank || '並'));
+    return Object.assign({ label:i.label_id, capture_date:i.capture_date, city:i.capture_city, area:i.capture_area, hunter:i.hunter_name, payee:(i.purchase_payee||i.hunter_name||'（捕獲者未記入）').trim(), sex:i.sex, meat_rank:i.meat_rank, part_rank:partRank, rank_changed:changed, processing_done_at:i.processing_done_at },
+      calcOne(rules, Object.assign({}, i, { meat_rank: rankUsed || i.meat_rank }), meat[i.label_id]||0));
+  });
   const byPayee = {};
   items.forEach(it => { const p = byPayee[it.payee] || (byPayee[it.payee] = { payee:it.payee, items:[], heads:0, boar:0, other:0, pickups:0, pending:0, total:0, adjust:0, adjust_note:'' }); p.items.push(it); p.heads++; if (it.pickup) p.pickups++; if (it.pending) p.pending++; else { if (it.species==='イノシシ') p.boar += it.price||0; else p.other += it.price||0; p.total += it.price||0; } });
   Object.values(byPayee).forEach(p => { const a = (adjustments||{})[p.payee]; if (a) { p.adjust = Number(a.amount)||0; p.adjust_note = a.note||''; } p.pay = Math.max(0, p.total + p.adjust); const h = D.hunters[normName(p.payee)]; p.bank = h ? { no:h.payee_no, name:h.name, furigana:h.account_furigana||'', bank:h.bank_name||'', branch:h.bank_branch||'', type:h.account_type||'', number:h.account_number||'', holder:h.account_holder||'' } : null; });
@@ -333,8 +359,8 @@ async function runCalc(){
   if (!from || !to || from > to) { showStatus('error','期間を正しく指定してください'); return; }
   showStatus('loading', `📥 ${from}〜${to} の個体と精肉重量を読み込み中…`);
   try {
-    const { list, meat } = await loadPeriod(from, to);
-    D.inds = list; D.meat = meat;
+    const { list, meat, grades } = await loadPeriod(from, to);
+    D.inds = list; D.meat = meat; D.grades = grades;
     D.run = { period_key: periodKey(), fiscal_year: parseInt(document.getElementById('fYear').value,10), half: document.getElementById('fHalf').value==='H1'?'上半期':'下半期', from_date: from, to_date: to, adjustments: (D.run && D.run.period_key===periodKey() ? D.run.adjustments : {}) || {}, id: (D.run && D.run.period_key===periodKey() ? D.run.id : null), status: '未保存' };
     D.result = compute(list, meat, RULES, D.run.adjustments);
     renderAll();
@@ -364,6 +390,8 @@ function renderAll(){
   const small = r.items.filter(i=>/kg未満/.test(i.reason));
   const noHunter = r.items.filter(i=>i.payee==='（捕獲者未記入）');
   if (r.pending) warns.push(`<b>未確定 ${r.pending}頭</b>：${r.items.filter(i=>i.pending).slice(0,12).map(i=>i.label).join('、')}${r.pending>12?' ほか':''}（精肉が終わると金額が入ります）`);
+  const rankDiff = r.items.filter(i => i.species==='イノシシ' && i.rank_changed && i.rank_changed.length);
+  if (rankDiff.length) warns.push(`<b>精肉時に受入と違うランクが付いた個体 ${rankDiff.length}頭</b>（多数決でランクを決めています。押し間違えなら業務アプリで直してください）：` + rankDiff.slice(0,10).map(i => `${i.label}（受入 ${i.meat_rank||'未設定'} → 計算 ${i.rank}：${i.rank_changed.slice(0,4).map(p=>`${p.part} ${p.grade}${p.by?'／'+p.by:''}${p.at?' '+p.at:''}`).join('、')}${i.rank_changed.length>4?' ほか':''}）`).join('　') + (rankDiff.length>10?' ほか':''));
   if (noRank.length) warns.push(`<b>肉ランク未設定 ${noRank.length}頭</b>（並として計算）：${noRank.slice(0,8).map(i=>i.label).join('、')}${noRank.length>8?' ほか':''}`);
   if (noAcc.length) warns.push(`<b>口座が無い支払先 ${noAcc.length}人</b>：${noAcc.map(p=>p.payee).join('、')} → 業務アプリの捕獲者台帳で口座を登録してください`);
   if (small.length) warns.push(`<b>${RULES.boar.min_weight_kg}kg未満 ${small.length}頭</b>：${small.map(i=>i.label).join('、')}（受入条件の確認用。計算式どおりの金額を出しています）`);

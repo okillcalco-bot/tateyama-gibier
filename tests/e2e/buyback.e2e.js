@@ -19,7 +19,11 @@ const INDS = [
   { id:'i6', label_id:'TGC-08-シ001', species:'シカ', capture_date:'2026-08-01', capture_city:'館山市', capture_area:'神余', hunter_name:'山田千代子', purchase_payee:null, sex:'オス', weight_total:45.0, meat_rank:null, yield_rate:null, stopkill_pickup:false, intake_method:'搬入', processing_done_at:'2026-08-02T02:00:00Z', buyback_amount:null },
   { id:'i7', label_id:'TGC-TEST-1', species:'イノシシ', capture_date:'2026-08-01', hunter_name:'テスト', weight_total:30 },
 ];
-const INV = [ { individual_id:'TGC-08-T001', weight:6, weight_kg:6 }, { individual_id:'TGC-08-T001', weight:6, weight_kg:6 }, { individual_id:'TGC-08-T002', weight:8, weight_kg:8 }, { individual_id:'TGC-08-T004', weight:5, weight_kg:5 }, { individual_id:'TGC-08-シ001', weight:15, weight_kg:15 } ];
+// 2026-09-18: ペットフード用・内臓・骨は歩留まりに入れない。部位ごとのランクは多数決（T001 は 極上2・上1 → 極上のまま、バラを上にした人が警告に出る）
+const INV = [ { individual_id:'TGC-08-T001', part_name:'ヒレ', grade:'極上', weight:6, weight_kg:6, processed_by:'石田' }, { individual_id:'TGC-08-T001', part_name:'ロース', grade:'極上', weight:6, weight_kg:6, processed_by:'石田' },
+  { individual_id:'TGC-08-T001', part_name:'ペットフード用（あり）', grade:'極上', weight:10, weight_kg:10 }, { individual_id:'TGC-08-T001', part_name:'骨', weight:5, weight_kg:5 }, { individual_id:'TGC-08-T001', part_name:'内臓', weight:3, weight_kg:3 },
+  { individual_id:'TGC-08-T001', part_name:'バラ', grade:'上', weight:0.001, weight_kg:0.001, processed_by:'山田', processed_at:'2026-04-06T02:00:00Z' },
+  { individual_id:'TGC-08-T002', weight:8, weight_kg:8 }, { individual_id:'TGC-08-T004', weight:5, weight_kg:5 }, { individual_id:'TGC-08-シ001', weight:15, weight_kg:15 } ];
 
 (async () => {
   const browser = await chromium.launch({ executablePath: process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
@@ -82,6 +86,10 @@ const INV = [ { individual_id:'TGC-08-T001', weight:6, weight_kg:6 }, { individu
   T('井上定男 = T001 12,000 + T002 0 + T004 840（支払先指定）= 12,840円', ui.rows.some(r => /井上定男/.test(r) && /¥12,840/.test(r) && /捕獲者: 井上定男・山田千代子/.test(r)), ui.rows.join(' | '));
   T('山田千代子 = キョン1,000 + シカ4,500 = 5,500円、T003は未確定', ui.rows.some(r => /山田千代子/.test(r) && /¥5,500/.test(r) && /未確定1/.test(r)), ui.rows.join(' | '));
   T('合計 ¥18,340、未確定1、支払先2（口座あり1／なし1）', ui.total === '¥18,340' && ui.pending === '1' && ui.payees === '2' && /口座あり 1／口座なし 1/.test(ui.payeesSub), JSON.stringify([ui.total, ui.pending, ui.payees, ui.payeesSub]));
+  const t1 = await page.evaluate(() => D.result.items.find(i => i.label === 'TGC-08-T001'));
+  T('歩留まり: ペットフード用・骨・内臓（18kg）は入れず 12.0kg → 30%', Math.round(t1.meat_kg*100)/100 === 12 && t1.yield_pct === 30, JSON.stringify([t1.meat_kg, t1.yield_pct]));
+  T('ランク: 部位の多数決（極上2・上1）→ 極上で 12,000円', t1.rank === '極上' && t1.price === 12000, JSON.stringify([t1.rank, t1.price]));
+  T('警告: バラだけ上にした人（山田・2026-04-06）が出る', /受入と違うランクが付いた個体 1頭/.test(ui.warn) && /TGC-08-T001/.test(ui.warn) && /バラ 上／山田 2026-04-06/.test(ui.warn), ui.warn.slice(0, 300));
   T('警告: 未確定・口座なし（山田千代子）を隠さない', /未確定 1頭/.test(ui.warn) && /TGC-08-T003/.test(ui.warn) && /口座が無い支払先 1人/.test(ui.warn) && /山田千代子/.test(ui.warn), ui.warn.slice(0, 200));
   T('状態: 未確定があると警告表示', /warn|未確定/.test(ui.st), ui.st.slice(0, 100));
   T('受入頭数（別紙1用）: イノシシ4（館山市3・南房総市1）・キョン1・シカ1', /イノシシ ?3 ?1 ?4/.test(ui.summary.replace(/[^\dイノシシキョンシカ館山市南房総合計 ]/g,'')) || (/イノシシ/.test(ui.summary) && /南房総市/.test(ui.summary)), ui.summary.slice(0, 160));
