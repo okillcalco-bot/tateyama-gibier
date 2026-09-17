@@ -53,8 +53,10 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   await fire(85, 0); await page.waitForTimeout(50);
   T('手動で「📐」を押した直後は自動で上書きしない', (await state()).rot === 90, String((await state()).rot));
 
-  // 保存画像は横向き（canvasが横長）になる
-  await page.evaluate(() => { const v = document.getElementById('arVideo'); Object.defineProperty(v, 'videoWidth', { value: 640 }); Object.defineProperty(v, 'videoHeight', { value: 480 }); window.__saved = null; arSaveToDevice = async () => 'downloaded'; arUploadPhoto = async () => null; });
+  // 保存画像は横向き（canvasが横長）になる。
+  // 実機（iPhone・回転ロック）のカメラ映像は縦長（480×640）で届き、横に構えると映像が横倒しになる。
+  // それを ±90°回して保存するので、縦長の映像 → 横長の保存画像。2026-09-17: 保存は映像の枠だけ（黒帯なし）
+  await page.evaluate(() => { const v = document.getElementById('arVideo'); Object.defineProperty(v, 'videoWidth', { value: 480 }); Object.defineProperty(v, 'videoHeight', { value: 640 }); window.__saved = null; arSaveToDevice = async () => 'downloaded'; arUploadPhoto = async () => null; });
   await page.evaluate(() => arCapture());
   await page.waitForTimeout(300);
   const cv = await page.evaluate(() => { const c = document.getElementById('arCanvas'); return { w: c.width, h: c.height }; });
