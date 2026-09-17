@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>館山ジビエセンター － 過年度（令和3年度〜）の捕獲個体と年度比較</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Barlow+Condensed:wght@400;600;700&display=swap');
+:root {
+  --bg:#0f1117; --surface:#1a1e2a; --surface2:#222736; --border:#2e3447;
+  --accent:#e8a44a; --accent2:#c06a2a; --green:#4caf7d; --red:#e05555; --blue:#5a8cd8; --yellow:#f0c040; --purple:#9b7fd4;
+  --text:#e8eaf0; --text2:#8b90a8; --radius:10px;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--text); font-family:'Noto Sans JP',sans-serif; font-size:14px; min-height:100vh; }
+.header { background:var(--surface); border-bottom:2px solid var(--accent); padding:14px 20px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; flex-wrap:wrap; gap:10px; }
+.header-title { font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:700; color:var(--accent); letter-spacing:.05em; }
+.header-sub { font-size:11px; color:var(--text2); margin-top:2px; }
+.nav-links { display:flex; gap:8px; flex-wrap:wrap; }
+.nav-link { background:var(--surface2); border:1px solid var(--border); color:var(--text2); padding:6px 12px; border-radius:6px; text-decoration:none; font-size:12px; }
+.nav-link:hover { color:var(--accent); border-color:var(--accent); }
+.filter-bar { background:var(--surface); border-bottom:1px solid var(--border); padding:12px 20px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.filter-group { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.filter-label { font-size:12px; color:var(--text2); white-space:nowrap; }
+select, input[type="text"] { background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:6px; font-size:13px; font-family:inherit; color-scheme:dark; }
+.chip { padding:5px 11px; border-radius:999px; border:1px solid var(--border); background:var(--surface2); color:var(--text2); cursor:pointer; font-size:12px; font-family:inherit; }
+.chip.on { background:var(--accent); color:#000; border-color:var(--accent); font-weight:600; }
+.btn { padding:7px 16px; border-radius:6px; border:none; cursor:pointer; font-size:13px; font-family:inherit; font-weight:500; }
+.btn:disabled { opacity:.5; cursor:default; }
+.btn-accent { background:var(--accent); color:#000; }
+.btn-secondary { background:var(--surface2); color:var(--text2); border:1px solid var(--border); }
+.btn-sm { padding:4px 10px; font-size:12px; }
+.main { padding:20px; max-width:1400px; margin:0 auto; }
+.status-bar { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px 16px; margin-bottom:16px; font-size:13px; display:none; white-space:pre-wrap; }
+.status-bar.info { border-color:var(--blue); color:var(--blue); display:block; }
+.status-bar.error { border-color:var(--red); color:var(--red); display:block; }
+.status-bar.loading { border-color:var(--accent); color:var(--accent); display:block; }
+.status-bar.warn { border-color:var(--yellow); color:var(--yellow); display:block; }
+.charts-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:20px; }
+.chart-full { grid-column:1 / -1; }
+.chart-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px; }
+.chart-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; gap:10px; flex-wrap:wrap; }
+.chart-title { font-size:14px; font-weight:500; }
+.chart-subtitle { font-size:11px; color:var(--text2); margin-top:2px; line-height:1.5; }
+.chart-wrap { position:relative; height:260px; }
+table { width:100%; border-collapse:collapse; }
+th { padding:8px 10px; text-align:left; font-size:11px; color:var(--text2); font-weight:500; letter-spacing:.04em; border-bottom:1px solid var(--border); background:var(--surface2); white-space:nowrap; }
+td { padding:7px 10px; border-bottom:1px solid var(--border); font-size:13px; }
+tr:last-child td { border-bottom:none; }
+.td-num { text-align:right; font-variant-numeric:tabular-nums; font-family:'Barlow Condensed',sans-serif; font-size:15px; }
+.muted { color:var(--text2); font-size:12px; }
+.tag { display:inline-block; padding:1px 7px; border-radius:4px; font-size:11px; background:rgba(232,164,74,.15); color:var(--accent); margin-right:4px; }
+.bar-line { height:10px; border-radius:3px; background:rgba(232,164,74,.85); display:inline-block; vertical-align:middle; }
+.note { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:14px 18px; font-size:12.5px; line-height:1.8; color:var(--text2); margin-bottom:20px; }
+.note b { color:var(--text); }
+.up { color:var(--green); } .down { color:var(--red); }
+@media (max-width:1000px) { .charts-grid { grid-template-columns:1fr; } .chart-full { grid-column:1; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <div class="header-title">🐗 TATEYAMA GIBIER</div>
+    <div class="header-sub">過年度 ― 令和3年度からの捕獲個体を同じ形で見る・年度で比べる</div>
+  </div>
+  <div class="nav-links">
+    <a href="index.html?tab=analysis" class="nav-link">📈 解析一覧</a>
+    <a href="buyback.html" class="nav-link">💴 買取金額通知</a>
+    <a href="catch-analysis.html" class="nav-link">🌙 捕獲条件分析</a>
+    <a href="index.html" class="nav-link">📦 業務アプリ</a>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <div class="filter-group"><span class="filter-label">年度</span><span id="yearChips"></span></div>
+  <div class="filter-group"><span class="filter-label">獣種</span><select id="fSpecies"><option value="イノシシ">イノシシ</option><option value="">すべて</option></select></div>
+  <div class="filter-group"><span class="filter-label">市</span><select id="fCity"><option value="">すべて</option></select></div>
+  <div class="filter-group"><span class="filter-label">半期</span><select id="fHalf"><option value="">通年</option><option value="上半期">上半期</option><option value="下半期">下半期</option></select></div>
+  <button class="btn btn-accent" onclick="render()">🔍 表示</button>
+  <button class="btn btn-secondary" onclick="downloadCsv()" id="btnCsv" disabled>⬇ 個体CSV</button>
+  <span class="muted" id="lastUpdated" style="margin-left:auto"></span>
+</div>
+
+<div class="main">
+  <div id="statusBar" class="status-bar"></div>
+
+  <div class="chart-card chart-full" style="margin-bottom:20px">
+    <div class="chart-header"><div><div class="chart-title">📅 年度ごとの実績</div>
+      <div class="chart-subtitle">令和3〜7年度は台帳スプレッドシート（生データ・イノシシ以外データ）から取り込んだもの、令和8年度以降は業務アプリの個体。矢印は前年度比。</div></div></div>
+    <div id="yearBox" class="muted" style="overflow-x:auto">読み込み中…</div>
+  </div>
+
+  <div class="charts-grid" id="chartsGrid"></div>
+
+  <div class="chart-card chart-full" style="margin-bottom:20px">
+    <div class="chart-header"><div><div class="chart-title">🏹 捕獲者（選んだ年度・獣種）</div>
+      <div class="chart-subtitle">頭数の多い順。年度ごとの頭数と買取額（台帳の買取価格／業務アプリの買取価格）。</div></div></div>
+    <div id="hunterBox" class="muted" style="overflow-x:auto">—</div>
+  </div>
+
+  <div class="chart-card chart-full" style="margin-bottom:20px">
+    <div class="chart-header"><div><div class="chart-title">📍 捕獲地区（選んだ年度・獣種）</div>
+      <div class="chart-subtitle">地区ごとの頭数の推移。増えている地区・減っている地区が分かります。</div></div></div>
+    <div id="areaBox" class="muted" style="overflow-x:auto">—</div>
+  </div>
+
+  <div class="chart-card chart-full" style="margin-bottom:20px">
+    <div class="chart-header"><div><div class="chart-title">🔎 個体一覧</div>
+      <div class="chart-subtitle">番号・捕獲者・地区で絞り込めます（先頭200件）。CSVは全件。</div></div>
+      <input type="text" id="q" placeholder="番号・捕獲者・地区で検索" oninput="renderList()" style="width:260px"></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>個体管理番号</th><th>年度</th><th>半期</th><th>種類</th><th>捕獲日</th><th>捕獲者</th><th>市</th><th>地区</th><th>方法</th><th>性別</th><th class="td-num">体重</th><th>肉ランク</th><th>歩留まり</th><th class="td-num">買取</th><th>引取</th></tr></thead>
+      <tbody id="listBody"></tbody></table></div>
+  </div>
+
+  <div class="note">
+    <b>取込元</b>：令和3年度＝台帳 Excel（118頭・12月開業〜3月）、令和4年度〜7年度＝Google スプレッドシートの台帳（DB から直接読める）。令和8年度＝業務アプリ。
+    台帳を直したら「台帳から再取込」で上書きされます（個体管理番号がキー）。令和7年度の「出荷・販売台帳」は部位ごとの精肉重量として取り込んであります（sales_history）。
+    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <select id="reYear"><option value="4">令和4年度</option><option value="5">令和5年度</option><option value="6">令和6年度</option><option value="7" selected>令和7年度</option></select>
+      <button class="btn btn-secondary btn-sm" onclick="reimport()">🔄 台帳から再取込</button>
+      <span class="muted" id="reMsg"></span>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+const LEDGER_SHEETS = { 4:'1swAW33rFAbSUMrqKCYjy9uVR8yxw65-VHxd_U9-SZWc', 5:'11Gn0zYo-uDM_JWvHW1BCTwYAPW_40FHUnVHLm8XBSV4', 6:'1z_n8wvLAWOtQV9UQLO7XKUnWPczZ_y0hCXyTGQC2Djo', 7:'1bVmQVbGqNhdDnWaA4pfzLPCTEWGD5eNhMF6RyFDx0Ck' };
+const COLORS = ['#8b90a8','#5a8cd8','#4caf7d','#9b7fd4','#f0c040','#e8a44a','#e05555','#3fbfbf'];
+
+function staffKeyGet(){ try { return localStorage.getItem('tg_staff_key') || sessionStorage.getItem('tg_staff_key') || ''; } catch(e){ return ''; } }
+async function sb(table, query='', method='GET', body=null){
+  const headers = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` };
+  const sk = staffKeyGet(); if (sk) headers['x-staff-key'] = sk;
+  if (body) headers['Content-Type'] = 'application/json';
+  const res = await fetch(`${SB_URL}/rest/v1/${table}${query}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  if (!res.ok) throw new Error(`${table}: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
+  const t = await res.text(); return t ? JSON.parse(t) : [];
+}
+function showStatus(type, msg){ const el=document.getElementById('statusBar'); el.className='status-bar '+type; el.textContent=msg; if(!type){ el.style.display='none'; } }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function yen(n){ return '¥' + Math.round(Number(n)||0).toLocaleString(); }
+function fy(y){ return '令和' + y; }
+function delta(cur, prev, fmt){ if (prev == null || cur == null || prev === 0) return ''; const d = cur - prev; const pct = Math.round(d / prev * 100); return `<span class="${d>=0?'up':'down'}" style="font-size:11px"> ${d>=0?'▲':'▼'}${fmt?fmt(Math.abs(d)):Math.abs(d)}（${pct>=0?'+':''}${pct}%）</span>`; }
+
+const D = { all:[], years:[], sel:new Set() };
+let charts = {};
+
+async function load(){
+  showStatus('loading','📥 過年度と今年度の個体を読み込み中…');
+  try {
+    const rows = await sb('v_individuals_all', '?select=label_id,fiscal_year,half,species,capture_date,capture_method,city,area,hunter_name,sex,weight,meat_rank,yield_rank,yield_pct,buyback,pickup,src&order=fiscal_year.asc,capture_date.asc&limit=20000');
+    D.all = rows.map(r => Object.assign(r, { weight: r.weight != null ? Number(r.weight) : null, buyback: r.buyback != null ? Number(r.buyback) : null, month: r.capture_date ? Number(r.capture_date.slice(5,7)) : null }));
+    D.years = [...new Set(D.all.map(r => r.fiscal_year))].sort((a,b)=>a-b);
+    D.sel = new Set(D.years);
+    document.getElementById('yearChips').innerHTML = D.years.map(y => `<button class="chip on" data-y="${y}" onclick="toggleYear(${y})">${fy(y)}</button>`).join('');
+    const cities = [...new Set(D.all.map(r => r.city).filter(Boolean))].sort();
+    document.getElementById('fCity').innerHTML = '<option value="">すべて</option>' + cities.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    const sp = [...new Set(D.all.map(r => r.species).filter(Boolean))];
+    document.getElementById('fSpecies').innerHTML = '<option value="イノシシ">イノシシ</option><option value="">すべて</option>' + sp.filter(s=>s!=='イノシシ').sort().map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    document.getElementById('btnCsv').disabled = false;
+    showStatus('', ''); render();
+  } catch(e) { showStatus('error', '読み込めませんでした: ' + (e.message||e)); }
+}
+function toggleYear(y){ if (D.sel.has(y)) D.sel.delete(y); else D.sel.add(y); document.querySelectorAll('#yearChips .chip').forEach(c => c.classList.toggle('on', D.sel.has(Number(c.dataset.y)))); render(); }
+function filtered(){
+  const sp = document.getElementById('fSpecies').value, city = document.getElementById('fCity').value, half = document.getElementById('fHalf').value;
+  return D.all.filter(r => D.sel.has(r.fiscal_year) && (!sp || r.species === sp) && (!city || r.city === city) && (!half || r.half === half));
+}
+function stats(rows){
+  const n = rows.length; const boar = rows.filter(r => r.species === 'イノシシ');
+  const w = boar.filter(r => r.weight > 0);
+  const female = boar.filter(r => r.sex === 'メス').length;
+  const bb = rows.filter(r => r.buyback != null);
+  const ranks = {}; boar.forEach(r => { if (r.meat_rank) ranks[r.meat_rank] = (ranks[r.meat_rank]||0)+1; });
+  const yr = {}; boar.forEach(r => { if (r.yield_rank) yr[r.yield_rank] = (yr[r.yield_rank]||0)+1; });
+  return { n, boar: boar.length, h1: rows.filter(r=>r.half==='上半期').length, h2: rows.filter(r=>r.half==='下半期').length,
+    avgW: w.length ? w.reduce((s,r)=>s+r.weight,0)/w.length : null, femalePct: boar.length ? female/boar.length*100 : null,
+    buyback: bb.reduce((s,r)=>s+r.buyback,0), buybackN: bb.length, avgBuy: bb.length ? bb.reduce((s,r)=>s+r.buyback,0)/bb.length : null,
+    pickupPct: n ? rows.filter(r=>r.pickup).length/n*100 : null, hunters: new Set(rows.map(r=>r.hunter_name).filter(Boolean)).size, areas: new Set(rows.map(r=>r.area).filter(Boolean)).size,
+    ranks, yr, species: rows.reduce((m,r)=>{ m[r.species]=(m[r.species]||0)+1; return m; }, {}) };
+}
+function render(){
+  const rows = filtered(); const years = D.years.filter(y => D.sel.has(y));
+  const st = {}; years.forEach(y => { st[y] = stats(rows.filter(r => r.fiscal_year === y)); });
+  // 年度表
+  const f1 = v => v == null ? '—' : v.toFixed(1);
+  const cols = [
+    ['頭数', y => st[y].n, (y,p) => delta(st[y].n, p && st[p].n)],
+    ['うちイノシシ', y => st[y].boar, (y,p) => delta(st[y].boar, p && st[p].boar)],
+    ['上半期 / 下半期', y => `${st[y].h1} / ${st[y].h2}`],
+    ['平均体重(kg)', y => f1(st[y].avgW), (y,p) => delta(st[y].avgW, p && st[p].avgW, v=>v.toFixed(1))],
+    ['メス比', y => st[y].femalePct==null?'—':Math.round(st[y].femalePct)+'%'],
+    ['買取合計', y => yen(st[y].buyback) + (st[y].buybackN < st[y].n ? `<br><span class="muted">${st[y].buybackN}頭分</span>` : ''), (y,p) => delta(st[y].buyback, p && st[p].buyback, yen)],
+    ['平均買取/頭', y => st[y].avgBuy==null?'—':yen(st[y].avgBuy)],
+    ['引取率', y => st[y].pickupPct==null?'—':Math.round(st[y].pickupPct)+'%'],
+    ['捕獲者数', y => st[y].hunters],
+    ['地区数', y => st[y].areas],
+    ['肉ランク（並/上/極上）', y => `${st[y].ranks['並']||0} / ${st[y].ranks['上']||0} / ${st[y].ranks['極上']||0}`],
+    ['歩留まり（A/B/C/D）', y => Object.keys(st[y].yr).length ? `${st[y].yr['A']||0} / ${st[y].yr['B']||0} / ${st[y].yr['C']||0} / ${st[y].yr['D']||0}` : '<span class="muted">記録なし</span>'],
+  ];
+  document.getElementById('yearBox').innerHTML = years.length ? `<table><thead><tr><th></th>${years.map(y=>`<th class="td-num">${fy(y)}年度${y===Math.max(...D.years)?'<br><span class="muted">（進行中）</span>':''}</th>`).join('')}</tr></thead><tbody>
+    ${cols.map(([label, get, dl]) => `<tr><td>${label}</td>${years.map((y,i) => `<td class="td-num">${get(y)}${dl ? dl(y, i ? years[i-1] : null) : ''}</td>`).join('')}</tr>`).join('')}</tbody></table>` : '<span class="muted">年度を選んでください</span>';
+  // グラフ
+  Object.values(charts).forEach(c => { try { c.destroy(); } catch(e) {} }); charts = {};
+  const grid = document.getElementById('chartsGrid'); grid.innerHTML = '';
+  const card = (key, title, sub, labels, datasets, opts) => {
+    const id = 'ch_' + key;
+    grid.insertAdjacentHTML('beforeend', `<div class="chart-card${opts&&opts.full?' chart-full':''}"><div class="chart-header"><div><div class="chart-title">${title}</div><div class="chart-subtitle">${sub}</div></div></div><div class="chart-wrap"><canvas id="${id}"></canvas></div></div>`);
+    if (!labels.length) { document.getElementById(id).parentElement.innerHTML = '<span class="muted">データがありません</span>'; return; }
+    if (typeof Chart === 'undefined') {
+      const wrap = document.getElementById(id).parentElement; wrap.style.height = 'auto';
+      const mx = Math.max(0.01, ...datasets.flatMap(d => d.data));
+      wrap.innerHTML = `<table class="fallback-bars">${labels.map((l,i)=>`<tr><td style="white-space:nowrap;padding:3px 6px;font-size:12px;color:var(--text2)">${esc(l)}</td><td style="width:100%;padding:3px 6px">${datasets.map(d=>`<div><span class="bar-line" style="width:${(d.data[i]/mx*100).toFixed(1)}%;background:${d.backgroundColor||d.borderColor}"></span> <span class="td-num">${d.data[i]}</span> <span class="muted">${esc(d.label)}</span></div>`).join('')}</td></tr>`).join('')}</table>`;
+      return;
+    }
+    charts[key] = new Chart(document.getElementById(id).getContext('2d'), { type: (opts && opts.type) || 'bar', data: { labels, datasets }, options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display: datasets.length > 1, labels:{ color:'#8b90a8' } } }, scales:{ x:{ stacked: !!(opts&&opts.stacked), ticks:{ color:'#8b90a8', font:{size:10} }, grid:{display:false} }, y:{ stacked: !!(opts&&opts.stacked), beginAtZero:true, ticks:{color:'#8b90a8'}, grid:{color:'#2e3447'} } } } });
+  };
+  // 1) 年度別頭数（獣種積み上げ）
+  const allSp = [...new Set(rows.map(r=>r.species))].sort((a,b)=> (b==='イノシシ') - (a==='イノシシ') || a.localeCompare(b,'ja'));
+  card('years', '📅 年度別の頭数（獣種）', '棒＝頭数。イノシシ以外は令和4年度から台帳に記録。', years.map(y=>fy(y)+'年度'), allSp.map((s,i)=>({ label:s, data: years.map(y=>st[y].species[s]||0), backgroundColor: COLORS[(i+5)%COLORS.length] })), { stacked:true });
+  // 2) 月別（年度ごとの線）
+  const months = [4,5,6,7,8,9,10,11,12,1,2,3];
+  card('month', '🗓 月別の頭数（年度ごと）', '4月始まり。年度ごとの山の位置が比べられます。', months.map(m=>m+'月'), years.map((y,i)=>({ label:fy(y), data: months.map(m => rows.filter(r=>r.fiscal_year===y && r.month===m).length), borderColor: COLORS[i%COLORS.length], backgroundColor: COLORS[i%COLORS.length], fill:false, tension:.2, pointRadius:2 })), { type:'line' });
+  // 3) 体重分布（イノシシ）
+  const bands = [[0,20,'〜20'],[20,30,'20〜30'],[30,40,'30〜40'],[40,50,'40〜50'],[50,60,'50〜60'],[60,80,'60〜80'],[80,999,'80〜']];
+  card('weight', '⚖ 体重の分布（イノシシ・kg）', '年度ごとの頭数。小さい個体が増えていないか、大物が減っていないか。', bands.map(b=>b[2]), years.map((y,i)=>({ label:fy(y), data: bands.map(b => rows.filter(r=>r.fiscal_year===y && r.species==='イノシシ' && r.weight>=b[0] && r.weight<b[1]).length), backgroundColor: COLORS[i%COLORS.length] })));
+  // 4) 捕獲方法
+  const methods = [...new Set(rows.map(r=>r.capture_method).filter(Boolean))].sort();
+  card('method', '🪤 捕獲方法', 'くくり罠（括り）・箱罠（檻）・銃 など。', methods, years.map((y,i)=>({ label:fy(y), data: methods.map(m => rows.filter(r=>r.fiscal_year===y && r.capture_method===m).length), backgroundColor: COLORS[i%COLORS.length] })));
+  // 捕獲者
+  const hunters = {}; rows.forEach(r => { const h = r.hunter_name || '（未記入）'; const o = hunters[h] || (hunters[h] = { name:h, total:0, buy:0, by:{} }); o.total++; o.buy += r.buyback||0; o.by[r.fiscal_year] = (o.by[r.fiscal_year]||0)+1; });
+  const hl = Object.values(hunters).sort((a,b)=>b.total-a.total).slice(0,30);
+  document.getElementById('hunterBox').innerHTML = hl.length ? `<table><thead><tr><th>#</th><th>捕獲者</th>${years.map(y=>`<th class="td-num">${fy(y)}</th>`).join('')}<th class="td-num">合計</th><th class="td-num">買取額（記録分）</th></tr></thead><tbody>${hl.map((h,i)=>`<tr><td>${i+1}</td><td>${esc(h.name)}</td>${years.map(y=>`<td class="td-num">${h.by[y]||''}</td>`).join('')}<td class="td-num"><b>${h.total}</b></td><td class="td-num">${yen(h.buy)}</td></tr>`).join('')}</tbody></table><div class="muted" style="margin-top:6px">上位30人。捕獲者は全体で ${Object.keys(hunters).length}人。</div>` : '—';
+  // 地区
+  const areas = {}; rows.forEach(r => { const a = (r.city||'') + ' ' + (r.area||'（不明）'); const o = areas[a] || (areas[a] = { name:a, total:0, by:{} }); o.total++; o.by[r.fiscal_year] = (o.by[r.fiscal_year]||0)+1; });
+  const al = Object.values(areas).sort((a,b)=>b.total-a.total).slice(0,40);
+  document.getElementById('areaBox').innerHTML = al.length ? `<table><thead><tr><th>#</th><th>地区</th>${years.map(y=>`<th class="td-num">${fy(y)}</th>`).join('')}<th class="td-num">合計</th><th>推移</th></tr></thead><tbody>${al.map((a,i)=>{ const last = years.length>1 ? [a.by[years[years.length-2]]||0, a.by[years[years.length-1]]||0] : null; return `<tr><td>${i+1}</td><td>${esc(a.name)}</td>${years.map(y=>`<td class="td-num">${a.by[y]||''}</td>`).join('')}<td class="td-num"><b>${a.total}</b></td><td>${last ? delta(last[1], last[0]) : ''}</td></tr>`; }).join('')}</tbody></table><div class="muted" style="margin-top:6px">上位40地区。地区は全体で ${Object.keys(areas).length}。推移は最後の2年度の比較。</div>` : '—';
+  renderList();
+  document.getElementById('lastUpdated').textContent = `${rows.length}頭を表示（${new Date().toLocaleTimeString('ja-JP')}）`;
+}
+function renderList(){
+  const q = (document.getElementById('q').value || '').trim();
+  const rows = filtered().filter(r => !q || [r.label_id, r.hunter_name, r.area, r.city].some(v => v && String(v).includes(q))).slice().sort((a,b)=> (b.capture_date||'').localeCompare(a.capture_date||''));
+  document.getElementById('listBody').innerHTML = rows.slice(0,200).map(r => `<tr><td>${esc(r.label_id)}</td><td>${fy(r.fiscal_year)}</td><td>${esc(r.half||'')}</td><td>${esc(r.species)}</td><td>${esc(r.capture_date||'')}</td><td>${esc(r.hunter_name||'')}</td><td>${esc(r.city||'')}</td><td>${esc(r.area||'')}</td><td>${esc(r.capture_method||'')}</td><td>${esc(r.sex||'')}</td><td class="td-num">${r.weight!=null?r.weight.toFixed(1):''}</td><td>${esc(r.meat_rank||'')}</td><td>${esc(r.yield_rank||(r.yield_pct!=null?Number(r.yield_pct).toFixed(1)+'%':''))}</td><td class="td-num">${r.buyback!=null?yen(r.buyback):''}</td><td>${r.pickup?'引取':''}</td></tr>`).join('') || '<tr><td colspan="15" class="muted">該当なし</td></tr>';
+}
+function downloadCsv(){
+  const rows = filtered();
+  const head = ['個体管理番号','年度','半期','種類','捕獲日','捕獲者','市','地区','捕獲方法','性別','体重','肉ランク','歩留まりランク','歩留まり率','買取価格','引取','出所'];
+  const q = x => { const s = x==null?'':String(x); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
+  const csv = '﻿' + [head.join(',')].concat(rows.map(r => [r.label_id,'令和'+r.fiscal_year,r.half,r.species,r.capture_date,r.hunter_name,r.city,r.area,r.capture_method,r.sex,r.weight,r.meat_rank,r.yield_rank,r.yield_pct,r.buyback,r.pickup?'引取':'',r.src==='history'?'台帳':'業務アプリ'].map(q).join(','))).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download = `捕獲個体_過年度_${[...D.sel].sort().map(y=>'R'+y).join('-')}.csv`; document.body.appendChild(a); a.click(); a.remove();
+}
+async function reimport(){
+  const y = Number(document.getElementById('reYear').value); const id = LEDGER_SHEETS[y]; const msg = document.getElementById('reMsg');
+  if (!id) { msg.textContent = 'この年度は再取込できません（Excel 原本）'; return; }
+  msg.textContent = `令和${y}年度の台帳を読み込み中…（1〜2分かかります）`;
+  try {
+    const r = await sb('rpc/tgc_import_ledger', '', 'POST', { p_year: y, p_sheet_id: id });
+    msg.textContent = `✅ 令和${y}年度: ${r.imported}件を取り込みました（${Object.entries(r.sheets||{}).map(([k,v])=>k+' '+v).join('・')}）`;
+    await load();
+  } catch(e) { msg.textContent = '⚠ 取込に失敗: ' + (e.message||e); }
+}
+load();
+</script>
+</body>
+</html>
