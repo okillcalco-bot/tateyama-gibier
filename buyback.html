@@ -72,6 +72,8 @@ tr:last-child td { border-bottom:none; }
 .rule-grid input { width:110px; }
 @media (max-width:1000px) { .kpi-row { grid-template-columns:repeat(2,1fr); } }
 </style>
+<script src="admin-gate.js"></script>
+<script>if(!window.adminGate){document.addEventListener("DOMContentLoaded",function(){document.body.innerHTML='<div style="padding:24px;font-family:sans-serif;">管理者確認の部品（admin-gate.js）を読み込めなかったため、このページは開けません。再読み込みしてください。 <a href="index.html">業務アプリへ戻る</a></div>';});}</script>
 </head>
 <body>
 
@@ -537,7 +539,7 @@ function printAnnouncement(){
      <table><thead><tr><th>歩留まりランク</th><th>歩留まり率</th><th>買取価格の割合</th></tr></thead><tbody>${yr}</tbody></table>
      <p>現場引取は1回${Number(rl.pickup_fee).toLocaleString()}円（止めさし込み）で、個体ごとに買取代金から天引きします。買取料金より引取額が上回る場合でも追加の請求はありません（0円に調整）。</p>`);
 }
-init();
+adminGate(init);
 </script>
 </body>
 </html>
