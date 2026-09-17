@@ -150,6 +150,14 @@ tr:last-child td { border-bottom:none; }
         <button class="btn btn-secondary" onclick="printAnnouncement()">📢 告知文（受入状況・買取価格表）を印刷</button>
         <span class="muted">通知書は支払先ごとに改ページ。明細が多い人は別紙が付きます。</span>
       </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <span style="font-weight:600">🏷 宛名ラベル</span>
+        <select id="lblTarget"><option value="payees">通知書と同じ支払先</option><option value="all">捕獲者台帳の全員</option></select>
+        <label>開始位置 <input type="number" id="lblStart" min="1" max="24" value="1" style="width:64px"> 枚目から</label>
+        <label><input type="checkbox" id="lblFrame"> 枠線（試し刷り用）</label>
+        <button class="btn btn-secondary" onclick="printAddressLabels()">🖨 宛名ラベルを印刷（コメリ KML-506・A4 24面）</button>
+        <span class="muted">住所・郵便番号は捕獲者台帳から。印刷ダイアログは余白「なし」・倍率100%で。</span>
+      </div>
     </div>
   </div>
 
@@ -292,7 +300,7 @@ async function init(){
   try {
     const [rules, hs] = await Promise.all([
       sb('app_settings','?key=eq.buyback_rules&select=value'),
-      sb('hunters','?select=id,name,furigana,bank_name,bank_branch,account_type,account_number,account_holder,account_furigana,payee_no,city&deleted_at=is.null&limit=1000'),
+      sb('hunters','?select=id,name,furigana,bank_name,bank_branch,account_type,account_number,account_holder,account_furigana,payee_no,city,address,postal_code&deleted_at=is.null&limit=1000'),
     ]);
     if (rules[0] && rules[0].value && rules[0].value.boar) { RULES = rules[0].value; rulesFromDb = true; }
     D.hunters = {}; hs.forEach(h => { D.hunters[normName(h.name)] = h; });
@@ -495,20 +503,30 @@ function printDoc(title, css, body){
   w.document.write(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>${esc(title)}</title><style>${css}</style></head><body>${body}<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script></body></html>`);
   w.document.close();
 }
-const NOTICE_CSS = `@page{size:A4;margin:22mm 20mm} body{font-family:"Noto Serif JP","Yu Mincho","Hiragino Mincho ProN",serif;font-size:11.5pt;color:#000;line-height:1.9} .pg{page-break-after:always} .pg:last-child{page-break-after:auto} h1{font-size:15pt;text-align:center;margin:0 0 14pt;letter-spacing:.1em} .r{text-align:right} .c{text-align:center} .greet{margin:10pt 0} .kiki{margin:16pt 0 8pt} .item{margin:4pt 0 4pt 2em} table{border-collapse:collapse;width:100%;font-size:9.5pt;margin-top:6pt;font-family:"Noto Sans JP","Yu Gothic",sans-serif} th,td{border:1px solid #333;padding:3pt 5pt} th{background:#eee;font-weight:600} .n{text-align:right} .tot td{font-weight:700;background:#f6f6f6} .sub{font-size:9pt;color:#333}`;
+/* 余白は用紙側(@page)と紙面側(.pg の padding)の両方で取る。印刷ダイアログで余白「なし」にされても
+   .pg の padding が残るので紙の端に文字が張り付かない（納品書 #309 と同じ考え方）。
+   文字は本文13pt・表10.5pt（以前は11.5pt・9.5pt。表は9列を1行に収めるため折り返し禁止）。別紙は22行ごとに手で改ページしているので、
+   ページの途中で表が割れて余白ゼロの行が出ることもない。 */
+const NOTICE_CSS = `@page{size:A4;margin:10mm} html,body{margin:0;padding:0} body{font-family:"Noto Serif JP","Yu Mincho","Hiragino Mincho ProN",serif;font-size:13pt;color:#000;line-height:1.75} .pg{box-sizing:border-box;padding:12mm 10mm 12mm;page-break-after:always} .pg:last-child{page-break-after:auto} h1{font-size:17pt;text-align:center;margin:0 0 12pt;letter-spacing:.1em} .r{text-align:right} .c{text-align:center} .greet{margin:8pt 0} .kiki{margin:12pt 0 6pt} .item{margin:4pt 0 4pt 2em} .name{margin:8pt 0 4pt;font-size:15pt} table{border-collapse:collapse;width:100%;font-size:10.5pt;line-height:1.4;margin-top:6pt;font-family:"Noto Sans JP","Yu Gothic",sans-serif;page-break-inside:avoid} th,td{border:1px solid #333;padding:4pt 5pt;white-space:nowrap} th{background:#eee;font-weight:600} .n{text-align:right} .tot td{font-weight:700;background:#f6f6f6} .sub{font-size:10pt;color:#333;line-height:1.6;margin-top:6pt}`;
+const NOTICE_INLINE_MAX = 5;    // この頭数までは通知書の本文に明細表を入れる（超えたら別紙）
+const NOTICE_ROWS_PER_SHEET = 22; // 別紙1枚あたりの明細行数（13pt/11pt で A4 に収まる実測値）
+function noticeRows(items){
+  return items.map(i=>`<tr><td>${esc(i.label)}</td><td>${esc(i.capture_date)}</td><td>${esc(i.species)}</td><td>${esc(i.sex||'')}</td><td class="n">${i.weight?i.weight.toFixed(1):''}</td><td>${i.species==='イノシシ'?esc(i.rank||''):''}</td><td>${i.yield_rank?esc(i.yield_rank):(i.pending?'未確定':'')}</td><td class="n">${i.pickup?'−'+Number(i.pickup_fee).toLocaleString():''}</td><td class="n">${i.pending?'—':Number(i.price).toLocaleString()}</td></tr>`).join('');
+}
+const NOTICE_THEAD = `<thead><tr><th>個体番号</th><th>捕獲日</th><th>種類</th><th>性別</th><th class="n">体重kg</th><th>肉ランク</th><th>歩留まり</th><th class="n">引取</th><th class="n">買取価格</th></tr></thead>`;
+const NOTICE_SUB = `<div class="sub">歩留まりランク A：3割以上（10割）／B：2割以上〜3割未満（5割）／C：1割以上〜2割未満（3割）／D：1割未満（買取不可）。現場引取は1回3,000円を個体ごとに天引き（0円が下限）。</div>`;
+function noticeTotalRows(p){
+  return `${p.adjust?`<tr><td colspan="8">調整 ${esc(p.adjust_note||'')}</td><td class="n">${p.adjust>0?'+':''}${Number(p.adjust).toLocaleString()}</td></tr>`:''}
+    <tr class="tot"><td colspan="8">合計（${p.items.length}頭）</td><td class="n">${Number(p.pay).toLocaleString()}</td></tr>`;
+}
 function noticeHtml(p, opts){
   const period = `${reiwa(D.run.fiscal_year)}${D.run.half}`;
   const items = p.items;
-  const table = `<table><thead><tr><th>個体管理番号</th><th>捕獲日</th><th>種類</th><th>性別</th><th class="n">体重(kg)</th><th>肉ランク</th><th>歩留まり</th><th class="n">引取</th><th class="n">買取価格</th></tr></thead><tbody>
-    ${items.map(i=>`<tr><td>${esc(i.label)}</td><td>${esc(i.capture_date)}</td><td>${esc(i.species)}</td><td>${esc(i.sex||'')}</td><td class="n">${i.weight?i.weight.toFixed(1):''}</td><td>${i.species==='イノシシ'?esc(i.rank||''):''}</td><td>${i.yield_rank?esc(i.yield_rank):(i.pending?'未確定':'')}</td><td class="n">${i.pickup?'−'+Number(i.pickup_fee).toLocaleString():''}</td><td class="n">${i.pending?'—':Number(i.price).toLocaleString()}</td></tr>`).join('')}
-    ${p.adjust?`<tr><td colspan="8">調整 ${esc(p.adjust_note||'')}</td><td class="n">${p.adjust>0?'+':''}${Number(p.adjust).toLocaleString()}</td></tr>`:''}
-    <tr class="tot"><td colspan="8">合計（${items.length}頭）</td><td class="n">${Number(p.pay).toLocaleString()}</td></tr></tbody></table>
-    <div class="sub">歩留まりランク A：3割以上（10割）／B：2割以上〜3割未満（5割）／C：1割以上〜2割未満（3割）／D：1割未満（買取不可）。現場引取は1回3,000円を個体ごとに天引き（0円が下限）。</div>`;
-  const inline = items.length <= 8;
-  return `<div class="pg">
+  const inline = items.length <= NOTICE_INLINE_MAX;
+  const letter = `<div class="pg">
     <h1>${esc(period)}捕獲個体買取金のご通知</h1>
     <div class="r">${esc(opts.date)}</div>
-    <div style="margin:10pt 0 6pt;font-size:13pt">${esc(p.payee)}　様</div>
+    <div class="name">${esc(p.payee)}　様</div>
     <div class="r">${esc(opts.from).replace(/　/g,'<br>')}</div>
     <p class="greet">拝啓　時下ますますご清祥のこととお喜び申し上げます。平素は格別のお引き立てを賜り、厚くお礼申し上げます。<br>
     標記の件につきまして、下記のとおり買取料金をお振込みいたしましたので、ここにご通知申し上げます。<br>
@@ -517,10 +535,14 @@ function noticeHtml(p, opts){
     <div class="c kiki">記</div>
     <div class="item">１．${esc(period)}イノシシ等買取合計金額　　<b>${Number(p.pay).toLocaleString()}　円</b></div>
     <div class="item">２．買取内容${inline ? '' : '　　別紙のとおり'}</div>
-    ${inline ? table : ''}
+    ${inline ? `<table>${NOTICE_THEAD}<tbody>${noticeRows(items)}${noticeTotalRows(p)}</tbody></table>${NOTICE_SUB}` : ''}
     <div class="item">３．お問い合わせ先　　${esc(opts.tel)}</div>
     <div class="r" style="margin-top:12pt">以上</div>
-  </div>${inline ? '' : `<div class="pg"><h1 style="font-size:12pt">別紙　${esc(p.payee)}　様　買取内容（${esc(period)}）</h1>${table}</div>`}`;
+  </div>`;
+  if (inline) return letter;
+  // 別紙: 22行ごとに1枚。合計行と注記は最後の1枚だけ
+  const sheets = []; for (let i = 0; i < items.length; i += NOTICE_ROWS_PER_SHEET) sheets.push(items.slice(i, i + NOTICE_ROWS_PER_SHEET));
+  return letter + sheets.map((rows, k) => { const last = k === sheets.length - 1; return `<div class="pg"><h1 style="font-size:14pt">別紙　${esc(p.payee)}　様　買取内容（${esc(period)}）${sheets.length > 1 ? `　${k+1}／${sheets.length}` : ''}</h1><table>${NOTICE_THEAD}<tbody>${noticeRows(rows)}${last ? noticeTotalRows(p) : ''}</tbody></table>${last ? NOTICE_SUB : ''}</div>`; }).join('');
 }
 function printNotices(){
   const r = D.result; if (!r) { showStatus('error','先に計算してください'); return; }
@@ -542,8 +564,8 @@ function printAnnouncement(){
   const sp = Object.entries(r.summary.bySpecies).sort((a,b)=>b[1]-a[1]);
   const cities = [...new Set(Object.keys(r.summary.byCity).map(k=>k.split('|')[1]))].sort();
   const yr = (rl.boar.yield_ranks||[]).map(y=>`<tr><td>${esc(y.rank)}</td><td>${esc(y.label||y.min_pct+'%以上')}</td><td>${Math.round(y.ratio*10)}割</td></tr>`).join('');
-  printDoc('告知', `@page{size:A4;margin:20mm} body{font-family:"Noto Sans JP",sans-serif;font-size:10.5pt;line-height:1.8} table{border-collapse:collapse;width:100%;margin:6pt 0} th,td{border:1px solid #333;padding:3pt 6pt} th{background:#eee} h1{font-size:13pt} h2{font-size:11.5pt;margin-top:14pt}`,
-    `<h1>${esc(period)}受入状況及び受入の詳細に関して（ご連絡）</h1>
+  printDoc('告知', `@page{size:A4;margin:10mm} html,body{margin:0;padding:0} body{font-family:"Noto Sans JP",sans-serif;font-size:12.5pt;line-height:1.65} .pg{box-sizing:border-box;padding:12mm 10mm 12mm} table{border-collapse:collapse;width:100%;margin:5pt 0;page-break-inside:avoid} th,td{border:1px solid #333;padding:3pt 7pt} th{background:#eee} h1{font-size:15pt;margin:0 0 8pt} h2{font-size:13pt;margin:10pt 0 4pt;page-break-after:avoid} p{margin:5pt 0}`,
+    `<div class="pg"><h1>${esc(period)}受入状況及び受入の詳細に関して（ご連絡）</h1>
      <h2>別紙1　${esc(period)}の受入頭数</h2>
      <table><thead><tr><th>獣種</th>${cities.map(c=>`<th>${esc(c)}</th>`).join('')}<th>合計</th></tr></thead><tbody>${sp.map(([s,n])=>`<tr><td>${esc(s)}</td>${cities.map(c=>`<td>${r.summary.byCity[s+'|'+c]||''}</td>`).join('')}<td>${n}</td></tr>`).join('')}<tr><td>合計</td>${cities.map(c=>`<td>${Object.keys(r.summary.byCity).filter(k=>k.endsWith('|'+c)).reduce((a,k)=>a+r.summary.byCity[k],0)}</td>`).join('')}<td>${r.items.length}</td></tr></tbody></table>
      <p>買取合計 ${yen(r.total)}（支払先 ${r.payees.filter(p=>p.pay>0).length}名）${r.pending?`。うち ${r.pending}頭は精肉待ちのため未確定`:''}。</p>
@@ -557,7 +579,44 @@ function printAnnouncement(){
        <tr><td>シカ</td><td>一律</td><td>${rl.deer.unit}円/kg</td></tr>
        <tr><td>中型獣</td><td>一律（${esc((rl.small.species||[]).join('、'))}）</td><td>${Number(rl.small.price).toLocaleString()}円/頭</td></tr></tbody></table>
      <table><thead><tr><th>歩留まりランク</th><th>歩留まり率</th><th>買取価格の割合</th></tr></thead><tbody>${yr}</tbody></table>
-     <p>現場引取は1回${Number(rl.pickup_fee).toLocaleString()}円（止めさし込み）で、個体ごとに買取代金から天引きします。買取料金より引取額が上回る場合でも追加の請求はありません（0円に調整）。</p>`);
+     <p>現場引取は1回${Number(rl.pickup_fee).toLocaleString()}円（止めさし込み）で、個体ごとに買取代金から天引きします。買取料金より引取額が上回る場合でも追加の請求はありません（0円に調整）。</p></div>`);
+}
+
+// ───────────── 宛名ラベル（コメリ KML-506：A4 24面 70×33.9mm・3列×8段・上下余白12.9mm・左右余白0） ─────────────
+const LABEL_SHEET = { name:'コメリ KML-506（A4 24面 70×33.9mm）', cols:3, rows:8, w:70, h:33.9, top:12.9 };
+function labelPostal(h){ const z = String(h.postal_code||'').replace(/[^0-9０-９]/g,'').replace(/[０-９]/g, c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)); return z.length === 7 ? z.slice(0,3)+'-'+z.slice(3) : (h.postal_code||''); }
+function labelAddress(h){
+  let a = String(h.address||'').trim();
+  // 台帳の住所は「館山市〜」から始まるものが大半。都道府県が無く千葉県内の市町なら「千葉県」を付ける
+  if (a && !/^(北海道|.{2,3}[都道府県])/.test(a) && /^(館山市|南房総市|鴨川市|鋸南町|木更津市|君津市|富津市|袖ケ浦市|袖ヶ浦市|市原市|千葉市|船橋市|市川市|松戸市|柏市|茂原市|いすみ市|勝浦市|大多喜町|御宿町|一宮町|睦沢町|長生村|白子町|長柄町|長南町|東金市|山武市|大網白里市|九十九里町|芝山町|横芝光町|匝瑳市|旭市|銚子市|香取市|成田市|印西市|佐倉市|八街市|四街道市|習志野市|八千代市|鎌ケ谷市|鎌ヶ谷市|浦安市|流山市|野田市|我孫子市|白井市|富里市|酒々井町|栄町|神崎町|多古町|東庄町)/.test(a)) a = '千葉県' + a;
+  return a;
+}
+function printAddressLabels(){
+  const target = document.getElementById('lblTarget').value;
+  const start = Math.min(LABEL_SHEET.cols*LABEL_SHEET.rows, Math.max(1, parseInt(document.getElementById('lblStart').value,10)||1));
+  const frame = document.getElementById('lblFrame').checked;
+  let people = [];
+  if (target === 'all') {
+    people = Object.values(D.hunters).slice().sort((a,b)=>(a.furigana||a.name||'').localeCompare(b.furigana||b.name||'','ja'));
+  } else {
+    const r = D.result; if (!r) { showStatus('error','先に計算してください（通知書と同じ支払先に貼ります）'); return; }
+    const only = document.getElementById('nOne').value; const zero = document.getElementById('nZero').checked;
+    people = r.payees.filter(p => (!only || p.payee===only) && (zero || p.pay>0)).map(p => D.hunters[normName(p.payee)] || { name: p.payee });
+  }
+  if (!people.length) { showStatus('error','出力する宛先がありません'); return; }
+  const noAddr = people.filter(h => !h.address);
+  if (noAddr.length) showStatus('warn', `住所が台帳に無い人 ${noAddr.length}人：${noAddr.map(h=>h.name).join('、')} → ラベルには「住所未登録」と出ます。業務アプリの捕獲者台帳で住所を登録してください`);
+  const per = LABEL_SHEET.cols*LABEL_SHEET.rows;
+  const cells = Array(start-1).fill(null).concat(people);
+  const sheets = []; for (let i = 0; i < cells.length; i += per) sheets.push(cells.slice(i, i+per));
+  const cell = h => !h ? `<div class="lbl${frame?' f':''}"></div>` : `<div class="lbl${frame?' f':''}">${h.address ? `<div class="zip">${labelPostal(h)?'〒'+esc(labelPostal(h)):''}</div><div class="adr">${esc(labelAddress(h))}</div>` : `<div class="zip"></div><div class="adr miss">住所未登録（捕獲者台帳に登録してください）</div>`}<div class="nm">${esc(h.name)}　様</div></div>`;
+  const css = `@page{size:A4;margin:0} html,body{margin:0;padding:0} body{font-family:"Noto Sans JP","Yu Gothic","Hiragino Sans",sans-serif;color:#000}
+    .sheet{width:210mm;height:297mm;box-sizing:border-box;padding-top:${LABEL_SHEET.top}mm;display:grid;grid-template-columns:repeat(${LABEL_SHEET.cols},${LABEL_SHEET.w}mm);grid-auto-rows:${LABEL_SHEET.h}mm;align-content:start;page-break-after:always;overflow:hidden}
+    .sheet:last-child{page-break-after:auto}
+    .lbl{box-sizing:border-box;width:${LABEL_SHEET.w}mm;height:${LABEL_SHEET.h}mm;padding:3.5mm 6mm 2mm;overflow:hidden;line-height:1.35}
+    .lbl.f{outline:.2mm dashed #999;outline-offset:-.2mm}
+    .zip{font-size:9.5pt;min-height:4.4mm} .adr{font-size:9.5pt} .adr.miss{color:#444} .nm{font-size:14pt;font-weight:700;margin-top:1.5mm;white-space:nowrap}`;
+  printDoc('宛名ラベル', css, sheets.map(sh => `<div class="sheet">${sh.map(cell).join('')}</div>`).join(''));
 }
 adminGate(init);
 </script>
