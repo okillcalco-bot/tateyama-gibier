@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>館山ジビエセンター － 捕獲個体 買取金額通知（半期）</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Barlow+Condensed:wght@400;600;700&display=swap');
+:root {
+  --bg:#0f1117; --surface:#1a1e2a; --surface2:#222736; --border:#2e3447;
+  --accent:#e8a44a; --accent2:#c06a2a; --green:#4caf7d; --red:#e05555; --blue:#5a8cd8; --yellow:#f0c040; --purple:#9b7fd4;
+  --text:#e8eaf0; --text2:#8b90a8; --radius:10px;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--text); font-family:'Noto Sans JP',sans-serif; font-size:14px; min-height:100vh; }
+.header { background:var(--surface); border-bottom:2px solid var(--accent); padding:14px 20px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; flex-wrap:wrap; gap:10px; }
+.header-title { font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:700; color:var(--accent); letter-spacing:.05em; }
+.header-sub { font-size:11px; color:var(--text2); margin-top:2px; }
+.nav-links { display:flex; gap:8px; flex-wrap:wrap; }
+.nav-link { background:var(--surface2); border:1px solid var(--border); color:var(--text2); padding:6px 12px; border-radius:6px; text-decoration:none; font-size:12px; }
+.nav-link:hover { color:var(--accent); border-color:var(--accent); }
+.filter-bar { background:var(--surface); border-bottom:1px solid var(--border); padding:12px 20px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.filter-group { display:flex; align-items:center; gap:6px; }
+.filter-label { font-size:12px; color:var(--text2); white-space:nowrap; }
+select, input[type="date"], input[type="number"], input[type="text"], textarea { background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:6px; font-size:13px; font-family:inherit; color-scheme:dark; }
+select:focus, input:focus, textarea:focus { outline:none; border-color:var(--accent); }
+.btn { padding:7px 16px; border-radius:6px; border:none; cursor:pointer; font-size:13px; font-family:inherit; font-weight:500; }
+.btn:disabled { opacity:.5; cursor:default; }
+.btn-accent { background:var(--accent); color:#000; }
+.btn-accent:hover { background:var(--accent2); }
+.btn-secondary { background:var(--surface2); color:var(--text2); border:1px solid var(--border); }
+.btn-secondary:hover { color:var(--text); border-color:var(--text2); }
+.btn-sm { padding:4px 10px; font-size:12px; }
+.main { padding:20px; max-width:1400px; margin:0 auto; }
+.status-bar { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px 16px; margin-bottom:16px; font-size:13px; display:none; white-space:pre-wrap; }
+.status-bar.info { border-color:var(--blue); color:var(--blue); display:block; }
+.status-bar.error { border-color:var(--red); color:var(--red); display:block; }
+.status-bar.loading { border-color:var(--accent); color:var(--accent); display:block; }
+.status-bar.warn { border-color:var(--yellow); color:var(--yellow); display:block; }
+.tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
+.tab { padding:8px 14px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text2); cursor:pointer; font-size:13px; font-family:inherit; }
+.tab.on { background:var(--accent); color:#000; border-color:var(--accent); font-weight:600; }
+.panel { display:none; } .panel.on { display:block; }
+.kpi-row { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:20px; }
+.kpi-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px; position:relative; overflow:hidden; }
+.kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--kpi-color,var(--accent)); }
+.kpi-label { font-size:11px; color:var(--text2); letter-spacing:.06em; margin-bottom:6px; }
+.kpi-value { font-family:'Barlow Condensed',sans-serif; font-size:26px; font-weight:700; }
+.kpi-sub { font-size:11px; color:var(--text2); margin-top:4px; line-height:1.5; }
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px; margin-bottom:20px; }
+.card-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; gap:10px; flex-wrap:wrap; }
+.card-title { font-size:14px; font-weight:500; }
+.card-sub { font-size:11px; color:var(--text2); margin-top:2px; line-height:1.5; }
+table { width:100%; border-collapse:collapse; }
+th { padding:8px 10px; text-align:left; font-size:11px; color:var(--text2); font-weight:500; letter-spacing:.04em; border-bottom:1px solid var(--border); background:var(--surface2); white-space:nowrap; }
+td { padding:7px 10px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:middle; }
+tr:last-child td { border-bottom:none; }
+.td-num { text-align:right; font-variant-numeric:tabular-nums; font-family:'Barlow Condensed',sans-serif; font-size:15px; }
+.tag { display:inline-block; padding:1px 7px; border-radius:4px; font-size:11px; background:rgba(232,164,74,.15); color:var(--accent); margin-right:4px; }
+.tag-red { background:rgba(224,85,85,.15); color:var(--red); }
+.tag-green { background:rgba(76,175,125,.15); color:var(--green); }
+.tag-blue { background:rgba(90,140,216,.15); color:var(--blue); }
+.muted { color:var(--text2); font-size:12px; }
+.payee-row { cursor:pointer; }
+.payee-row:hover td { background:rgba(232,164,74,.06); }
+.detail-row td { background:rgba(0,0,0,.18); padding:0 10px 10px 28px; }
+.detail-row table td { font-size:12.5px; padding:4px 8px; }
+.note { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:14px 18px; font-size:12.5px; line-height:1.8; color:var(--text2); margin-bottom:20px; }
+.note b { color:var(--text); }
+.rule-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; }
+.rule-grid label { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12.5px; color:var(--text2); }
+.rule-grid input { width:110px; }
+@media (max-width:1000px) { .kpi-row { grid-template-columns:repeat(2,1fr); } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">🐗 TATEYAMA GIBIER</div>
+    <div class="header-sub">捕獲個体 買取金額通知 ― 半期ごとの計算・通知書・振込一覧</div>
+  </div>
+  <div class="nav-links">
+    <a href="index.html?tab=analysis" class="nav-link">📈 解析一覧</a>
+    <a href="history.html" class="nav-link">📚 過年度</a>
+    <a href="index.html" class="nav-link">📦 業務アプリ</a>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <div class="filter-group"><span class="filter-label">年度</span><select id="fYear"></select></div>
+  <div class="filter-group"><span class="filter-label">半期</span>
+    <select id="fHalf"><option value="H1">上半期（4〜9月）</option><option value="H2">下半期（10〜3月）</option></select></div>
+  <div class="filter-group"><span class="filter-label">期間</span><input type="date" id="fFrom"><span class="filter-label">〜</span><input type="date" id="fTo"></div>
+  <button class="btn btn-accent" onclick="runCalc()">🧮 計算する</button>
+  <button class="btn btn-secondary" id="btnSave" onclick="saveRun('下書き')" disabled>💾 下書きを保存</button>
+  <button class="btn btn-secondary" id="btnFix" onclick="saveRun('確定')" disabled>✅ 確定して保存</button>
+  <span class="muted" id="runState" style="margin-left:auto"></span>
+</div>
+
+<div class="main">
+  <div id="statusBar" class="status-bar"></div>
+  <div class="tabs">
+    <button class="tab on" data-p="calc" onclick="showTab('calc')">計算</button>
+    <button class="tab" data-p="notice" onclick="showTab('notice')">通知書</button>
+    <button class="tab" data-p="bank" onclick="showTab('bank')">振込一覧</button>
+    <button class="tab" data-p="rules" onclick="showTab('rules')">算出ルール</button>
+    <button class="tab" data-p="runs" onclick="showTab('runs')">過去の計算</button>
+  </div>
+
+  <!-- 計算 -->
+  <div class="panel on" id="p-calc">
+    <div class="kpi-row">
+      <div class="kpi-card" style="--kpi-color:var(--accent)"><div class="kpi-label">対象頭数</div><div class="kpi-value" id="kHeads">—</div><div class="kpi-sub" id="kHeadsSub"></div></div>
+      <div class="kpi-card" style="--kpi-color:var(--green)"><div class="kpi-label">買取合計（確定分）</div><div class="kpi-value" id="kTotal">—</div><div class="kpi-sub" id="kTotalSub"></div></div>
+      <div class="kpi-card" style="--kpi-color:var(--yellow)"><div class="kpi-label">未確定（精肉待ち等）</div><div class="kpi-value" id="kPending">—</div><div class="kpi-sub" id="kPendingSub">歩留まりが出るまで金額が決まらない個体</div></div>
+      <div class="kpi-card" style="--kpi-color:var(--blue)"><div class="kpi-label">支払先</div><div class="kpi-value" id="kPayees">—</div><div class="kpi-sub" id="kPayeesSub"></div></div>
+      <div class="kpi-card" style="--kpi-color:var(--purple)"><div class="kpi-label">現場引取</div><div class="kpi-value" id="kPickup">—</div><div class="kpi-sub" id="kPickupSub"></div></div>
+    </div>
+    <div id="warnBox" class="note" style="display:none"></div>
+    <div class="card">
+      <div class="card-header"><div><div class="card-title">💴 支払先ごとの買取金額</div>
+        <div class="card-sub">行をクリックすると個体の明細が開きます。「調整」は手動の加減額（例: 別の人の分をまとめて振り込む、前期の差額）。メモと一緒に保存されます。</div></div>
+        <div><button class="btn btn-secondary btn-sm" onclick="downloadCsv('detail')">⬇ 明細CSV</button> <button class="btn btn-secondary btn-sm" onclick="downloadCsv('payee')">⬇ 支払先CSV</button></div></div>
+      <div style="overflow-x:auto"><table><thead><tr><th>支払先</th><th class="td-num">頭数</th><th class="td-num">イノシシ</th><th class="td-num">その他</th><th class="td-num">引取</th><th class="td-num">調整</th><th class="td-num">支払額</th><th>口座</th><th>状態</th></tr></thead>
+        <tbody id="payeeBody"><tr><td colspan="9" class="muted">期間を選んで「計算する」を押してください。</td></tr></tbody></table></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div><div class="card-title">📊 期間の受入頭数（告知の別紙1用）</div><div class="card-sub">獣種ごと・市ごとの頭数。告知文の「受入頭数」にそのまま使えます。</div></div></div>
+      <div id="summaryBox" class="muted">—</div>
+    </div>
+  </div>
+
+  <!-- 通知書 -->
+  <div class="panel" id="p-notice">
+    <div class="card">
+      <div class="card-header"><div><div class="card-title">📄 買取金のご通知（支払先ごとにA4・1枚＋別紙）</div>
+        <div class="card-sub">これまでの Word の通知書と同じ文面です。日付・担当・電話は下で変えられます。印刷はブラウザの印刷（PDF保存も可）。</div></div></div>
+      <div class="rule-grid" style="margin-bottom:12px">
+        <label>日付 <input type="text" id="nDate" placeholder="令和８年１２月吉日" style="width:180px"></label>
+        <label>差出人 <input type="text" id="nFrom" value="合同会社アルコ　代表社員　沖浩志" style="width:220px"></label>
+        <label>問い合わせ <input type="text" id="nTel" value="合同会社アルコ　070(1410)8808　担当沖まで" style="width:260px"></label>
+        <label>0円の人も出す <input type="checkbox" id="nZero"></label>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <select id="nOne"><option value="">全員</option></select>
+        <button class="btn btn-accent" onclick="printNotices()">🖨 通知書を印刷</button>
+        <button class="btn btn-secondary" onclick="printAnnouncement()">📢 告知文（受入状況・買取価格表）を印刷</button>
+        <span class="muted">通知書は支払先ごとに改ページ。明細が多い人は別紙が付きます。</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 振込一覧 -->
+  <div class="panel" id="p-bank">
+    <div class="card">
+      <div class="card-header"><div><div class="card-title">🏦 振込一覧（銀行・支店順）</div>
+        <div class="card-sub">捕獲者台帳の口座を使います。口座の無い人は赤で出ます（台帳で登録してください）。金額0円の人は出しません。</div></div>
+        <div><button class="btn btn-secondary btn-sm" onclick="downloadCsv('bank')">⬇ 振込CSV</button> <button class="btn btn-secondary btn-sm" onclick="printBank()">🖨 印刷</button></div></div>
+      <div style="overflow-x:auto"><table><thead><tr><th>No</th><th>名前</th><th>フリガナ</th><th>銀行名</th><th>支店名</th><th>種類</th><th>口座番号</th><th class="td-num">金額</th><th>備考</th></tr></thead>
+        <tbody id="bankBody"><tr><td colspan="9" class="muted">計算すると出ます。</td></tr></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- 算出ルール -->
+  <div class="panel" id="p-rules">
+    <div class="card">
+      <div class="card-header"><div><div class="card-title">📐 買取価格の算出ルール</div>
+        <div class="card-sub">告知 別紙3 の表と同じ。値を変えて保存すると次の計算から使われます（ページに埋め込んでいません）。</div></div>
+        <div class="muted" id="rulesState"></div></div>
+      <div class="note" style="margin-bottom:14px">
+        <b>式</b>：買取価格 ＝ 体重（kg・切り捨て）× 単価 × 歩留まり係数 − 現場引取（あれば）。0円が下限（差額の請求はしない）。<br>
+        イノシシ・メスは肉ランク（脂の厚み）で単価が変わり、オスは一律。歩留まり率 ＝ 精肉した肉の重量 ÷ 体重（精肉登録から自動計算）。<br>
+        シカは一律単価 × 歩留まり係数。中型獣（キョン・アライグマ・ハクビシン・タヌキ・ノウサギ）は1頭いくら。
+      </div>
+      <div class="rule-grid" id="rulesForm"></div>
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-accent btn-sm" onclick="rulesSave()">保存</button>
+        <span class="muted" id="rulesMsg"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 過去の計算 -->
+  <div class="panel" id="p-runs">
+    <div class="card">
+      <div class="card-header"><div><div class="card-title">🗂 保存した計算</div>
+        <div class="card-sub">下書きと確定。開くとその時点の金額と明細（スナップショット）が表示されます。確定後に個体が精肉されても、確定分は変わりません。</div></div></div>
+      <div style="overflow-x:auto"><table><thead><tr><th>期間</th><th>状態</th><th class="td-num">頭数</th><th class="td-num">支払額</th><th>保存日時</th><th>メモ</th><th></th></tr></thead>
+        <tbody id="runsBody"><tr><td colspan="7" class="muted">読み込み中…</td></tr></tbody></table></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+
+function staffKeyGet(){ try { return localStorage.getItem('tg_staff_key') || sessionStorage.getItem('tg_staff_key') || ''; } catch(e){ return ''; } }
+async function sb(table, query='', method='GET', body=null, prefer=''){
+  const headers = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` };
+  const sk = staffKeyGet(); if (sk) headers['x-staff-key'] = sk;
+  if (body) headers['Content-Type'] = 'application/json';
+  headers['Prefer'] = prefer || (method === 'GET' ? '' : 'return=representation');
+  const res = await fetch(`${SB_URL}/rest/v1/${table}${query}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  if (!res.ok) throw new Error(`${table}: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
+  const t = await res.text(); return t ? JSON.parse(t) : [];
+}
+function showStatus(type, msg){ const el=document.getElementById('statusBar'); el.className='status-bar '+type; el.textContent=msg; if(!type){ el.style.display='none'; } }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function yen(n){ return '¥' + Math.round(Number(n)||0).toLocaleString(); }
+function normName(s){ return String(s||'').replace(/[\s　]/g,''); }
+function reiwa(y){ return y == null ? '' : '令和' + y + '年度'; }
+function zen(n){ return String(n).replace(/[0-9]/g, d => '０１２３４５６７８９'[d]); }
+function showTab(p){ document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.p===p)); document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('on', x.id==='p-'+p)); if(p==='runs') runsLoad(); }
+
+// ───────────── ルール ─────────────
+const RULES_DEFAULT = { boar:{ female_rank_unit:{'並':100,'上':200,'極上':300}, male_unit:100, yield_ranks:[{rank:'A',min_pct:30,ratio:1},{rank:'B',min_pct:20,ratio:0.5},{rank:'C',min_pct:10,ratio:0.3},{rank:'D',min_pct:0,ratio:0}], weight_floor:true, min_weight_kg:20 },
+  deer:{ unit:100, use_yield:true }, small:{ price:1000, species:['キョン','アライグマ','ハクビシン','タヌキ','ノウサギ'] }, pickup_fee:3000, source:'既定値' };
+let RULES = JSON.parse(JSON.stringify(RULES_DEFAULT)); let rulesFromDb = false;
+function yieldRank(rules, pct){ if(pct==null||isNaN(pct)) return null; const ranks=(rules.boar.yield_ranks||[]).slice().sort((a,b)=>b.min_pct-a.min_pct); for(const r of ranks){ if(pct>=r.min_pct) return r; } return ranks[ranks.length-1]||null; }
+// 1頭の買取価格。戻り: { price, base, unit, ratio, yield_rank, weight_used, pickup_fee, pending, reason }
+function calcOne(rules, ind, meatKg){
+  const sp = ind.species || 'イノシシ';
+  const pickup = !!(ind.stopkill_pickup || ind.intake_method === '引取');
+  const fee = pickup ? (Number(rules.pickup_fee)||0) : 0;
+  const w = Number(ind.weight_total)||0;
+  const wUsed = rules.boar.weight_floor ? Math.floor(w) : w;
+  let yieldPct = (meatKg>0 && w>0) ? Math.round(meatKg/w*1000)/10 : (ind.yield_rate!=null && Number(ind.yield_rate)>0 && Number(ind.yield_rate)<=100 ? Number(ind.yield_rate) : null);
+  const out = { species:sp, pickup, pickup_fee:fee, weight:w, weight_used:wUsed, meat_kg:meatKg||0, yield_pct:yieldPct, unit:null, ratio:null, yield_rank:null, base:null, price:null, pending:false, reason:'' };
+  if ((rules.small.species||[]).includes(sp)) {
+    out.base = Number(rules.small.price)||0; out.ratio = 1; out.price = Math.max(0, out.base - fee); out.reason = '中型獣 1頭 ' + yen(out.base); return out;
+  }
+  if (sp === 'シカ') {
+    out.unit = Number(rules.deer.unit)||0; out.base = wUsed * out.unit;
+    if (rules.deer.use_yield) { const yr = yieldRank(rules, yieldPct); if (!yr) { out.pending = true; out.reason = '歩留まり待ち（精肉前）'; return out; } out.ratio = yr.ratio; out.yield_rank = yr.rank; }
+    else out.ratio = 1;
+    out.price = Math.max(0, Math.round(out.base * out.ratio) - fee); return out;
+  }
+  if (sp === 'イノシシ') {
+    const rank = ind.meat_rank || '並';
+    out.unit = ind.sex === 'メス' ? (Number((rules.boar.female_rank_unit||{})[rank]) || Number(rules.boar.female_rank_unit['並']) || 100) : (Number(rules.boar.male_unit)||100);
+    out.rank = rank; out.base = wUsed * out.unit;
+    const yr = yieldRank(rules, yieldPct);
+    if (!yr) { out.pending = true; out.reason = ind.processing_done_at ? '歩留まりが出ていない（精肉重量が未登録）' : '精肉待ち'; return out; }
+    out.ratio = yr.ratio; out.yield_rank = yr.rank;
+    out.price = Math.max(0, Math.round(out.base * out.ratio) - fee);
+    if (w > 0 && w < (Number(rules.boar.min_weight_kg)||0)) out.reason = (rules.boar.min_weight_kg + 'kg未満');
+    return out;
+  }
+  out.base = 0; out.price = 0; out.reason = '買取対象外の獣種'; return out;
+}
+
+// ───────────── データ ─────────────
+const D = { inds:[], meat:{}, hunters:{}, result:null, run:null };
+function periodDates(){
+  const y = parseInt(document.getElementById('fYear').value,10), h = document.getElementById('fHalf').value;
+  const g = 2018 + y;   // 令和y年 = 西暦 2018+y
+  return h === 'H1' ? { from: `${g}-04-01`, to: `${g}-09-30` } : { from: `${g}-10-01`, to: `${g+1}-03-31` };
+}
+function periodKey(){ return 'R' + document.getElementById('fYear').value + document.getElementById('fHalf').value; }
+function fillPeriod(){ const p = periodDates(); document.getElementById('fFrom').value = p.from; document.getElementById('fTo').value = p.to; }
+async function init(){
+  const now = new Date(); const m = now.getMonth()+1; const fy = (m >= 4 ? now.getFullYear() : now.getFullYear()-1) - 2018;
+  const sel = document.getElementById('fYear'); sel.innerHTML = '';
+  for (let y = fy; y >= 3; y--) sel.insertAdjacentHTML('beforeend', `<option value="${y}">令和${y}年度（${2018+y}/4〜${2019+y}/3）</option>`);
+  document.getElementById('fHalf').value = (m >= 4 && m <= 9) || m === 10 || m === 11 || m === 12 ? (m >= 10 ? 'H1' : 'H1') : 'H2';
+  fillPeriod();
+  sel.addEventListener('change', fillPeriod); document.getElementById('fHalf').addEventListener('change', fillPeriod);
+  try {
+    const [rules, hs] = await Promise.all([
+      sb('app_settings','?key=eq.buyback_rules&select=value'),
+      sb('hunters','?select=id,name,furigana,bank_name,bank_branch,account_type,account_number,account_holder,account_furigana,payee_no,city&deleted_at=is.null&limit=1000'),
+    ]);
+    if (rules[0] && rules[0].value && rules[0].value.boar) { RULES = rules[0].value; rulesFromDb = true; }
+    D.hunters = {}; hs.forEach(h => { D.hunters[normName(h.name)] = h; });
+  } catch(e) { showStatus('error', '設定/捕獲者台帳を読み込めませんでした: ' + (e.message||e) + '（既定のルールで計算します）'); }
+  rulesRender();
+  document.getElementById('nDate').value = `令和${zen(now.getFullYear() - 2018)}年${zen(m)}月吉日`;
+}
+async function loadPeriod(from, to){
+  const inds = await sb('individuals', `?select=id,label_id,species,capture_date,capture_city,capture_area,hunter_name,purchase_payee,sex,weight_total,meat_rank,yield_rate,stopkill_pickup,intake_method,processing_done_at,buyback_amount&deleted_at=is.null&capture_date=gte.${from}&capture_date=lte.${to}&order=capture_date.asc,label_id.asc&limit=5000`);
+  const list = inds.filter(i => i.label_id && /^TGC-\d{2}-/.test(i.label_id) && !/^TGC-TEST/.test(i.label_id));
+  const meat = {};
+  if (list.length) {
+    const inv = await sb('inventory', `?select=individual_id,weight,weight_kg&deleted_at=is.null&tier=eq.2&individual_id=not.is.null&limit=20000`);
+    inv.forEach(v => { meat[v.individual_id] = (meat[v.individual_id]||0) + (Number(v.weight != null ? v.weight : v.weight_kg)||0); });
+  }
+  return { list, meat };
+}
+function compute(list, meat, rules, adjustments){
+  const items = list.map(i => Object.assign({ label:i.label_id, capture_date:i.capture_date, city:i.capture_city, area:i.capture_area, hunter:i.hunter_name, payee:(i.purchase_payee||i.hunter_name||'（捕獲者未記入）').trim(), sex:i.sex, meat_rank:i.meat_rank, processing_done_at:i.processing_done_at }, calcOne(rules, i, meat[i.label_id]||0)));
+  const byPayee = {};
+  items.forEach(it => { const p = byPayee[it.payee] || (byPayee[it.payee] = { payee:it.payee, items:[], heads:0, boar:0, other:0, pickups:0, pending:0, total:0, adjust:0, adjust_note:'' }); p.items.push(it); p.heads++; if (it.pickup) p.pickups++; if (it.pending) p.pending++; else { if (it.species==='イノシシ') p.boar += it.price||0; else p.other += it.price||0; p.total += it.price||0; } });
+  Object.values(byPayee).forEach(p => { const a = (adjustments||{})[p.payee]; if (a) { p.adjust = Number(a.amount)||0; p.adjust_note = a.note||''; } p.pay = Math.max(0, p.total + p.adjust); const h = D.hunters[normName(p.payee)]; p.bank = h ? { no:h.payee_no, name:h.name, furigana:h.account_furigana||'', bank:h.bank_name||'', branch:h.bank_branch||'', type:h.account_type||'', number:h.account_number||'', holder:h.account_holder||'' } : null; });
+  const payees = Object.values(byPayee).sort((a,b)=>b.pay-a.pay);
+  const summary = { bySpecies:{}, byCity:{} };
+  items.forEach(it => { summary.bySpecies[it.species]=(summary.bySpecies[it.species]||0)+1; const c=it.city||'不明'; const k=it.species+'|'+c; summary.byCity[k]=(summary.byCity[k]||0)+1; });
+  return { items, payees, summary, total: payees.reduce((s,p)=>s+p.pay,0), pending: items.filter(i=>i.pending).length, pickups: items.filter(i=>i.pickup).length };
+}
+async function runCalc(){
+  const from = document.getElementById('fFrom').value, to = document.getElementById('fTo').value;
+  if (!from || !to || from > to) { showStatus('error','期間を正しく指定してください'); return; }
+  showStatus('loading', `📥 ${from}〜${to} の個体と精肉重量を読み込み中…`);
+  try {
+    const { list, meat } = await loadPeriod(from, to);
+    D.inds = list; D.meat = meat;
+    D.run = { period_key: periodKey(), fiscal_year: parseInt(document.getElementById('fYear').value,10), half: document.getElementById('fHalf').value==='H1'?'上半期':'下半期', from_date: from, to_date: to, adjustments: (D.run && D.run.period_key===periodKey() ? D.run.adjustments : {}) || {}, id: (D.run && D.run.period_key===periodKey() ? D.run.id : null), status: '未保存' };
+    D.result = compute(list, meat, RULES, D.run.adjustments);
+    renderAll();
+    document.getElementById('btnSave').disabled = false; document.getElementById('btnFix').disabled = false;
+    document.getElementById('runState').textContent = `計算: ${new Date().toLocaleString('ja-JP')}（${D.run.status}）`;
+    const r = D.result;
+    if (!list.length) showStatus('warn', 'この期間の個体がありません。');
+    else if (r.pending) showStatus('warn', `⚠ ${list.length}頭のうち ${r.pending}頭は歩留まりが出ていないため金額が未確定です（精肉が終わると自動で入ります）。確定分の合計 ${yen(r.total)}。`);
+    else showStatus('info', `✅ ${list.length}頭・支払先 ${r.payees.length}件・合計 ${yen(r.total)}`);
+  } catch(e) { showStatus('error', '計算できませんでした: ' + (e.message||e)); }
+}
+function renderAll(){
+  const r = D.result; if (!r) return;
+  document.getElementById('kHeads').textContent = r.items.length.toLocaleString();
+  document.getElementById('kHeadsSub').textContent = Object.entries(r.summary.bySpecies).map(([k,v])=>`${k} ${v}`).join('・');
+  document.getElementById('kTotal').textContent = yen(r.total);
+  document.getElementById('kTotalSub').textContent = `イノシシ ${yen(r.payees.reduce((s,p)=>s+p.boar,0))} ／ その他 ${yen(r.payees.reduce((s,p)=>s+p.other,0))}${r.payees.some(p=>p.adjust) ? ' ／ 調整 ' + yen(r.payees.reduce((s,p)=>s+p.adjust,0)) : ''}`;
+  document.getElementById('kPending').textContent = r.pending.toLocaleString();
+  document.getElementById('kPayees').textContent = r.payees.length.toLocaleString();
+  document.getElementById('kPayeesSub').textContent = `口座あり ${r.payees.filter(p=>p.bank && p.bank.number).length}／口座なし ${r.payees.filter(p=>!(p.bank && p.bank.number)).length}`;
+  document.getElementById('kPickup').textContent = r.pickups.toLocaleString();
+  document.getElementById('kPickupSub').textContent = `天引き ${yen(r.items.filter(i=>i.pickup && !i.pending).reduce((s,i)=>s+Math.min(i.pickup_fee, Math.round((i.base||0)*(i.ratio||0))),0))}`;
+  // 警告
+  const warns = [];
+  const noRank = r.items.filter(i=>i.species==='イノシシ' && !i.meat_rank && !i.pending);
+  const noAcc = r.payees.filter(p=>p.pay>0 && !(p.bank && p.bank.number));
+  const small = r.items.filter(i=>/kg未満/.test(i.reason));
+  const noHunter = r.items.filter(i=>i.payee==='（捕獲者未記入）');
+  if (r.pending) warns.push(`<b>未確定 ${r.pending}頭</b>：${r.items.filter(i=>i.pending).slice(0,12).map(i=>i.label).join('、')}${r.pending>12?' ほか':''}（精肉が終わると金額が入ります）`);
+  if (noRank.length) warns.push(`<b>肉ランク未設定 ${noRank.length}頭</b>（並として計算）：${noRank.slice(0,8).map(i=>i.label).join('、')}${noRank.length>8?' ほか':''}`);
+  if (noAcc.length) warns.push(`<b>口座が無い支払先 ${noAcc.length}人</b>：${noAcc.map(p=>p.payee).join('、')} → 業務アプリの捕獲者台帳で口座を登録してください`);
+  if (small.length) warns.push(`<b>${RULES.boar.min_weight_kg}kg未満 ${small.length}頭</b>：${small.map(i=>i.label).join('、')}（受入条件の確認用。計算式どおりの金額を出しています）`);
+  if (noHunter.length) warns.push(`<b>捕獲者が未記入 ${noHunter.length}頭</b>：${noHunter.map(i=>i.label).join('、')}`);
+  const wb = document.getElementById('warnBox'); wb.style.display = warns.length ? 'block' : 'none'; wb.innerHTML = warns.map(w=>'・'+w).join('<br>');
+  // 支払先
+  const rk = it => it.yield_rank ? `${it.yield_rank}（${it.yield_pct!=null?it.yield_pct+'%':'—'}）` : (it.pending ? '<span class="tag tag-red">未確定</span>' : '—');
+  document.getElementById('payeeBody').innerHTML = r.payees.length ? r.payees.map((p,idx) => `
+    <tr class="payee-row" onclick="toggleDetail(${idx})"><td><b>${esc(p.payee)}</b>${p.items.some(i=>i.hunter && normName(i.hunter)!==normName(p.payee)) ? '<br><span class="muted">捕獲者: '+esc([...new Set(p.items.map(i=>i.hunter).filter(Boolean))].join('・'))+'</span>' : ''}</td>
+      <td class="td-num">${p.heads}${p.pending?`<br><span class="tag tag-red">未確定${p.pending}</span>`:''}</td><td class="td-num">${yen(p.boar)}</td><td class="td-num">${yen(p.other)}</td><td class="td-num">${p.pickups||'—'}</td>
+      <td class="td-num" onclick="event.stopPropagation()"><input type="number" step="1" value="${p.adjust||0}" style="width:90px;padding:3px 6px" onchange="setAdjust('${esc(p.payee)}', this.value, null)"><br><input type="text" placeholder="メモ" value="${esc(p.adjust_note)}" style="width:120px;padding:3px 6px;font-size:11px;margin-top:3px" onchange="setAdjust('${esc(p.payee)}', null, this.value)"></td>
+      <td class="td-num"><b>${yen(p.pay)}</b></td>
+      <td>${p.bank && p.bank.number ? `<span class="muted">${esc(p.bank.bank)} ${esc(p.bank.branch)} ${esc(p.bank.number)}</span>` : (p.pay>0 ? '<span class="tag tag-red">口座なし</span>' : '<span class="muted">—</span>')}</td>
+      <td>${p.pending ? '<span class="tag tag-red">精肉待ちあり</span>' : '<span class="tag tag-green">確定可</span>'}</td></tr>
+    <tr class="detail-row" id="det-${idx}" style="display:none"><td colspan="9"><table><thead><tr><th>個体管理番号</th><th>捕獲日</th><th>種類</th><th>性別</th><th class="td-num">体重</th><th>肉ランク</th><th>歩留まり</th><th class="td-num">単価</th><th class="td-num">引取</th><th class="td-num">買取価格</th><th>備考</th></tr></thead><tbody>
+      ${p.items.map(it=>`<tr><td>${esc(it.label)}</td><td>${esc(it.capture_date)}</td><td>${esc(it.species)}</td><td>${esc(it.sex||'')}</td><td class="td-num">${it.weight?it.weight.toFixed(1):'—'}</td><td>${it.species==='イノシシ'?esc(it.rank||''):'—'}</td><td>${rk(it)}</td><td class="td-num">${it.unit!=null?it.unit+'円/kg':(it.species==='イノシシ'||it.species==='シカ'?'—':yen(it.base))}</td><td class="td-num">${it.pickup?'−'+yen(it.pickup_fee):''}</td><td class="td-num">${it.pending?'—':yen(it.price)}</td><td class="muted">${esc(it.reason)}</td></tr>`).join('')}
+    </tbody></table></td></tr>`).join('') : '<tr><td colspan="9" class="muted">この期間の個体がありません。</td></tr>';
+  // 集計
+  const cities = [...new Set(Object.keys(r.summary.byCity).map(k=>k.split('|')[1]))].sort();
+  const species = Object.keys(r.summary.bySpecies).sort((a,b)=>r.summary.bySpecies[b]-r.summary.bySpecies[a]);
+  document.getElementById('summaryBox').innerHTML = species.length ? `<table><thead><tr><th>獣種</th>${cities.map(c=>`<th class="td-num">${esc(c)}</th>`).join('')}<th class="td-num">合計</th></tr></thead><tbody>${species.map(s=>`<tr><td>${esc(s)}</td>${cities.map(c=>`<td class="td-num">${r.summary.byCity[s+'|'+c]||''}</td>`).join('')}<td class="td-num"><b>${r.summary.bySpecies[s]}</b></td></tr>`).join('')}<tr><td><b>合計</b></td>${cities.map(c=>`<td class="td-num"><b>${Object.keys(r.summary.byCity).filter(k=>k.endsWith('|'+c)).reduce((a,k)=>a+r.summary.byCity[k],0)}</b></td>`).join('')}<td class="td-num"><b>${r.items.length}</b></td></tr></tbody></table>` : '—';
+  // 振込一覧
+  const rows = r.payees.filter(p=>p.pay>0).map(p=>({ p, b:p.bank||{} })).sort((a,b)=>(a.b.bank||'ん').localeCompare(b.b.bank||'ん','ja')||(a.b.branch||'').localeCompare(b.b.branch||'','ja')||(a.b.no||999)-(b.b.no||999));
+  document.getElementById('bankBody').innerHTML = rows.length ? rows.map(({p,b})=>`<tr${b.number?'':' style="color:var(--red)"'}><td>${b.no!=null?b.no:''}</td><td>${esc(p.payee)}${b.holder&&normName(b.holder)!==normName(p.payee)?`<br><span class="muted">名義: ${esc(b.holder)}</span>`:''}</td><td>${esc(b.furigana||'')}</td><td>${esc(b.bank||'')}</td><td>${esc(b.branch||'')}</td><td>${esc(b.type||'')}</td><td>${esc(b.number||'（未登録）')}</td><td class="td-num"><b>${yen(p.pay)}</b></td><td class="muted">${esc(p.adjust_note||'')}${p.pending?' 精肉待ちあり':''}</td></tr>`).join('') + `<tr><td colspan="7" style="text-align:right"><b>合計 ${rows.length}件</b></td><td class="td-num"><b>${yen(rows.reduce((s,x)=>s+x.p.pay,0))}</b></td><td></td></tr>` : '<tr><td colspan="9" class="muted">支払額のある支払先がありません。</td></tr>';
+  // 通知書の対象
+  const one = document.getElementById('nOne'); one.innerHTML = '<option value="">全員</option>' + r.payees.map(p=>`<option value="${esc(p.payee)}">${esc(p.payee)}（${yen(p.pay)}）</option>`).join('');
+}
+function toggleDetail(i){ const el=document.getElementById('det-'+i); if(el) el.style.display = el.style.display==='none'?'':'none'; }
+function setAdjust(payee, amount, note){
+  if (!D.run) return; const a = D.run.adjustments[payee] || (D.run.adjustments[payee] = { amount:0, note:'' });
+  if (amount != null) a.amount = Number(amount)||0; if (note != null) a.note = note;
+  D.result = compute(D.inds, D.meat, RULES, D.run.adjustments); renderAll();
+}
+
+// ───────────── 保存・過去の計算 ─────────────
+async function saveRun(status){
+  if (!D.result || !D.run) return;
+  if (status === '確定' && D.result.pending && !confirm(`未確定の個体が ${D.result.pending}頭あります（0円扱いで確定されます）。このまま確定しますか？`)) return;
+  const note = prompt('メモ（任意）', (D.run.note||'')); if (note === null) return;
+  const data = { rules: RULES, adjustments: D.run.adjustments, payees: D.result.payees.map(p=>({ payee:p.payee, heads:p.heads, boar:p.boar, other:p.other, pickups:p.pickups, pending:p.pending, total:p.total, adjust:p.adjust, adjust_note:p.adjust_note, pay:p.pay, bank:p.bank, items:p.items })), summary: D.result.summary, total: D.result.total, pending: D.result.pending, heads: D.result.items.length, computed_at: new Date().toISOString() };
+  const row = { period_key: D.run.period_key, fiscal_year: D.run.fiscal_year, half: D.run.half, from_date: D.run.from_date, to_date: D.run.to_date, status, note: note||null, data, updated_at: new Date().toISOString() };
+  try {
+    let saved;
+    if (D.run.id) saved = await sb('buyback_runs', `?id=eq.${D.run.id}`, 'PATCH', row);
+    else saved = await sb('buyback_runs', '', 'POST', row);
+    if (Array.isArray(saved) && saved[0]) { D.run.id = saved[0].id; D.run.status = status; D.run.note = note; }
+    document.getElementById('runState').textContent = `保存: ${new Date().toLocaleString('ja-JP')}（${status}）`;
+    showStatus('info', `✅ ${status}として保存しました（${D.run.period_key}・${yen(D.result.total)}）`);
+  } catch(e) { showStatus('error', '保存できませんでした: ' + (e.message||e)); }
+}
+async function runsLoad(){
+  const body = document.getElementById('runsBody');
+  try {
+    const rows = await sb('buyback_runs', '?select=id,period_key,fiscal_year,half,from_date,to_date,status,note,created_at,updated_at,data->total,data->heads&order=created_at.desc&limit=100');
+    body.innerHTML = rows.length ? rows.map(x=>`<tr><td>${esc(x.period_key)}<br><span class="muted">${esc(x.from_date)}〜${esc(x.to_date)}</span></td><td>${x.status==='確定'?'<span class="tag tag-green">確定</span>':'<span class="tag tag-blue">下書き</span>'}</td><td class="td-num">${x.heads!=null?x.heads:''}</td><td class="td-num">${x.total!=null?yen(x.total):''}</td><td class="muted">${new Date(x.updated_at||x.created_at).toLocaleString('ja-JP')}</td><td class="muted">${esc(x.note||'')}</td><td><button class="btn btn-secondary btn-sm" onclick="runOpen('${x.id}')">開く</button> <button class="btn btn-secondary btn-sm" onclick="runDelete('${x.id}','${esc(x.period_key)}','${x.status}')">削除</button></td></tr>`).join('') : '<tr><td colspan="7" class="muted">まだ保存した計算がありません。</td></tr>';
+  } catch(e) { body.innerHTML = `<tr><td colspan="7" style="color:var(--red)">読み込めませんでした: ${esc(e.message||e)}</td></tr>`; }
+}
+async function runOpen(id){
+  try {
+    const rows = await sb('buyback_runs', `?id=eq.${id}&select=*`); const x = rows[0]; if (!x) return;
+    document.getElementById('fYear').value = String(x.fiscal_year); document.getElementById('fHalf').value = x.half==='上半期'?'H1':'H2';
+    document.getElementById('fFrom').value = x.from_date; document.getElementById('fTo').value = x.to_date;
+    const d = x.data || {};
+    D.run = { id:x.id, period_key:x.period_key, fiscal_year:x.fiscal_year, half:x.half, from_date:x.from_date, to_date:x.to_date, adjustments:d.adjustments||{}, status:x.status, note:x.note };
+    // スナップショットをそのまま表示（再計算しない）
+    const payees = (d.payees||[]).map(p=>Object.assign({}, p));
+    const items = payees.flatMap(p=>p.items||[]);
+    D.inds = []; D.meat = {};
+    D.result = { items, payees, summary: d.summary||{bySpecies:{},byCity:{}}, total: d.total||0, pending: d.pending||0, pickups: items.filter(i=>i.pickup).length };
+    renderAll(); showTab('calc');
+    document.getElementById('btnSave').disabled = x.status==='確定'; document.getElementById('btnFix').disabled = x.status==='確定';
+    document.getElementById('runState').textContent = `保存済み（${x.status}）${new Date(x.updated_at||x.created_at).toLocaleString('ja-JP')} を表示中`;
+    showStatus('info', `${x.period_key} の${x.status}を開きました（計算時点のスナップショット）。最新の個体で計算し直すには「計算する」。`);
+  } catch(e) { showStatus('error', '開けませんでした: ' + (e.message||e)); }
+}
+async function runDelete(id, key, status){
+  if (status==='確定' && !confirm(`${key} は確定済みです。本当に削除しますか？`)) return;
+  if (status!=='確定' && !confirm(`${key} の下書きを削除しますか？`)) return;
+  try { await sb('buyback_runs', `?id=eq.${id}`, 'DELETE'); runsLoad(); } catch(e) { showStatus('error', '削除できませんでした: ' + (e.message||e)); }
+}
+
+// ───────────── ルール画面 ─────────────
+function rulesRender(){
+  const r = RULES; const f = document.getElementById('rulesForm');
+  document.getElementById('rulesState').textContent = rulesFromDb ? `保存済みのルール（${r.source||''}）` : '既定値（未保存）';
+  f.innerHTML = `
+    <label>イノシシ メス 並（円/kg）<input type="number" id="r_f_nami" value="${r.boar.female_rank_unit['並']}"></label>
+    <label>イノシシ メス 上（円/kg）<input type="number" id="r_f_jou" value="${r.boar.female_rank_unit['上']}"></label>
+    <label>イノシシ メス 極上（円/kg）<input type="number" id="r_f_goku" value="${r.boar.female_rank_unit['極上']}"></label>
+    <label>イノシシ オス 一律（円/kg）<input type="number" id="r_m" value="${r.boar.male_unit}"></label>
+    ${(r.boar.yield_ranks||[]).map((y,i)=>`<label>歩留まり ${esc(y.rank)}：${esc(y.min_pct)}%以上 → 割合 <input type="number" step="0.1" id="r_y_${i}" value="${y.ratio}"></label>`).join('')}
+    <label>体重は切り捨て <input type="checkbox" id="r_floor" ${r.boar.weight_floor?'checked':''}></label>
+    <label>受入の最低体重（kg・注意表示用）<input type="number" id="r_minw" value="${r.boar.min_weight_kg}"></label>
+    <label>シカ 一律（円/kg）<input type="number" id="r_deer" value="${r.deer.unit}"></label>
+    <label>シカも歩留まり係数を掛ける <input type="checkbox" id="r_deer_y" ${r.deer.use_yield?'checked':''}></label>
+    <label>中型獣（円/頭）<input type="number" id="r_small" value="${r.small.price}"></label>
+    <label>中型獣の獣種（読点区切り）<input type="text" id="r_small_sp" value="${esc((r.small.species||[]).join('、'))}" style="width:220px"></label>
+    <label>現場引取（円/回・天引き）<input type="number" id="r_fee" value="${r.pickup_fee}"></label>
+    <label>出典・メモ <input type="text" id="r_src" value="${esc(r.source||'')}" style="width:260px"></label>`;
+}
+function rulesCollect(){
+  const g = id => document.getElementById(id);
+  const n = id => Number(g(id).value)||0;
+  const out = JSON.parse(JSON.stringify(RULES));
+  out.boar.female_rank_unit = { '並': n('r_f_nami'), '上': n('r_f_jou'), '極上': n('r_f_goku') };
+  out.boar.male_unit = n('r_m'); out.boar.weight_floor = g('r_floor').checked; out.boar.min_weight_kg = n('r_minw');
+  out.boar.yield_ranks = (RULES.boar.yield_ranks||[]).map((y,i)=>Object.assign({}, y, { ratio: n('r_y_'+i) }));
+  out.deer = { unit: n('r_deer'), use_yield: g('r_deer_y').checked };
+  out.small = { price: n('r_small'), species: g('r_small_sp').value.split(/[、,\s]+/).filter(Boolean) };
+  out.pickup_fee = n('r_fee'); out.source = g('r_src').value; out.updated_at = new Date().toISOString().slice(0,10);
+  return out;
+}
+async function rulesSave(){
+  const msg = document.getElementById('rulesMsg');
+  try {
+    const val = rulesCollect();
+    const r = await sb('app_settings', '?key=eq.buyback_rules', 'PATCH', { value: val });
+    if (!Array.isArray(r) || !r.length) await sb('app_settings', '', 'POST', { key:'buyback_rules', value: val });
+    RULES = val; rulesFromDb = true; rulesRender(); msg.textContent = '✅ 保存しました（次の計算から使われます）';
+    if (D.inds.length) { D.result = compute(D.inds, D.meat, RULES, D.run.adjustments); renderAll(); }
+  } catch(e) { msg.textContent = '⚠ 保存に失敗: ' + (e.message||e); }
+}
+
+// ───────────── 出力 ─────────────
+function csvQ(x){ const s = x==null?'':String(x); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; }
+function downloadCsv(kind){
+  const r = D.result; if (!r) return;
+  let head, rows, name;
+  if (kind === 'detail') { head = ['支払先','捕獲者','個体管理番号','捕獲日','種類','性別','体重','肉ランク','歩留まり率','歩留まりランク','単価','係数','引取','買取価格','状態']; rows = r.payees.flatMap(p=>p.items.map(i=>[p.payee,i.hunter,i.label,i.capture_date,i.species,i.sex,i.weight,i.rank||'',i.yield_pct!=null?i.yield_pct:'',i.yield_rank||'',i.unit!=null?i.unit:'',i.ratio!=null?i.ratio:'',i.pickup?i.pickup_fee:'',i.pending?'':i.price,i.pending?'未確定 '+i.reason:i.reason])); name='買取明細'; }
+  else if (kind === 'payee') { head = ['支払先','頭数','イノシシ','その他','引取件数','未確定','調整','調整メモ','支払額']; rows = r.payees.map(p=>[p.payee,p.heads,p.boar,p.other,p.pickups,p.pending,p.adjust,p.adjust_note,p.pay]); name='買取支払先'; }
+  else { head = ['No','名前','フリガナ','銀行名','支店名','種類','口座番号','金額','備考']; rows = r.payees.filter(p=>p.pay>0).map(p=>{ const b=p.bank||{}; return [b.no!=null?b.no:'',p.payee,b.furigana||'',b.bank||'',b.branch||'',b.type||'',b.number||'',p.pay,p.adjust_note||'']; }); name='振込一覧'; }
+  const csv = '﻿' + [head.join(',')].concat(rows.map(x=>x.map(csvQ).join(','))).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download = `${name}_${(D.run&&D.run.period_key)||''}.csv`; document.body.appendChild(a); a.click(); a.remove();
+}
+function printDoc(title, css, body){
+  const w = window.open('', '_blank'); if (!w) { showStatus('error','ポップアップがブロックされました。許可してもう一度押してください'); return; }
+  w.document.write(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>${esc(title)}</title><style>${css}</style></head><body>${body}<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script></body></html>`);
+  w.document.close();
+}
+const NOTICE_CSS = `@page{size:A4;margin:22mm 20mm} body{font-family:"Noto Serif JP","Yu Mincho","Hiragino Mincho ProN",serif;font-size:11.5pt;color:#000;line-height:1.9} .pg{page-break-after:always} .pg:last-child{page-break-after:auto} h1{font-size:15pt;text-align:center;margin:0 0 14pt;letter-spacing:.1em} .r{text-align:right} .c{text-align:center} .greet{margin:10pt 0} .kiki{margin:16pt 0 8pt} .item{margin:4pt 0 4pt 2em} table{border-collapse:collapse;width:100%;font-size:9.5pt;margin-top:6pt;font-family:"Noto Sans JP","Yu Gothic",sans-serif} th,td{border:1px solid #333;padding:3pt 5pt} th{background:#eee;font-weight:600} .n{text-align:right} .tot td{font-weight:700;background:#f6f6f6} .sub{font-size:9pt;color:#333}`;
+function noticeHtml(p, opts){
+  const period = `${reiwa(D.run.fiscal_year)}${D.run.half}`;
+  const items = p.items;
+  const table = `<table><thead><tr><th>個体管理番号</th><th>捕獲日</th><th>種類</th><th>性別</th><th class="n">体重(kg)</th><th>肉ランク</th><th>歩留まり</th><th class="n">引取</th><th class="n">買取価格</th></tr></thead><tbody>
+    ${items.map(i=>`<tr><td>${esc(i.label)}</td><td>${esc(i.capture_date)}</td><td>${esc(i.species)}</td><td>${esc(i.sex||'')}</td><td class="n">${i.weight?i.weight.toFixed(1):''}</td><td>${i.species==='イノシシ'?esc(i.rank||''):''}</td><td>${i.yield_rank?esc(i.yield_rank):(i.pending?'未確定':'')}</td><td class="n">${i.pickup?'−'+Number(i.pickup_fee).toLocaleString():''}</td><td class="n">${i.pending?'—':Number(i.price).toLocaleString()}</td></tr>`).join('')}
+    ${p.adjust?`<tr><td colspan="8">調整 ${esc(p.adjust_note||'')}</td><td class="n">${p.adjust>0?'+':''}${Number(p.adjust).toLocaleString()}</td></tr>`:''}
+    <tr class="tot"><td colspan="8">合計（${items.length}頭）</td><td class="n">${Number(p.pay).toLocaleString()}</td></tr></tbody></table>
+    <div class="sub">歩留まりランク A：3割以上（10割）／B：2割以上〜3割未満（5割）／C：1割以上〜2割未満（3割）／D：1割未満（買取不可）。現場引取は1回3,000円を個体ごとに天引き（0円が下限）。</div>`;
+  const inline = items.length <= 8;
+  return `<div class="pg">
+    <h1>${esc(period)}捕獲個体買取金のご通知</h1>
+    <div class="r">${esc(opts.date)}</div>
+    <div style="margin:10pt 0 6pt;font-size:13pt">${esc(p.payee)}　様</div>
+    <div class="r">${esc(opts.from).replace(/　/g,'<br>')}</div>
+    <p class="greet">拝啓　時下ますますご清祥のこととお喜び申し上げます。平素は格別のお引き立てを賜り、厚くお礼申し上げます。<br>
+    標記の件につきまして、下記のとおり買取料金をお振込みいたしましたので、ここにご通知申し上げます。<br>
+    なお、ご不明な点などがございましたら、下記担当までお問い合わせください。</p>
+    <div class="r">敬具</div>
+    <div class="c kiki">記</div>
+    <div class="item">１．${esc(period)}イノシシ等買取合計金額　　<b>${Number(p.pay).toLocaleString()}　円</b></div>
+    <div class="item">２．買取内容${inline ? '' : '　　別紙のとおり'}</div>
+    ${inline ? table : ''}
+    <div class="item">３．お問い合わせ先　　${esc(opts.tel)}</div>
+    <div class="r" style="margin-top:12pt">以上</div>
+  </div>${inline ? '' : `<div class="pg"><h1 style="font-size:12pt">別紙　${esc(p.payee)}　様　買取内容（${esc(period)}）</h1>${table}</div>`}`;
+}
+function printNotices(){
+  const r = D.result; if (!r) { showStatus('error','先に計算してください'); return; }
+  const opts = { date: document.getElementById('nDate').value, from: document.getElementById('nFrom').value, tel: document.getElementById('nTel').value };
+  const only = document.getElementById('nOne').value; const zero = document.getElementById('nZero').checked;
+  const list = r.payees.filter(p => (!only || p.payee===only) && (zero || p.pay>0));
+  if (!list.length) { showStatus('error','出力する支払先がありません'); return; }
+  printDoc('買取金のご通知', NOTICE_CSS, list.map(p=>noticeHtml(p, opts)).join(''));
+}
+function printBank(){
+  const r = D.result; if (!r) return;
+  const rows = r.payees.filter(p=>p.pay>0).map(p=>({p,b:p.bank||{}})).sort((a,b)=>(a.b.bank||'ん').localeCompare(b.b.bank||'ん','ja')||(a.b.branch||'').localeCompare(b.b.branch||'','ja'));
+  printDoc('振込一覧', `@page{size:A4;margin:15mm} body{font-family:"Noto Sans JP",sans-serif;font-size:10pt} table{border-collapse:collapse;width:100%} th,td{border:1px solid #333;padding:3pt 5pt} th{background:#eee} .n{text-align:right} h1{font-size:13pt}`,
+    `<h1>${esc(reiwa(D.run.fiscal_year)+D.run.half)} 買取金 振込一覧（${rows.length}件・${yen(rows.reduce((s,x)=>s+x.p.pay,0))}）</h1><table><thead><tr><th>No</th><th>名前</th><th>フリガナ</th><th>銀行名</th><th>支店名</th><th>種類</th><th>口座番号</th><th class="n">金額</th><th>備考</th></tr></thead><tbody>${rows.map(({p,b})=>`<tr><td>${b.no!=null?b.no:''}</td><td>${esc(p.payee)}</td><td>${esc(b.furigana||'')}</td><td>${esc(b.bank||'')}</td><td>${esc(b.branch||'')}</td><td>${esc(b.type||'')}</td><td>${esc(b.number||'未登録')}</td><td class="n">${Number(p.pay).toLocaleString()}</td><td>${esc(p.adjust_note||'')}</td></tr>`).join('')}</tbody></table>`);
+}
+function printAnnouncement(){
+  const r = D.result; if (!r) { showStatus('error','先に計算してください'); return; }
+  const period = `${reiwa(D.run.fiscal_year)}${D.run.half}`; const rl = RULES;
+  const sp = Object.entries(r.summary.bySpecies).sort((a,b)=>b[1]-a[1]);
+  const cities = [...new Set(Object.keys(r.summary.byCity).map(k=>k.split('|')[1]))].sort();
+  const yr = (rl.boar.yield_ranks||[]).map(y=>`<tr><td>${esc(y.rank)}</td><td>${esc(y.label||y.min_pct+'%以上')}</td><td>${Math.round(y.ratio*10)}割</td></tr>`).join('');
+  printDoc('告知', `@page{size:A4;margin:20mm} body{font-family:"Noto Sans JP",sans-serif;font-size:10.5pt;line-height:1.8} table{border-collapse:collapse;width:100%;margin:6pt 0} th,td{border:1px solid #333;padding:3pt 6pt} th{background:#eee} h1{font-size:13pt} h2{font-size:11.5pt;margin-top:14pt}`,
+    `<h1>${esc(period)}受入状況及び受入の詳細に関して（ご連絡）</h1>
+     <h2>別紙1　${esc(period)}の受入頭数</h2>
+     <table><thead><tr><th>獣種</th>${cities.map(c=>`<th>${esc(c)}</th>`).join('')}<th>合計</th></tr></thead><tbody>${sp.map(([s,n])=>`<tr><td>${esc(s)}</td>${cities.map(c=>`<td>${r.summary.byCity[s+'|'+c]||''}</td>`).join('')}<td>${n}</td></tr>`).join('')}<tr><td>合計</td>${cities.map(c=>`<td>${Object.keys(r.summary.byCity).filter(k=>k.endsWith('|'+c)).reduce((a,k)=>a+r.summary.byCity[k],0)}</td>`).join('')}<td>${r.items.length}</td></tr></tbody></table>
+     <p>買取合計 ${yen(r.total)}（支払先 ${r.payees.filter(p=>p.pay>0).length}名）${r.pending?`。うち ${r.pending}頭は精肉待ちのため未確定`:''}。</p>
+     <h2>別紙3　捕獲個体の買取価格について</h2>
+     <p>買取価格は、獣種及び脂身の厚さ（イノシシ・メスの場合）、肉の歩留まり率（個体の総重量のうち精肉できた重量）によって決定します。</p>
+     <table><thead><tr><th>種類</th><th>要件</th><th>単価</th></tr></thead><tbody>
+       <tr><td rowspan="3">イノシシ（メス）</td><td>並（脂の厚み2cm未満）</td><td>${rl.boar.female_rank_unit['並']}円/kg</td></tr>
+       <tr><td>上（脂の厚み2cm以上3cm未満）</td><td>${rl.boar.female_rank_unit['上']}円/kg</td></tr>
+       <tr><td>極上（脂の厚み3cm以上）</td><td>${rl.boar.female_rank_unit['極上']}円/kg</td></tr>
+       <tr><td>イノシシ（オス）</td><td>一律</td><td>${rl.boar.male_unit}円/kg</td></tr>
+       <tr><td>シカ</td><td>一律</td><td>${rl.deer.unit}円/kg</td></tr>
+       <tr><td>中型獣</td><td>一律（${esc((rl.small.species||[]).join('、'))}）</td><td>${Number(rl.small.price).toLocaleString()}円/頭</td></tr></tbody></table>
+     <table><thead><tr><th>歩留まりランク</th><th>歩留まり率</th><th>買取価格の割合</th></tr></thead><tbody>${yr}</tbody></table>
+     <p>現場引取は1回${Number(rl.pickup_fee).toLocaleString()}円（止めさし込み）で、個体ごとに買取代金から天引きします。買取料金より引取額が上回る場合でも追加の請求はありません（0円に調整）。</p>`);
+}
+init();
+</script>
+</body>
+</html>

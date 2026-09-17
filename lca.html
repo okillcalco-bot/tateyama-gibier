@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>館山ジビエセンター － 猪肉のLCA（環境負荷）算出</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Barlow+Condensed:wght@400;600;700&display=swap');
+:root {
+  --bg:#0f1117; --surface:#1a1e2a; --surface2:#222736; --border:#2e3447;
+  --accent:#e8a44a; --accent2:#c06a2a; --green:#4caf7d; --red:#e05555; --blue:#5a8cd8; --yellow:#f0c040; --purple:#9b7fd4;
+  --text:#e8eaf0; --text2:#8b90a8; --radius:10px;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--text); font-family:'Noto Sans JP',sans-serif; font-size:14px; min-height:100vh; }
+.header { background:var(--surface); border-bottom:2px solid var(--accent); padding:14px 20px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; flex-wrap:wrap; gap:10px; }
+.header-title { font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:700; color:var(--accent); letter-spacing:.05em; }
+.header-sub { font-size:11px; color:var(--text2); margin-top:2px; }
+.nav-links { display:flex; gap:8px; flex-wrap:wrap; }
+.nav-link { background:var(--surface2); border:1px solid var(--border); color:var(--text2); padding:6px 12px; border-radius:6px; text-decoration:none; font-size:12px; }
+.nav-link:hover { color:var(--accent); border-color:var(--accent); }
+.filter-bar { background:var(--surface); border-bottom:1px solid var(--border); padding:12px 20px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.filter-label { font-size:12px; color:var(--text2); white-space:nowrap; }
+select, input[type="number"], input[type="text"], textarea { background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:6px; font-size:13px; font-family:inherit; color-scheme:dark; }
+select:focus, input:focus { outline:none; border-color:var(--accent); }
+.btn { padding:7px 16px; border-radius:6px; border:none; cursor:pointer; font-size:13px; font-family:inherit; font-weight:500; }
+.btn-accent { background:var(--accent); color:#000; }
+.btn-secondary { background:var(--surface2); color:var(--text2); border:1px solid var(--border); }
+.btn-sm { padding:4px 10px; font-size:12px; }
+.main { padding:20px; max-width:1400px; margin:0 auto; }
+.status-bar { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px 16px; margin-bottom:16px; font-size:13px; display:none; white-space:pre-wrap; }
+.status-bar.info { border-color:var(--blue); color:var(--blue); display:block; }
+.status-bar.error { border-color:var(--red); color:var(--red); display:block; }
+.status-bar.warn { border-color:var(--yellow); color:var(--yellow); display:block; }
+.tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
+.tab { padding:8px 14px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text2); cursor:pointer; font-size:13px; font-family:inherit; }
+.tab.on { background:var(--accent); color:#000; border-color:var(--accent); font-weight:600; }
+.panel { display:none; } .panel.on { display:block; }
+.kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+.kpi-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px; position:relative; overflow:hidden; }
+.kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--kpi-color,var(--accent)); }
+.kpi-label { font-size:11px; color:var(--text2); letter-spacing:.06em; margin-bottom:6px; }
+.kpi-value { font-family:'Barlow Condensed',sans-serif; font-size:26px; font-weight:700; }
+.kpi-sub { font-size:11px; color:var(--text2); margin-top:4px; line-height:1.5; }
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px; margin-bottom:20px; }
+.card-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; gap:10px; flex-wrap:wrap; }
+.card-title { font-size:14px; font-weight:500; }
+.card-sub { font-size:11px; color:var(--text2); margin-top:2px; line-height:1.5; }
+table { width:100%; border-collapse:collapse; }
+th { padding:8px 10px; text-align:left; font-size:11px; color:var(--text2); font-weight:500; letter-spacing:.04em; border-bottom:1px solid var(--border); background:var(--surface2); white-space:nowrap; }
+td { padding:7px 10px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:middle; }
+tr:last-child td { border-bottom:none; }
+.td-num { text-align:right; font-variant-numeric:tabular-nums; font-family:'Barlow Condensed',sans-serif; font-size:15px; }
+.muted { color:var(--text2); font-size:12px; }
+.note { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:14px 18px; font-size:12.5px; line-height:1.8; color:var(--text2); margin-bottom:20px; }
+.note b { color:var(--text); }
+.in-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:10px 18px; }
+.in-grid label { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12.5px; color:var(--text2); }
+.in-grid input { width:120px; }
+.in-grid .h { grid-column:1 / -1; font-size:12px; color:var(--accent); margin-top:8px; letter-spacing:.06em; }
+.bar-line { height:12px; border-radius:3px; display:inline-block; vertical-align:middle; }
+@media (max-width:1000px) { .kpi-row { grid-template-columns:repeat(2,1fr); } }
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <div class="header-title">🐗 TATEYAMA GIBIER</div>
+    <div class="header-sub">猪肉のLCA（ライフサイクルアセスメント） ― 肉1kgあたりの温室効果ガス排出量を年度ごとに算出</div>
+  </div>
+  <div class="nav-links">
+    <a href="index.html?tab=analysis" class="nav-link">📈 解析一覧</a>
+    <a href="mileage-analysis.html" class="nav-link">🚚 フードマイレージ</a>
+    <a href="history.html" class="nav-link">📚 過年度</a>
+    <a href="index.html" class="nav-link">📦 業務アプリ</a>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <span class="filter-label">年度</span><select id="fYear"></select>
+  <button class="btn btn-accent" onclick="calcAndRender()">🧮 算出する</button>
+  <button class="btn btn-secondary" onclick="fillFromDb()">📥 台帳から頭数・肉量・走行距離を入れる</button>
+  <span class="muted" id="state" style="margin-left:auto"></span>
+</div>
+
+<div class="main">
+  <div id="statusBar" class="status-bar"></div>
+  <div class="tabs">
+    <button class="tab on" data-p="result" onclick="showTab('result')">結果</button>
+    <button class="tab" data-p="input" onclick="showTab('input')">算出方法（年度の入力）</button>
+    <button class="tab" data-p="coef" onclick="showTab('coef')">係数（出典）</button>
+  </div>
+
+  <div class="panel on" id="p-result">
+    <div class="kpi-row">
+      <div class="kpi-card" style="--kpi-color:var(--accent)"><div class="kpi-label">ジビエ肉 1kgあたり</div><div class="kpi-value" id="kTotal">—</div><div class="kpi-sub">kg-CO₂e/kg（原材料調達＋加工・保管＋調理・飲食）</div></div>
+      <div class="kpi-card" style="--kpi-color:var(--green)"><div class="kpi-label">牛肉と比べて</div><div class="kpi-value" id="kBeef">—</div><div class="kpi-sub">牛肉 19.70 kg-CO₂e/kg（IDEA 3.2.0）</div></div>
+      <div class="kpi-card" style="--kpi-color:var(--blue)"><div class="kpi-label">豚肉と比べて</div><div class="kpi-value" id="kPork">—</div><div class="kpi-sub">豚肉 5.31 kg-CO₂e/kg</div></div>
+      <div class="kpi-card" style="--kpi-color:var(--purple)"><div class="kpi-label">一番大きい要因</div><div class="kpi-value" id="kTop" style="font-size:18px">—</div><div class="kpi-sub" id="kTopSub"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div><div class="card-title">🥩 他の肉との比較（kg-CO₂e/kg）</div>
+        <div class="card-sub">牛・豚・鶏は資料の試算値（原材料調達＝畜産、流通100km、調理・飲食は共通）。ジビエは選んだ年度の入力から計算。棒は対数ではなく実寸。</div></div></div>
+      <div id="cmpBox" class="muted">—</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div><div class="card-title">🔬 内訳（ジビエ・選んだ年度）</div>
+        <div class="card-sub">活動量 ÷ 年間の肉生産量 × 係数。フードマイレージと通じるのは「輸送」の行（走行距離 × 燃費 × ガソリンの係数／宅配のトンキロ）。</div></div></div>
+      <div id="detailBox" class="muted" style="overflow-x:auto">—</div>
+    </div>
+    <div class="note">
+      <b>読み方</b>：ジビエは畜産のような飼料・飼育の負荷が無いぶん原材料調達が小さく、代わりに処理施設の電気（冷凍・冷蔵）と残渣の処分が大きい。
+      資料の試算（令和5年度）は 4.30 kg-CO₂e/kg、罠の鉄を除くと 3.01、再エネ電力なら 1.59。牛肉の約1/5〜1/12、豚肉と同程度〜下。<br>
+      <b>フードマイレージとの関係</b>：山→センターの走行距離（LCAの「輸送」）は年度の実績（往復距離の合計）で、フードマイレージ解析の距離とは別に、実走行で数えます。センター→お客さんは宅配のトンキロで入ります。
+    </div>
+  </div>
+
+  <div class="panel" id="p-input">
+    <div class="card">
+      <div class="card-header"><div><div class="card-title">📝 算出方法（年度ごとの実績を入力）</div>
+        <div class="card-sub">【入力フォーム】猪肉のLCA_データ収集 の項目そのまま。年度を選んで入力し「保存」。台帳から入れられる項目（頭数・肉量・走行距離）はボタンで自動入力できます。</div></div>
+        <div class="muted" id="inState"></div></div>
+      <div class="in-grid" id="inForm"></div>
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="text" id="inNote" placeholder="メモ（出典・注意など）" style="width:360px">
+        <button class="btn btn-accent btn-sm" onclick="saveInputs()">保存</button>
+        <span class="muted" id="inMsg"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="p-coef">
+    <div class="card">
+      <div class="card-header"><div><div class="card-title">📚 排出係数（IDEA 3.2.0・資料より）</div>
+        <div class="card-sub">値を変えて保存すると次の算出から使われます。出典を必ず残してください。</div></div>
+        <div class="muted" id="coState"></div></div>
+      <div style="overflow-x:auto"><table><thead><tr><th>項目</th><th class="td-num">値</th><th>単位</th><th>メモ</th></tr></thead><tbody id="coBody"></tbody></table></div>
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="text" id="coSource" placeholder="出典" style="width:360px">
+        <button class="btn btn-accent btn-sm" onclick="saveCoef()">保存</button>
+        <span class="muted" id="coMsg"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+function staffKeyGet(){ try { return localStorage.getItem('tg_staff_key') || sessionStorage.getItem('tg_staff_key') || ''; } catch(e){ return ''; } }
+async function sb(table, query='', method='GET', body=null, prefer=''){
+  const headers = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` };
+  const sk = staffKeyGet(); if (sk) headers['x-staff-key'] = sk;
+  if (body) headers['Content-Type'] = 'application/json';
+  headers['Prefer'] = prefer || (method === 'GET' ? '' : 'return=representation');
+  const res = await fetch(`${SB_URL}/rest/v1/${table}${query}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  if (!res.ok) throw new Error(`${table}: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
+  const t = await res.text(); return t ? JSON.parse(t) : [];
+}
+function showStatus(type, msg){ const el=document.getElementById('statusBar'); el.className='status-bar '+type; el.textContent=msg; if(!type){ el.style.display='none'; } }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function showTab(p){ document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.p===p)); document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('on', x.id==='p-'+p)); }
+function f2(v){ return v==null||isNaN(v)?'—':(Math.abs(v)<0.01?v.toExponential(2):v.toFixed(2)); }
+
+// 入力項目（資料の入力フォームの並び）
+const FIELDS = [
+  ['h','生産量'], ['heads','受入頭数（頭/年）'], ['heads_boar','うちイノシシ（頭/年）'], ['meat_kg','肉の生産量（kg/年）'],
+  ['h','資材'], ['box_traps','箱罠の同時設置個数（個）'], ['box_trap_kg','箱罠1個の重さ（kg）',80], ['box_trap_life','箱罠の耐用年数（年）',5], ['snare_stainless_kg_per_kg','くくり罠のステンレス量（kg/肉kg）',0.2667], ['snare_life_times','くくり罠の耐用回数（回）',3], ['rice_bran_kg','米ぬかの使用量（kg/年）'],
+  ['h','廃棄物'], ['residue_kg','産廃（動植物性残渣）の廃棄量（kg/年）'], ['residue_km_roundtrip','産廃処分場までの往復距離（km/回）',74.6], ['residue_trips','産廃の運搬回数（回/年）',12],
+  ['h','エネルギー'], ['electricity_kwh','電気使用量（kWh/年）'], ['water_m3','水使用量（㎥/年）'],
+  ['h','ガソリン（罠・見回り・搬入）'], ['trap_set_km','罠設置時の往復走行距離（km/回）'], ['trap_set_times','罠設置回数（回/年）'], ['patrol_km','見回り時の往復走行距離（km/回）'], ['patrol_times','見回り回数（回/年）'], ['haul_km_total','止め刺し→搬入の往復走行距離の合計（km/年）'], ['fuel_km_per_l','燃費（km/L・軽トラ）',14], ['gasoline_l','ガソリン消費量（L/年・実績があれば）'],
+  ['h','梱包・流通'], ['packing_cardboard_m2_per_kg','段ボール（㎡/肉kg）',0.26], ['packing_eps_kg_per_kg','発泡スチロール（kg/肉kg）',0.11], ['distribution_tkm_per_kg','流通（宅配）のトンキロ（tkm/肉kg）',0.31929],
+];
+let COEF = null, coefFromDb = false; let INPUTS = {}; let curYear = null;
+
+function coef(key){ const it = ((COEF||{}).items||[]).find(i=>i.key===key); return it ? Number(it.value)||0 : 0; }
+// 算出（資料のインベントリの考え方に合わせる。すべて「肉1kgあたり」）
+function calc(d){
+  const meat = Number(d.meat_kg)||0; if (!meat) return null;
+  const per = v => (Number(v)||0) / meat;
+  const rows = [];
+  const add = (stage, name, amount, unit, ckey, cname, note) => { const c = coef(ckey); const co2 = amount * c; rows.push({ stage, name, amount, unit, ckey, cname, coef:c, co2, note }); return co2; };
+  // 原材料調達
+  add('原材料調達','箱罠（鉄）', per((Number(d.box_traps)||0) * (Number(d.box_trap_kg)||80) / (Number(d.box_trap_life)||5)), 'kg/kg', 'steel', 'その他の鉄鋼品');
+  add('原材料調達','くくり罠（ステンレス）', Number(d.snare_stainless_kg_per_kg)||0, 'kg/kg', 'stainless', 'ステンレス鋼', '資料の値 0.2667 kg/kg（0.8 kg/kg ÷ 耐用3回 を織り込み済み）');
+  add('原材料調達','罠の廃金属処理', (Number(d.snare_stainless_kg_per_kg)||0) * 4, 'kg/kg', 'metal_waste', '産廃処理 金属くず', '資料の値（1.0667 kg/kg）に合わせた概算');
+  const gasL = Number(d.gasoline_l) || ((Number(d.haul_km_total)||0) + (Number(d.trap_set_km)||0)*(Number(d.trap_set_times)||0) + (Number(d.patrol_km)||0)*(Number(d.patrol_times)||0)) / (Number(d.fuel_km_per_l)||14);
+  add('原材料調達','輸送（軽トラ・ガソリン）', per(gasL), 'L/kg', 'gasoline', 'ガソリン燃焼', `年間 ${Math.round(gasL)} L（走行距離 ÷ 燃費、または実績）`);
+  // 加工・保管
+  add('加工・保管','電力', per(d.electricity_kwh), 'kWh/kg', 'electricity', '電力（日本平均）');
+  add('加工・保管','上水', per(d.water_m3), '㎥/kg', 'water', '上水道');
+  add('加工・保管','排水', per(d.water_m3), '㎥/kg', 'sewage', '下水道処理');
+  add('加工・保管','残渣（産廃処理）', per(d.residue_kg), 'kg/kg', 'residue', '産廃処理 動植物性残渣');
+  add('加工・保管','残渣の運搬', per((Number(d.residue_kg)||0)/1000 * (Number(d.residue_km_roundtrip)||0)/2 * 2) , 'tkm/kg', 'truck10t', 'トラック輸送 10t', '残渣 t × 処分場までの距離');
+  add('加工・保管','梱包（段ボール）', Number(d.packing_cardboard_m2_per_kg)||0, '㎡/kg', 'cardboard', '段ボール');
+  add('加工・保管','梱包（発泡スチロール）', Number(d.packing_eps_kg_per_kg)||0, 'kg/kg', 'eps', '発泡ポリスチレン');
+  add('流通','宅配（トラック）', Number(d.distribution_tkm_per_kg)||0, 'tkm/kg', 'truck10t', 'トラック輸送 10t');
+  rows.push({ stage:'調理・飲食', name:'調理・飲食（共通）', amount:1, unit:'kg', ckey:'cooking', cname:'固定分', coef:coef('cooking'), co2:coef('cooking'), note:'牛・豚・鶏と共通' });
+  const byStage = {}; rows.forEach(r => { byStage[r.stage] = (byStage[r.stage]||0) + r.co2; });
+  const total = rows.reduce((s,r)=>s+r.co2,0);
+  return { rows, byStage, total, gasL, meat };
+}
+
+// ───────────── 画面 ─────────────
+function renderInputs(){
+  const d = INPUTS[curYear] || {}; const f = document.getElementById('inForm');
+  f.innerHTML = FIELDS.map(([k,label,def]) => k==='h' ? `<div class="h">${esc(label)}</div>` : `<label>${esc(label)}<input type="number" step="any" data-k="${k}" value="${d[k]!=null?d[k]:(def!=null?def:'')}"></label>`).join('');
+  document.getElementById('inNote').value = (INPUTS[curYear] && INPUTS[curYear].__note) || '';
+  document.getElementById('inState').textContent = INPUTS[curYear] ? '保存済みの入力' : '未入力（既定値のみ）';
+}
+function collectInputs(){ const d = {}; document.querySelectorAll('#inForm input[data-k]').forEach(i => { if (i.value !== '') d[i.dataset.k] = Number(i.value); }); return d; }
+async function saveInputs(){
+  const msg = document.getElementById('inMsg'); const d = collectInputs(); const note = document.getElementById('inNote').value;
+  try {
+    const r = await sb('lca_inputs', `?fiscal_year=eq.${curYear}`, 'PATCH', { data: d, note, updated_at: new Date().toISOString() });
+    if (!Array.isArray(r) || !r.length) await sb('lca_inputs', '', 'POST', { fiscal_year: curYear, data: d, note });
+    INPUTS[curYear] = Object.assign({}, d, { __note: note }); msg.textContent = '✅ 保存しました'; renderInputs(); calcAndRender();
+  } catch(e) { msg.textContent = '⚠ 保存に失敗: ' + (e.message||e); }
+}
+function renderCoef(){
+  const items = (COEF||{}).items || [];
+  document.getElementById('coState').textContent = coefFromDb ? `保存済み（${(COEF||{}).source||''}）` : '既定値（未保存）';
+  document.getElementById('coBody').innerHTML = items.map((it,i)=>`<tr><td>${esc(it.name)}<br><span class="muted">${esc(it.key)}</span></td><td class="td-num"><input type="number" step="any" data-ci="${i}" value="${it.value}" style="width:110px"></td><td>${esc(it.unit)}</td><td class="muted">${esc(it.note||'')}</td></tr>`).join('');
+  document.getElementById('coSource').value = (COEF||{}).source || '';
+}
+async function saveCoef(){
+  const msg = document.getElementById('coMsg');
+  document.querySelectorAll('#coBody input[data-ci]').forEach(i => { const it = COEF.items[Number(i.dataset.ci)]; if (it) it.value = Number(i.value)||0; });
+  COEF.source = document.getElementById('coSource').value;
+  try { const r = await sb('app_settings', '?key=eq.lca_coefficients', 'PATCH', { value: COEF }); if (!Array.isArray(r) || !r.length) throw new Error('設定行がありません（migration 未適用）'); coefFromDb = true; renderCoef(); msg.textContent = '✅ 保存しました'; calcAndRender(); }
+  catch(e) { msg.textContent = '⚠ 保存に失敗: ' + (e.message||e); }
+}
+function calcAndRender(){
+  const d = Object.assign({}, INPUTS[curYear] || {}, collectInputs());
+  const r = calc(d);
+  const ref = ((COEF||{}).reference||{}).items || [];
+  const beef = ref.find(x=>/牛/.test(x.name)), pork = ref.find(x=>/豚/.test(x.name));
+  if (!r) { document.getElementById('kTotal').textContent = '—'; document.getElementById('kBeef').textContent = '—'; document.getElementById('kPork').textContent = '—'; document.getElementById('kTop').textContent = '—'; document.getElementById('cmpBox').innerHTML = '<span class="muted">「算出方法」で肉の生産量（kg/年）を入れてください。</span>'; document.getElementById('detailBox').innerHTML = ''; document.getElementById('state').textContent = `令和${curYear}年度: 肉の生産量が未入力`; return; }
+  document.getElementById('kTotal').textContent = r.total.toFixed(2);
+  document.getElementById('kBeef').textContent = beef ? `約 1/${(beef.total / r.total).toFixed(1)}` : '—';
+  document.getElementById('kPork').textContent = pork ? (pork.total >= r.total ? `約 1/${(pork.total / r.total).toFixed(1)}` : `約 ${(r.total / pork.total).toFixed(1)}倍`) : '—';
+  const top = r.rows.slice().sort((a,b)=>b.co2-a.co2)[0];
+  document.getElementById('kTop').textContent = top ? top.name : '—';
+  document.getElementById('kTopSub').textContent = top ? `${top.co2.toFixed(2)} kg-CO₂e/kg（全体の ${Math.round(top.co2/r.total*100)}%）` : '';
+  const cmp = ref.map(x=>({ name:x.name, total:x.total, parts:[x.material,x.processing,x.cooking+x.eating] })).concat([{ name:`ジビエ肉（館山・令和${curYear}年度・この入力）`, total:r.total, parts:[r.byStage['原材料調達']||0, (r.byStage['加工・保管']||0)+(r.byStage['流通']||0), r.byStage['調理・飲食']||0], mine:true }]);
+  const mx = Math.max(...cmp.map(c=>c.total));
+  document.getElementById('cmpBox').innerHTML = `<table><thead><tr><th>肉</th><th style="width:45%">kg-CO₂e/kg</th><th class="td-num">合計</th><th class="td-num">原材料調達</th><th class="td-num">加工・保管・流通</th><th class="td-num">調理・飲食</th></tr></thead><tbody>${cmp.map(c=>`<tr${c.mine?' style="background:rgba(232,164,74,.08)"':''}><td>${c.mine?'<b>':''}${esc(c.name)}${c.mine?'</b>':''}</td><td><span class="bar-line" style="width:${(c.parts[0]/mx*100).toFixed(1)}%;background:#9b7fd4"></span><span class="bar-line" style="width:${(c.parts[1]/mx*100).toFixed(1)}%;background:#5a8cd8"></span><span class="bar-line" style="width:${(c.parts[2]/mx*100).toFixed(1)}%;background:#8b90a8"></span></td><td class="td-num"><b>${c.total.toFixed(2)}</b></td><td class="td-num">${c.parts[0].toFixed(2)}</td><td class="td-num">${c.parts[1].toFixed(2)}</td><td class="td-num">${c.parts[2].toFixed(2)}</td></tr>`).join('')}</tbody></table><div class="muted" style="margin-top:6px">紫＝原材料調達（畜産／罠・搬入）、青＝加工・保管・流通（電気・水・残渣・梱包・宅配）、灰＝調理・飲食（共通）。出典: ${esc(((COEF||{}).reference||{}).source||'')}</div>`;
+  document.getElementById('detailBox').innerHTML = `<table><thead><tr><th>段階</th><th>項目</th><th class="td-num">活動量（肉1kgあたり）</th><th>単位</th><th>係数</th><th class="td-num">係数の値</th><th class="td-num">kg-CO₂e/kg</th><th class="td-num">割合</th><th>メモ</th></tr></thead><tbody>${r.rows.map(x=>`<tr><td>${esc(x.stage)}</td><td>${esc(x.name)}</td><td class="td-num">${f2(x.amount)}</td><td>${esc(x.unit)}</td><td class="muted">${esc(x.cname)}</td><td class="td-num">${f2(x.coef)}</td><td class="td-num">${x.co2.toFixed(3)}</td><td class="td-num">${(x.co2/r.total*100).toFixed(1)}%</td><td class="muted">${esc(x.note||'')}</td></tr>`).join('')}<tr style="background:rgba(232,164,74,.08)"><td colspan="6"><b>合計</b></td><td class="td-num"><b>${r.total.toFixed(3)}</b></td><td class="td-num">100%</td><td class="muted">年間の肉 ${r.meat.toLocaleString()} kg・ガソリン ${Math.round(r.gasL)} L</td></tr></tbody></table>`;
+  document.getElementById('state').textContent = `令和${curYear}年度: ${r.total.toFixed(2)} kg-CO₂e/kg`;
+}
+async function fillFromDb(){
+  const y = curYear; const g = 2018 + y; const from = `${g}-04-01`, to = `${g+1}-03-31`;
+  showStatus('info', `令和${y}年度（${from}〜${to}）の頭数・精肉重量・走行距離を集計中…`);
+  try {
+    const inds = await sb('v_individuals_all', `?select=label_id,species,city,area,weight&fiscal_year=eq.${y}&limit=20000`);
+    const heads = inds.length, boar = inds.filter(i=>i.species==='イノシシ').length;
+    let meatKg = 0;
+    if (y >= 8) { const inv = await sb('inventory', `?select=individual_id,weight,weight_kg&deleted_at=is.null&tier=eq.2&individual_id=not.is.null&limit=20000`); const set = new Set(inds.map(i=>i.label_id)); inv.forEach(v => { if (set.has(v.individual_id)) meatKg += Number(v.weight != null ? v.weight : v.weight_kg)||0; }); }
+    else if (y === 7) { const sh = await sb('sales_history', `?select=label_id,qty_g&fiscal_year=eq.7&limit=20000`); sh.forEach(s => { meatKg += (Number(s.qty_g)||0)/1000; }); }
+    const areas = await sb('area_master', '?select=city,oaza,road_km_roundtrip&road_km_roundtrip=not.is.null');
+    const km = {}; areas.forEach(a => { km[(a.city||'')+'|'+(a.oaza||'')] = Number(a.road_km_roundtrip); });
+    let haul = 0, haulN = 0; inds.forEach(i => { const k = km[(i.city||'')+'|'+(i.area||'')]; if (k) { haul += k; haulN++; } });
+    const set = v => { const el = document.querySelector(`#inForm input[data-k="${v[0]}"]`); if (el && v[1] != null && v[1] !== 0) el.value = v[1]; };
+    set(['heads', heads]); set(['heads_boar', boar]); if (meatKg) set(['meat_kg', Math.round(meatKg)]); if (haul) set(['haul_km_total', Math.round(haul)]);
+    showStatus('info', `令和${y}年度: 受入 ${heads}頭（イノシシ ${boar}）／肉 ${meatKg?Math.round(meatKg).toLocaleString()+' kg':'（精肉重量の記録なし）'}／搬入の往復距離 ${Math.round(haul).toLocaleString()} km（地区の往復距離が分かる ${haulN}頭分）。電気・水・残渣は請求書から入れてください。`);
+    calcAndRender();
+  } catch(e) { showStatus('error', '集計できませんでした: ' + (e.message||e)); }
+}
+async function init(){
+  const now = new Date(); const fy = (now.getMonth()+1 >= 4 ? now.getFullYear() : now.getFullYear()-1) - 2018;
+  const sel = document.getElementById('fYear'); for (let y = fy; y >= 3; y--) sel.insertAdjacentHTML('beforeend', `<option value="${y}">令和${y}年度（${2018+y}/4〜${2019+y}/3）</option>`);
+  try {
+    const [c, ins] = await Promise.all([ sb('app_settings','?key=eq.lca_coefficients&select=value'), sb('lca_inputs','?select=fiscal_year,data,note') ]);
+    if (c[0] && c[0].value && Array.isArray(c[0].value.items)) { COEF = c[0].value; coefFromDb = true; }
+    ins.forEach(i => { INPUTS[i.fiscal_year] = Object.assign({}, i.data||{}, { __note: i.note||'' }); });
+  } catch(e) { showStatus('error', '設定を読み込めませんでした: ' + (e.message||e)); }
+  if (!COEF) COEF = { source:'既定値（未保存）', items:[{key:'electricity',name:'電力',value:0.549,unit:'kg-CO2e/kWh'},{key:'water',name:'上水道',value:0.336,unit:'kg-CO2e/m3'},{key:'sewage',name:'下水道処理',value:0.517,unit:'kg-CO2e/m3'},{key:'residue',name:'産廃処理（動植物性残渣）',value:0.218,unit:'kg-CO2e/kg'},{key:'truck10t',name:'トラック輸送 10t',value:0.162,unit:'kg-CO2e/tkm'},{key:'keitora',name:'軽トラック',value:2.43,unit:'kg-CO2e/tkm'},{key:'gasoline',name:'ガソリン燃焼',value:2.32,unit:'kg-CO2e/L'},{key:'stainless',name:'ステンレス鋼',value:4.84,unit:'kg-CO2e/kg'},{key:'steel',name:'その他の鉄鋼品',value:0.00665,unit:'kg-CO2e/kg'},{key:'cardboard',name:'段ボール',value:0.622,unit:'kg-CO2e/m2'},{key:'eps',name:'発泡ポリスチレン',value:3.72,unit:'kg-CO2e/kg'},{key:'metal_waste',name:'産廃処理 金属くず',value:0.0429,unit:'kg-CO2e/kg'},{key:'cooking',name:'調理・飲食（共通）',value:0.93,unit:'kg-CO2e/kg'}], reference:{ source:'猪肉のLCA_20241010.xlsx 試算結果', items:[{name:'牛肉',total:19.70,material:18.70,processing:0,cooking:0.91,eating:0.02},{name:'豚肉',total:5.31,material:4.39,processing:0,cooking:0.91,eating:0.02},{name:'鶏肉',total:3.05,material:2.13,processing:0,cooking:0.91,eating:0.02},{name:'ジビエ肉（館山・R5実績）',total:4.30,material:1.33,processing:2.05,cooking:0.91,eating:0.02}] } };
+  // 既定の年度: 入力があれば最新、無ければ今年度
+  const have = Object.keys(INPUTS).map(Number).sort((a,b)=>b-a);
+  curYear = have.length ? have[0] : fy; sel.value = String(curYear);
+  sel.addEventListener('change', () => { curYear = Number(sel.value); renderInputs(); calcAndRender(); });
+  renderCoef(); renderInputs(); calcAndRender();
+}
+init();
+</script>
+</body>
+</html>
