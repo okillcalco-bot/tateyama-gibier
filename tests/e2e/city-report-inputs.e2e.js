@@ -62,6 +62,26 @@ function rowHt(xml, r) { const m = xml.match(new RegExp('<row r="' + r + '"[^>]*
   await page.route('**/rest/v1/**', r => {
     const u = decodeURIComponent(r.request().url()), m = r.request().method();
     const J = x => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(x) });
+    if (/\/attendance/.test(u)) {
+      // 8月: 8/5 解体側は今泉が最後（17:10）、カット側は白石。8/6 は沖と田口だけ → 沖。8/8（土）は大橋・黒川（吉田は未打刻なので後ろ）
+      return J(/2026-08-01/.test(u) ? [
+        { work_date: '2026-08-05', staff_id: 's1', staff_name: '大和田薫', clock_in: '08:00', clock_out: '16:00' },
+        { work_date: '2026-08-05', staff_id: 's2', staff_name: '今泉貴雄', clock_in: '08:00', clock_out: '17:10' },
+        { work_date: '2026-08-05', staff_id: 's3', staff_name: '白石秀一', clock_in: '08:00', clock_out: '17:30' },
+        { work_date: '2026-08-05', staff_id: 's4', staff_name: '田口和利', clock_in: '08:00', clock_out: '17:30' },
+        { work_date: '2026-08-05', staff_id: 's5', staff_name: '沖浩志', clock_in: '08:00', clock_out: '18:00' },
+        { work_date: '2026-08-06', staff_id: 's4', staff_name: '田口和利', clock_in: '08:00', clock_out: '17:30' },
+        { work_date: '2026-08-06', staff_id: 's5', staff_name: '沖浩志', clock_in: '08:00', clock_out: '17:30' },
+        { work_date: '2026-08-08', staff_id: 's6', staff_name: '大橋直人', clock_in: '08:00', clock_out: '12:40' },
+        { work_date: '2026-08-08', staff_id: 's1', staff_name: '大和田薫', clock_in: '08:00', clock_out: '12:00' },
+        { work_date: '2026-08-08', staff_id: 's7', staff_name: '吉田友美', clock_in: '08:00', clock_out: null },
+        { work_date: '2026-08-08', staff_id: 's8', staff_name: '黒川珠絵', clock_in: '08:00', clock_out: '13:00' },
+      ] : []);
+    }
+    if (/cleaning_logs/.test(u)) {
+      // 8/7 は勤怠が無い → 清掃アプリの記録で補う
+      return J(/2026-08-01/.test(u) ? [{ room: '解体室', staff_name: '相川武士', cleaned_at: '2026-08-07T08:00:00+09:00' }] : []);
+    }
     if (/facility_check_logs/.test(u)) {
       // 8月: 8/5 に冷凍ストッカー1 = -19、ユニット冷蔵庫は 5℃で要改善。それ以外の日は記録なし
       return J(/2026-08-01/.test(u) ? [{ check_date: '2026-08-05', item: '冷凍ストッカー1', value: '-19', result: '可' }, { check_date: '2026-08-05', item: 'ユニット冷蔵庫', value: '5', result: '要改善' }, { check_date: '2026-08-06', item: '冷凍庫1（ホシザキ）', value: '-17', result: '可' }] : []);
@@ -118,6 +138,16 @@ function rowHt(xml, r) { const m = xml.match(new RegExp('<row r="' + r + '"[^>]*
   T('ユニット冷蔵庫: 8/5 は要改善 → 上段△・下段 5、他の日は○・-1', cell(ck, 'G20') === '△' && cell(ck, 'G21') === 5 && cell(ck, 'C20') === '○' && cell(ck, 'C21') === -1, [cell(ck, 'G20'), cell(ck, 'G21'), cell(ck, 'C20'), cell(ck, 'C21')].join(' | '));
   T('冷凍庫(ホシザキ): アプリの「冷凍庫1（ホシザキ）」の記録 8/6 = -17 を拾い、他は -18', cell(ck, 'H41') === -17 && cell(ck, 'C41') === -18 && cell(ck, 'C47') === -20 && cell(ck, 'C39') === -60, [cell(ck, 'H41'), cell(ck, 'C41'), cell(ck, 'C47'), cell(ck, 'C39')].join(' | '));
   T('苦情: 「令和8年8月の苦情はありません」', cell(cp, 'B4') === '－' && cell(cp, 'E4') === '令和8年8月の苦情はありません', [cell(cp, 'B4'), cell(cp, 'E4')].join(' | '));
+
+  // 3c) 清掃記録の担当は勤怠から（2026-09-18）: 解体側＝解体担当で最後に帰った人、カット側＝精肉担当で最後に帰った人。沖・田口だけの日は沖
+  const cs = sheetXml(f8, '3清掃記録');
+  T('8/5: 解体側は今泉（17:10・大和田16:00より遅い）、カット側は白石。外周も解体側の人', cell(cs, 'G4') === '今' && cell(cs, 'G10') === '白' && cell(cs, 'G3') === '今', [cell(cs, 'G4'), cell(cs, 'G10'), cell(cs, 'G3')].join(' | '));
+  T('8/5: 沖・田口は最後まで居ても担当にしない', cell(cs, 'G4') !== '沖' && cell(cs, 'G10') !== '田', '');
+  T('8/6: 沖と田口だけの日は両方とも 沖', cell(cs, 'H4') === '沖' && cell(cs, 'H10') === '沖', [cell(cs, 'H4'), cell(cs, 'H10')].join(' | '));
+  T('8/8（土）: 解体側は大橋（12:40）→「橋」、カット側は黒川（吉田は未打刻なので後ろ）。週次の行にも入る', cell(cs, 'J4') === '橋' && cell(cs, 'J10') === '黒' && cell(cs, 'J5') === '橋' && cell(cs, 'J11') === '黒', [cell(cs, 'J4'), cell(cs, 'J10'), cell(cs, 'J5'), cell(cs, 'J11')].join(' | '));
+  T('平日（8/5）は週次の行が空欄', cell(cs, 'G5') === null && cell(cs, 'G11') === null, [cell(cs, 'G5'), cell(cs, 'G11')].join(' | '));
+  T('勤怠が無い日（8/7）は清掃アプリの記録で補う（相川→「相」）', cell(cs, 'I4') === '相' && cell(cs, 'I10') === null, [cell(cs, 'I4'), cell(cs, 'I10')].join(' | '));
+  T('出勤の無い日（8/9）は空欄', cell(cs, 'K4') === null && cell(cs, 'K10') === null, '');
 
   // 4) Excel（2026-04）: その月の収支があればその月（B1=4月）。4月は30日なので31日目（AG列）は空欄
   const f4 = await excel('2026-04');
