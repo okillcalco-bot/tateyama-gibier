@@ -516,6 +516,16 @@ textarea { min-height: 80px; resize: vertical; }
         <div id="hunterNameWarning" style="display:none;color:#e0a020;font-size:12px;font-weight:600;margin-top:4px;"></div>
       </div>
 
+      <!-- 公開ページ（ラベルQR「この肉の物語」）に捕獲者名を出してよいか（2026-09-18）。出さない人は写真の看板にも名前を入れない -->
+      <div class="form-row" id="hunterPublicRow">
+        <label class="form-label">「この肉の物語」（お客さん向けページ）に捕獲者名を出す</label>
+        <div class="toggle-group" data-field="hunter_name_public">
+          <div class="toggle-btn active" data-val="出す">出してよい</div>
+          <div class="toggle-btn" data-val="出さない">出さない</div>
+        </div>
+        <div class="field-note" style="font-size:11px;color:var(--text2);margin-top:4px;">出さない人は、写真の看板にも名前を入れません。前回の選択を覚えて次回の既定にします</div>
+      </div>
+
       <div class="form-row" style="position:relative;">
         <label class="form-label">搬入者（捕獲者と別のとき）</label>
         <input type="text" class="input" id="carrierName" placeholder="空欄＝捕獲者と同じ（かな・漢字で予測）" autocomplete="off" oninput="onCarrierInput()" onfocus="onCarrierInput()">
@@ -1672,7 +1682,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadTodayCount();
   syncPending();
   // 捕獲者の電話番号（調査票で使う）を控えておく
-  try { window._huntersCache = await sb('GET', 'hunters', null, '?select=name,phone&deleted_at=is.null&limit=500'); } catch (e) { window._huntersCache = []; }
+  try { window._huntersCache = await sb('GET', 'hunters', null, '?select=name,phone,name_public&deleted_at=is.null&limit=500'); } catch (e) { window._huntersCache = []; }
   // 提出から一定期間たった写真を自動削除（保存容量を増やさないため）
   svCleanupOldPhotos();
   // 未入力チェックを常時表示（入力・選択のたびに更新）
@@ -1795,6 +1805,10 @@ function renderNameSuggest(inputId, boxId, pickFnName) {
 // セクションの overflow:hidden で候補が見切れないよう、画面基準(fixed)で入力欄の直下に配置。
 // 下に入らない場合は上に開き、高さは画面内に収める。
 function positionNameSuggest(inp, box) {
+  // 入力欄が画面の外（下の欄をタップしたままスクロールしていない等）なら、まず画面内に入れてから位置を決める。
+  // 外のまま計算すると候補も画面の外に出て見えない（2026-09-18: 捕獲者名の公開設定の行を足して下の欄が押し下がったときに実測）
+  const r0 = inp.getBoundingClientRect();
+  if (r0.bottom > window.innerHeight - 40 || r0.top < 0) { try { inp.scrollIntoView({ block: 'center' }); } catch (e) {} }
   const r = inp.getBoundingClientRect();
   const gap = 2, margin = 8;
   // 50音パッドが開いているときは、その上端までを下方向の余白とする（候補がパッドの裏に隠れないように）
@@ -2280,6 +2294,18 @@ function onHunterPicked() {
   const el = document.getElementById('hunterName');
   if (!el) return;
   loadUsual();   // 過去データから「いつもの」チップを出し、最頻を自動入力
+  applyHunterPublicDefault((el.value || '').trim());
+}
+/* 「この肉の物語」に捕獲者名を出すか。捕獲者マスタ（hunters.name_public）の前回の選択を既定にする（2026-09-18） */
+function setHunterPublicToggle(val) {
+  state.hunter_name_public = val;
+  document.querySelectorAll('[data-field="hunter_name_public"] .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.val === val));
+}
+function applyHunterPublicDefault(name) {
+  if (!name || editRecordId) return;   // 編集中は登録済みの値のまま
+  const h = (window._huntersCache || []).find(x => x && x.name === name);
+  if (!h || h.name_public == null) return;
+  setHunterPublicToggle(h.name_public === false ? '出さない' : '出す');
 }
 
 /* ── いつもの（捕獲者の過去データから頻度順に候補を出す） ── */
@@ -2622,6 +2648,8 @@ function loadForEdit(rec) {
     document.getElementById('areaPickedRow').style.display = '';
   }
   sv('hunterName', rec.hunter_name);
+  // 公開ページに名前を出すか: 登録済みの値（未確認＝null は「出さない」として表示）
+  setHunterPublicToggle(rec.hunter_name_public === true ? '出す' : '出さない');
   sv('bleedTime', rec.bleed_time);
   sv('receiveTime', rec.receive_time);
   sv('transportStart', rec.transport_start);
@@ -3226,6 +3254,7 @@ async function handleSubmit() {
       capture_city: state.capture_city,
       capture_area: document.getElementById('captureArea').value,
       hunter_name: document.getElementById('hunterName').value,
+      hunter_name_public: state.hunter_name_public !== '出さない',   // 「この肉の物語」に捕獲者名を出してよいか
       capture_method: state.capture_method,
       finishing_method: state.finishing_method,
       trap_part: state.trap_part || null,
@@ -3333,6 +3362,14 @@ async function handleSubmit() {
       }
     }
 
+    // 捕獲者マスタに「名前を出してよいか」の今回の選択を覚える（次回の既定）。失敗しても登録は済んでいるので流す
+    try {
+      const _hn = (record.hunter_name || '').trim();
+      if (_hn && typeof record.hunter_name_public === 'boolean') {
+        sb('PATCH', 'hunters', { name_public: record.hunter_name_public }, `?name=eq.${encodeURIComponent(_hn)}&deleted_at=is.null`).catch(() => {});
+        (window._huntersCache || []).forEach(h => { if (h && h.name === _hn) h.name_public = record.hunter_name_public; });
+      }
+    } catch (e) {}
     // 登録後はカメラを強制しない。搬入一覧に溜めて、看板写真は一覧から後でまとめて撮る。
     loadTodayCount();
     resetForm();
@@ -3533,7 +3570,9 @@ function resetForm() {
   // Restore defaults
   state.gutting = 'なし'; state.has_fetus = 'なし'; state.hunter_health = '良好';
   state.quality = '良'; state.intake_method = '持込';
+  state.hunter_name_public = '出す';   // 既定は出してよい。出さない人だけ選び直す（捕獲者マスタの前回の選択で自動で切り替わる）
   // Re-activate default buttons
+  setHunterPublicToggle('出す');
   document.querySelectorAll('[data-field="gutting"] [data-val="なし"]').forEach(b => b.classList.add('active'));
   document.querySelectorAll('[data-field="hunter_health"] [data-val="良好"]').forEach(b => b.classList.add('active'));
   document.querySelectorAll('[data-field="quality"] [data-val="良"]').forEach(b => b.classList.add('active'));
@@ -3966,6 +4005,7 @@ function currentFormRec() {
   return {
     capture_date: g('captureDate') || (typeof today === 'function' ? today() : ''),
     hunter_name: g('hunterName'),
+    hunter_name_public: state.hunter_name_public !== '出さない',
     capture_city: state.capture_city || '',
     capture_area: g('captureArea'),
     intake_method: state.intake_method || '',
@@ -3995,9 +4035,11 @@ function arBoardData(r) {
   const sw = (r.weight_total != null && r.weight_total !== '') ? (r.weight_total + ' kg') : '';
   const sexWeight = [r.sex, sw].filter(Boolean).join('　');
   const serial = (r.serial_number != null && r.serial_number !== '') ? String(r.serial_number) : '';
+  // 「この肉の物語」に名前を出さない人（hunter_name_public=false）は、看板にも捕獲者行を入れない（写真は公開ページに載るため）
+  const hunterLine = r.hunter_name_public === false ? '' : (r.hunter_name || '');
   return {
     code: r.label_id || '',
-    lines: [['通し番号', serial], ['捕獲日', r.capture_date || ''], ['捕獲者', r.hunter_name || ''],
+    lines: [['通し番号', serial], ['捕獲日', r.capture_date || ''], ['捕獲者', hunterLine],
             ['捕獲場所', place], ['性別・体重', sexWeight]].filter(function (x) { return x[1]; })
   };
 }

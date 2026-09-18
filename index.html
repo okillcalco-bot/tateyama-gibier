@@ -2079,6 +2079,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="form-group" style="grid-column:1/-1"><label>住所</label><input class="form-input" id="hun-f-address" placeholder="例: 館山市八戸37（宛名ラベルには「千葉県」を自動で付けます）" /></div>
         <div class="form-group"><label>電話番号</label><input class="form-input" id="hun-f-phone" /></div>
         <div class="form-group"><label>罠の設置場所</label><input class="form-input" id="hun-f-trap_area" placeholder="例: 神余 山中" /></div>
+        <div class="form-group"><label>「この肉の物語」（お客さん向けページ）に名前を出す</label><select class="form-input" id="hun-f-name_public"><option value="">未確認（出さない）</option><option value="true">出してよい</option><option value="false">出さない</option></select></div>
       </div>
       <div style="font-size:12px;color:var(--gold);font-weight:600;margin:14px 0 6px;border-bottom:1px solid var(--border);padding-bottom:4px;">▌ 報奨金・買取の振込先</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -10225,6 +10226,7 @@ function hunterOpenNew() {
   hunterEditId = null;
   document.getElementById('hunterModalTitle').textContent = '捕獲者 新規登録';
   HUNTER_FIELDS.forEach(f => document.getElementById('hun-f-' + f).value = '');
+  const _np0 = document.getElementById('hun-f-name_public'); if (_np0) _np0.value = '';
   document.getElementById('hunterModal').style.display = 'block';
 }
 
@@ -10235,6 +10237,7 @@ function hunterEdit(id) {
   hunterEditId = id;
   document.getElementById('hunterModalTitle').textContent = '捕獲者情報編集';
   HUNTER_FIELDS.forEach(f => document.getElementById('hun-f-' + f).value = h[f] || '');
+  const _np1 = document.getElementById('hun-f-name_public'); if (_np1) _np1.value = h.name_public == null ? '' : String(h.name_public);
   document.getElementById('hunterModal').style.display = 'block';
 }
 
@@ -10276,6 +10279,7 @@ function hunterPrintLabels() {
 async function hunterSave() {
   const payload = {};
   HUNTER_FIELDS.forEach(f => payload[f] = document.getElementById('hun-f-' + f).value.trim() || null);
+  const _np = document.getElementById('hun-f-name_public'); if (_np) payload.name_public = _np.value === '' ? null : _np.value === 'true';
   if (!payload.name) { toast('氏名は必須です', 'error'); return; }
   try {
     if (hunterEditId) {
