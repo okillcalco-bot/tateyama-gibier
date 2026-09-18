@@ -553,7 +553,24 @@ function printSelected() {
   const printArea = document.getElementById('printArea');
   printArea.innerHTML = records.map((r, i) => buildRecordBlock(r, i + 1)).join('');
 
+  // PDFで保存するときのファイル名＝ページの題名。何の記録の・いつからいつまでの分か、ファイル名だけで分かるようにする
+  // （2026-09-18 沖: 「イノシシ以外の台帳は打ち出した日にち区間もファイル名に付けて」）
+  if (!window._printOrigTitle) { window._printOrigTitle = document.title; window.addEventListener('afterprint', () => { document.title = window._printOrigTitle; }); }
+  document.title = printFileTitle(records);
+  setTimeout(() => { document.title = window._printOrigTitle; }, 60000);
   window.print();
+}
+
+// 印刷（PDF保存）のファイル名: 館山ジビエセンター_捕獲票_イノシシ以外_2026-09-01〜2026-09-18
+//   イノシシだけなら「放射能検査台帳」、イノシシ以外だけなら「捕獲票_イノシシ以外」、混在は「捕獲票」。
+//   期間は印刷する記録の捕獲日の最小〜最大（1日だけなら1つ）。
+function printFileTitle(records) {
+  const dates = records.map(r => r.capture_date).filter(Boolean).sort();
+  const from = dates[0] || '', to = dates[dates.length - 1] || '';
+  const range = from ? (from === to ? from : `${from}〜${to}`) : '';
+  const boar = records.filter(r => r.species === 'イノシシ').length;
+  const kind = boar === records.length ? '放射能検査台帳' : (boar === 0 ? '捕獲票_イノシシ以外' : '捕獲票');
+  return ['館山ジビエセンター', kind, range].filter(Boolean).join('_');
 }
 
 function chk(val, trueLabel) {

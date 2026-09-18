@@ -68,6 +68,28 @@ async function stubSupabase(ctx) {
   ck('シカでも備考は表示される', deerHtml.includes('シカの備考メモ'), deerHtml);
   ck('イノシシでも備考は表示される', boarHtml.includes('イノシシの備考メモ'), boarHtml);
 
+  // 5) PDF保存のファイル名（＝印刷中のページ題名）に 種別と期間 が入る（2026-09-18）
+  const titles = await page.evaluate(() => {
+    const out = { before: document.title };
+    window.print = () => { out.during = document.title; };
+    allRecords = [
+      { id: 'a', label_id: 'TGC-08-キ053', species: 'キョン', capture_date: '2026-07-22' },
+      { id: 'b', label_id: 'TGC-08-ア012', species: 'アライグマ', capture_date: '2026-07-29' },
+      { id: 'c', label_id: 'TGC-08-ハ020', species: 'ハクビシン', capture_date: '2026-08-12' },
+      { id: 'd', label_id: 'TGC-08-T332', species: 'イノシシ', capture_date: '2026-09-17' },
+    ];
+    selectedIds = new Set(['a', 'b', 'c']); printSelected(); out.nonBoar = out.during;
+    selectedIds = new Set(['d']); printSelected(); out.boar = out.during;
+    selectedIds = new Set(['c', 'd']); printSelected(); out.mixed = out.during;
+    window.dispatchEvent(new Event('afterprint'));
+    out.after = document.title;
+    return out;
+  });
+  ck('イノシシ以外: ファイル名に「捕獲票_イノシシ以外」と捕獲日の期間（7/22〜8/12）', titles.nonBoar === '館山ジビエセンター_捕獲票_イノシシ以外_2026-07-22〜2026-08-12', titles.nonBoar);
+  ck('イノシシだけ: 「放射能検査台帳」と日付（1日なら1つ）', titles.boar === '館山ジビエセンター_放射能検査台帳_2026-09-17', titles.boar);
+  ck('混在: 「捕獲票」と期間', titles.mixed === '館山ジビエセンター_捕獲票_2026-08-12〜2026-09-17', titles.mixed);
+  ck('印刷が終わると題名は元に戻る', titles.after === titles.before && /放射能検査台帳/.test(titles.before), titles.after);
+
   ck('ページエラーなし', errors.length === 0, errors.join(' / '));
 
   await browser.close();
