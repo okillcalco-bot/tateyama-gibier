@@ -1948,7 +1948,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="section">
       <div class="section-title">🏛 市役所提出（指定管理 業務報告書）</div>
       <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;line-height:1.7;">
-        毎月の「TGC業務報告書」を提出様式そのままのExcelで生成します。<b>業務日誌（出勤人数・受入頭数）と清掃記録はアプリのデータから自動転記</b>。点検保守は「○（異常なし）」、冷蔵・冷凍庫の温度は施設チェックの記録があればその値・無ければ範囲内の既定値、苦情は「なし」で埋めます（異常があった月だけExcel上で直してください）。<b>打合せ記録簿</b>（農水産課の議事録メール）と<b>収支状況</b>（千葉トラスト会計の月次損益）は下の入力欄に入れておくと Excel に転記されます。収支は翌月に届くため、対象月の分が無いときは直近の月の数字を使います。年度業務報告書は4月〜3月の月次報告書の綴りです（下の年度まとめで数字を確認できます）。
+        毎月の「TGC業務報告書」を提出様式そのままのExcelで生成します。<b>業務日誌（出勤人数・受入頭数）と清掃記録はアプリのデータから自動転記</b>。清掃の担当は勤怠から決めます（解体側＝大和田・相川・大橋・名取・今泉、カット側＝白石・吉田・渡邊・黒川のうち、その日いちばん遅くまでいた人。担当が誰も出ていない日は沖）。点検保守は「○（異常なし）」、冷蔵・冷凍庫の温度は施設チェックの記録があればその値・無ければ範囲内の既定値、苦情は「なし」で埋めます（異常があった月だけExcel上で直してください）。<b>打合せ記録簿</b>（農水産課の議事録メール）と<b>収支状況</b>（千葉トラスト会計の月次損益）は下の入力欄に入れておくと Excel に転記されます。収支は翌月に届くため、対象月の分が無いときは直近の月の数字を使います。年度業務報告書は4月〜3月の月次報告書の綴りです（下の年度まとめで数字を確認できます）。
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
         <div class="form-group" style="margin:0;"><label>対象月</label><input class="form-input" id="city-report-month" type="month" style="max-width:170px;" onchange="cityInputsLoad()"></div>
@@ -13395,7 +13395,7 @@ async function cityReportData(month) {
   const start = `${month}-01`;
   const endEx = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
   const [att, inds, cleans] = await Promise.all([
-    sb('GET', 'attendance', null, `?work_date=gte.${start}&work_date=lt.${endEx}&select=work_date,staff_id,clock_in`),
+    sb('GET', 'attendance', null, `?work_date=gte.${start}&work_date=lt.${endEx}&select=work_date,staff_id,staff_name,clock_in,clock_out`),
     sb('GET', 'individuals', null, `?capture_date=gte.${start}&capture_date=lt.${endEx}&species=eq.イノシシ&select=capture_date,intake_status,label_id`),
     sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${start}T00:00:00&cleaned_at=lt.${endEx}T00:00:00&select=room,staff_name,cleaned_at&limit=2000`)
   ]);
@@ -13403,8 +13403,32 @@ async function cityReportData(month) {
   att.forEach(a => { if (!a.clock_in) return; (attByDay[a.work_date] = attByDay[a.work_date] || new Set()).add(a.staff_id); });
   // 市役所報告書の受入頭数はイノシシのみ。搬入待ち・テストデータは除外
   inds.forEach(i => { if (i.intake_status === '搬入待ち' || /^仮-|TEST/.test(i.label_id || '')) return; indByDay[i.capture_date] = (indByDay[i.capture_date] || 0) + 1; });
+  // 清掃記録の担当は勤怠から決める（2026-09-18 沖）。清掃アプリの記録は、勤怠が無い日の補いにだけ使う
   cleans.forEach(c => { const d = String(c.cleaned_at).slice(0, 10); (cleanByDay[d] = cleanByDay[d] || {})[c.room] = cityInitial(c.staff_name); });
+  const attRows = {};
+  att.forEach(a => { if (!a.clock_in) return; (attRows[a.work_date] = attRows[a.work_date] || []).push(a); });
+  Object.keys(attRows).forEach(d => {
+    const kaitai = cityCleanerFor('解体室', attRows[d]), seiniku = cityCleanerFor('精肉室', attRows[d]);
+    cleanByDay[d] = { '解体室': cityInitial(kaitai), '精肉室': cityInitial(seiniku), '施設外周': cityInitial(kaitai) };
+  });
   return { y, m, days, month, attByDay, indByDay, cleanByDay };
+}
+/* 清掃の担当（2026-09-18 沖）: 部屋ごとの担当のうち、その日いちばん遅くまでいた人（退勤時刻の遅い順）。
+   沖（代表）と田口（社員・精肉担当）は基本的に清掃しない。担当が誰も出ていない日は 沖。
+   姓で照合する（勤怠の staff_name は「大和田薫」のようにフルネーム） */
+const CITY_CLEAN_ROLES = {
+  '解体室': ['大和田', '相川', '大橋', '名取', '今泉'],
+  '精肉室': ['白石', '吉田', '渡邊', '黒川'],
+};
+const CITY_CLEAN_FALLBACK = '沖';
+function cityCleanerFor(room, rows) {
+  const keys = CITY_CLEAN_ROLES[room] || [];
+  const cands = (rows || []).filter(a => keys.some(k => String(a.staff_name || '').startsWith(k)));
+  if (!cands.length) return (rows || []).length ? CITY_CLEAN_FALLBACK : '';
+  // 退勤時刻の遅い順。未打刻（null）は分からないので後ろに回す。同じなら担当表の順
+  cands.sort((a, b) => String(b.clock_out || '00:00').localeCompare(String(a.clock_out || '00:00'))
+    || keys.findIndex(k => String(a.staff_name || '').startsWith(k)) - keys.findIndex(k => String(b.staff_name || '').startsWith(k)));
+  return cands[0].staff_name;
 }
 
 /* ── 打合せ記録簿・収支状況の入力（city_report_inputs: month × kind） ──
