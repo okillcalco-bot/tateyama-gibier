@@ -1948,15 +1948,49 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="section">
       <div class="section-title">🏛 市役所提出（指定管理 業務報告書）</div>
       <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;line-height:1.7;">
-        毎月の「TGC業務報告書」を提出様式そのままのExcelで生成します。<b>業務日誌（出勤人数・受入頭数）と清掃記録はアプリのデータから自動転記</b>。点検保守は「○（異常なし）」で埋めるので、異常があった日はExcel上で△✕に直してください。<b>打合せ記録簿</b>は農水産課からの議事録メール、<b>収支状況</b>は千葉トラスト会計の月次メールを見ながらExcel上で仕上げてください。年度業務報告書は4月〜3月の月次報告書の綴りです（下の年度まとめで数字を確認できます）。
+        毎月の「TGC業務報告書」を提出様式そのままのExcelで生成します。<b>業務日誌（出勤人数・受入頭数）と清掃記録はアプリのデータから自動転記</b>。点検保守は「○（異常なし）」で埋めるので、異常があった日はExcel上で△✕に直してください。<b>打合せ記録簿</b>（農水産課の議事録メール）と<b>収支状況</b>（千葉トラスト会計の月次損益）は下の入力欄に入れておくと Excel に転記されます。収支は翌月に届くため、対象月の分が無いときは直近の月の数字を使います。年度業務報告書は4月〜3月の月次報告書の綴りです（下の年度まとめで数字を確認できます）。
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
-        <div class="form-group" style="margin:0;"><label>対象月</label><input class="form-input" id="city-report-month" type="month" style="max-width:170px;"></div>
+        <div class="form-group" style="margin:0;"><label>対象月</label><input class="form-input" id="city-report-month" type="month" style="max-width:170px;" onchange="cityInputsLoad()"></div>
         <button class="btn" onclick="cityReportPreview()">📋 データ集計プレビュー</button>
         <button class="btn btn-primary" onclick="cityReportExcel()">⬇ 月次業務報告書（Excel）</button>
         <div class="form-group" style="margin:0;"><label>年度</label><select class="form-input" id="city-report-fy" style="max-width:160px;"></select></div>
         <button class="btn" onclick="cityReportFiscal()">📊 年度まとめ</button>
       </div>
+      <!-- 打合せ記録簿・収支状況の入力（2026-09-18: Excel上の手作業だった2枚をアプリのデータにする） -->
+      <details id="city-inputs" style="margin:0 0 12px;" ontoggle="if(this.open)cityInputsLoad()">
+        <summary style="cursor:pointer;font-weight:700;">✍ 打合せ記録簿・収支状況の入力（対象月ぶん）<span id="city-inputs-state" style="font-weight:400;color:var(--text2);margin-left:8px;"></span></summary>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-top:10px;">
+          <div style="border:1px solid var(--border);border-radius:var(--radius);padding:10px;">
+            <div style="font-weight:700;margin-bottom:6px;">④ 打合せ記録簿（市役所定例ミーティング）</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+              <div class="form-group" style="margin:0;"><label>第◯回</label><input class="form-input" id="ci-m-no" type="number" min="1" placeholder="5"></div>
+              <div class="form-group" style="margin:0;"><label>実施日</label><input class="form-input" id="ci-m-date" type="date"></div>
+              <div class="form-group" style="margin:0;"><label>時間</label><input class="form-input" id="ci-m-time" placeholder="15:00〜16:30"></div>
+              <div class="form-group" style="margin:0;"><label>打合せ方式</label><input class="form-input" id="ci-m-method" placeholder="会議"></div>
+            </div>
+            <div class="form-group" style="margin:6px 0 0;"><label>場所</label><input class="form-input" id="ci-m-place" placeholder="館山市役所　4号館2階南側会議室"></div>
+            <div class="form-group" style="margin:6px 0 0;"><label>出席者（発注者側・館山市）</label><input class="form-input" id="ci-m-client" placeholder="農水産課 ○○係長、○○主事"></div>
+            <div class="form-group" style="margin:6px 0 0;"><label>出席者（受託者側）</label><input class="form-input" id="ci-m-contractor" placeholder="合同会社アルコ　沖"></div>
+            <div class="form-group" style="margin:6px 0 0;"><label>打合せ事項（協議事項）　※議事録メールの本文をそのまま貼ってください</label><textarea class="form-input" id="ci-m-items" rows="10" style="font-size:12.5px;line-height:1.5;"></textarea></div>
+            <div class="form-group" style="margin:6px 0 0;"><label>次回開催</label><input class="form-input" id="ci-m-next" placeholder="令和8年9月16日（水）15:00〜"></div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
+              <button class="btn btn-primary" onclick="cityInputsSave('meeting')">💾 打合せ記録を保存</button>
+              <span id="ci-m-msg" style="font-size:12px;color:var(--text2);"></span>
+            </div>
+          </div>
+          <div style="border:1px solid var(--border);border-radius:var(--radius);padding:10px;">
+            <div style="font-weight:700;margin-bottom:6px;">⑥ 収支状況（部門別月次損益計算書「ジビエセンター」［共通費配賦後］の当月列）</div>
+            <div style="font-size:12px;color:var(--text2);margin-bottom:6px;" id="ci-pl-note"></div>
+            <div id="ci-pl-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px 8px;"></div>
+            <div id="ci-pl-sum" style="font-size:12.5px;margin-top:8px;line-height:1.7;"></div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
+              <button class="btn btn-primary" onclick="cityInputsSave('pl')">💾 収支を保存</button>
+              <span id="ci-pl-msg" style="font-size:12px;color:var(--text2);"></span>
+            </div>
+          </div>
+        </div>
+      </details>
       <div id="city-report-out" style="overflow-x:auto;"></div>
     </div>
     <div class="section" id="doc-preview-section" style="display:none;">
@@ -13347,6 +13381,109 @@ async function cityReportData(month) {
   return { y, m, days, month, attByDay, indByDay, cleanByDay };
 }
 
+/* ── 打合せ記録簿・収支状況の入力（city_report_inputs: month × kind） ──
+   2026-09-18: 農水産課の議事録メールと会計事務所の月次損益（部門別月次損益計算書 ジビエセンター）を
+   アプリに入れ、Excel生成時に「4打ち合わせ記録簿」「6収支状況」へ転記する。それまではExcel上の手作業だった。 */
+// テンプレート「6収支状況」A列の科目 → 行番号（表記はテンプレートのまま。仕入髙 の「髙」も同じ）
+const CITY_PL_ROWS = { '売上高': 2, '期首棚卸高': 3, '仕入髙': 4, '期末棚卸高': 5,
+  '役員報酬': 8, '給与手当': 9, '雑給': 10, '法定福利費': 11, '福利厚生費': 12, '外注費': 13, '旅費交通費': 14, '通信費': 15, '交際費': 16,
+  '寄付金': 17, '減価償却費': 18, '賃借料': 19, '地代家賃': 20, 'リース料': 21, '保険料': 22, '修繕費': 23, '水道光熱費': 24, '燃料費': 25,
+  '消耗品費': 26, '租税公課': 27, '荷造包装費': 28, '広告宣伝費': 29, '諸会費': 30, '管理諸費': 31, '防災保守費': 32, '書籍費': 33, '雑費': 34,
+  '受取利息': 37, '雑収入': 38, '支払利息': 40 };
+const CITY_PL_SGA = Object.keys(CITY_PL_ROWS).filter(k => CITY_PL_ROWS[k] >= 8 && CITY_PL_ROWS[k] <= 34);
+function cityPlCalc(d) {
+  const n = k => Number(d[k]) || 0;
+  const gross = n('売上高') - n('期首棚卸高') - n('仕入髙') - n('期末棚卸高');
+  const sga = CITY_PL_SGA.reduce((s, k) => s + n(k), 0);
+  const op = gross - sga;
+  return { gross, sga, op, ordinary: op + n('受取利息') + n('雑収入') - n('支払利息') };
+}
+async function cityInputsFetch(month) {
+  const rows = await sb('GET', 'city_report_inputs', null, `?month=eq.${month}&select=kind,data,source,updated_at`);
+  const out = {}; rows.forEach(r => { out[r.kind] = r; }); return out;
+}
+/* 収支は会計事務所から翌月に届く。報告月の分が無ければ、同じ年度内で直近の月を使う */
+async function cityPlForReport(month) {
+  const rows = await sb('GET', 'city_report_inputs', null, `?kind=eq.pl&month=lte.${month}&select=month,data,source&order=month.desc&limit=1`);
+  if (!rows.length) return null;
+  const [y, m] = month.split('-').map(Number), fy = m >= 4 ? y : y - 1;
+  const [py, pm] = rows[0].month.split('-').map(Number), pfy = pm >= 4 ? py : py - 1;
+  return pfy === fy ? rows[0] : null;   // 年度をまたいだ古い数字は使わない
+}
+function cityInputsRenderPl(data) {
+  const grid = document.getElementById('ci-pl-grid'); if (!grid) return;
+  grid.innerHTML = Object.keys(CITY_PL_ROWS).map(k => `<label style="font-size:11.5px;display:flex;flex-direction:column;gap:2px;"><span>${esc2(k)}</span><input class="form-input ci-pl" data-k="${esc2(k)}" type="number" step="1" inputmode="numeric" style="text-align:right;padding:4px 6px;" value="${data && data[k] != null ? Number(data[k]) : ''}" oninput="cityInputsPlSum()"></label>`).join('');
+  cityInputsPlSum();
+}
+function cityInputsPlRead() {
+  const d = {};
+  document.querySelectorAll('#ci-pl-grid .ci-pl').forEach(i => { if (i.value !== '' && !isNaN(Number(i.value))) d[i.dataset.k] = Number(i.value); });
+  return d;
+}
+function cityInputsPlSum() {
+  const el = document.getElementById('ci-pl-sum'); if (!el) return;
+  const c = cityPlCalc(cityInputsPlRead()), f = v => '¥' + Math.round(v).toLocaleString();
+  el.innerHTML = `売上総利益 <b>${f(c.gross)}</b>　販管費計 <b>${f(c.sga)}</b>　営業損益 <b>${f(c.op)}</b>　経常損益 <b>${f(c.ordinary)}</b>　<span style="color:var(--text2);">※損益計算書の営業損益と一致するか確かめてください</span>`;
+}
+async function cityInputsLoad() {
+  const month = cityReportMonthVal();
+  const st = document.getElementById('city-inputs-state'); if (!st) return;
+  const det = document.getElementById('city-inputs'); if (det && !det.open) { st.textContent = ''; return; }
+  st.textContent = '読込中…';
+  try {
+    const [cur, pl] = await Promise.all([cityInputsFetch(month), cityPlForReport(month)]);
+    const m = (cur.meeting && cur.meeting.data) || {};
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v == null ? '' : v; };
+    set('ci-m-no', m.no); set('ci-m-date', m.date); set('ci-m-time', m.time); set('ci-m-method', m.method); set('ci-m-place', m.place);
+    set('ci-m-client', m.client_attendees); set('ci-m-contractor', m.contractor_attendees); set('ci-m-items', m.items); set('ci-m-next', m.next);
+    document.getElementById('ci-m-msg').textContent = cur.meeting ? `保存済み（${String(cur.meeting.updated_at).slice(0, 10)}${cur.meeting.source ? '・' + cur.meeting.source : ''}）` : 'この月の打合せ記録はまだありません';
+    const note = document.getElementById('ci-pl-note');
+    if (cur.pl) { cityInputsRenderPl(cur.pl.data); note.textContent = `${month.replace('-', '/')} の収支（${cur.pl.source || '出どころ未記入'}）`; }
+    else if (pl) { cityInputsRenderPl(pl.data); note.innerHTML = `対象月の収支はまだありません。Excel には直近の <b>${esc2(pl.month.replace('-', '/'))}</b> 分（${esc2(pl.source || '')}）を転記します。ここで保存すると <b>${esc2(month.replace('-', '/'))}</b> 分として保存されます`; }
+    else { cityInputsRenderPl({}); note.textContent = 'この年度の収支はまだありません。損益計算書「ジビエセンター」の当月列を入れてください'; }
+    document.getElementById('ci-pl-msg').textContent = '';
+    st.textContent = `${month.replace('-', '/')}: 打合せ ${cur.meeting ? '✓' : '未'} / 収支 ${cur.pl ? '✓' : (pl ? '直近' + pl.month.slice(5).replace(/^0/, '') + '月分' : '未')}`;
+  } catch (e) { st.textContent = '読込に失敗: ' + e.message; }
+}
+async function cityInputsSave(kind) {
+  const month = cityReportMonthVal();
+  const msg = document.getElementById(kind === 'pl' ? 'ci-pl-msg' : 'ci-m-msg');
+  const g = id => (document.getElementById(id).value || '').trim();
+  let data, source;
+  if (kind === 'meeting') {
+    data = { no: Number(g('ci-m-no')) || null, date: g('ci-m-date') || null, time: g('ci-m-time'), method: g('ci-m-method'), place: g('ci-m-place'),
+      client_attendees: g('ci-m-client'), contractor_attendees: g('ci-m-contractor'), items: g('ci-m-items'), next: g('ci-m-next') };
+    if (!data.date && !data.items) { msg.textContent = '実施日か協議事項を入れてください'; return; }
+    source = '農水産課 議事録メール';
+  } else {
+    data = cityInputsPlRead();
+    if (data['売上高'] == null) { msg.textContent = '売上高を入れてください'; return; }
+    source = '千葉トラスト会計 部門別月次損益計算書（ジビエセンター）';
+  }
+  msg.textContent = '保存中…';
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/city_report_inputs?on_conflict=month,kind`, {
+      method: 'POST',
+      headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation,resolution=merge-duplicates' },
+      body: JSON.stringify({ month, kind, data, source, updated_by: (typeof currentStaffName === 'function' ? currentStaffName() : null) || '管理者', updated_at: new Date().toISOString() }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    msg.textContent = `保存しました（${month.replace('-', '/')} ${kind === 'pl' ? '収支' : '打合せ記録'}）`;
+    toast(`${month.replace('-', '/')} の${kind === 'pl' ? '収支状況' : '打合せ記録簿'}を保存しました`);
+    cityInputsLoad();
+  } catch (e) { msg.textContent = '保存に失敗: ' + e.message; toast('保存に失敗しました: ' + sbSafeMsg(e), 'error'); }
+}
+/* 打合せ記録簿の転記内容を組み立てる（Excel生成とテストで共用） */
+function cityMeetingCells(m) {
+  if (!m) return null;
+  // 日付は文字列の年月日をそのまま使う（端末のタイムゾーンで前日にずれないように）
+  const dm = m.date && String(m.date).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const jd = dm ? `令和${Number(dm[1]) - 2018}年${Number(dm[2])}月${Number(dm[3])}日（${'日月火水木金土'[new Date(Date.UTC(Number(dm[1]), Number(dm[2]) - 1, Number(dm[3]))).getUTCDay()]}）${m.time ? ' ' + m.time : ''}` : (m.time || '');
+  let items = (m.items || '').replace(/\r\n?/g, '\n').trim();
+  if (m.next) items += (items ? '\n\n' : '') + '次回開催: ' + m.next;
+  return { no: m.no ? `第${m.no}回` : '第　回', date: jd, place: m.place || '', client: m.client_attendees || '館山市 農水産課', contractor: m.contractor_attendees || '合同会社アルコ　沖', method: m.method || '会議', items };
+}
+
 async function cityReportPreview() {
   const month = cityReportMonthVal();
   const out = document.getElementById('city-report-out');
@@ -13399,7 +13536,7 @@ async function cityReportExcel() {
   const month = cityReportMonthVal();
   toast('業務報告書を生成中...', 'info');
   try {
-    const [tplRes, d] = await Promise.all([fetch('tgc-report-template.xlsx?v=' + Date.now()), cityReportData(month)]);
+    const [tplRes, d, inputs, plRow] = await Promise.all([fetch('tgc-report-template.xlsx?v=' + Date.now()), cityReportData(month), cityInputsFetch(month), cityPlForReport(month)]);
     if (!tplRes.ok) throw new Error('テンプレートを取得できませんでした（デプロイ直後は1分ほど待って再試行）');
     const files = await cityUnzip(await tplRes.arrayBuffer());
     const dec = new TextDecoder(), enc = new TextEncoder();
@@ -13416,7 +13553,7 @@ async function cityReportExcel() {
       if (name && rid && relMap[rid]) sheetPath[name] = relMap[rid];
     });
     const xml = {};
-    for (const nm of ['表紙', '目次', '1業務日誌', '2点検保守等実施記録', '3清掃記録', '6収支状況']) {
+    for (const nm of ['表紙', '目次', '1業務日誌', '2点検保守等実施記録', '3清掃記録', '4打ち合わせ記録簿', '6収支状況']) {
       if (!sheetPath[nm]) throw new Error('テンプレートにシートがありません: ' + nm);
       xml[nm] = dec.decode(files[sheetPath[nm]]);
     }
@@ -13434,7 +13571,11 @@ async function cityReportExcel() {
     }
     const era = `令和${d.y - 2018}年${d.m}月`;
     patch('表紙', 'B13', { str: `（${era}）` });
-    patch('目次', 'C15', { str: `収支（${era}分）` });
+    // 収支は報告月の分が無ければ直近の月（同じ年度内）。目次と収支の見出しはその月にする
+    const plMonth = plRow ? plRow.month : month;
+    const [plY, plM] = plMonth.split('-').map(Number);
+    const plEra = `令和${plY - 2018}年${plM}月`;
+    patch('目次', 'C15', { str: `収支（${plEra}分）` });
     // 1業務日誌
     patch('1業務日誌', 'E1', { str: era });
     const serial = (y, m, day) => Math.round((Date.UTC(y, m - 1, day) - Date.UTC(1899, 11, 30)) / 864e5);
@@ -13472,10 +13613,39 @@ async function cityReportExcel() {
       const isSat = day <= d.days && new Date(d.y, d.m - 1, day).getDay() === 6;
       for (const r in weeklyRows) patch('3清掃記録', col + r, (isSat && cl && cl[weeklyRows[r]]) ? { str: cl[weeklyRows[r]] } : { blank: true });
     }
-    // 6収支状況（数字は会計事務所の月次メールを基にExcel上で記入）
-    const fy = d.m >= 4 ? d.y : d.y - 1;
+    // 4打ち合わせ記録簿（入力欄の打合せ記録を転記。無ければテンプレートのまま）
+    const mc = cityMeetingCells(inputs.meeting && inputs.meeting.data);
+    if (mc) {
+      patch('4打ち合わせ記録簿', 'B4', { str: mc.no });
+      patch('4打ち合わせ記録簿', 'J7', { str: mc.date });
+      patch('4打ち合わせ記録簿', 'J8', { str: mc.place });
+      patch('4打ち合わせ記録簿', 'D7', { str: mc.client });
+      patch('4打ち合わせ記録簿', 'D9', { str: mc.contractor });
+      patch('4打ち合わせ記録簿', 'J9', { str: mc.method });
+      patch('4打ち合わせ記録簿', 'B11', { str: mc.items });
+      // 協議事項は B11:K31（21行）の結合セル。行数が多いときは行の高さを広げて切れないようにする
+      // （幅 ≒ 全角44字/行、1行 ≒ 15pt。既定は 21行×23pt）
+      const lines = mc.items.split('\n').reduce((s, l) => s + Math.max(1, Math.ceil(l.length / 44)), 0);
+      const rowHt = Math.max(23, Math.ceil(lines * 15 / 21));
+      if (rowHt > 23) {
+        for (let r = 11; r <= 31; r++) {
+          xml['4打ち合わせ記録簿'] = xml['4打ち合わせ記録簿'].replace(new RegExp('<row r="' + r + '"[^>]*>'), tag => {
+            const selfClose = /\/>$/.test(tag);
+            return tag.replace(/\s(ht|customHeight)="[^"]*"/g, '').replace(/\s*\/?>$/, ' ht="' + rowHt + '" customHeight="1"' + (selfClose ? '/>' : '>'));
+          });
+        }
+      }
+    }
+    // 6収支状況（入力欄の収支を転記。報告月の分が無ければ直近の月。無ければ見出しだけ）
+    const fy = plM >= 4 ? plY : plY - 1;
     patch('6収支状況', 'A1', { str: `令和${fy - 2018}年度` });
-    patch('6収支状況', 'B1', { str: `${d.m}月` });
+    patch('6収支状況', 'B1', { str: `${plM}月` });
+    if (plRow) {
+      for (const k in CITY_PL_ROWS) {
+        const v = plRow.data[k];
+        patch('6収支状況', 'B' + CITY_PL_ROWS[k], v == null || v === '' ? { blank: true } : { num: Number(v) });
+      }
+    }
     // 再パックしてダウンロード
     const outFiles = Object.keys(files).map(name => {
       const patched = Object.keys(sheetPath).find(nm => sheetPath[nm] === name && xml[nm]);
@@ -13486,7 +13656,7 @@ async function cityReportExcel() {
     a.download = `TGC業務報告書_令和${d.y - 2018}年${d.m}月.xlsx`;
     a.click(); URL.revokeObjectURL(a.href);
     playFeedbackSound(true);
-    toast(`業務報告書（${era}）を生成しました。打合せ記録・収支・温度記録はExcel上で仕上げてください`);
+    toast(`業務報告書（${era}）を生成しました。打合せ記録 ${mc ? '転記済み' : '未入力'}・収支 ${plRow ? plEra + '分を転記' : '未入力'}。温度記録・点検の△✕はExcel上で仕上げてください`);
   } catch (e) {
     playFeedbackSound(false);
     toast('生成に失敗しました: ' + e.message, 'error');
