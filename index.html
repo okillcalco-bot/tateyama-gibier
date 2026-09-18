@@ -1948,7 +1948,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="section">
       <div class="section-title">🏛 市役所提出（指定管理 業務報告書）</div>
       <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;line-height:1.7;">
-        毎月の「TGC業務報告書」を提出様式そのままのExcelで生成します。<b>業務日誌（出勤人数・受入頭数）と清掃記録はアプリのデータから自動転記</b>。点検保守は「○（異常なし）」で埋めるので、異常があった日はExcel上で△✕に直してください。<b>打合せ記録簿</b>（農水産課の議事録メール）と<b>収支状況</b>（千葉トラスト会計の月次損益）は下の入力欄に入れておくと Excel に転記されます。収支は翌月に届くため、対象月の分が無いときは直近の月の数字を使います。年度業務報告書は4月〜3月の月次報告書の綴りです（下の年度まとめで数字を確認できます）。
+        毎月の「TGC業務報告書」を提出様式そのままのExcelで生成します。<b>業務日誌（出勤人数・受入頭数）と清掃記録はアプリのデータから自動転記</b>。点検保守は「○（異常なし）」、冷蔵・冷凍庫の温度は施設チェックの記録があればその値・無ければ範囲内の既定値、苦情は「なし」で埋めます（異常があった月だけExcel上で直してください）。<b>打合せ記録簿</b>（農水産課の議事録メール）と<b>収支状況</b>（千葉トラスト会計の月次損益）は下の入力欄に入れておくと Excel に転記されます。収支は翌月に届くため、対象月の分が無いときは直近の月の数字を使います。年度業務報告書は4月〜3月の月次報告書の綴りです（下の年度まとめで数字を確認できます）。
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
         <div class="form-group" style="margin:0;"><label>対象月</label><input class="form-input" id="city-report-month" type="month" style="max-width:170px;" onchange="cityInputsLoad()"></div>
@@ -13391,6 +13391,12 @@ const CITY_PL_ROWS = { '売上高': 2, '期首棚卸高': 3, '仕入髙': 4, '�
   '消耗品費': 26, '租税公課': 27, '荷造包装費': 28, '広告宣伝費': 29, '諸会費': 30, '管理諸費': 31, '防災保守費': 32, '書籍費': 33, '雑費': 34,
   '受取利息': 37, '雑収入': 38, '支払利息': 40 };
 const CITY_PL_SGA = Object.keys(CITY_PL_ROWS).filter(k => CITY_PL_ROWS[k] >= 8 && CITY_PL_ROWS[k] <= 34);
+// テンプレート「2点検保守等実施記録」の冷蔵・冷凍庫（上段=点検○、下段=庫内温度℃）。def は記録が無い日の既定値（普段の実測値）
+const CITY_TEMP_ROWS = [
+  { label: 'ユニット冷蔵庫', row: 20, def: -1 }, { label: '冷凍ストッカー1', row: 34, def: -20 }, { label: '冷凍ストッカー2', row: 36, def: -20 },
+  { label: '冷凍ストッカー(-60℃)', row: 38, def: -60 }, { label: '冷凍庫(ホシザキ）', row: 40, def: -18 }, { label: '大型冷蔵冷凍庫1', row: 42, def: -20 },
+  { label: '大型冷凍庫2', row: 44, def: -20 }, { label: '大型冷蔵冷凍庫3', row: 46, def: -20 },
+];
 function cityPlCalc(d) {
   const n = k => Number(d[k]) || 0;
   const gross = n('売上高') - n('期首棚卸高') - n('仕入髙') - n('期末棚卸高');
@@ -13536,7 +13542,8 @@ async function cityReportExcel() {
   const month = cityReportMonthVal();
   toast('業務報告書を生成中...', 'info');
   try {
-    const [tplRes, d, inputs, plRow] = await Promise.all([fetch('tgc-report-template.xlsx?v=' + Date.now()), cityReportData(month), cityInputsFetch(month), cityPlForReport(month)]);
+    const [tplRes, d, inputs, plRow, fchecks] = await Promise.all([fetch('tgc-report-template.xlsx?v=' + Date.now()), cityReportData(month), cityInputsFetch(month), cityPlForReport(month),
+      sb('GET', 'facility_check_logs', null, `?check_date=gte.${month}-01&check_date=lt.${new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 1)).toISOString().slice(0, 10)}&value=not.is.null&select=check_date,item,value,result&limit=2000`).catch(() => [])]);
     if (!tplRes.ok) throw new Error('テンプレートを取得できませんでした（デプロイ直後は1分ほど待って再試行）');
     const files = await cityUnzip(await tplRes.arrayBuffer());
     const dec = new TextDecoder(), enc = new TextEncoder();
@@ -13553,7 +13560,7 @@ async function cityReportExcel() {
       if (name && rid && relMap[rid]) sheetPath[name] = relMap[rid];
     });
     const xml = {};
-    for (const nm of ['表紙', '目次', '1業務日誌', '2点検保守等実施記録', '3清掃記録', '4打ち合わせ記録簿', '6収支状況']) {
+    for (const nm of ['表紙', '目次', '1業務日誌', '2点検保守等実施記録', '3清掃記録', '4打ち合わせ記録簿', '5苦情及びその対応', '6収支状況']) {
       if (!sheetPath[nm]) throw new Error('テンプレートにシートがありません: ' + nm);
       xml[nm] = dec.decode(files[sheetPath[nm]]);
     }
@@ -13591,15 +13598,34 @@ async function cityReportExcel() {
         ['A', 'B', 'C', 'D', 'E'].forEach(c => patch('1業務日誌', c + r, { blank: true }));
       }
     }
-    // 2点検保守（設備行を○で埋め、月の日数を超える列は空欄。温度・特記はExcel上で記入）
+    // 2点検保守（設備行を○で埋め、月の日数を超える列は空欄）
+    //   2026-09-18 沖: 異常があったときだけ記録する運用なので、基本は「異常なし」で出す。
+    //   冷蔵・冷凍庫は上段○・下段に庫内温度。温度は施設チェック（facility_check_logs）にその日の記録があればその値、
+    //   無ければ範囲内の既定値（普段の実測値）。
     patch('2点検保守等実施記録', 'AG1', { str: era });
     const CHECK_ROWS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33];
     for (const r of CHECK_ROWS) {
-      for (let day = 1; day <= 30; day++) {
+      for (let day = 1; day <= 31; day++) {
         const col = cityColLetter(2 + day);
         patch('2点検保守等実施記録', col + r, day <= d.days ? { str: '○' } : { blank: true });
       }
     }
+    const tempByDay = {};   // 'YYYY-MM-DD' → { 正規化した設備名: 値 }
+    const normEq = s => String(s || '').replace(/[（）()\s]/g, '').replace(/冷凍庫1ホシザキ/, '冷凍庫ホシザキ');
+    (fchecks || []).forEach(f => { if (f.value == null || f.value === '') return; (tempByDay[f.check_date] = tempByDay[f.check_date] || {})[normEq(f.item)] = f; });
+    for (const eq of CITY_TEMP_ROWS) {
+      for (let day = 1; day <= 31; day++) {
+        const col = cityColLetter(2 + day);
+        if (day > d.days) { patch('2点検保守等実施記録', col + eq.row, { blank: true }); patch('2点検保守等実施記録', col + (eq.row + 1), { blank: true }); continue; }
+        const rec = (tempByDay[`${month}-${String(day).padStart(2, '0')}`] || {})[normEq(eq.label)];
+        const v = rec ? Number(String(rec.value).replace(/[^\d.-]/g, '')) : eq.def;
+        patch('2点検保守等実施記録', col + eq.row, { str: rec && rec.result === '要改善' ? '△' : '○' });
+        patch('2点検保守等実施記録', col + (eq.row + 1), isNaN(v) ? { str: String(rec.value) } : { num: v });
+      }
+    }
+    // 5苦情（苦情があった月だけExcel上で書き足す）
+    patch('5苦情及びその対応', 'B4', { str: '－' });
+    patch('5苦情及びその対応', 'E4', { str: `${era}の苦情はありません` });
     // 3清掃記録（アプリの清掃記録から担当者イニシャルを転記）
     patch('3清掃記録', 'AG1', { str: era });
     const dailyRows = { 4: '解体室', 6: '解体室', 8: '解体室', 10: '精肉室', 12: '精肉室' };

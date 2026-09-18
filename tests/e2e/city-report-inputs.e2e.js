@@ -62,6 +62,10 @@ function rowHt(xml, r) { const m = xml.match(new RegExp('<row r="' + r + '"[^>]*
   await page.route('**/rest/v1/**', r => {
     const u = decodeURIComponent(r.request().url()), m = r.request().method();
     const J = x => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(x) });
+    if (/facility_check_logs/.test(u)) {
+      // 8月: 8/5 に冷凍ストッカー1 = -19、ユニット冷蔵庫は 5℃で要改善。それ以外の日は記録なし
+      return J(/2026-08-01/.test(u) ? [{ check_date: '2026-08-05', item: '冷凍ストッカー1', value: '-19', result: '可' }, { check_date: '2026-08-05', item: 'ユニット冷蔵庫', value: '5', result: '要改善' }, { check_date: '2026-08-06', item: '冷凍庫1（ホシザキ）', value: '-17', result: '可' }] : []);
+    }
     if (/city_report_inputs/.test(u)) {
       if (m === 'POST') { posts.push({ url: u, prefer: r.request().headers()['prefer'], body: JSON.parse(r.request().postData() || '{}') }); return J([{}]); }
       const mm = u.match(/month=eq\.(\d{4}-\d{2})/), le = u.match(/month=lte\.(\d{4}-\d{2})/);
@@ -107,9 +111,18 @@ function rowHt(xml, r) { const m = xml.match(new RegExp('<row r="' + r + '"[^>]*
   T('収支状況: 売上高 3,321,050・仕入 67,101・外注費 431,913・雑費 170,237', cell(pl, 'B2') === 3321050 && cell(pl, 'B4') === 67101 && cell(pl, 'B13') === 431913 && cell(pl, 'B34') === 170237, [cell(pl, 'B2'), cell(pl, 'B4'), cell(pl, 'B13'), cell(pl, 'B34')].join(' | '));
   T('収支状況: 無い科目（福利厚生費 B12・雑収入 B38）は空欄、式（B35・B42）は残る', cell(pl, 'B12') === null && cell(pl, 'B38') === null && cell(pl, 'B35') === 'F' && cell(pl, 'B42') === 'F', [cell(pl, 'B12'), cell(pl, 'B38'), cell(pl, 'B35')].join(' | '));
 
-  // 4) Excel（2026-04）: その月の収支があればその月（B1=4月）
+  // 3b) 点検保守: 異常なし（○）が既定。冷蔵・冷凍庫は上段○・下段に温度（記録があればその値、無ければ既定値）。苦情は「なし」
+  const ck = sheetXml(f8, '2点検保守等実施記録'), cp = sheetXml(f8, '5苦情及びその対応');
+  T('点検保守: 設備行は31日ぶん○（8/31 = AG列）', cell(ck, 'C3') === '○' && cell(ck, 'AG3') === '○' && cell(ck, 'AG33') === '○', [cell(ck, 'C3'), cell(ck, 'AG3'), cell(ck, 'AG33')].join(' | '));
+  T('冷凍ストッカー1: 8/5 は記録の -19、他の日は既定値 -20、上段は○', cell(ck, 'G35') === -19 && cell(ck, 'C35') === -20 && cell(ck, 'AG35') === -20 && cell(ck, 'G34') === '○' && cell(ck, 'C34') === '○', [cell(ck, 'G35'), cell(ck, 'C35'), cell(ck, 'AG35'), cell(ck, 'G34')].join(' | '));
+  T('ユニット冷蔵庫: 8/5 は要改善 → 上段△・下段 5、他の日は○・-1', cell(ck, 'G20') === '△' && cell(ck, 'G21') === 5 && cell(ck, 'C20') === '○' && cell(ck, 'C21') === -1, [cell(ck, 'G20'), cell(ck, 'G21'), cell(ck, 'C20'), cell(ck, 'C21')].join(' | '));
+  T('冷凍庫(ホシザキ): アプリの「冷凍庫1（ホシザキ）」の記録 8/6 = -17 を拾い、他は -18', cell(ck, 'H41') === -17 && cell(ck, 'C41') === -18 && cell(ck, 'C47') === -20 && cell(ck, 'C39') === -60, [cell(ck, 'H41'), cell(ck, 'C41'), cell(ck, 'C47'), cell(ck, 'C39')].join(' | '));
+  T('苦情: 「令和8年8月の苦情はありません」', cell(cp, 'B4') === '－' && cell(cp, 'E4') === '令和8年8月の苦情はありません', [cell(cp, 'B4'), cell(cp, 'E4')].join(' | '));
+
+  // 4) Excel（2026-04）: その月の収支があればその月（B1=4月）。4月は30日なので31日目（AG列）は空欄
   const f4 = await excel('2026-04');
-  const pl4 = sheetXml(f4, '6収支状況'), mt4 = sheetXml(f4, '4打ち合わせ記録簿');
+  const pl4 = sheetXml(f4, '6収支状況'), mt4 = sheetXml(f4, '4打ち合わせ記録簿'), ck4 = sheetXml(f4, '2点検保守等実施記録');
+  T('4月: 31日目（AG列）は設備行も温度行も空欄、30日目（AF列）は入る', cell(ck4, 'AG3') === null && cell(ck4, 'AG34') === null && cell(ck4, 'AG35') === null && cell(ck4, 'AF3') === '○' && cell(ck4, 'AF35') === -20, [cell(ck4, 'AG3'), cell(ck4, 'AG35'), cell(ck4, 'AF3'), cell(ck4, 'AF35')].join(' | '));
   T('4月: 4月分の収支（売上 3,669,421）・B1=4月', cell(pl4, 'B1') === '4月' && cell(pl4, 'B2') === 3669421 && cell(pl4, 'B34') === 124140, [cell(pl4, 'B1'), cell(pl4, 'B2')].join(' | '));
   T('4月: 打合せ記録が無い月はテンプレートのまま（案内文が残る）', /議事録メールを基に記入/.test(cell(mt4, 'B11')) && cell(mt4, 'B4') === '第　回' && rowHt(mt4, 11) === 23, [cell(mt4, 'B4'), rowHt(mt4, 11)].join(' | '));
   T('pageerrorなし', errors.length === 0, errors.join(' / '));
