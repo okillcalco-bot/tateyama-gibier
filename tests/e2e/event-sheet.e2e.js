@@ -210,8 +210,8 @@ const INDS = [
     return out;
   }, ROWS);
 
-  T('用紙がA4横（281mm幅）', Math.abs(layout.pageWmm - 281) < 0.3, layout.pageWmm.toFixed(1) + 'mm');
-  T('用紙がA4横（194mm高）', Math.abs(layout.pageHmm - 194) < 0.3, layout.pageHmm.toFixed(1) + 'mm');
+  T('用紙がA4横（余白13mm・紙面271mm幅）', Math.abs(layout.pageWmm - 271) < 0.3, layout.pageWmm.toFixed(1) + 'mm');
+  T('用紙がA4横（紙面184mm高）', Math.abs(layout.pageHmm - 184) < 0.3, layout.pageHmm.toFixed(1) + 'mm');
   T('印刷指定もA4横', layout.landscape, layout.pageRule);
   T('1枚に6個体', layout.cards === 6, layout.cards);
   T('3列2段に並ぶ', layout.cols === 3 && layout.rows === 2, `${layout.cols}列${layout.rows}段`);

@@ -148,7 +148,7 @@ const AREAS = [{ id: 'a1', city: '館山市', district: '神戸', oaza: '神余'
   T('商品・ひとこと・距離・感想の呼びかけが入る', /串焼き＝モモ/.test(html) && /栗林/.test(html) && /5\.7 km/.test(html) && /最後の一行/.test(html), '');
   T('ひとこと未設定の個体は自動の文で埋まる', /上滝田の山で箱罠にかかった35kgのオスのイノシシです/.test(html), '');
 
-  // 実寸で描いて、はみ出しと重なりを測る（A4横 297×210mm、余白10mm → 紙面 277×190mm）
+  // 実寸で描いて、はみ出しと重なりを測る（A4横 297×210mm、余白14mm → 紙面 269×182mm）
   const css = await page.evaluate(() => evIndSheetCss());
   const p2 = await ctx.newPage();
   await p2.setContent(`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${css}</style></head><body>${html}</body></html>`);
@@ -165,7 +165,7 @@ const AREAS = [{ id: 'a1', city: '館山市', district: '神戸', oaza: '神余'
       return { hmm: r.height / mm, wmm: r.width / mm, qrmm: qr.width / mm, qrOverlap: qr.right > qx.left + 0.5, phOverlap: ph.right > inr.left + 0.5, over };
     });
   });
-  T('紙面は 277×190mm に収まる', geo.every(g => g.hmm <= 190.5 && g.wmm <= 277.5), JSON.stringify(geo.map(g => [Math.round(g.wmm), Math.round(g.hmm)])));
+  T('紙面は 269×182mm に収まる（余白14mm・真ん中）', geo.every(g => g.hmm <= 182.5 && g.wmm <= 269.5), JSON.stringify(geo.map(g => [Math.round(g.wmm), Math.round(g.hmm)])));
   T('中身が枠からはみ出さない', geo.every(g => !g.over), JSON.stringify(geo));
   T('QRは42mm・文字と重ならない', geo.every(g => g.qrmm >= 41 && !g.qrOverlap && !g.phOverlap), JSON.stringify(geo));
   await p2.close();
