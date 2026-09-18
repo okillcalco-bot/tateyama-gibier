@@ -25,6 +25,15 @@
   .sub{font-size:13px;color:var(--ink2);margin:8px 0 0}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:14px}
   .prod{text-align:center;padding:22px 18px}
+  /* 写真は切らずに全体を見せる。看板つきカメラの写真は左下に捕獲者名が焼き込まれているので、
+     名前を出さない個体では看板の位置をぼかして番号と日付だけを重ねる（2026-09-18） */
+  .ph-wrap{position:relative;margin-bottom:12px}
+  .ph-wrap img{width:100%;height:auto;display:block;border-radius:10px}
+  .sign-mask{position:absolute;left:3%;bottom:2.3%;width:62%;height:30%;border-radius:10px;
+    background:rgba(24,28,22,.78);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    color:#fff;padding:8px 10px;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;text-align:left}
+  .sign-mask b{font-family:ui-monospace,monospace;font-size:14px;letter-spacing:.02em}
+  .sign-mask span{font-size:11.5px;color:#e8e2c8}
   .prod .nm{font-size:20px;font-weight:700}
   .prod .kg{font-size:14px;color:var(--ink2);margin-top:4px}
   .prod .cd{font-family:ui-monospace,monospace;font-size:11px;color:var(--ink3);margin-top:8px}
@@ -54,6 +63,8 @@
   .voice:first-of-type{border-top:none}
   .voice .top{display:flex;gap:8px;align-items:baseline;font-size:12.5px;color:var(--ink3)}
   .voice .nm{font-weight:700;color:var(--ink)}
+  .voice.mine{background:#eef4e9;border-radius:10px;padding:11px 10px;margin-top:6px;border-top:none}
+  .mine-badge{font-size:11px;background:var(--moss);color:#fff;border-radius:999px;padding:2px 8px;font-weight:700}
   .voice .cm{margin-top:4px;white-space:pre-wrap}
   footer{text-align:center;font-size:11.5px;color:var(--ink3);margin-top:26px;line-height:1.9}
   .center{text-align:center;color:var(--ink2);padding:30px 10px}
@@ -313,7 +324,7 @@ function render(){
     // 個体から開いたとき（出店シートのQRなど）。パックではなく一頭を見出しにする
     const sh=story.sheet||{}, ev=story.event||null;
     h+=`<div class="card prod">
-      ${story.photo?`<img src="${esc(story.photo)}" alt="" style="width:100%;max-height:260px;object-fit:cover;border-radius:10px;margin-bottom:12px;display:block;">`:''}
+      ${story.photo?`<div class="ph-wrap"><img src="${esc(story.photo)}" alt="" onload="storyMaskSign(this)">${(story.photo_kind!=='sheet' && i.hunter_public!==true)?`<div class="sign-mask"><b>${esc(i.label||'')}</b><span>捕獲日 ${esc(i.capture_date||'')}</span></div>`:''}</div>`:''}
       <div class="nm">${esc(i.place||'—')} の一頭</div>
       <div class="kg">${esc(i.species||'')}${i.sex?`（${esc(i.sex)}）`:''}${i.weight_total?` ${esc(i.weight_total)} kg`:''}</div>
       <div class="cd">${esc(i.label||'')}</div>
@@ -383,16 +394,20 @@ function render(){
     <input id="dish" maxlength="120" placeholder="例: 串焼き、ぼたん鍋、カレー">
     <label for="comment">ひとこと（任意）</label>
     <textarea id="comment" maxlength="1000" placeholder="味わい、驚いたこと、どなたと召し上がったか など"></textarea>
-    <label for="nickname">お名前・ニックネーム（任意）</label>
-    <input id="nickname" maxlength="60" placeholder="例: 館山の田中">
+    <label for="nickname">ニックネーム（任意・空欄なら「匿名さん」として載ります）</label>
+    <input id="nickname" maxlength="60" placeholder="例: 館山の田中、Tさん、はじめてジビエ">
     <button class="send" id="send" onclick="send()">${blend?'この商品':'この一頭'}の記録に一行残す</button>
     <div class="msg" id="msg"></div>
   </div>`;
 
   if(voices.length){
+    // スタンプの集計（「うまい！ ×3」）。声を並べる前に、みんなの反応がひと目で分かるように
+    const tally={}; voices.forEach(v=>(v.stamps||[]).forEach(s=>{ tally[s]=(tally[s]||0)+1; }));
+    const tallyHtml=Object.keys(tally).length?`<div class="chips" style="margin:-4px 0 10px;">${Object.entries(tally).sort((a,b)=>b[1]-a[1]).map(([s,n])=>`<span class="chip">${esc(s)} ×${n}</span>`).join('')}</div>`:'';
     h+=`<div class="card"><h2><span class="ic">🍽</span>${blend?'この商品':'この一頭'}を食べた人の声${vc?`（${vc}人）`:''}</h2>
-      ${voices.map(v=>`<div class="voice">
-        <div class="top"><span class="nm">${esc(v.nickname||'名前なし')}</span>
+      ${tallyHtml}
+      ${voices.map((v,k)=>`<div class="voice${(myVoice&&k===0)?' mine':''}">
+        <div class="top"><span class="nm">${v.nickname?esc(v.nickname)+' さん':'匿名さん'}</span>${(myVoice&&k===0)?'<span class="mine-badge">あなたの一行</span>':''}
           ${v.rating?`<span style="color:var(--gold)">${'★'.repeat(v.rating)}</span>`:''}
           ${v.dish?`<span>${esc(v.dish)}</span>`:''}<span style="margin-left:auto">${esc(v.at||'')}</span></div>
         ${(v.stamps&&v.stamps.length)?`<div class="chips" style="margin-top:4px;">${v.stamps.map(s=>`<span class="chip">${esc(s)}</span>`).join('')}</div>`:''}
@@ -403,6 +418,21 @@ function render(){
 
   document.getElementById('main').innerHTML=h;
   paintStars(); paintStamps();
+  if(myVoice){ const mine=document.querySelector('.voice.mine'); if(mine){ setTimeout(()=>mine.scrollIntoView({behavior:'smooth',block:'center'}),400); } }
+}
+let myVoice=false;   // いま送った一行（一番上）を「あなたの一行」として目立たせる
+
+/* 看板つきカメラの写真: 看板は枠の左下（12px・幅≤74%・高さ＝角パディング20＋番号行＋5行）。
+   写真の実寸から看板の高さの割合を出し、その分だけ覆う（横向きは文字が大きい） */
+function storyMaskSign(img){
+  const wrap=img.parentElement, m=wrap&&wrap.querySelector('.sign-mask'); if(!m) return;
+  const nw=img.naturalWidth||390, nh=img.naturalHeight||520, land=nw>nh;
+  const logW=land?800:390, logH=logW*nh/nw;
+  const clamp=(mn,v,mx)=>Math.max(mn,Math.min(mx,v));
+  const codeF=clamp(20,logW*0.06,34), lineF=clamp(13,logW*0.036,19);
+  const boxH=20+codeF*1.35+5*lineF*1.35;
+  m.style.height=Math.min(60, Math.round(boxH/logH*100+5))+'%';
+  m.style.width=(land?50:62)+'%';
 }
 
 function setRating(n){ rating=(rating===n?0:n); paintStars(); }
@@ -431,7 +461,7 @@ async function send(){
       const nth=r.voice_count?`この一頭を食べた ${r.voice_count}人目の声として、`:'';
       const thanks='ありがとうございます。'+nth+(story&&story.blend?'この商品':'この一頭')+'の記録に、いま一行が加わりました。';
       msg.textContent=thanks;
-      story=await fetchStory(); rating=0; picked=new Set(); render();
+      story=await fetchStory(); rating=0; picked=new Set(); myVoice=true; render();
       const m2=document.getElementById('msg');
       if(m2){ m2.style.color='var(--moss)'; m2.textContent=thanks; }
     }else{
