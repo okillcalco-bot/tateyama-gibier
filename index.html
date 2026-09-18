@@ -1530,7 +1530,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="section">
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
         <span>捕獲者台帳（館山市・南房総市）</span>
-        <button class="btn btn-primary" onclick="hunterOpenNew()">＋ 新規登録</button>
+        <span style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn" onclick="hunterPrintLabels()" title="コメリ KML-506（A4 24面 70×33.9mm）に貼る宛名ラベル。住所・郵便番号は台帳から">🏷 宛名ラベル印刷（KML-506）</button>
+          <button class="btn btn-primary" onclick="hunterOpenNew()">＋ 新規登録</button>
+        </span>
       </div>
       <div id="hunters-stats" style="font-size:12.5px;color:var(--text2);margin-bottom:10px;"></div>
       <input class="form-input" id="hunter-search" placeholder="氏名・地区・罠設置場所で検索" style="max-width:300px;margin-bottom:10px;" oninput="loadHunters()" />
@@ -2038,7 +2041,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="form-group"><label>氏名 *</label><input class="form-input" id="hun-f-name" /></div>
         <div class="form-group"><label>ふりがな（かな入力の予測に使用）</label><input class="form-input" id="hun-f-furigana" placeholder="例: かとうしげる" /></div>
         <div class="form-group"><label>地区</label><select class="form-input" id="hun-f-city"><option value="">選択...</option><option>館山市</option><option>南房総市</option><option>その他</option></select></div>
-        <div class="form-group" style="grid-column:1/-1"><label>住所</label><input class="form-input" id="hun-f-address" /></div>
+        <div class="form-group"><label>郵便番号（宛名ラベル用）</label><input class="form-input" id="hun-f-postal_code" placeholder="例: 294-0025" inputmode="numeric" /></div>
+        <div class="form-group" style="grid-column:1/-1"><label>住所</label><input class="form-input" id="hun-f-address" placeholder="例: 館山市八戸37（宛名ラベルには「千葉県」を自動で付けます）" /></div>
         <div class="form-group"><label>電話番号</label><input class="form-input" id="hun-f-phone" /></div>
         <div class="form-group"><label>罠の設置場所</label><input class="form-input" id="hun-f-trap_area" placeholder="例: 神余 山中" /></div>
       </div>
@@ -5896,8 +5900,8 @@ function pmPrintOnly() {
     toast('先に登録してください','error');
     return;
   }
-  const { weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode } = pmLastPrintInfo;
-  pmPrintLabel(weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode || pmScanCodeGet(identCode));
+  const { weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode, grade } = pmLastPrintInfo;
+  pmPrintLabel(weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode || pmScanCodeGet(identCode), grade);
   // 再印刷したら直前登録カードの印刷状態も更新
   if (pmLastAction && pmLastAction.ident === identCode) {
     pmShowLastAction({ ...pmLastAction, printed: true });
@@ -6199,7 +6203,7 @@ async function scaleRequestWeight() {
 function pmDoPrint(plan) {
   if (!pmSelectedPart || !pmIndividual || !plan) return;
   pmLastPrintInfo = { weight_kg: plan.weight_kg, lotCode: plan.lotCode, identCode: plan.identCode,
-                      fullPartName: plan.fullPartName, labelWeight: plan.labelWeight, scanCode: plan.scanCode };
+                      fullPartName: plan.fullPartName, labelWeight: plan.labelWeight, scanCode: plan.scanCode, grade: pmGrade };
   // 8桁の数字キーが用意できている時だけ「先に」印刷する。
   // 無い時に先に刷ると長い識別コードを焼いて読めないラベルになるので、ここでは刷らず、
   // 保存直後にDBが必ず付ける数字キー（trigger）で印刷する（数百ms後・確実に読める）。
@@ -6303,7 +6307,7 @@ async function pmOnWeightReceived(weight_kg, plan) {
     let identCode = plan.identCode;
     const lotCode = plan.lotCode, fullPartName = plan.fullPartName, labelWeight = plan.labelWeight;
     let scanCode = plan.scanCode;
-    pmLastPrintInfo = { weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode };
+    pmLastPrintInfo = { weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode, grade: pmGrade };
 
     // 3. DB保存
     const record = {
@@ -6340,7 +6344,7 @@ async function pmOnWeightReceived(weight_kg, plan) {
         identCode = record.ident_code;
         scanCode = pmScanCodeGet(identCode);
         if (scanCode) record.scan_code = scanCode; else delete record.scan_code;
-        pmLastPrintInfo = { weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode };
+        pmLastPrintInfo = { weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode, grade: pmGrade };
       }
     }
     pmUsedIdents.add(identCode);
@@ -6356,7 +6360,7 @@ async function pmOnWeightReceived(weight_kg, plan) {
       const alreadyPrintedUnreadable = pmLastLabelPrinted && !scanOk(scanCode);
       scanCode = assigned;
       pmScanCodeFor[identCode] = assigned;
-      pmLastPrintInfo = { weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode };
+      pmLastPrintInfo = { weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode, grade: pmGrade };
       // すでに読めないラベルを刷ってしまっていた場合だけ、読めるキーで刷り直す（通常はここに来ない）。
       if (alreadyPrintedUnreadable) {
         alert(`先に出たラベルのバーコードは読み取れません。\n番号 ${assigned} で刷り直します。先のラベルは捨ててください。`);
@@ -8746,7 +8750,11 @@ function pmLabelHtml(d) {
        印字できるのは上端から約57mmまで（下端2.5〜3mmは印字されない）で、注記と物語の案内が
        2行に折り返して全体が押し下げられていた。産地・重量を少し小さくし、注記・案内を1行に、
        発行元と住所を1行にまとめて、内容が52mm以内に終わるようにした（slackは3.9→8mm以上）。 */
-    .o  { font-size:8pt; font-weight:bold; border-bottom:.5pt solid #000; padding-bottom:.4mm; white-space:nowrap; }
+    .o  { font-size:8pt; font-weight:bold; border-bottom:.5pt solid #000; padding-bottom:.4mm; white-space:nowrap; display:flex; justify-content:space-between; align-items:center; }
+    /* 肉ランク（2026-09-18）: 上・極上は一目で分かるように産地行の右に印を出す（並は何も出さない）。
+       上＝黒枠、極上＝黒地に白抜き。行の高さは 8pt の文字と同じに収めているので下の配置は変わらない。 */
+    .rk { flex:none; font-size:6.5pt; font-weight:bold; line-height:1.3; padding:0 1.1mm; margin-left:1mm; border:.6pt solid #000; border-radius:.6mm; letter-spacing:.3px; }
+    .rk.gokujo { background:#000; color:#fff; }
     .id { font-size:5pt; color:#333; margin-top:.4mm; }
     .p  { font-size:11pt; font-weight:bold; margin-top:.4mm; line-height:1.25; line-break:strict; overflow-wrap:normal; }
     .w  { font-size:14pt; font-weight:bold; line-height:1.1; }
@@ -8775,7 +8783,7 @@ function pmLabelHtml(d) {
   `;
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${css}
 </style></head><body>
-    <div class="o">${d.origin}　${d.speciesName}</div>
+    <div class="o"><span>${d.origin}　${d.speciesName}</span>${d.grade === '極上' ? '<span class="rk gokujo">極上</span>' : d.grade === '上' ? '<span class="rk">上</span>' : ''}</div>
     <div class="id">個体管理番号　${d.labelId}</div>
     <div class="p" style="font-size:${labelPartFontPt(d.partName)}pt">${d.partName}</div>
     <div class="w">${Number(d.labelWeight).toFixed(3)}<span class="wu"> kg</span></div>
@@ -8792,8 +8800,9 @@ function pmLabelHtml(d) {
 }
 
 // ── ラベル印刷 ──
-function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight, scanCode) {
+function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight, scanCode, grade) {
   if (!partName) partName = pmSelectedPart.part_name;
+  if (grade === undefined) grade = pmGrade;   // 登録時のランク。再印刷は pmLastPrintInfo.grade を渡す
   if (labelWeight === undefined) labelWeight = weight_kg;
   const species     = pmIndividual.species || '';
   // T始まり→館山産、M始まり→南房総産、その他はDBのlocation/origin参照
@@ -8816,7 +8825,7 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight, scan
 
   const html = pmLabelHtml({
     origin, speciesName, labelId: pmIndividual.label_id, partName,
-    labelWeight, expiryStr, identCode, barcodeSvg: barcodeSection, barcodeThin,
+    labelWeight, expiryStr, identCode, barcodeSvg: barcodeSection, barcodeThin, grade,
     // バーコードに焼いた8桁の数字キーを、読めない時に手打ちできるよう大きく表示する。
     // （数字キーが無く識別コードを焼いた時は従来どおり識別コードだけ表示）
     scanCode: (scanCode && /^\d{8}$/.test(String(scanCode))) ? scanCode : null,
@@ -10163,7 +10172,7 @@ async function loadHunters() {
   }
 }
 
-const HUNTER_FIELDS = ['name', 'furigana', 'city', 'address', 'phone', 'trap_area', 'bank_name', 'bank_branch', 'account_type', 'account_number', 'account_holder', 'memo'];
+const HUNTER_FIELDS = ['name', 'furigana', 'city', 'postal_code', 'address', 'phone', 'trap_area', 'bank_name', 'bank_branch', 'account_type', 'account_number', 'account_holder', 'memo'];
 
 function hunterOpenNew() {
   if (!requireAdmin('捕獲者の新規登録')) return;
@@ -10181,6 +10190,41 @@ function hunterEdit(id) {
   document.getElementById('hunterModalTitle').textContent = '捕獲者情報編集';
   HUNTER_FIELDS.forEach(f => document.getElementById('hun-f-' + f).value = h[f] || '');
   document.getElementById('hunterModal').style.display = 'block';
+}
+
+/* 宛名ラベル（コメリ KML-506：A4 24面 70×33.9mm・3列×8段・上下余白12.9mm・左右0）
+   買取金額通知（buyback.html）の宛名ラベルと同じ用紙・同じレイアウト。検索で絞っていればその人だけ。 */
+const HUNTER_LABEL_SHEET = { cols:3, rows:8, w:70, h:33.9, top:12.9 };
+function hunterLabelPostal(h) { const z = String(h.postal_code || '').replace(/[^0-9０-９]/g, '').replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)); return z.length === 7 ? z.slice(0, 3) + '-' + z.slice(3) : (h.postal_code || ''); }
+function hunterLabelAddress(h) {
+  let a = String(h.address || '').trim();
+  if (a && !/^(北海道|.{2,3}[都道府県])/.test(a) && /^(館山市|南房総市|鴨川市|鋸南町|木更津市|君津市|富津市|袖ケ浦市|袖ヶ浦市|市原市|千葉市|船橋市|市川市|松戸市|柏市|茂原市|いすみ市|勝浦市|大多喜町|御宿町|一宮町|睦沢町|長生村|白子町|長柄町|長南町|東金市|山武市|大網白里市|九十九里町|芝山町|横芝光町|匝瑳市|旭市|銚子市|香取市|成田市|印西市|佐倉市|八街市|四街道市|習志野市|八千代市|鎌ケ谷市|鎌ヶ谷市|浦安市|流山市|野田市|我孫子市|白井市|富里市|酒々井町|栄町|神崎町|多古町|東庄町)/.test(a)) a = '千葉県' + a;
+  return a;
+}
+function hunterPrintLabels() {
+  if (!huntersData.length) { toast('捕獲者台帳が読み込まれていません', 'error'); return; }
+  const q = (document.getElementById('hunter-search').value || '').trim();
+  const people = (q ? huntersData.filter(h => (h.name || '').includes(q) || (h.furigana || '').includes(q) || (h.trap_area || '').includes(q) || (h.city || '').includes(q)) : huntersData)
+    .slice().sort((a, b) => (a.furigana || a.name || '').localeCompare(b.furigana || b.name || '', 'ja'));
+  if (!people.length) { toast('印刷する人がいません', 'error'); return; }
+  const S = HUNTER_LABEL_SHEET, per = S.cols * S.rows;
+  const ans = prompt(`宛名ラベル ${people.length}人分を印刷します（コメリ KML-506・A4 24面）。\n使いかけのシートなら、何枚目のラベルから使うか（1〜${per}）。\n枠線を試し刷りしたい場合は「枠」と入れてください。`, '1');
+  if (ans == null) return;
+  const frame = /枠/.test(ans); const start = Math.min(per, Math.max(1, parseInt(ans, 10) || 1));
+  const noAddr = people.filter(h => !h.address);
+  if (noAddr.length) toast(`住所が無い人 ${noAddr.length}人（${noAddr.map(h => h.name).join('、')}）はラベルに「住所未登録」と出ます`, 'error');
+  const cells = Array(start - 1).fill(null).concat(people);
+  const sheets = []; for (let i = 0; i < cells.length; i += per) sheets.push(cells.slice(i, i + per));
+  const cell = h => !h ? `<div class="lbl${frame ? ' f' : ''}"></div>` : `<div class="lbl${frame ? ' f' : ''}">${h.address ? `<div class="zip">${hunterLabelPostal(h) ? '〒' + esc2(hunterLabelPostal(h)) : ''}</div><div class="adr">${esc2(hunterLabelAddress(h))}</div>` : `<div class="zip"></div><div class="adr miss">住所未登録（捕獲者台帳に登録してください）</div>`}<div class="nm">${esc2(h.name)}　様</div></div>`;
+  const css = `@page{size:A4;margin:0} html,body{margin:0;padding:0} body{font-family:"Noto Sans JP","Yu Gothic","Hiragino Sans",sans-serif;color:#000}
+    .sheet{width:210mm;height:297mm;box-sizing:border-box;padding-top:${S.top}mm;display:grid;grid-template-columns:repeat(${S.cols},${S.w}mm);grid-auto-rows:${S.h}mm;align-content:start;page-break-after:always;overflow:hidden}
+    .sheet:last-child{page-break-after:auto}
+    .lbl{box-sizing:border-box;width:${S.w}mm;height:${S.h}mm;padding:3.5mm 6mm 2mm;overflow:hidden;line-height:1.35}
+    .lbl.f{outline:.2mm dashed #999;outline-offset:-.2mm}
+    .zip{font-size:9.5pt;min-height:4.4mm} .adr{font-size:9.5pt} .adr.miss{color:#444} .nm{font-size:14pt;font-weight:700;margin-top:1.5mm;white-space:nowrap}`;
+  const w = window.open('', '_blank'); if (!w) { toast('ポップアップがブロックされました。許可してもう一度押してください', 'error'); return; }
+  w.document.write(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>宛名ラベル</title><style>${css}</style></head><body>${sheets.map(sh => `<div class="sheet">${sh.map(cell).join('')}</div>`).join('')}<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script></body></html>`);
+  w.document.close();
 }
 
 async function hunterSave() {
@@ -11596,6 +11640,9 @@ async function kkSubmit() {
     const batchCode = `TGC-${pc}B-${date}-${String(start).padStart(3, '0')}`;
     const nowIso = new Date().toISOString();
     const firstParentId = kkMaterials[0].id;
+    // 等級: inventory.grade の DB 既定値が「上」なので、書かないと加工品が全部「上」になる（2026-09-18 ミンチ肉99件が上だった）。
+    // ミンチ肉は並のみ。スライスは原料ブロックの等級を引き継ぐ（複数原料なら最初の1点）。
+    const packGrade = pc === 'MI' ? '並' : (kkMaterials[0].grade || '並');
 
     // 1. 完成パックを在庫登録（個数分・固有コード）
     const packs = [];
@@ -11612,6 +11659,7 @@ async function kkSubmit() {
         weight: packW,
         weight_kg: packW,
         status: '在庫',
+        grade: packGrade,
         operator: operator,
         processed_by: operator,
         processed_at: nowIso,
@@ -11923,6 +11971,7 @@ async function kkRepackOpen(batchCode) {
       batchCode,
       species: p.species || '',
       prodName: p.process_type || p.part_name || '',
+      grade: p.grade || null,   // 追加パックは既存パックと同じ等級
       parent_inventory_id: p.parent_inventory_id || null,
       location_code: p.location_code || null,
       origin
@@ -11968,6 +12017,7 @@ async function kkRepackSubmit() {
         weight: w,
         weight_kg: w,
         status: '在庫',
+        grade: pc === 'MI' ? '並' : (b.grade || '並'),   // ミンチ肉は並のみ。DB既定「上」に落ちないよう明示
         operator: operator,
         processed_by: operator,
         processed_at: nowIso,

@@ -61,6 +61,8 @@ const path = require('path');
   await page.waitForTimeout(400);
 
   results.push(['inventoryへ3件POST', Array.isArray(postedInv) && postedInv.length === 3, postedInv && postedInv.length]);
+  // 2026-09-18: DB既定の grade「上」に落ちてミンチ肉99件が「上」になっていた。ミンチ肉は並のみ
+  results.push(['ミンチの追加パックは grade=並 を明示して POST', Array.isArray(postedInv) && postedInv.every(r => r.grade === '並'), JSON.stringify(postedInv && postedInv.map(r => r.grade))]);
   const ok = Array.isArray(postedInv) && postedInv.every(r =>
     r.individual_code === 'TGC-MIB-20260826-001' && r.tier === 3 && r.status === '在庫' &&
     r.weight === 1 && r.weight_kg === 1 && r.part_name === 'ミンチ肉（粗挽き）' &&

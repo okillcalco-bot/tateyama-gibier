@@ -18,10 +18,10 @@ const path = require('path');
   // 実寸(40mm×60mm)のiframeにラベルを描画し、各要素の位置を実測する
   // scanCode を渡すと、実際の出荷ラベルと同じく「この肉の物語」QRも一緒に描画する
   // （2026-09-08: QRを載せたまま元のバーコード高さ12mmに戻せるかを確かめるため追加）
-  const measure = async (identCode, partName, scanCode) => await page.evaluate(async ({ identCode, partName, scanCode }) => {
+  const measure = async (identCode, partName, scanCode, grade) => await page.evaluate(async ({ identCode, partName, scanCode, grade }) => {
     const html = pmLabelHtml({
       origin: '館山産', speciesName: 'イノシシ肉', labelId: 'TGC-08-M168',
-      partName, labelWeight: 0.76, expiryStr: '2027/8/26', identCode,
+      partName, labelWeight: 0.76, expiryStr: '2027/8/26', identCode, grade: grade || null,
       barcodeSvg: makeCode128SVG(scanCode || shortIdent(identCode)),
       scanCode: scanCode || null,
       qrSvg: scanCode ? makeQRSVG(storyUrl(scanCode), 9.5) : null
@@ -39,13 +39,13 @@ const path = require('path');
       bodyH: d.body.getBoundingClientRect().height,
       scrollH: d.body.scrollHeight,
       o: box(q('.o')), ex: box(q('.ex')), tmp: box(q('.tmp')), bc: box(q('.bc')), svg: box(q('.bc svg')),
-      bct: box(q('.bct')), mk: box(q('.mk')), ad: box(q('.ad')),
+      bct: box(q('.bct')), mk: box(q('.mk')), ad: box(q('.ad')), rk: box(q('.rk')), rkText: q('.rk') ? q('.rk').textContent : '',
       lines: (() => { const o = {}; for (const s of ['.wn', '.qt', '.mk']) { const el = q(s); if (!el) continue; const cs = d.defaultView.getComputedStyle(el); const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.2; o[s] = Math.round(el.getBoundingClientRect().height / lh); } return o; })(),
       clippedX: [...d.querySelectorAll('.wn,.qt,.mk')].filter(el => el.scrollWidth > el.clientWidth + 1).map(el => el.className)
     };
     f.remove();
     return out;
-  }, { identCode, partName, scanCode });
+  }, { identCode, partName, scanCode, grade });
 
   const results = [];
   const check = (label, m) => {
@@ -121,6 +121,15 @@ const path = require('path');
   const tooSmall = wraps.filter(w => w.pt < 9).map(w => w.n);
   results.push(['縮めすぎていない(9px以上)', tooSmall.length === 0, tooSmall.join(' / ')]);
 
+  // 2026-09-18: 上・極上のランク印。並は出ない／上は枠／極上は黒地。産地行に収まり、下の配置（消費期限・バーコード）が並と同じ位置
+  const gNami = await measure('TGC-08-M168', 'ロース', '10000926');
+  const gJo = await measure('TGC-08-M168', 'ロース', '10000926', '上');
+  const gGoku = await measure('TGC-08-M168', 'ロース', '10000926', '極上');
+  results.push(['ランク印: 並は出ない', !gNami.rk, JSON.stringify(gNami.rkText)]);
+  results.push(['ランク印: 上は「上」、極上は「極上」', gJo.rkText === '上' && gGoku.rkText === '極上', JSON.stringify([gJo.rkText, gGoku.rkText])]);
+  results.push(['ランク印: 産地行の中（右端）に収まり、はみ出さない', gGoku.rk.right <= gGoku.o.right + 0.5 && gGoku.rk.top >= gGoku.o.top - 0.5 && gGoku.rk.bottom <= gGoku.o.bottom + 0.5, `rk=${(gGoku.rk.right/gGoku.mmPx).toFixed(1)}mm o.right=${(gGoku.o.right/gGoku.mmPx).toFixed(1)}mm`]);
+  results.push(['ランク印: 消費期限とバーコードの位置が並と同じ（±0.3mm）', Math.abs(gGoku.ex.top - gNami.ex.top) < 0.3 * gNami.mmPx && Math.abs(gGoku.svg.top - gNami.svg.top) < 0.3 * gNami.mmPx, `ex ${(gNami.ex.top/gNami.mmPx).toFixed(2)}→${(gGoku.ex.top/gGoku.mmPx).toFixed(2)}mm svg ${(gNami.svg.top/gNami.mmPx).toFixed(2)}→${(gGoku.svg.top/gGoku.mmPx).toFixed(2)}mm`]);
+  check('極上ランク印付き', gGoku);
   results.push(['pageerrorなし', errors.length === 0, errors.join(' / ')]);
 
   let pass = 0;
