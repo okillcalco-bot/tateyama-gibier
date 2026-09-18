@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>館山ジビエセンター － 収支解析・事業計画のたね</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Barlow+Condensed:wght@400;600;700&display=swap');
+:root {
+  --bg:#0f1117; --surface:#1a1e2a; --surface2:#222736; --border:#2e3447;
+  --accent:#e8a44a; --accent2:#c06a2a; --green:#4caf7d; --red:#e05555; --blue:#5a8cd8; --yellow:#f0c040; --purple:#9b7fd4; --teal:#3fb8af;
+  --text:#e8eaf0; --text2:#8b90a8; --radius:10px;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--text); font-family:'Noto Sans JP',sans-serif; font-size:14px; min-height:100vh; }
+.header { background:var(--surface); border-bottom:2px solid var(--accent); padding:14px 20px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; flex-wrap:wrap; gap:10px; }
+.header-title { font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:700; color:var(--accent); letter-spacing:.05em; }
+.header-sub { font-size:11px; color:var(--text2); margin-top:2px; }
+.nav-links { display:flex; gap:8px; flex-wrap:wrap; }
+.nav-link { background:var(--surface2); border:1px solid var(--border); color:var(--text2); padding:6px 12px; border-radius:6px; text-decoration:none; font-size:12px; }
+.nav-link:hover { color:var(--accent); border-color:var(--accent); }
+.filter-bar { background:var(--surface); border-bottom:1px solid var(--border); padding:12px 20px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.filter-group { display:flex; align-items:center; gap:6px; }
+.filter-label { font-size:12px; color:var(--text2); white-space:nowrap; }
+select, input, textarea { background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:6px; font-size:13px; font-family:inherit; color-scheme:dark; }
+select:focus, input:focus, textarea:focus { outline:none; border-color:var(--accent); }
+.btn { padding:7px 16px; border-radius:6px; border:none; cursor:pointer; font-size:13px; font-family:inherit; font-weight:500; }
+.btn-accent { background:var(--accent); color:#000; } .btn-accent:hover { background:var(--accent2); }
+.btn-secondary { background:var(--surface2); color:var(--text2); border:1px solid var(--border); } .btn-secondary:hover { color:var(--text); border-color:var(--text2); }
+.btn-sm { padding:4px 10px; font-size:12px; }
+.main { padding:20px; max-width:1400px; margin:0 auto; }
+.status-bar { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:10px 16px; margin-bottom:16px; font-size:13px; display:none; white-space:pre-wrap; }
+.status-bar.info { border-color:var(--blue); color:var(--blue); display:block; }
+.status-bar.error { border-color:var(--red); color:var(--red); display:block; }
+.status-bar.loading { border-color:var(--accent); color:var(--accent); display:block; }
+.status-bar.warn { border-color:var(--yellow); color:var(--yellow); display:block; }
+.kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+.kpi-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px; position:relative; overflow:hidden; }
+.kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--kpi-color,var(--accent)); }
+.kpi-label { font-size:11px; color:var(--text2); letter-spacing:.06em; margin-bottom:6px; }
+.kpi-value { font-family:'Barlow Condensed',sans-serif; font-size:26px; font-weight:700; }
+.kpi-sub { font-size:11px; color:var(--text2); margin-top:4px; line-height:1.5; }
+.charts-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:20px; }
+.chart-full { grid-column:1 / -1; }
+.chart-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px; }
+.chart-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; gap:10px; }
+.chart-title { font-size:14px; font-weight:500; }
+.chart-subtitle { font-size:11px; color:var(--text2); margin-top:2px; line-height:1.5; }
+.chart-wrap { position:relative; height:260px; }
+table { width:100%; border-collapse:collapse; }
+th { padding:8px 10px; text-align:left; font-size:11px; color:var(--text2); font-weight:500; letter-spacing:.04em; border-bottom:1px solid var(--border); background:var(--surface2); white-space:nowrap; }
+td { padding:7px 10px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:top; }
+tr:last-child td { border-bottom:none; }
+.td-num { text-align:right; font-variant-numeric:tabular-nums; font-family:'Barlow Condensed',sans-serif; font-size:15px; white-space:nowrap; }
+th.td-num { font-family:'Noto Sans JP',sans-serif; font-size:11px; }
+.pos { color:var(--green); } .neg { color:var(--red); } .flat { color:var(--text2); }
+.note { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:14px 18px; font-size:12.5px; line-height:1.8; color:var(--text2); margin-bottom:20px; }
+.note b { color:var(--text); } .note ul { padding-left:18px; }
+.tag { display:inline-block; padding:1px 7px; border-radius:4px; font-size:11px; background:rgba(232,164,74,.15); color:var(--accent); margin-right:4px; white-space:nowrap; }
+.tag.chk { background:rgba(240,192,64,.15); color:var(--yellow); }
+.tag.data { background:rgba(90,140,216,.18); color:var(--blue); }
+.muted { color:var(--text2); font-size:12px; }
+.section-title { font-size:16px; font-weight:700; margin:26px 0 6px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.section-lead { font-size:12px; color:var(--text2); margin-bottom:12px; line-height:1.7; }
+.idea-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; margin-bottom:20px; }
+.idea { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px; display:flex; flex-direction:column; gap:8px; border-top:3px solid var(--idea-color,var(--accent)); }
+.idea h3 { font-size:15px; font-weight:700; display:flex; align-items:center; gap:8px; }
+.idea .why { font-size:12.5px; line-height:1.7; }
+.idea .why b { color:var(--accent); }
+.idea .block { font-size:12px; line-height:1.7; color:var(--text2); }
+.idea .block b { color:var(--text); }
+.idea .progs { display:flex; flex-wrap:wrap; gap:4px; }
+.idea .progs span { font-size:11px; background:var(--surface2); border:1px solid var(--border); border-radius:4px; padding:2px 7px; }
+.idea .foot { display:flex; gap:8px; align-items:center; margin-top:auto; padding-top:6px; }
+.fallback-bars td { border:none; padding:2px 6px; }
+.bar { height:12px; border-radius:3px; min-width:1px; }
+.copied { color:var(--green); font-size:12px; }
+textarea.plan { width:100%; min-height:220px; font-size:12.5px; line-height:1.6; resize:vertical; }
+@media (max-width:1000px) { .kpi-row { grid-template-columns:repeat(2,1fr); } .charts-grid, .idea-grid { grid-template-columns:1fr; } .chart-full { grid-column:1; } }
+</style>
+<script src="admin-gate.js"></script>
+<script>if(!window.adminGate){document.addEventListener("DOMContentLoaded",function(){document.body.innerHTML='<div style="padding:24px;font-family:sans-serif;">管理者確認の部品（admin-gate.js）を読み込めなかったため、このページは開けません。再読み込みしてください。 <a href="index.html">業務アプリへ戻る</a></div>';});}</script>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">🐗 TATEYAMA GIBIER</div>
+    <div class="header-sub">収支解析 ― 会計の月次損益 × 頭数・精肉量・販売 ／ 補助金・事業計画のたね</div>
+  </div>
+  <div class="nav-links">
+    <a href="index.html?tab=analysis" class="nav-link">📈 解析一覧</a>
+    <a href="sales-dashboard.html" class="nav-link">📊 売上分析</a>
+    <a href="history.html" class="nav-link">📚 過年度</a>
+    <a href="lca.html" class="nav-link">🌱 LCA</a>
+    <a href="index.html?tab=docs" class="nav-link">🏛 収支の入力（月次報告書）</a>
+    <a href="index.html" class="nav-link">📦 業務アプリ</a>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <div class="filter-group"><span class="filter-label">年度</span><select id="fFy"></select></div>
+  <div class="filter-group"><span class="filter-label">頭数の種類</span>
+    <select id="fSpecies"><option value="">すべて</option><option value="イノシシ">イノシシだけ</option></select></div>
+  <button class="btn btn-accent" onclick="runAnalysis()">🔍 解析する</button>
+  <button class="btn btn-secondary" onclick="downloadCsv()" id="btnCsv" disabled>⬇ 月別CSV</button>
+  <span class="muted" id="lastUpdated" style="margin-left:auto"></span>
+</div>
+
+<div class="main">
+  <div id="statusBar" class="status-bar"></div>
+
+  <div class="kpi-row" id="kpiRow">
+    <div class="kpi-card" style="--kpi-color:var(--accent)"><div class="kpi-label">売上高（会計・累計）</div><div class="kpi-value" id="kSales">—</div><div class="kpi-sub" id="kSalesSub"></div></div>
+    <div class="kpi-card" style="--kpi-color:var(--green)"><div class="kpi-label">営業損益（累計）</div><div class="kpi-value" id="kOp">—</div><div class="kpi-sub" id="kOpSub"></div></div>
+    <div class="kpi-card" style="--kpi-color:var(--red)"><div class="kpi-label">販管費率 ／ 人件費率</div><div class="kpi-value" id="kSga">—</div><div class="kpi-sub" id="kSgaSub"></div></div>
+    <div class="kpi-card" style="--kpi-color:var(--blue)"><div class="kpi-label">1頭あたり 売上 ／ 販管費</div><div class="kpi-value" id="kPerHead">—</div><div class="kpi-sub" id="kPerHeadSub"></div></div>
+    <div class="kpi-card" style="--kpi-color:var(--purple)"><div class="kpi-label">精肉1kgあたり売上</div><div class="kpi-value" id="kPerKg">—</div><div class="kpi-sub" id="kPerKgSub"></div></div>
+    <div class="kpi-card" style="--kpi-color:var(--yellow)"><div class="kpi-label">損益分岐の頭数（月）</div><div class="kpi-value" id="kBep">—</div><div class="kpi-sub" id="kBepSub"></div></div>
+    <div class="kpi-card" style="--kpi-color:var(--teal)"><div class="kpi-label">搬入頭数（累計）</div><div class="kpi-value" id="kHeads">—</div><div class="kpi-sub" id="kHeadsSub"></div></div>
+    <div class="kpi-card" style="--kpi-color:var(--text2)"><div class="kpi-label">アプリの販売記録 ÷ 会計の売上</div><div class="kpi-value" id="kCover">—</div><div class="kpi-sub" id="kCoverSub"></div></div>
+  </div>
+
+  <div class="charts-grid">
+    <div class="chart-card"><div class="chart-header"><div><div class="chart-title">💴 月別の売上高（会計）と前年同月</div><div class="chart-subtitle">棒＝今年度の売上高、薄い棒＝前年同月。会計事務所の月次損益（ジビエセンター部門）から。</div></div></div><div class="chart-wrap"><canvas id="chSales"></canvas></div></div>
+    <div class="chart-card"><div class="chart-header"><div><div class="chart-title">📉 月別の営業損益・経常損益</div><div class="chart-subtitle">棒＝営業損益（売上−仕入−販管費）、線＝経常損益（雑収入・補助金などを含む）、点線＝前年同月の経常損益。</div></div></div><div class="chart-wrap"><canvas id="chProfit"></canvas></div></div>
+    <div class="chart-card"><div class="chart-header"><div><div class="chart-title">🧾 月別の費目構成（販管費＋仕入）</div><div class="chart-subtitle">人件費・外注・物流・包材・光熱水・消耗品・施設・販促・その他・仕入 の積み上げ。どこが膨らんでいるかを見る。</div></div></div><div class="chart-wrap"><canvas id="chCost"></canvas></div></div>
+    <div class="chart-card"><div class="chart-header"><div><div class="chart-title">🐗 1頭あたりの売上・販管費 と 頭数</div><div class="chart-subtitle">線＝売上÷頭数、販管費÷頭数（円／頭）。棒＝搬入頭数。頭数が増えても1頭あたりの販管費が下がらなければ、規模の効果が出ていない。</div></div></div><div class="chart-wrap"><canvas id="chPerHead"></canvas></div></div>
+  </div>
+
+  <div class="chart-card chart-full" style="margin-bottom:20px">
+    <div class="chart-header"><div><div class="chart-title">📅 月別の収支と現場の数字（ユニットエコノミクス）</div><div class="chart-subtitle">会計（売上・仕入・販管費・営業損益）と、アプリの記録（搬入頭数・精肉kg・販売記録）を同じ行に並べる。会計の数字が無い月は「—」。</div></div></div>
+    <div style="overflow-x:auto"><table id="monthTable"><thead><tr><th>月</th><th class="td-num">搬入頭数</th><th class="td-num">精肉 kg</th><th class="td-num">売上高</th><th class="td-num">前年同月</th><th class="td-num">仕入</th><th class="td-num">販管費</th><th class="td-num">うち人件費</th><th class="td-num">営業損益</th><th class="td-num">経常損益</th><th class="td-num">売上／頭</th><th class="td-num">販管費／頭</th><th class="td-num">売上／精肉kg</th><th class="td-num">アプリ販売記録</th></tr></thead><tbody id="monthBody"><tr><td colspan="14" class="muted">解析を実行してください。</td></tr></tbody></table></div>
+  </div>
+
+  <div class="chart-card chart-full" style="margin-bottom:20px">
+    <div class="chart-header"><div><div class="chart-title">🧮 科目別の費用（年度累計・月平均・直近月）</div><div class="chart-subtitle">会計の科目そのまま。直近月が月平均より大きく上振れした科目に印を付ける（＋30%以上）。</div></div></div>
+    <div style="overflow-x:auto"><table id="acctTable"><thead><tr><th>科目</th><th>分類</th><th class="td-num">年度累計</th><th class="td-num">月平均</th><th class="td-num">直近月</th><th class="td-num">売上比</th><th>読み</th></tr></thead><tbody id="acctBody"><tr><td colspan="7" class="muted">解析を実行してください。</td></tr></tbody></table></div>
+  </div>
+
+  <div class="section-title">💡 補助金・事業計画のたね <span class="tag">実測値から自動で書く</span></div>
+  <div class="section-lead">上の数字から「課題 → 取組 → 数値目標 → 必要な投資 → 使えそうな制度」の骨子を作ります。<b>制度名は候補で、名称・要件・募集時期は年度ごとに変わるので必ず一次情報で確認してください</b>（<span class="tag chk">要確認</span>）。骨子はコピーして申請書やGビズの入力の下書きに使えます。数字は解析した年度のものが入ります。</div>
+  <div class="idea-grid" id="ideaGrid"><div class="muted">解析を実行してください。</div></div>
+
+  <div class="chart-card chart-full" style="margin-bottom:20px">
+    <div class="chart-header"><div><div class="chart-title">📝 事業計画の下書き（全部まとめて）</div><div class="chart-subtitle">上のたねを1本の文章にしたもの。ここで書き換えてからコピーできます（保存はしません。ブラウザを閉じると消えます）。</div></div>
+      <div style="display:flex;gap:8px"><button class="btn btn-secondary btn-sm" onclick="rebuildPlan()">↻ 数字から作り直す</button><button class="btn btn-accent btn-sm" onclick="copyText(document.getElementById('planText').value, 'planCopied')">📋 コピー</button><span id="planCopied" class="copied"></span></div></div>
+    <textarea id="planText" class="plan" placeholder="解析を実行すると、ここに下書きが入ります。"></textarea>
+  </div>
+
+  <div class="note">
+    <b>この解析の読み方と限界</b>
+    <ul>
+      <li><b>会計の数字</b>は千葉トラスト会計の「部門別月次損益計算書 ジビエセンター（共通費配賦後）」を月次報告書の入力（業務アプリ → 書類 → 月次業務報告書 → 収支）から取っています。翌月に届くため、直近1〜2か月は空きます。</li>
+      <li><b>前年同月</b>は同じ損益計算書の「前期」列（売上高・売上総利益・経常損益のみ）。前期の科目別内訳は無いので費目構成は今年度だけです。</li>
+      <li><b>頭数</b>は個体台帳（過年度は取込データ）の捕獲日ベース、<b>精肉kg</b>は在庫の一次登録（親のない行）の処理日ベース。会計の売上は「売れた月」なので、頭数・精肉kgとは1〜2か月ずれます。1頭あたりの数字は目安です。</li>
+      <li><b>損益分岐の頭数</b>＝月平均の販管費 ÷（1頭あたりの売上総利益）。「今の売り方のまま、毎月これだけ搬入があれば営業損益がゼロ」という意味。売り方（単価・歩留まり・加工品比率）が変われば動きます。</li>
+      <li><b>アプリの販売記録 ÷ 会計の売上</b>は、受注（キャンセル除く）と出店の売上をアプリに入れている割合。低い月は、アプリ外で売れたものが多い（＝「1本の線」が切れている）合図です。</li>
+    </ul>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+
+// ───────────── Supabase（他の解析ページと同じ最小限の取り方） ─────────────
+function staffKeyGet(){ try { return localStorage.getItem('tg_staff_key') || sessionStorage.getItem('tg_staff_key') || ''; } catch(e){ return ''; } }
+const SB_PAGE = 1000;
+async function sbPaged(query, fetchOnce){
+  const m = /([?&])limit=(\d+)/.exec(query || '');
+  const want = m ? Number(m[2]) : 0;
+  if (!(want > SB_PAGE) || /[?&]offset=/.test(query)) return fetchOnce(query);
+  const out = []; let offset = 0;
+  for (;;) {
+    const lim = Math.min(SB_PAGE, want - out.length);
+    const rows = await fetchOnce(query.replace(/([?&])limit=\d+/, `$1limit=${lim}&offset=${offset}`));
+    if (!Array.isArray(rows)) return rows;
+    out.push(...rows);
+    if (rows.length !== lim || out.length >= want) return out;
+    offset += rows.length;
+  }
+}
+async function sb(table, query=''){ return sbPaged(query, q => sbOnce(table, q)); }
+async function sbOnce(table, query=''){
+  const headers = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` };
+  const sk = staffKeyGet(); if (sk) headers['x-staff-key'] = sk;
+  const res = await fetch(`${SB_URL}/rest/v1/${table}${query}`, { headers });
+  if (!res.ok) throw new Error(await res.text());
+  const t = await res.text(); return t ? JSON.parse(t) : [];
+}
+function showStatus(type, msg){ const el=document.getElementById('statusBar'); el.className='status-bar '+type; el.textContent=msg; if(!type){ el.style.display='none'; } }
+
+// ───────────── 年度（4月始まり）・書式 ─────────────
+function fyOf(ym){ const [y,m]=ym.split('-').map(Number); return m>=4 ? y : y-1; }
+function fyMonths(fy){ return Array.from({length:12},(_,i)=>{ const m=((i+3)%12)+1; const y=m>=4?fy:fy+1; return `${y}-${String(m).padStart(2,'0')}`; }); }
+function reiwa(fy){ return `令和${fy-2018}年度`; }
+function monthLabel(ym){ return `${Number(ym.slice(5,7))}月`; }
+function todayYm(){ const t=new Date(); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}`; }
+const yen = v => v==null || !isFinite(v) ? '—' : (v<0?'▲':'') + Math.round(Math.abs(v)).toLocaleString('ja-JP');
+const man = v => v==null || !isFinite(v) ? '—' : (v<0?'▲':'') + (Math.abs(v)/10000).toLocaleString('ja-JP',{maximumFractionDigits:0}) + '万';
+const pct = v => v==null || !isFinite(v) ? '—' : (v*100).toFixed(0)+'%';
+const num = (v,d=0) => v==null || !isFinite(v) ? '—' : Number(v).toLocaleString('ja-JP',{maximumFractionDigits:d});
+const sgn = v => v==null ? 'flat' : (v>0 ? 'pos' : (v<0 ? 'neg' : 'flat'));
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ───────────── 損益の計算（月次報告書の CITY_PL_ROWS と同じ科目名） ─────────────
+// 売上・仕入・営業外 以外の科目はすべて販管費として扱う（新しい科目が増えても取りこぼさない）
+const PL_NON_SGA = new Set(['売上高','期首棚卸高','仕入髙','仕入高','期末棚卸高','受取利息','雑収入','支払利息']);
+const COST_GROUPS = [
+  { key:'labor',   name:'人件費',     color:'#e05555', accts:['役員報酬','給与手当','雑給','法定福利費','福利厚生費'] },
+  { key:'outsrc',  name:'外注費',     color:'#9b7fd4', accts:['外注費'] },
+  { key:'logi',    name:'物流・移動', color:'#5a8cd8', accts:['旅費交通費','燃料費','車両費','運賃','荷造運賃'] },
+  { key:'pack',    name:'包材',       color:'#3fb8af', accts:['荷造包装費'] },
+  { key:'util',    name:'光熱水',     color:'#f0c040', accts:['水道光熱費'] },
+  { key:'supply',  name:'消耗品',     color:'#e8a44a', accts:['消耗品費'] },
+  { key:'facil',   name:'施設',       color:'#4caf7d', accts:['地代家賃','賃借料','リース料','減価償却費','修繕費','保険料','防災保守費','租税公課'] },
+  { key:'promo',   name:'販促・交際', color:'#d87aa8', accts:['広告宣伝費','交際費','諸会費'] },
+  { key:'other',   name:'その他',     color:'#8b90a8', accts:[] },
+  { key:'cogs',    name:'仕入',       color:'#c06a2a', accts:['仕入髙','仕入高'] },
+];
+function groupOf(acct){ if (PL_NON_SGA.has(acct) && !/仕入/.test(acct)) return null; const g = COST_GROUPS.find(g => g.accts.includes(acct)); return g ? g.key : (/仕入/.test(acct) ? 'cogs' : 'other'); }
+function plCalc(d){
+  const n = k => Number(d[k]) || 0;
+  const cogs = n('期首棚卸高') + n('仕入髙') + n('仕入高') - n('期末棚卸高');
+  const sales = n('売上高');
+  let sga = 0; const groups = {}; COST_GROUPS.forEach(g => groups[g.key] = 0);
+  Object.keys(d).forEach(k => { if (PL_NON_SGA.has(k)) return; const v = n(k); sga += v; groups[groupOf(k)] += v; });
+  groups.cogs = cogs;
+  const gross = sales - cogs, op = gross - sga;
+  return { sales, cogs, gross, sga, op, ordinary: op + n('受取利息') + n('雑収入') - n('支払利息'), other_income: n('雑収入'), labor: groups.labor, groups };
+}
+
+// ───────────── データ取得 ─────────────
+let charts = {}, model = null;
+async function loadAll(fy, species){
+  const months = fyMonths(fy), prevMonths = fyMonths(fy-1);
+  const from = months[0]+'-01', to = `${fy+1}-04-01`, prevFrom = prevMonths[0]+'-01';
+  const sp = species ? `&species=eq.${encodeURIComponent(species)}` : '';
+  const [plRows, inds, inv, orders, events] = await Promise.all([
+    sb('city_report_inputs', `?kind=in.(pl,pl_summary)&select=month,kind,data,source&order=month.asc&limit=200`),
+    sb('v_individuals_all', `?select=capture_date,species,weight&capture_date=gte.${prevFrom}&capture_date=lt.${to}${sp}&limit=6000`),
+    sb('inventory', `?select=processed_at,created_at,weight_kg,weight,individual_id,species&deleted_at=is.null&parent_inventory_id=is.null&created_at=gte.${from}&limit=20000`),
+    sb('orders', `?select=order_date,total_amount,status&order_date=gte.${from}&order_date=lt.${to}&limit=5000`),
+    sb('sale_events', `?select=event_date,cash_total,cashless_total,consign_sales_ex&deleted_at=is.null&event_date=gte.${from}&event_date=lt.${to}&limit=1000`),
+  ]);
+  return build({ fy, species, months, prevMonths, plRows, inds, inv, orders, events });
+}
+
+function build(src){
+  const { fy, months, prevMonths, plRows, inds, inv, orders, events } = src;
+  const pl = {}, plSum = {};
+  plRows.forEach(r => { if (r.kind === 'pl') pl[r.month] = r; else plSum[r.month] = r; });
+  const heads = {}, kgLive = {}, kgMeat = {}, headsMeat = {}, appSales = {};
+  inds.forEach(r => { const ym = (r.capture_date||'').slice(0,7); if (!ym) return; heads[ym] = (heads[ym]||0)+1; kgLive[ym] = (kgLive[ym]||0) + (Number(r.weight)||0); });
+  const ids = {};
+  inv.forEach(r => { const ym = (r.processed_at || r.created_at || '').slice(0,7); if (!ym) return; if (src.species && r.species && r.species !== src.species) return;
+    kgMeat[ym] = (kgMeat[ym]||0) + (Number(r.weight_kg ?? r.weight)||0); (ids[ym] = ids[ym] || new Set()).add(r.individual_id); });
+  Object.keys(ids).forEach(ym => headsMeat[ym] = ids[ym].size);
+  orders.forEach(r => { if (/キャンセル|cancel/i.test(r.status||'')) return; const ym = (r.order_date||'').slice(0,7); appSales[ym] = (appSales[ym]||0) + (Number(r.total_amount)||0); });
+  events.forEach(r => { const ym = (r.event_date||'').slice(0,7); appSales[ym] = (appSales[ym]||0) + (Number(r.cash_total)||0) + (Number(r.cashless_total)||0) + (Number(r.consign_sales_ex)||0); });
+
+  const rows = months.map((ym, i) => {
+    const p = pl[ym] ? plCalc(pl[ym].data) : (plSum[ym] ? { sales:Number(plSum[ym].data['売上高'])||0, gross:Number(plSum[ym].data['売上総利益'])||0, ordinary:Number(plSum[ym].data['経常損益'])||0, summaryOnly:true } : null);
+    const pym = prevMonths[i];
+    const prev = plSum[pym] ? { sales:Number(plSum[pym].data['売上高'])||0, gross:Number(plSum[pym].data['売上総利益'])||0, ordinary:Number(plSum[pym].data['経常損益'])||0 } : (pl[pym] ? plCalc(pl[pym].data) : null);
+    const h = heads[ym]||0, kg = kgMeat[ym]||0;
+    return { ym, label: monthLabel(ym), heads: h, kgLive: kgLive[ym]||0, kgMeat: kg, headsMeat: headsMeat[ym]||0, prevHeads: heads[pym]||0,
+      pl: p, prev, appSales: appSales[ym]||0,
+      salesPerHead: p && h ? p.sales/h : null, sgaPerHead: p && !p.summaryOnly && h ? p.sga/h : null, salesPerKg: p && kg ? p.sales/kg : null };
+  });
+
+  // 年度累計（会計の数字がある月だけで揃える）
+  const withPl = rows.filter(r => r.pl), withSga = rows.filter(r => r.pl && !r.pl.summaryOnly);
+  const sum = (arr, f) => arr.reduce((s, r) => s + (f(r)||0), 0);
+  const t = { months: withPl.length, sgaMonths: withSga.length, lastPlMonth: withPl.length ? withPl[withPl.length-1].ym : null,
+    sales: sum(withPl, r=>r.pl.sales), gross: sum(withPl, r=>r.pl.gross), ordinary: sum(withPl, r=>r.pl.ordinary),
+    sga: sum(withSga, r=>r.pl.sga), op: sum(withSga, r=>r.pl.op), labor: sum(withSga, r=>r.pl.labor), cogs: sum(withSga, r=>r.pl.cogs), otherIncome: sum(withSga, r=>r.pl.other_income),
+    heads: sum(withPl, r=>r.heads), headsAll: sum(rows, r=>r.heads), kgMeat: sum(withPl, r=>r.kgMeat), kgMeatAll: sum(rows, r=>r.kgMeat),
+    prevSales: sum(withPl.filter(r=>r.prev), r=>r.prev.sales), prevOrdinary: sum(withPl.filter(r=>r.prev), r=>r.prev.ordinary), prevHeads: sum(withPl, r=>r.prevHeads), prevMonths: withPl.filter(r=>r.prev).length,
+    appSales: sum(withPl, r=>r.appSales), appSalesAll: sum(rows, r=>r.appSales), monthsWithHeads: rows.filter(r=>r.heads).length };
+  t.salesPerHead = t.heads ? t.sales/t.heads : null;
+  t.sgaPerHead = t.heads && t.sgaMonths ? t.sga/sum(withSga, r=>r.heads) : null;
+  t.grossPerHead = t.heads ? t.gross/t.heads : null;
+  t.salesPerKg = t.kgMeat ? t.sales/t.kgMeat : null;
+  t.sgaRate = t.sales && t.sgaMonths ? t.sga/sum(withSga, r=>r.pl.sales) : null;
+  t.laborRate = t.sales && t.sgaMonths ? t.labor/sum(withSga, r=>r.pl.sales) : null;
+  t.sgaMonthly = t.sgaMonths ? t.sga/t.sgaMonths : null;
+  t.headsMonthly = t.monthsWithHeads ? t.headsAll/t.monthsWithHeads : null;
+  t.bepHeads = t.sgaMonthly && t.grossPerHead > 0 ? t.sgaMonthly/t.grossPerHead : null;
+  t.coverage = t.sales ? t.appSales/t.sales : null;
+  t.salesYoy = t.prevSales ? t.sales/t.prevSales - 1 : null;
+  t.headsYoy = t.prevHeads ? t.heads/t.prevHeads - 1 : null;
+  // 科目別（今年度に科目内訳がある月）
+  const accts = {};
+  withSga.forEach(r => { const d = pl[r.ym].data; Object.keys(d).forEach(k => { if (PL_NON_SGA.has(k) && !/仕入/.test(k)) return; (accts[k] = accts[k] || { name:k, group:groupOf(k), total:0, months:0, last:null }); accts[k].total += Number(d[k])||0; accts[k].months++; }); });
+  if (withSga.length) { const last = pl[withSga[withSga.length-1].ym].data; Object.keys(accts).forEach(k => { accts[k].last = Number(last[k])||0; accts[k].avg = accts[k].total/withSga.length; }); }
+  const groups = {}; COST_GROUPS.forEach(g => groups[g.key] = sum(withSga, r=>r.pl.groups[g.key]));
+  return { fy, species: src.species, rows, t, accts: Object.values(accts).sort((a,b)=>b.total-a.total), groups, plSource: withPl.length ? (pl[withPl[withPl.length-1].ym]||plSum[withPl[withPl.length-1].ym]).source : '' };
+}
+
+// ───────────── 描画 ─────────────
+async function runAnalysis(){
+  const fy = Number(document.getElementById('fFy').value), species = document.getElementById('fSpecies').value;
+  showStatus('loading', '会計の月次損益・個体・在庫・受注・出店を読み込んでいます…');
+  try {
+    model = await loadAll(fy, species);
+    render(model);
+    const t = model.t;
+    if (!t.months) showStatus('warn', `${reiwa(fy)}の収支（会計の月次損益）がまだ入っていません。業務アプリ → 書類 → 月次業務報告書 → 収支 から入れると、ここに出ます。頭数・精肉kg・販売記録だけ表示しています。`);
+    else showStatus('info', `${reiwa(fy)}: 会計の数字は ${model.rows.filter(r=>r.pl).map(r=>r.label).join('・')} の${t.months}か月分（科目内訳は${t.sgaMonths}か月）。出どころ: ${model.plSource||'—'}`);
+    document.getElementById('btnCsv').disabled = false;
+    document.getElementById('lastUpdated').textContent = '解析 ' + new Date().toLocaleString('ja-JP');
+  } catch (e) { showStatus('error', '読み込めませんでした: ' + (e.message||e)); }
+}
+
+function render(m){
+  const t = m.t, rows = m.rows;
+  const set = (id, v) => { document.getElementById(id).innerHTML = v; };
+  set('kSales', man(t.months ? t.sales : null) + '<span class="muted" style="font-size:12px">円</span>');
+  set('kSalesSub', t.prevMonths ? `前年同期間 ${man(t.prevSales)}円（<span class="${sgn(t.salesYoy)}">${t.salesYoy>0?'+':''}${pct(t.salesYoy)}</span>）・${t.months}か月分` : `${t.months}か月分（前年の数字なし）`);
+  set('kOp', `<span class="${sgn(t.op)}">${man(t.sgaMonths ? t.op : null)}</span><span class="muted" style="font-size:12px">円</span>`);
+  set('kOpSub', `経常損益 <span class="${sgn(t.ordinary)}">${man(t.months ? t.ordinary : null)}円</span>${t.otherIncome ? `（雑収入・補助金など ${man(t.otherIncome)}円を含む）` : ''}${t.prevMonths ? `／前年同期間の経常 ${man(t.prevOrdinary)}円` : ''}`);
+  set('kSga', `${pct(t.sgaRate)} <span class="muted" style="font-size:14px">／</span> ${pct(t.laborRate)}`);
+  set('kSgaSub', t.sgaMonths ? `販管費 ${man(t.sga)}円（月平均 ${man(t.sgaMonthly)}円）・人件費 ${man(t.labor)}円` : '科目内訳のある月がありません');
+  set('kPerHead', `${yen(t.salesPerHead)} <span class="muted" style="font-size:14px">／</span> ${yen(t.sgaPerHead)}`);
+  set('kPerHeadSub', `円／頭（会計のある${t.months}か月・搬入 ${num(t.heads)}頭）。1頭あたり売上総利益 ${yen(t.grossPerHead)}円`);
+  set('kPerKg', yen(t.salesPerKg) + '<span class="muted" style="font-size:12px">円/kg</span>');
+  set('kPerKgSub', `精肉 ${num(t.kgMeat)}kg（同じ期間）。年度全体では ${num(t.kgMeatAll)}kg`);
+  set('kBep', t.bepHeads ? `${num(t.bepHeads)}<span class="muted" style="font-size:12px">頭/月</span>` : '—');
+  set('kBepSub', t.bepHeads ? `月平均販管費 ${man(t.sgaMonthly)}円 ÷ 1頭あたり売上総利益 ${yen(t.grossPerHead)}円。今の月平均搬入 ${num(t.headsMonthly)}頭 → <span class="${t.headsMonthly>=t.bepHeads?'pos':'neg'}">${t.headsMonthly>=t.bepHeads?'上回っている':'足りない'}</span>` : '売上総利益か販管費の数字が足りません');
+  set('kHeads', num(t.headsAll) + '<span class="muted" style="font-size:12px">頭</span>');
+  set('kHeadsSub', `月平均 ${num(t.headsMonthly)}頭${t.prevHeads ? `・前年同期間比 <span class="${sgn(t.headsYoy)}">${t.headsYoy>0?'+':''}${pct(t.headsYoy)}</span>` : ''}${m.species ? `（${m.species}）` : ''}`);
+  set('kCover', pct(t.coverage));
+  set('kCoverSub', `アプリの受注＋出店 ${man(t.appSales)}円 ÷ 会計の売上 ${man(t.sales)}円。低いほどアプリ外の売上が多い`);
+
+  // 月別テーブル
+  document.getElementById('monthBody').innerHTML = rows.map(r => { const p = r.pl || {}; const so = p.summaryOnly;
+    return `<tr><td>${r.label}<div class="muted">${r.ym}</div></td><td class="td-num">${num(r.heads)}${r.prevHeads?`<div class="muted">前年 ${num(r.prevHeads)}</div>`:''}</td><td class="td-num">${num(r.kgMeat)}</td>
+      <td class="td-num">${r.pl?yen(p.sales):'—'}</td><td class="td-num muted">${r.prev?yen(r.prev.sales):'—'}</td><td class="td-num">${r.pl&&!so?yen(p.cogs):'—'}</td><td class="td-num">${r.pl&&!so?yen(p.sga):'—'}</td><td class="td-num">${r.pl&&!so?yen(p.labor):'—'}</td>
+      <td class="td-num ${sgn(p.op)}">${r.pl&&!so?yen(p.op):'—'}</td><td class="td-num ${sgn(p.ordinary)}">${r.pl?yen(p.ordinary):'—'}</td>
+      <td class="td-num">${yen(r.salesPerHead)}</td><td class="td-num">${yen(r.sgaPerHead)}</td><td class="td-num">${yen(r.salesPerKg)}</td><td class="td-num">${r.appSales?yen(r.appSales):'—'}${r.pl&&r.appSales?`<div class="muted">${pct(r.appSales/p.sales)}</div>`:''}</td></tr>`; }).join('')
+    + `<tr style="background:var(--surface2)"><td><b>累計</b></td><td class="td-num"><b>${num(t.headsAll)}</b></td><td class="td-num"><b>${num(t.kgMeatAll)}</b></td><td class="td-num"><b>${yen(t.months?t.sales:null)}</b></td><td class="td-num muted">${yen(t.prevMonths?t.prevSales:null)}</td><td class="td-num">${yen(t.sgaMonths?t.cogs:null)}</td><td class="td-num">${yen(t.sgaMonths?t.sga:null)}</td><td class="td-num">${yen(t.sgaMonths?t.labor:null)}</td><td class="td-num ${sgn(t.op)}"><b>${yen(t.sgaMonths?t.op:null)}</b></td><td class="td-num ${sgn(t.ordinary)}">${yen(t.months?t.ordinary:null)}</td><td class="td-num">${yen(t.salesPerHead)}</td><td class="td-num">${yen(t.sgaPerHead)}</td><td class="td-num">${yen(t.salesPerKg)}</td><td class="td-num">${yen(t.appSalesAll||null)}</td></tr>`;
+
+  // 科目別
+  const salesSga = rows.filter(r=>r.pl&&!r.pl.summaryOnly).reduce((s,r)=>s+r.pl.sales,0);
+  document.getElementById('acctBody').innerHTML = m.accts.length ? m.accts.map(a => { const g = COST_GROUPS.find(x=>x.key===a.group); const up = a.avg>0 && a.last>=a.avg*1.3, down = a.avg>0 && a.last<=a.avg*0.7 && a.last>0;
+    return `<tr><td>${esc(a.name)}</td><td><span class="tag" style="background:${g?g.color+'26':''};color:${g?g.color:''}">${g?g.name:'—'}</span></td><td class="td-num">${yen(a.total)}</td><td class="td-num">${yen(a.avg)}</td><td class="td-num ${up?'neg':(down?'pos':'')}">${yen(a.last)}</td><td class="td-num">${pct(salesSga?a.total/salesSga:null)}</td><td class="muted">${up?'直近月が月平均より＋30%以上。理由を一言メモしておくと申請書で使える':(down?'直近月は少なめ':'')}${a.months<t.sgaMonths?`（${a.months}か月だけ計上）`:''}</td></tr>`; }).join('')
+    : '<tr><td colspan="7" class="muted">科目内訳のある月がありません</td></tr>';
+
+  drawCharts(m);
+  document.getElementById('ideaGrid').innerHTML = renderIdeas(planIdeas(m));
+  rebuildPlan();
+}
+
+function chartOrFallback(id, build, fallbackRows){
+  const cv = document.getElementById(id), wrap = cv.parentElement;
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+  if (typeof Chart === 'undefined') {
+    // グラフ部品（CDN）が読めない環境でも空にせず、簡易バーで同じ数字を見せる（数字の無い月は省く）
+    fallbackRows = fallbackRows.filter(r => r.values.some(v => v.v));
+    if (!fallbackRows.length) fallbackRows = [{ label:'—', values:[{ v:0, color:'transparent', text:'数字がありません' }] }];
+    const max = Math.max(1, ...fallbackRows.flatMap(r => r.values.map(v => Math.abs(v.v)||0)));
+    wrap.style.height = 'auto';
+    wrap.innerHTML = `<table class="fallback-bars">${fallbackRows.map(r => `<tr><td style="white-space:nowrap;font-size:12px;color:var(--text2)">${r.label}</td><td style="width:100%">${r.values.map(v => `<div style="display:flex;align-items:center;gap:6px"><div class="bar" style="background:${v.color};width:${(Math.abs(v.v)/max*100).toFixed(1)}%"></div><span class="td-num" style="font-size:12px">${v.text}</span></div>`).join('')}</td></tr>`).join('')}</table>`;
+    return;
+  }
+  if (!wrap.querySelector('canvas')) { wrap.style.height = ''; wrap.innerHTML = `<canvas id="${id}"></canvas>`; }
+  charts[id] = new Chart(document.getElementById(id).getContext('2d'), build());
+}
+const AX = { x:{ ticks:{ color:'#8b90a8', font:{size:11} }, grid:{display:false} }, y:{ ticks:{ color:'#8b90a8', callback:v=>man(v) }, grid:{color:'#2e3447'} } };
+function drawCharts(m){
+  const rows = m.rows, labels = rows.map(r=>r.label);
+  const v = (r, f) => { try { const x = f(r); return x==null||!isFinite(x)?null:Math.round(x); } catch(e){ return null; } };
+  chartOrFallback('chSales', () => ({ type:'bar', data:{ labels, datasets:[
+      { label:'今年度', data: rows.map(r=>v(r, x=>x.pl&&x.pl.sales)), backgroundColor:'rgba(232,164,74,.85)', borderRadius:4 },
+      { label:'前年同月', data: rows.map(r=>v(r, x=>x.prev&&x.prev.sales)), backgroundColor:'rgba(139,144,168,.45)', borderRadius:4 } ] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{color:'#8b90a8'} }, tooltip:{ callbacks:{ label:c=>`${c.dataset.label} ${yen(c.parsed.y)}円` } } }, scales:AX } }),
+    rows.map(r => ({ label:r.label, values:[ { v:r.pl?r.pl.sales:0, color:'rgba(232,164,74,.85)', text:'今年度 '+man(r.pl?r.pl.sales:null) }, { v:r.prev?r.prev.sales:0, color:'rgba(139,144,168,.45)', text:'前年 '+man(r.prev?r.prev.sales:null) } ] })));
+  chartOrFallback('chProfit', () => ({ type:'bar', data:{ labels, datasets:[
+      { label:'営業損益', data: rows.map(r=>v(r, x=>x.pl&&!x.pl.summaryOnly?x.pl.op:null)), backgroundColor: rows.map(r=>r.pl&&r.pl.op<0?'rgba(224,85,85,.8)':'rgba(76,175,125,.8)'), borderRadius:4 },
+      { label:'経常損益', type:'line', data: rows.map(r=>v(r, x=>x.pl&&x.pl.ordinary)), borderColor:'#e8a44a', pointRadius:3, borderWidth:2, tension:.2 },
+      { label:'前年同月の経常', type:'line', data: rows.map(r=>v(r, x=>x.prev&&x.prev.ordinary)), borderColor:'#8b90a8', borderDash:[5,4], pointRadius:0, borderWidth:1.5 } ] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{color:'#8b90a8'} }, tooltip:{ callbacks:{ label:c=>`${c.dataset.label} ${yen(c.parsed.y)}円` } } }, scales:AX } }),
+    rows.map(r => ({ label:r.label, values:[ { v:r.pl&&!r.pl.summaryOnly?r.pl.op:0, color:r.pl&&r.pl.op<0?'rgba(224,85,85,.8)':'rgba(76,175,125,.8)', text:'営業 '+man(r.pl&&!r.pl.summaryOnly?r.pl.op:null) }, { v:r.pl?r.pl.ordinary:0, color:'#e8a44a', text:'経常 '+man(r.pl?r.pl.ordinary:null) } ] })));
+  const gs = COST_GROUPS.filter(g => m.groups[g.key] > 0);
+  chartOrFallback('chCost', () => ({ type:'bar', data:{ labels, datasets: gs.map(g => ({ label:g.name, data: rows.map(r=>v(r, x=>x.pl&&!x.pl.summaryOnly?x.pl.groups[g.key]:null)), backgroundColor:g.color, stack:'c' })) },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{color:'#8b90a8', boxWidth:12} }, tooltip:{ callbacks:{ label:c=>`${c.dataset.label} ${yen(c.parsed.y)}円` } } }, scales:{ x:{...AX.x, stacked:true}, y:{...AX.y, stacked:true} } } }),
+    rows.filter(r=>r.pl&&!r.pl.summaryOnly).map(r => ({ label:r.label, values: gs.map(g => ({ v:r.pl.groups[g.key], color:g.color, text:`${g.name} ${man(r.pl.groups[g.key])}` })) })));
+  chartOrFallback('chPerHead', () => ({ type:'bar', data:{ labels, datasets:[
+      { label:'搬入頭数', data: rows.map(r=>r.heads||null), backgroundColor:'rgba(63,184,175,.35)', yAxisID:'y1', borderRadius:4 },
+      { label:'売上／頭', type:'line', data: rows.map(r=>v(r, x=>x.salesPerHead)), borderColor:'#e8a44a', pointRadius:3, borderWidth:2, yAxisID:'y', tension:.2 },
+      { label:'販管費／頭', type:'line', data: rows.map(r=>v(r, x=>x.sgaPerHead)), borderColor:'#e05555', pointRadius:3, borderWidth:2, yAxisID:'y', tension:.2 } ] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{color:'#8b90a8'} }, tooltip:{ callbacks:{ label:c=>c.dataset.yAxisID==='y1'?`${c.dataset.label} ${c.parsed.y}頭`:`${c.dataset.label} ${yen(c.parsed.y)}円` } } },
+      scales:{ x:AX.x, y:{ position:'left', ticks:{ color:'#8b90a8', callback:v=>yen(v) }, grid:{color:'#2e3447'} }, y1:{ position:'right', beginAtZero:true, ticks:{ color:'#3fb8af' }, grid:{ drawOnChartArea:false } } } } }),
+    rows.map(r => ({ label:r.label, values:[ { v:r.heads, color:'rgba(63,184,175,.6)', text:`${r.heads}頭` }, { v:r.salesPerHead||0, color:'#e8a44a', text:'売上/頭 '+yen(r.salesPerHead) }, { v:r.sgaPerHead||0, color:'#e05555', text:'販管費/頭 '+yen(r.sgaPerHead) } ] })));
+}
+
+// ───────────── 補助金・事業計画のたね（実測値から書く） ─────────────
+// 候補の制度は「方向」を示すだけ。名称・要件・時期は年度で変わるので、必ず一次情報で確認（要確認）。
+const PROGRAMS = {
+  choju:  '鳥獣被害防止総合対策交付金（農水省・ジビエ利用拡大：処理加工施設・冷凍設備・搬送・人材育成）',
+  sanson: '農山漁村振興交付金（農水省・農泊／食育／地域資源の活用）',
+  rokuji: '6次産業化・食料産業関連の支援（農水省／千葉県・加工品開発・販路開拓）',
+  jizoku: '小規模事業者持続化補助金（商工会議所経由・販路開拓・広告・EC）',
+  mono:   'ものづくり・商業・サービス生産性向上促進補助金（設備投資・生産性向上）',
+  shinji: '中小企業新事業進出補助金（旧・事業再構築：新分野への進出）',
+  chiba:  '千葉県・館山市の有害鳥獣対策／地域活性化の補助（県・市の予算で毎年変わる）',
+  kankou: '観光庁・自治体の体験型観光／インバウンド関連の支援',
+  cert:   '国産ジビエ認証（補助ではなく信用。取引先・価格の根拠になる）',
+};
+function planIdeas(m){
+  const t = m.t, ideas = [], r = m.rows, n = num, y = yen, mn = man;
+  const peak = r.reduce((a,b)=>b.heads>(a?a.heads:0)?b:a, null);
+  const g = m.groups, salesSga = r.filter(x=>x.pl&&!x.pl.summaryOnly).reduce((s,x)=>s+x.pl.sales,0);
+  const rate = k => salesSga ? g[k]/salesSga : null;
+  const fyName = reiwa(m.fy);
+  // 1) 頭数は増えたが売上が追いつかない → 販路・加工品
+  if (t.months) {
+    const gap = (t.headsYoy!=null && t.salesYoy!=null) ? t.headsYoy - t.salesYoy : null;
+    ideas.push({ key:'sales', icon:'🛒', color:'var(--accent)', title:'販路開拓・加工品で「1頭あたりの売上」を上げる',
+      why: `${fyName}は搬入が前年同期間比 <b>${t.headsYoy==null?'—':(t.headsYoy>0?'+':'')+pct(t.headsYoy)}</b>、売上は <b>${t.salesYoy==null?'—':(t.salesYoy>0?'+':'')+pct(t.salesYoy)}</b>。1頭あたり売上 <b>${y(t.salesPerHead)}円</b>、精肉1kgあたり <b>${y(t.salesPerKg)}円</b>。${gap!=null&&gap>0.1?'頭数の伸びに売上が追いついておらず、獲れた分を売り切る出口が足りない。':'頭数と売上は同じくらいの伸び。次は単価（加工品・部位の使い切り）で上げる段階。'}`,
+      action: '低利用部位（すね・ネック・内臓）の加工品（味付け肉・ソーセージ・ペットフード）、飲食店向けの定期便、EC・ふるさと納税の出品、出店の定例化。',
+      target: `1頭あたり売上を ${y(t.salesPerHead)}円 → ${y(t.salesPerHead*1.2)}円（＋20%）。精肉1kgあたり ${y(t.salesPerKg)}円 → ${y(t.salesPerKg*1.15)}円。アプリの販売記録の網羅率 ${pct(t.coverage)} → 90%以上（売上の出口を全部たどれる状態）。`,
+      invest: '加工用の真空包装機・ミンサー・急速冷凍、パッケージとラベル、EC出品と撮影、試食販売の人件費。',
+      programs: ['rokuji','jizoku','choju','cert'] });
+  }
+  // 2) 人件費率・販管費率 → 省力化・設備
+  if (t.sgaMonths) {
+    ideas.push({ key:'labor', icon:'⚙️', color:'var(--red)', title:'処理の省力化と設備更新（1頭あたり販管費を下げる）',
+      why: `販管費率 <b>${pct(t.sgaRate)}</b>、うち人件費率 <b>${pct(t.laborRate)}</b>（人件費 ${mn(t.labor)}円／${t.sgaMonths}か月）。1頭あたり販管費 <b>${y(t.sgaPerHead)}円</b>。月の搬入は最大 <b>${peak?peak.heads+'頭（'+peak.label+'）':'—'}</b> で、繁忙月に処理が詰まる。`,
+      action: '解体ラインの動線見直し、吊り下げレール・ホイスト、真空包装・計量ラベルの自動化（自社アプリと連携）、冷凍・熟成庫の増設で「受け入れられる頭数」を増やす。',
+      target: `1頭あたり販管費 ${y(t.sgaPerHead)}円 → ${y(t.sgaPerHead*0.85)}円（−15%）。月の処理能力 ${peak?peak.heads:'—'}頭 → ${peak?Math.round(peak.heads*1.3):'—'}頭。損益分岐の頭数 ${n(t.bepHeads)}頭/月 を下回らない体制。`,
+      invest: '設備（レール・包装機・冷凍庫）、電気工事、作業手順書・研修。',
+      programs: ['choju','mono','chiba'] });
+  }
+  // 3) 物流・移動
+  if (t.sgaMonths && g.logi > 0) {
+    const headsSga = r.filter(x=>x.pl&&!x.pl.summaryOnly).reduce((s,x)=>s+x.heads,0);
+    ideas.push({ key:'logi', icon:'🚚', color:'var(--blue)', title:'搬入・配送の効率化（広域回収と配送の共同化）',
+      why: `物流・移動（旅費交通費＋燃料費）は <b>${mn(g.logi)}円</b>（売上比 ${pct(rate('logi'))}、1頭あたり <b>${y(headsSga?g.logi/headsSga:null)}円</b>）。南房総市からの搬入が増え、回収の距離が伸びている（議事録: 広域捕獲許可の課題）。`,
+      action: '回収ルートの固定化（地区ごとの曜日）、南房総側の一時保冷拠点、配送の共同化（他事業者と混載）、フードマイレージ解析の距離データで根拠を示す。',
+      target: `物流・移動の売上比 ${pct(rate('logi'))} → ${pct(rate('logi')*0.8)}。1頭あたり回収コスト −20%。`,
+      invest: '保冷車・保冷ボックス、一時保管の冷蔵庫、回収ルートの管理（アプリ）。',
+      programs: ['choju','chiba'] });
+  }
+  // 4) 包材・環境
+  if (t.sgaMonths && g.pack > 0) {
+    ideas.push({ key:'pack', icon:'🌱', color:'var(--green)', title:'環境配慮（包材・LCA）を売りにする',
+      why: `包材（荷造包装費）は <b>${mn(g.pack)}円</b>（売上比 ${pct(rate('pack'))}、精肉1kgあたり <b>${y(t.kgMeat?g.pack/t.kgMeat:null)}円</b>）。猪肉のLCAで牛肉の1/4程度の温室効果ガスという試算があり、フードマイレージも短い。`,
+      action: '包材の見直し（過剰包装を減らす・再生材）、LCAとフードマイレージをラベル・QRで消費者に見せる、環境配慮を条件にした取引先（学校給食・ホテル）の開拓。',
+      target: `包材費 精肉1kgあたり −15%。環境表示つき商品の売上比率 30%。`,
+      invest: '包材の切替、ラベル・QRの表示、LCAの第三者確認。',
+      programs: ['rokuji','sanson','jizoku'] });
+  }
+  // 5) 体験・観光・食育
+  ideas.push({ key:'exp', icon:'🎓', color:'var(--purple)', title:'解体体験・見学・食育で「肉以外の売上」をつくる',
+    why: `会計の売上はほぼ肉の販売。解体体験（5名）・高校の解体見学（10名）など問い合わせは既にある（8月の議事録）。搬入 ${n(t.headsAll)}頭という規模は、見せる素材として十分。`,
+    action: '解体体験・見学の定例メニュー化（安全・衛生の手順書）、学校向けの食育プログラム、宿泊施設と組んだジビエ体験ツアー、感想（食べた人の声）を集めて発信。',
+    target: `体験・見学の売上 年 50万円 → 200万円（新規）。受け入れ回数 月2回。食べた人の声（ラベルQRから）を年100件集める。`,
+    invest: '見学用の窓・動線、体験用の道具・保護具、予約と決済（アプリ）、パンフレット。',
+    programs: ['sanson','kankou','chiba'] });
+  // 6) 収益構造（雑収入・補助金への依存）
+  if (t.sgaMonths) {
+    ideas.push({ key:'struct', icon:'📊', color:'var(--yellow)', title:'損益分岐を下げる（補助金に頼らない体質）',
+      why: `営業損益 <b class="${sgn(t.op)}">${mn(t.op)}円</b>、経常損益 <b class="${sgn(t.ordinary)}">${mn(t.ordinary)}円</b>${t.otherIncome?`（差の多くは雑収入 ${mn(t.otherIncome)}円）`:''}。損益分岐の頭数 <b>${n(t.bepHeads)}頭/月</b> に対し、今の月平均搬入は <b>${n(t.headsMonthly)}頭</b>。`,
+      action: '固定費（人件費・施設）の見える化と繁閑に合わせたシフト、1頭あたり売上総利益の改善（歩留まり・部位の使い切り）、季節の谷（' + (r.filter(x=>x.heads).sort((a,b)=>a.heads-b.heads).slice(0,2).map(x=>x.label).join('・')||'—') + '）の埋め方。',
+      target: `損益分岐の頭数 ${n(t.bepHeads)}頭/月 → ${n(t.bepHeads*0.85)}頭/月。営業損益ベースで通期黒字。`,
+      invest: '大きな投資は不要。数字を毎月見る仕組み（このページ）と、シフト・値付けの運用。',
+      programs: ['jizoku','cert'] });
+  }
+  return ideas;
+}
+function renderIdeas(ideas){
+  if (!ideas.length) return '<div class="muted">会計の数字が入ると、ここに補助金・事業計画のたねが出ます。</div>';
+  return ideas.map(i => `<div class="idea" style="--idea-color:${i.color}" data-key="${i.key}"><h3>${i.icon} ${esc(i.title)}</h3>
+    <div class="why">${i.why}</div>
+    <div class="block"><b>取組</b>：${esc(i.action)}</div>
+    <div class="block"><b>数値目標</b>：${esc(i.target)}</div>
+    <div class="block"><b>必要な投資</b>：${esc(i.invest)}</div>
+    <div class="progs">${i.programs.map(p => `<span title="${esc(PROGRAMS[p])}">${esc(PROGRAMS[p].split('（')[0])} <span class="tag chk">要確認</span></span>`).join('')}</div>
+    <div class="foot"><button class="btn btn-secondary btn-sm" onclick="copyIdea('${i.key}', this)">📋 骨子をコピー</button><span class="copied"></span></div></div>`).join('');
+}
+function ideaText(i){
+  const strip = s => String(s).replace(/<[^>]+>/g, '');
+  return `■ ${i.title}\n【課題（実測）】${strip(i.why)}\n【取組】${i.action}\n【数値目標】${i.target}\n【必要な投資】${i.invest}\n【使えそうな制度（要確認）】${i.programs.map(p=>PROGRAMS[p]).join('／')}`;
+}
+function copyIdea(key, btn){ const i = planIdeas(model).find(x=>x.key===key); if (!i) return; copyText(ideaText(i), null, btn && btn.nextElementSibling); }
+async function copyText(text, msgId, msgEl){
+  const el = msgEl || (msgId && document.getElementById(msgId));
+  try { await navigator.clipboard.writeText(text); if (el) { el.textContent = 'コピーしました'; setTimeout(()=>el.textContent='', 2000); } }
+  catch(e) { if (el) el.textContent = 'コピーできませんでした（' + (e.message||e) + '）。文章を選んでコピーしてください'; }
+}
+function rebuildPlan(){
+  if (!model) return;
+  const t = model.t, ideas = planIdeas(model);
+  const head = `館山ジビエセンター 事業計画の下書き（${reiwa(model.fy)}の実績から・${new Date().toLocaleDateString('ja-JP')}作成）\n\n` +
+    `【現状】搬入 ${num(t.headsAll)}頭（月平均 ${num(t.headsMonthly)}頭）、精肉 ${num(t.kgMeatAll)}kg。会計の${t.months}か月で売上 ${yen(t.sales)}円（前年同期間比 ${t.salesYoy==null?'—':(t.salesYoy>0?'+':'')+pct(t.salesYoy)}）、営業損益 ${yen(t.sgaMonths?t.op:null)}円、経常損益 ${yen(t.months?t.ordinary:null)}円。販管費率 ${pct(t.sgaRate)}（人件費率 ${pct(t.laborRate)}）。1頭あたり売上 ${yen(t.salesPerHead)}円・販管費 ${yen(t.sgaPerHead)}円、精肉1kgあたり売上 ${yen(t.salesPerKg)}円。損益分岐の頭数 ${num(t.bepHeads)}頭/月。\n\n` +
+    `【軸】1個体の一生が1本の線（生態 → 個体 → 精肉 → 加工 → 販売 → 食べた人の声）で繋がっている。自社アプリで個体番号ごとに記録し、消費者はQRからその線をたどれる。\n\n`;
+  document.getElementById('planText').value = head + ideas.map(ideaText).join('\n\n') + '\n\n※ 制度名は候補。名称・要件・募集時期は必ず一次情報で確認する。';
+}
+
+function downloadCsv(){
+  if (!model) return;
+  const head = ['月','搬入頭数','前年同月頭数','精肉kg','売上高','前年同月売上','仕入','販管費','人件費','営業損益','経常損益','売上/頭','販管費/頭','売上/精肉kg','アプリ販売記録'];
+  const v = x => x==null||!isFinite(x)?'':Math.round(x);
+  const lines = model.rows.map(r => { const p=r.pl||{}, so=p.summaryOnly; return [r.ym, r.heads, r.prevHeads, Math.round(r.kgMeat), r.pl?p.sales:'', r.prev?r.prev.sales:'', r.pl&&!so?p.cogs:'', r.pl&&!so?p.sga:'', r.pl&&!so?p.labor:'', r.pl&&!so?p.op:'', r.pl?p.ordinary:'', v(r.salesPerHead), v(r.sgaPerHead), v(r.salesPerKg), r.appSales].join(','); });
+  const blob = new Blob(['﻿'+[head.join(',')].concat(lines).join('\n')], { type:'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `収支解析_${reiwa(model.fy)}.csv`; document.body.appendChild(a); a.click(); a.remove();
+}
+
+function initFilters(){
+  const cur = fyOf(todayYm()), sel = document.getElementById('fFy');
+  for (let fy = cur; fy >= cur-3; fy--) sel.insertAdjacentHTML('beforeend', `<option value="${fy}">${reiwa(fy)}（${fy}年4月〜${fy+1}年3月）</option>`);
+  const q = new URLSearchParams(location.search).get('fy'); if (q && [...sel.options].some(o=>o.value===q)) sel.value = q;
+}
+initFilters();
+adminGate(() => runAnalysis());
+</script>
+</body>
+</html>
