@@ -99,6 +99,11 @@ input, select, textarea, button { font-family: inherit; font-size: 1rem; }
 
 /* Form rows */
 .form-row { margin-bottom: 16px; }
+/* 直前の個体と今回の番号（2026-09-18: 紙の台帳の未入力分より先にアプリが採番して番号が重複した事故の再発防止） */
+.number-hint { font-size: 12px; color: var(--text2); line-height: 1.6; margin: -6px 0 14px; }
+.number-hint.warn { color: #7a3d00; background: #fff4e5; border: 1px solid #f0b264; border-radius: var(--radius); padding: 8px 10px; }
+.number-hint b { font-weight: 700; }
+.number-hint button { display: inline-block; margin-top: 6px; font-size: 12px; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border2); background: var(--surface); color: var(--gold-light); font-weight: 600; }
 .form-row:last-child { margin-bottom: 0; }
 .form-label {
   display: block; margin-bottom: 7px;
@@ -594,6 +599,8 @@ textarea { min-height: 80px; resize: vertical; }
         </div>
         <div id="serialPlaceholderNote" style="display:none;font-size:11px;color:var(--gold);margin-top:4px;"></div>
       </div>
+      <!-- イノシシ以外: 前回の個体と今回の番号を並べて見せる。日が空いていれば紙の台帳の未入力を疑う -->
+      <div id="numberHint" class="number-hint" style="display:none;"></div>
       <div class="form-row">
         <label class="form-label">性別</label>
         <div class="toggle-group" data-field="sex">
@@ -1177,7 +1184,7 @@ async function refreshIndividualNumber() {
   if (!prefix) return;
 
   // ── 通し番号を取得 ──
-  let nextSerial;
+  let nextSerial, lastOfSpecies = null;
   if (species === 'イノシシ') {
     // 実際に捕獲済み（capture_date あり）の最大+1を基準にする。先に用意した空枠（仮-・捕獲日なし）は
     // まだ埋まっていない予約枠なので、次の番号を先送りしない。空枠の番号は入力時に一致させて埋める。
@@ -1217,10 +1224,11 @@ async function refreshIndividualNumber() {
     let dbNext = 1, dbOk = false;
     try {
       const rows = await sb('GET', 'individuals', null,
-        `?label_id=like.TGC-08-${prefix}*&deleted_at=is.null&select=serial_number,label_id&order=serial_number.desc.nullslast&limit=1`);
+        `?label_id=like.TGC-08-${prefix}*&deleted_at=is.null&select=serial_number,label_id,capture_date,hunter_name&order=serial_number.desc.nullslast&limit=1`);
       if (rows.length > 0) {
         const fromLabel = parseInt(String(rows[0].label_id || '').replace(`TGC-08-${prefix}`, ''), 10);
         dbNext = Math.max(rows[0].serial_number || 0, isNaN(fromLabel) ? 0 : fromLabel) + 1;
+        lastOfSpecies = rows[0];
       }
       dbOk = true;
     } catch(e) { dbNext = 1; }
@@ -1288,6 +1296,50 @@ async function refreshIndividualNumber() {
   document.getElementById('indLabelId').value = `TGC-08-${prefix}${String(labelNum).padStart(3, '0')}`;
   // 管理番号番を一時保持（保存時に使用）
   document.getElementById('indLabelId').dataset.labelNum = labelNum;
+  renderNumberHint(species, prefix, lastOfSpecies, labelNum);
+}
+
+/* ── 直前の個体と今回の番号を並べて見せる（イノシシ以外） ──
+   2026-09-18: 紙の台帳（様式2）を写真で後から入れる運用のため、未入力の個体があるまま現場で
+   新規登録すると「DBの最大＋1」が紙の番号と重複した（キ053〜061・ア012〜018・ハ019〜021 の19頭を付け替え）。
+   前回の個体（番号・捕獲日・捕獲者）を出し、NUMBER_GAP_WARN_DAYS 日以上空いていれば
+   「紙の台帳に未入力が無いか」を先に確かめるよう促す。紙の番号で入れるときは番号欄を開いて手で指定できる。 */
+const NUMBER_GAP_WARN_DAYS = 14;
+function renderNumberHint(species, prefix, last, next) {
+  const el = document.getElementById('numberHint');
+  if (!el) return;
+  if (editRecordId || window.hunterMode || window.staffFieldMode || species === 'イノシシ' || !prefix) { el.style.display = 'none'; return; }
+  const nextLabel = `TGC-08-${prefix}${String(next).padStart(3, '0')}`;
+  if (!last) {
+    el.className = 'number-hint';
+    el.innerHTML = `${species}は今年度まだ登録がありません → 今回 <b>${nextLabel}</b>`;
+    el.style.display = 'block';
+    return;
+  }
+  const md = d => (d && /^\d{4}-\d{2}-\d{2}/.test(d)) ? `${parseInt(d.slice(5, 7), 10)}/${parseInt(d.slice(8, 10), 10)}` : (d || '日付なし');
+  const days = (last.capture_date && /^\d{4}-\d{2}-\d{2}/.test(last.capture_date))
+    ? Math.floor((Date.now() - new Date(last.capture_date.slice(0, 10) + 'T00:00:00+09:00').getTime()) / 86400000) : null;
+  const lastTxt = `${last.label_id}（${md(last.capture_date)} ${last.hunter_name || ''}）`.replace(/ ）/, '）');
+  const stale = days != null && days >= NUMBER_GAP_WARN_DAYS;
+  const manualBtn = window.manualNumber ? '' : `<button type="button" onclick="useManualNumber()">紙の台帳の番号で登録する</button>`;
+  el.className = stale ? 'number-hint warn' : 'number-hint';
+  el.innerHTML = stale
+    ? `⚠ ${species}の前回は ${lastTxt} で <b>${days}日</b> 空いています。今回は <b>${nextLabel}</b> になります。<br>`
+      + `紙の台帳（様式2）に<b>まだ入れていない個体</b>があれば、番号がずれるので先にそちらを登録してください。${manualBtn}`
+    : `前回 ${lastTxt} → 今回 <b>${nextLabel}</b> ${manualBtn}`;
+  el.style.display = 'block';
+}
+
+/* 紙の台帳の番号で登録する: 番号欄を開いて手入力できるようにし、保存時は AUTO 採番ではなく入力した番号で登録する。
+   既に使われている番号は保存前の「既に登録されています」で止まる（handleSubmit）。 */
+function useManualNumber() {
+  window.manualNumber = true;
+  const row = document.getElementById('serialRow'); if (row) row.style.display = '';
+  const note = document.getElementById('serialEditNote');
+  if (note) { note.textContent = '✏️ 紙の台帳（様式2）の番号を通し番号に入れてください。保存時はその番号で登録します'; note.style.display = ''; }
+  const hint = document.getElementById('numberHint');
+  if (hint) { const b = hint.querySelector('button'); if (b) b.remove(); }
+  const ser = document.getElementById('indSerial'); if (ser) { ser.focus(); ser.select && ser.select(); }
 }
 
 function syncLabelId() {
@@ -3147,8 +3199,10 @@ async function handleSubmit() {
     // 捕獲者モードは対象外（従来どおり）。
     // 引き取りの仮-個体を「編集」保存したときも、DBトリガで本番号を自動採番する（仮-のまま手直しした場合のみ）
     const editingPlaceholder = !!editRecordId && /^仮-/.test(labelId || '');
+    // 「紙の台帳の番号で登録する」を押したときは入力した番号で登録する（イノシシ以外の後入力・2026-09-18）
     const useAuto = ((!editRecordId) || window.receiveMode || editingPlaceholder) && !matchedPlaceholderId
-      && !window.hunterMode && !window.staffFieldMode && !pending && !!prefix;
+      && !window.hunterMode && !window.staffFieldMode && !pending && !!prefix
+      && !(window.manualNumber && state.species !== 'イノシシ' && !editRecordId);
     // 登録の冪等キー（オフライン再送で二重登録しないため。retry時も同じ値を使う）
     const _submitRef = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
       : (Date.now().toString(36) + '-' + Math.random().toString(36).slice(2));
@@ -3500,6 +3554,8 @@ function resetForm() {
     if (el) { el.value = ''; if (el.dataset) el.dataset.autofill = ''; }
   });
   // 個体番号の行を隠して読み取り専用に戻す（修正モードで出していた場合）
+  window.manualNumber = false;   // 「紙の台帳の番号で登録する」は1件ごとに選び直す
+  const _nh = document.getElementById('numberHint'); if (_nh) _nh.style.display = 'none';
   const _srow = document.getElementById('serialRow'); if (_srow) _srow.style.display = 'none';
   const _lab = document.getElementById('indLabelId'); if (_lab) { _lab.setAttribute('readonly', ''); _lab.style.background = 'var(--bg2)'; }
   const _snote = document.getElementById('serialEditNote'); if (_snote) _snote.style.display = 'none';
