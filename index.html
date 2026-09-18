@@ -7291,7 +7291,7 @@ async function evLoadIndCache() {
     const chunk = labels.slice(i, i + 80).map(l => '"' + encodeURIComponent(String(l).replace(/"/g, '')) + '"').join(',');
     const got = await sb('GET', 'individuals', null,
       `?label_id=in.(${chunk})&deleted_at=is.null` +
-      `&select=label_id,species,sex,weight_total,capture_date,capture_city,capture_area,capture_method,radiation_test_date,radiation_result,processing_done_at,capture_lat,capture_lng,image_url`);
+      `&select=label_id,species,sex,weight_total,capture_date,capture_city,capture_area,capture_method,radiation_test_date,radiation_result,processing_done_at,capture_lat,capture_lng,image_url,hunter_name_public`);
     got.forEach(g => { evIndCache[g.label_id] = g; });
   }
 }
@@ -7808,10 +7808,12 @@ function evSheetCss() {
   return `
     /* 会場では紙コップなどで売るので、お客様が読むQRは商品ではなくこのシートに要る。
        A4横に一覧として並べ、机の上で見てもらう。 */
-    @page { size: A4 landscape; margin: 8mm; }
+    /* 2026-09-18: 余白8mmでは右端が印刷機の印字できない縁にかかって文字が切れた（実機で実測）。
+       余白を13mmに広げ、紙面を 271×184mm にして真ん中に置く */
+    @page { size: A4 landscape; margin: 13mm; }
     * { box-sizing:border-box; margin:0; padding:0; }
     body { font-family:'Meiryo','Yu Gothic',sans-serif; color:#111; background:#fff; }
-    .pg { width:281mm; height:194mm; display:flex; flex-direction:column; page-break-after:always; }
+    .pg { width:271mm; height:184mm; margin:0 auto; display:flex; flex-direction:column; page-break-after:always; }
     .pg:last-child { page-break-after:auto; }
     .hd { flex:0 0 13mm; display:flex; align-items:baseline; gap:3mm;
           border-bottom:.6mm solid #8a7648; padding-bottom:1.5mm; }
@@ -7819,7 +7821,7 @@ function evSheetCss() {
     .hd .d { font-size:10pt; color:#444; }
     .hd .p { margin-left:auto; font-size:8.5pt; color:#666; }
     .gr { flex:1 1 auto; display:grid; grid-template-columns:repeat(3,1fr);
-          grid-template-rows:repeat(2,1fr); gap:4mm; padding-top:3mm; }
+          grid-template-rows:repeat(2,minmax(0,1fr)); gap:3mm; padding-top:2.5mm; min-height:0; }
     .cd { border:.4mm solid #8a7648; border-radius:2mm; padding:3.5mm 4mm;
           display:flex; flex-direction:column; overflow:hidden; }
     .cd .no { font-size:9pt; font-weight:bold; font-family:monospace; color:#8a7648; display:flex; white-space:nowrap; }
@@ -7829,8 +7831,8 @@ function evSheetCss() {
     .cd .fa { font-size:8.5pt; color:#333; line-height:1.6; margin-top:1.8mm; }
     .cd .pt { font-size:9pt; margin-top:auto; line-height:1.5; }
     .cd .pt .lb { color:#666; font-size:8pt; }
-    .cd .ft { display:flex; align-items:center; gap:3mm; margin-top:2.5mm;
-              padding-top:2.5mm; border-top:.3mm dashed #cbbf9c; }
+    .cd .ft { display:flex; align-items:center; gap:3mm; margin-top:2mm;
+              padding-top:2mm; border-top:.3mm dashed #cbbf9c; }
     .cd .qr { flex:0 0 28mm; }
     .cd .qr svg { display:block; width:28mm !important; height:28mm !important; }
     .cd .qx { flex:1 1 auto; min-width:0; font-size:9pt; line-height:1.6; }
@@ -8382,10 +8384,15 @@ function individualEventStoryUrl(labelId, eventId) {
 }
 function evIndSheetCss() {
   return `
-    @page { size: A4 landscape; margin: 10mm; }
+    /* 2026-09-18: 余白10mmでは右端（QRの説明・住所）が印刷機の縁で切れた。余白14mm・紙面 269×182mm を真ん中に */
+    @page { size: A4 landscape; margin: 14mm; }
     * { box-sizing:border-box; margin:0; padding:0; }
     body { font-family:'Meiryo','Yu Gothic',sans-serif; color:#111; background:#fff; }
-    .pg { width:277mm; height:190mm; display:flex; flex-direction:column; page-break-after:always; border:.6mm solid #8a7648; border-radius:4mm; padding:8mm 10mm; }
+    .pg { width:269mm; height:182mm; margin:0 auto; display:flex; flex-direction:column; page-break-after:always; border:.6mm solid #8a7648; border-radius:4mm; padding:7mm 9mm; }
+    /* 看板つきカメラの写真は左下に捕獲者名が焼き込まれている。名前を出さない個体は看板の位置を覆う（番号と捕獲日だけ） */
+    .ph .phw { position:relative; width:96mm; height:104mm; }
+    .ph .msk { position:absolute; left:3%; bottom:2.3%; width:60%; height:32%; background:rgba(24,28,22,.92); border-radius:2mm; color:#fff; padding:2mm 3mm; display:flex; flex-direction:column; justify-content:flex-end; font-size:9pt; line-height:1.5; }
+    .ph .msk b { font-family:monospace; font-size:11pt; }
     .pg:last-child { page-break-after:auto; }
     .hd { display:flex; align-items:baseline; gap:4mm; }
     .hd .eb { font-size:10pt; letter-spacing:.2em; color:#8a7648; }
@@ -8428,7 +8435,7 @@ function evIndSheetHtml(rows, title, dateStr, eventId) {
       <div class="hd"><span class="eb">館山ジビエセンター</span><span class="t">${esc2(title || '本日の一頭')}</span><span class="d">${esc2(dateStr || '')}</span></div>
       <div class="bd">
         <div class="ph">
-          ${photo ? `<img src="${esc2(photo)}" alt="">` : `<div class="noimg">${esc2(place || '館山・南房総')}<br>の山で獲れた一頭</div>`}
+          ${photo ? `<div class="phw"><img src="${esc2(photo)}" alt="">${(!s.photo_path && i.hunter_name_public !== true) ? `<div class="msk"><b>${esc2(label)}</b><span>捕獲日 ${esc2(i.capture_date || '')}</span></div>` : ''}</div>` : `<div class="noimg">${esc2(place || '館山・南房総')}<br>の山で獲れた一頭</div>`}
           <div class="st">${esc2(story)}</div>
         </div>
         <div class="in">
