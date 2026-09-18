@@ -348,7 +348,7 @@ function render(){
       ${i.method?`<div class="row"><span class="k">捕獲方法</span><span class="v">${esc(i.method)}</span></div>`:''}
       ${i.species?`<div class="row"><span class="k">鳥獣種</span><span class="v">${esc(i.species)}${i.sex?'（'+esc(i.sex)+'）':''}</span></div>`:''}
       ${i.weight_total?`<div class="row"><span class="k">体重</span><span class="v">${esc(i.weight_total)} kg</span></div>`:''}
-      ${i.processed_date?`<div class="row"><span class="k">精肉した日</span><span class="v">${esc(i.processed_date)}${i.aging_days!=null?`<span style="font-weight:400;color:var(--ink2);font-size:13px;">（${esc(i.aging_days)}日ねかせて）</span>`:''}</span></div>`:''}
+      ${i.processed_date?`<div class="row"><span class="k">${i.processed_kind==='organ'?'さばいた日':'精肉した日'}</span><span class="v">${esc(i.processed_date)}${i.processed_kind==='organ'?`<span style="font-weight:400;color:var(--ink2);font-size:13px;">（内臓は獲れた日に処理）</span>`:(i.aging_days!=null?`<span style="font-weight:400;color:var(--ink2);font-size:13px;">（${esc(i.aging_days)}日ねかせて）</span>`:'')}</span></div>`:''}
       <div class="row"><span class="k">個体番号</span><span class="v">${esc(i.label||'—')}</span></div>
     </div>`;
 

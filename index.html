@@ -7841,7 +7841,8 @@ function evSheetCss() {
 function evCardHtml(r) {
   const i = r.ind || {};
   const label = i.label_id || r.label;
-  const aging = evAgingDays(i.capture_date, i.processing_done_at);
+  const sb = evSabaki(i, r.packs);
+  const aging = sb.aging;
   const parts = r.packs.map(p => `${p.part_name} ${evNum(p.weight != null ? p.weight : p.weight_kg).toFixed(2)}kg`).join(' ／ ');
   const place = ((i.capture_city || '') + ' ' + (i.capture_area || '')).trim();
   return `<div class="cd">
@@ -7849,7 +7850,7 @@ function evCardHtml(r) {
     <div class="pl">${esc2(place || '（場所の記録なし）')}</div>
     <div class="dt">${i.capture_date ? esc2(evJp(i.capture_date)) + 'に' : ''}${esc2(i.capture_method || '')}でつかまえた一頭です</div>
     <div class="fa">
-      ${i.processing_done_at ? `精肉した日　${esc2(evJp(evDateOnly(i.processing_done_at)))}${aging != null ? `（${aging}日ねかせました）` : ''}<br>` : ''}
+      ${sb.date ? `${sb.organ ? 'さばいた日' : '精肉した日'}　${esc2(evJp(sb.date))}${sb.organ ? '（獲れた日に処理）' : (aging != null ? `（${aging}日ねかせました）` : '')}<br>` : ''}
       ${i.radiation_result ? `放射性物質検査　${esc2(i.radiation_result)}${i.radiation_test_date ? `（${esc2(evJp(i.radiation_test_date))}）` : ''}` : ''}
     </div>
     <div class="pt"><span class="lb">今日つかっているお肉</span><br>${esc2(parts) || '—'}</div>
@@ -7864,6 +7865,16 @@ function evCardHtml(r) {
 }
 
 // 出店の明細から「一頭ごと」の並びを作る（小分けはここに混ぜない）
+/* 内臓（レバー・ハツ・タン等）は獲れた日にセンターでさばく＝「さばいた日」は獲れた日（2026-09-18 沖）。
+   枝肉は熟成のあと精肉する（processing_done_at）。個体シート・カード・物語ページの文で使う。 */
+const EV_ORGAN_PARTS = ['レバー', 'ハツ', 'タン', 'フワ', 'マメ', '内臓', '心臓', '肝臓', '腎臓', '肺', '舌', 'ホルモン'];
+function evIsOrganPart(name) { const s = String(name || ''); return EV_ORGAN_PARTS.some(p => s.includes(p)); }
+/* この出店で使う部位が内臓だけなら 獲れた日（ねかせ日数なし）、それ以外は精肉した日（ねかせ日数つき） */
+function evSabaki(i, packs) {
+  const organOnly = (packs || []).length > 0 && (packs || []).every(p => evIsOrganPart(p.part_name));
+  if (organOnly) return i && i.capture_date ? { date: i.capture_date, aging: null, organ: true } : { date: null, aging: null, organ: true };
+  return { date: i && i.processing_done_at ? evDateOnly(i.processing_done_at) : null, aging: i ? evAgingDays(i.capture_date, i.processing_done_at) : null, organ: false };
+}
 function evCardRows() {
   const byInd = new Map();
   evItems.filter(i => i.kind === 'inventory' && i.individual_label).forEach(i => {
@@ -8405,12 +8416,13 @@ function evIndSheetHtml(rows, title, dateStr, eventId) {
   return rows.map(r => {
     const i = r.ind || {}; const s = evSheets[r.label] || {};
     const label = i.label_id || r.label;
-    const aging = evAgingDays(i.capture_date, i.processing_done_at);
+    const sb = evSabaki(i, r.packs);
+    const aging = sb.aging;
     const parts = r.packs.map(p => p.part_name).filter((v, k, a) => a.indexOf(v) === k).join('・');
     const place = ((i.capture_city || '') + ' ' + (i.capture_area || '')).trim();
     const m = evMileageOf(i);
     const photo = s.photo_path ? evSheetPhotoUrl(s.photo_path) : (i.image_url || '');
-    const story = s.story_text || `${i.capture_date ? evJp(i.capture_date) + '、' : ''}${place ? place + 'の山で' : ''}${i.capture_method ? i.capture_method + 'にかかった' : '獲れた'}${i.weight_total ? i.weight_total + 'kgの' : ''}${i.sex ? i.sex + 'の' : ''}${i.species || ''}です。${i.processing_done_at ? '館山ジビエセンターで' + evJp(evDateOnly(i.processing_done_at)) + 'にさばきました。' : ''}`;
+    const story = s.story_text || `${i.capture_date ? evJp(i.capture_date) + '、' : ''}${place ? place + 'の山で' : ''}${i.capture_method ? i.capture_method + 'にかかった' : '獲れた'}${i.weight_total ? i.weight_total + 'kgの' : ''}${i.sex ? i.sex + 'の' : ''}${i.species || ''}です。${sb.date ? (sb.organ ? '獲れたその日に館山ジビエセンターでさばきました。' : '館山ジビエセンターで' + evJp(sb.date) + 'にさばきました。') : ''}`;
     return `<div class="pg">
       <div class="hd"><span class="eb">館山ジビエセンター</span><span class="t">${esc2(title || '本日の一頭')}</span><span class="d">${esc2(dateStr || '')}</span></div>
       <div class="bd">
@@ -8423,7 +8435,7 @@ function evIndSheetHtml(rows, title, dateStr, eventId) {
           <div class="dt">${esc2(i.species || r.species || '')}${i.sex ? '・' + esc2(i.sex) : ''}${i.weight_total ? '　' + esc2(i.weight_total) + ' kg' : ''}　<span style="font-family:monospace;color:#8a7648;">${esc2(label)}</span></div>
           <div class="fa">
             <b>獲れた日</b><span>${i.capture_date ? esc2(evJp(i.capture_date)) : '—'}${i.capture_method ? '（' + esc2(i.capture_method) + '）' : ''}</span>
-            <b>さばいた日</b><span>${i.processing_done_at ? esc2(evJp(evDateOnly(i.processing_done_at))) + (aging != null ? `（${aging}日ねかせて）` : '') : '—'}</span>
+            <b>さばいた日</b><span>${sb.date ? esc2(evJp(sb.date)) + (sb.organ ? '（獲れた日に処理）' : (aging != null ? `（${aging}日ねかせて）` : '')) : '—'}</span>
             <b>放射性物質検査</b><span>${i.radiation_result ? esc2(i.radiation_result) + (i.radiation_test_date ? `（${esc2(evJp(i.radiation_test_date))}）` : '') : '—'}</span>
             <b>今日つかう部位</b><span>${esc2(parts || '—')}</span>
           </div>
