@@ -382,6 +382,20 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .mv-step .mv-h { font-weight: 700; font-size: 15px; color: #1a1a1a; }
 .mv-step .mv-d { font-size: 13px; color: #333; margin-top: 2px; }
 .mv-step .mv-tip { font-size: 12px; color: #555; background: #f3f1e6; border-left: 3px solid #c9a13b; padding: 4px 8px; margin-top: 4px; border-radius: 0 4px 4px 0; }
+.mv-lead { font-size: 12.5px; color: #333; margin: 0 0 10px; }
+.mv-legend { font-size: 11.5px; color: #555; margin-top: 4px; }
+.mv-grp { margin: 0 0 8px; page-break-inside: avoid; border-top: 1px solid #ddd; padding-top: 5px; }
+.mv-grp-h { font-weight: 700; font-size: 14px; color: #1a1a1a; display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+.mv-grp-h .mv-no { flex: 0 0 22px; height: 22px; border-radius: 50%; background: #8d6a1d; color: #fff; font-weight: 700; text-align: center; line-height: 22px; font-size: 12px; }
+.mv-task { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: #222; margin: 0 0 2px 30px; line-height: 1.55; }
+.mv-task-t { flex: 1; }
+.mv-freq { flex: 0 0 auto; display: inline-block; min-width: 58px; text-align: center; font-size: 10.5px; font-weight: 700; border-radius: 4px; padding: 1px 6px; border: 1px solid #999; color: #444; background: #f4f4f4; }
+.mv-freq.mv-f-daily { background: #dff0df; border-color: #4f8a4f; color: #1f5a1f; }
+.mv-freq.mv-f-use { background: #dfe8f5; border-color: #4a6fa5; color: #1f3d6e; }
+.mv-freq.mv-f-spare { background: #f1f1f1; border-color: #aaa; color: #555; }
+.mv-freq.mv-f-clog { background: #fbe9d2; border-color: #c9862b; color: #7a4a0c; }
+.mv-sub-list { margin: 1px 0 2px; padding-left: 18px; font-size: 11.5px; color: #555; }
+.mv-grp .mv-tip { margin-left: 30px; }
 .mv-caution { font-size: 12.5px; color: #7a1f1f; background: #fbeeee; border: 1px solid #e6c3c3; border-radius: 6px; padding: 8px 12px; margin-top: 10px; }
 .mv-foot { margin-top: 16px; border-top: 1px dashed #999; padding-top: 6px; font-size: 10.5px; color: #888; display: flex; justify-content: space-between; }
 @media print {
@@ -2244,6 +2258,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div class="form-group"><label>実施者 *</label><select class="form-input" id="clean-staff"></select></div>
       <div style="font-size:12px;color:var(--text2);margin:10px 0 6px;">実施した項目（チェックを外すと未実施として記録されません）</div>
       <div id="clean-items" style="display:flex;flex-direction:column;gap:6px;"></div>
+      <div id="clean-manual-link" style="display:none;margin-top:8px;"><button type="button" class="btn btn-sm" onclick="manualOpen('clean_kaitai')">📖 解体室の清掃手順（場所別・頻度つき）を見る・印刷</button></div>
       <div class="form-group" id="clean-temp-row" style="display:none;margin-top:10px;"><label>庫内温度 * （例: 冷蔵2℃ / 冷凍-20℃）</label><input class="form-input" id="clean-temp" placeholder="例: 冷蔵2℃ / 冷凍-20℃" /></div>
       <div class="form-group" style="margin-top:10px;"><label>特記事項</label><input class="form-input" id="clean-note" placeholder="例: 排水溝の詰まりを解消" /></div>
       <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
@@ -10834,6 +10849,7 @@ function cleaningOpen(roomKey) {
   document.getElementById('clean-staff').innerHTML = '<option value="">実施者を選択...</option>' + names.map(n => `<option>${esc2(n)}</option>`).join('');
   document.getElementById('clean-items').innerHTML = room.items.map((it, i) => `<label style="display:flex;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:14px;"><input type="checkbox" class="clean-chk" value="${esc2(it)}" checked> ${esc2(it)}</label>`).join('');
   document.getElementById('clean-temp-row').style.display = room.temp ? 'block' : 'none';
+  document.getElementById('clean-manual-link').style.display = room.key === '解体室' ? 'block' : 'none';
   document.getElementById('clean-temp').value = '';
   document.getElementById('clean-note').value = '';
   document.getElementById('cleanModal').style.display = 'block';
@@ -14172,6 +14188,81 @@ const MANUALS = [
       { h: '確認は「runNow」', d: 'その場で実行してログに取込結果が出ます。' },
       { h: '店が増えたら追記', d: '差出人アドレスと商品名を、スクリプトの表に足します。' },
     ], caution: '3道の駅の売上メールから在庫へ自動反映。数字が止まったら担当に連絡してください。' },
+  { id: 'clean_kaitai', icon: '🧹', title: '⑫ 解体室の清掃手順（場所別・頻度つき）', who: '解体担当スタッフ', when: '作業終了後 毎日（項目ごとの頻度は印を見る）', where: '解体室',
+    version: '一次版 2026-09-20（沖・近日中に見直し予定）',
+    lead: '上から順に、高い所 → 棚 → 流し・台 → 壁 → 床 → 下水 → 仕上げの消毒 の順で進めます。印は 毎日＝毎回やる／使用時＝使った日だけ／時間があれば＝余裕のある日に／詰まった時＝詰まった時だけ。',
+    groups: [
+      { h: '天井・手が届かない高さの壁', tasks: [
+        { t: '下に物がないことを確認したのち、デッキブラシで汚れを剥離する', f: '時間があれば' },
+        { t: '飛び散らないように水道のホースで汚れを流す', f: '時間があれば' } ],
+        note: '届かない場合は脚立、場所によっては踏み台を用意するとよい' },
+      { h: '窓・ドア', tasks: [
+        { t: '汚れを高圧洗浄機で流す', f: '時間があれば', sub: ['汚れがひどい場合はスポンジで洗う', '窓のフレームにゴミや虫の死骸等があるので念入りに掻き出す'] } ] },
+      { h: '包丁が置いてある棚 ― 棚の上', tasks: [
+        { t: 'アルコール洗浄する', f: '毎日', sub: ['汚れがひどい場合はスポンジで洗う'] },
+        { t: 'タオルを敷きなおす', f: '毎日' },
+        { t: 'ペンなどを所定の場所に戻す', f: '毎日' } ] },
+      { h: '包丁が置いてある棚 ― ポット', tasks: [
+        { t: '電源ケーブルを抜く', f: '毎日' }, { t: 'ポットを洗う', f: '毎日' }, { t: 'ポットを伏せて置く', f: '毎日' } ] },
+      { h: '包丁が置いてある棚 ― 包丁・のこぎり', tasks: [
+        { t: '洗剤で洗う', f: '毎日' }, { t: 'タオルの上に並べる', f: '毎日' } ] },
+      { h: '包丁が置いてある棚 ― ミンサー', tasks: [
+        { t: '金属部分は分解して洗剤で洗う', f: '使用時' }, { t: '本体はアルコールで拭き上げる', f: '使用時' }, { t: '組み上げる', f: '使用時' } ] },
+      { h: '包丁が置いてある棚 ― はかり・吊るしばかり', tasks: [ { t: 'アルコールで拭き上げる', f: '使用時' } ] },
+      { h: '包丁が置いてある棚 ― iPad', tasks: [
+        { t: 'アルコールで拭き上げる', f: '毎日' }, { t: 'ドア脇のかごにしまって充電を開始する', f: '毎日' } ] },
+      { h: '包丁が置いてある棚 ― 砥石', tasks: [ { t: '泥を水で流して所定の場所に戻す', f: '毎日' } ] },
+      { h: '包丁が置いてある棚 ― 棚の下', tasks: [ { t: '脚部の汚れは角度を変えて高圧洗浄機で流す', f: '毎日' } ] },
+      { h: '流し', tasks: [
+        { t: '蛇口・槽の内側と回りを、洗剤を使ってスポンジまたはたわしで洗う', f: '毎日' },
+        { t: '棚や脚部、配管等の汚れを高圧洗浄機で流す', f: '毎日' },
+        { t: '残った汚れと洗剤を高圧洗浄機で流す', f: '毎日' },
+        { t: '脚部と滑車の汚れは角度を変えて高圧洗浄機で流す', f: '毎日' } ] },
+      { h: '解体台・三脚', tasks: [
+        { t: '表と裏をたわしやスポンジで洗う', f: '毎日' },
+        { t: '表と裏に残った汚れと洗剤を高圧洗浄機で流す', f: '毎日' },
+        { t: '脚部と滑車の汚れは角度を変えて高圧洗浄機で流す', f: '毎日' } ],
+        note: '解体台をひっくり返して洗うのは時間があるときでよい' },
+      { h: 'フレームラック（冷蔵庫側）', tasks: [ { t: '表と裏に残った汚れと洗剤を高圧洗浄機で流す', f: '毎日' } ] },
+      { h: 'フレームラック（シャッター側）', tasks: [
+        { t: 'パイプの汚れを高圧洗浄機で流す', f: '毎日' }, { t: '脚部のパイプの中の汚れを高圧洗浄機で流す', f: '毎日' } ] },
+      { h: '中間の高さの壁・シャッター・冷蔵庫のドア', tasks: [
+        { t: 'たわしやスポンジで洗う', f: '毎日' },
+        { t: '残った汚れと洗剤を流す。濡れて困る場所は水道のホースで、濡れて困らない場所は高圧洗浄機で', f: '毎日' } ] },
+      { h: '低い高さの壁', tasks: [
+        { t: '汚れを高圧洗浄機で流す', f: '毎日' }, { t: '配管等の汚れは角度を変えて高圧洗浄機で流す', f: '毎日' } ] },
+      { h: 'ゴミ箱', tasks: [
+        { t: '表と裏の汚れをたわしやスポンジで洗う', f: '毎日' }, { t: '表と裏に残った汚れと洗剤を高圧洗浄機で流す', f: '毎日' } ] },
+      { h: 'エプロン', tasks: [
+        { t: '表と裏の汚れをたわしやスポンジで洗う', f: '毎日', sub: ['汚れがひどい場合は塩素系漂白剤を使うとよい'] } ] },
+      { h: '長靴', tasks: [
+        { t: '底の汚れを高圧洗浄機で流す', f: '毎日' },
+        { t: '表面の表と裏の汚れをたわしやスポンジで洗う', f: '毎日', sub: ['汚れがひどい場合は塩素系漂白剤を使うとよい'] },
+        { t: '中はアルコールで消毒する', f: '毎日' } ] },
+      { h: '冷蔵庫側の下水', tasks: [
+        { t: '蓋を外す', f: '詰まった時' }, { t: '蓋の汚れを高圧洗浄機で流す', f: '詰まった時' },
+        { t: '手を突っ込んで排水溝の中のカップを取る', f: '詰まった時' }, { t: 'カップを洗う', f: '詰まった時' },
+        { t: '排水溝の中の汚れをすくい出し、ごみ箱に捨てる', f: '詰まった時' }, { t: '下水全体の汚れを高圧洗浄機で流す', f: '詰まった時' },
+        { t: 'カップを戻して蓋をする', f: '詰まった時' } ] },
+      { h: '床', tasks: [
+        { t: '汚れを高圧洗浄機で流す', f: '毎日' }, { t: '洗剤を使ってデッキブラシで磨く', f: '毎日' },
+        { t: '残った汚れと洗剤を高圧洗浄機で流す', f: '毎日' }, { t: 'スクレイパーで水切りする', f: '毎日' } ] },
+      { h: 'シャッター側の下水', tasks: [
+        { t: 'ざっとごみを手で取る', f: '毎日' }, { t: '蓋を外す', f: '毎日' },
+        { t: '蓋の角をシャッターの框（かまち）に乗せて浮かせる', f: '毎日', sub: ['蓋のパイプ状のフレームが壁の内側を向くように', '立てかけるのは4つ角のうち1つの角でよい'] },
+        { t: '蓋の表面の汚れを高圧洗浄機で流す', f: '毎日' },
+        { t: '蓋を裏返す', f: '毎日', sub: ['蓋のパイプ状のフレームが壁の内側を向くように', '立てかけるのは4つ角のうち1つの角でよい'] },
+        { t: '蓋の裏面の汚れを高圧洗浄機で流す', f: '毎日' },
+        { t: '蓋のパイプ状のフレームの両端と側面の穴から、パイプの内側の汚れを高圧洗浄機で流す', f: '毎日' },
+        { t: 'ザルで下水溝の底の汚物をさらう', f: '毎日', sub: ['バケツの内側を20号のビニール袋で2重に覆い、ごみはその中に捨てるとよい'] },
+        { t: '裏返した蓋の上、フレームの内側にザルを置いて汚れを高圧洗浄機で流す', f: '毎日' },
+        { t: '蓋についた汚れを高圧洗浄機で流す', f: '毎日' }, { t: '蓋を戻す', f: '毎日' },
+        { t: '周りに飛び散った汚れを高圧洗浄機で流す', f: '毎日', sub: ['このとき高圧洗浄機の水を下水の水に直撃させない（飛び散る）'] } ] },
+      { h: '仕上げ ― 床・下水・流しの排水溝・ザル', tasks: [
+        { t: '床に余った次亜塩素酸をまく', f: '毎日' }, { t: '下水と流しの排水溝とザルに塩素系漂白剤をスプレーする', f: '毎日' } ] },
+      { h: '補充', tasks: [
+        { t: '次亜塩素酸の補充', f: '毎日', sub: ['カップ2杯に対して水を線まで注ぐ'] }, { t: 'その他ビニール袋などの補充', f: '毎日' } ] },
+    ], caution: '清掃が終わったら「清掃記録(HACCP)」タブの 解体室 で記録してください。この手順は一次版です。やりにくい所・抜けている所は沖まで。' },
 ];
 function loadManual() {
   const box = document.getElementById('manual-index');
@@ -14183,20 +14274,29 @@ function loadManual() {
        <button class="btn btn-sm" onclick="manualOpen('${m.id}')">📖 開く・印刷</button>
      </div>`).join('');
 }
+const MANUAL_FREQ = { '毎日': 'mv-f-daily', '使用時': 'mv-f-use', '時間があれば': 'mv-f-spare', '詰まった時': 'mv-f-clog' };
+function manualGroupsHtml(m) {
+  const legend = Object.keys(MANUAL_FREQ).map(k => `<span class="mv-freq ${MANUAL_FREQ[k]}">${k}</span>`).join(' ');
+  return `<div class="mv-lead">${esc2(m.lead || '')}<div class="mv-legend">印の意味: ${legend}</div></div>` +
+    m.groups.map((g, i) => `<div class="mv-grp"><div class="mv-grp-h"><span class="mv-no">${i + 1}</span>${esc2(g.h)}</div>` +
+      g.tasks.map(t => `<div class="mv-task"><span class="mv-freq ${MANUAL_FREQ[t.f] || ''}">${esc2(t.f || '')}</span><div class="mv-task-t">${esc2(t.t)}` +
+        (t.sub && t.sub.length ? `<ul class="mv-sub-list">${t.sub.map(x => `<li>${esc2(x)}</li>`).join('')}</ul>` : '') + `</div></div>`).join('') +
+      (g.note ? `<div class="mv-tip">※ ${esc2(g.note)}</div>` : '') + `</div>`).join('');
+}
 function manualSheetHtml(m) {
-  const steps = m.steps.map((s, i) =>
+  const steps = m.groups ? manualGroupsHtml(m) : m.steps.map((s, i) =>
     `<div class="mv-step"><div class="mv-no">${i + 1}</div><div class="mv-body">
        <div class="mv-h">${esc2(s.h)}</div>
        ${s.d ? `<div class="mv-d">${esc2(s.d)}</div>` : ''}
        ${s.tip ? `<div class="mv-tip">💡 ${esc2(s.tip)}</div>` : ''}
      </div></div>`).join('');
   return `<div class="mv-sheet">
-    <h1>${m.icon} ${esc2(m.title.replace(/^[①-⑪]\s*/, ''))}</h1>
+    <h1>${m.icon} ${esc2(m.title.replace(/^[①-⑳]\s*/, ''))}</h1>
     <div class="mv-sub">館山ジビエセンター 業務マニュアル</div>
-    <div class="mv-meta"><span><b>対象</b> ${esc2(m.who)}</span><span><b>タイミング</b> ${esc2(m.when)}</span><span><b>場所</b> ${esc2(m.where)}</span></div>
+    <div class="mv-meta"><span><b>対象</b> ${esc2(m.who)}</span><span><b>タイミング</b> ${esc2(m.when)}</span><span><b>場所</b> ${esc2(m.where)}</span>${m.version ? `<span><b>版</b> ${esc2(m.version)}</span>` : ''}</div>
     ${steps}
     ${m.caution ? `<div class="mv-caution">⚠ ${esc2(m.caution)}</div>` : ''}
-    <div class="mv-foot"><span>館山ジビエセンター運営（合同会社アルコ）</span><span>${m.title.replace(/^([①-⑪]).*/, '$1')}</span></div>
+    <div class="mv-foot"><span>館山ジビエセンター運営（合同会社アルコ）</span><span>${m.title.replace(/^([①-⑳]).*/, '$1')}</span></div>
   </div>`;
 }
 function manualOpen(id) {
