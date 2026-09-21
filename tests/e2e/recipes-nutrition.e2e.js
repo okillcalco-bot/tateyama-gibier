@@ -16,6 +16,7 @@
 //     9. 加工調理の商品カードに紐づいた料理が出る
 //    10. 成分表が読めないときは赤で画面に出る（サイレント失敗なし）
 //    11. マニュアルに ⑬ がある
+//    12. 一括表示（義務9項目）の既定値・設定の保存・冷蔵/冷凍の切替、「表示を全部入れた1枚」が 40×60mm・5.5pt以上で収まる
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
 
@@ -127,7 +128,7 @@ async function open(browser, { query = '?tab=recipes', failDb = false } = {}) {
   await page.evaluate(() => rcLabelOpen('r1'));
   await page.waitForTimeout(100);
   const lbl = await page.evaluate(() => document.getElementById('rc-lbl-body').textContent.replace(/\s+/g, ' '));
-  ck('栄養成分表示: 1袋（250g）あたりの5項目、原材料名（重量順）、内容量、製造者', /1袋（250g）あたり/.test(lbl) && /エネルギー\s*526kcal/.test(lbl) && /食塩相当量\s*3\.0g/.test(lbl) && /原材料名 いのしし肉、しょうゆ、砂糖/.test(lbl) && /内容量 250g/.test(lbl) && /合同会社アルコ/.test(lbl), lbl.slice(0, 220));
+  ck('栄養成分表示: 1袋（250g）あたりの5項目、原材料名（重量順）、内容量、製造者', /1袋（250g）あたり/.test(lbl) && /エネルギー\s*526kcal/.test(lbl) && /食塩相当量\s*3\.0g/.test(lbl) && /原材料名\s*いのしし肉、しょうゆ、砂糖/.test(lbl) && /内容量\s*250g/.test(lbl) && /合同会社アルコ/.test(lbl), lbl.slice(0, 220));
   ck('ラベルの決まり（30cm²以下は省略可・今の40×60は24cm²）を説明している', /30cm²以下/.test(lbl) && /24cm²/.test(lbl), '');
   await page.evaluate(() => rcLabelPrint('label'));
   await page.evaluate(() => rcLabelPrint('a4'));
@@ -139,6 +140,40 @@ async function open(browser, { query = '?tab=recipes', failDb = false } = {}) {
   const mm = await lp.evaluate(() => { const px = n => n / 96 * 25.4; const els = [...document.body.children]; const bottom = Math.max(...els.map(e => e.getBoundingClientRect().bottom)); return { bottom: px(bottom), right: Math.max(...els.map(e => px(e.getBoundingClientRect().right))) }; });
   await lp.close();
   ck('40×60mm ラベル: 内容の下端が 57mm 以内・右端が 40mm 以内', mm.bottom <= 57 && mm.right <= 40.5, JSON.stringify(mm));
+
+  // 一括表示（食品表示の義務項目）と「表示を全部入れた1枚」（2026-09-21 追記）
+  await page.evaluate(() => rcLabelOpen('r1'));
+  const exp365 = await page.evaluate(() => { const d = new Date(); d.setDate(d.getDate() + 365); return d.toLocaleDateString('ja-JP'); });
+  const ik1 = await page.evaluate(() => [...document.querySelectorAll('#rc-lbl-body .rc-ik-r')].map(r => [...r.children].map(c => c.textContent)));
+  const ikMap = Object.fromEntries(ik1);
+  ck('一括表示: 名称／原材料名／原料原産地名／内容量／消費期限／保存方法／凍結前加熱の有無／加熱調理の必要性／製造者 の9行', ik1.length === 9 && ['名称', '原材料名', '原料原産地名', '内容量', '消費期限', '保存方法', '凍結前加熱の有無', '加熱調理の必要性', '製造者'].every(k => k in ikMap), ik1.map(x => x[0]).join(','));
+  ck('既定値: 原料原産地名は「いのしし肉（千葉県産）」、消費期限は印刷日＋365日、保存方法 -18℃以下、製造者は住所つき', ikMap['原料原産地名'] === 'いのしし肉（千葉県産）' && ikMap['消費期限'] === exp365 && /-18℃以下/.test(ikMap['保存方法']) && /合同会社アルコ/.test(ikMap['製造者']) && /西長田1163-5/.test(ikMap['製造者']), JSON.stringify(ikMap));
+  await page.fill('#rc-lb-allergens', '小麦・大豆');
+  await page.fill('#rc-lb-expiry_days', '180');
+  await page.evaluate(() => rcLabelSaveSettings());
+  await page.waitForTimeout(300);
+  const patch = calls.filter(c => c.m === 'PATCH' && /recipes\?id=eq\.r1/.test(c.u)).pop();
+  const exp180 = await page.evaluate(() => { const d = new Date(); d.setDate(d.getDate() + 180); return d.toLocaleDateString('ja-JP'); });
+  const ik2 = Object.fromEntries(await page.evaluate(() => [...document.querySelectorAll('#rc-lbl-body .rc-ik-r')].map(r => [...r.children].map(c => c.textContent))));
+  ck('表示の設定を保存: recipes.label に PATCH（アレルゲン 小麦・大豆、期限180日）', patch && patch.b.label && patch.b.label.allergens === '小麦・大豆' && patch.b.label.expiry_days === 180 && patch.b.label.product_type === '冷凍', JSON.stringify(patch && patch.b.label));
+  ck('保存後の表示: 原材料名の末尾に（一部に小麦・大豆を含む）、消費期限は＋180日', /（一部に小麦・大豆を含む）$/.test(ik2['原材料名']) && ik2['消費期限'] === exp180, JSON.stringify([ik2['原材料名'], ik2['消費期限']]));
+  await page.selectOption('#rc-lb-product_type', '冷蔵');
+  await page.evaluate(() => rcLabelSaveSettings());
+  await page.waitForTimeout(300);
+  const ik3 = await page.evaluate(() => [...document.querySelectorAll('#rc-lbl-body .rc-ik-r')].map(r => r.children[0].textContent));
+  ck('冷蔵にすると 凍結前加熱の有無・加熱調理の必要性 の行が消える（冷凍食品だけの項目）', ik3.length === 7 && !ik3.includes('凍結前加熱の有無'), ik3.join(','));
+  await page.selectOption('#rc-lb-product_type', '冷凍');
+  await page.evaluate(() => rcLabelSaveSettings());
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { window.__printed = []; rcLabelPrint('full'); });
+  const full = await page.evaluate(() => window.__printed[0]);
+  ck('「表示を全部入れた1枚」の HTML: 40×60mm に 9項目＋栄養成分表示（5項目）が入る', /size:40mm 60mm/.test(full) && ['名称', '原材料名', '原料原産地名', '内容量', '消費期限', '保存方法', '凍結前加熱の有無', '加熱調理の必要性', '製造者', '栄養成分表示', 'エネルギー', '食塩相当量', '小麦・大豆'].every(k => full.includes(k)), '');
+  const fp = await browser.newPage({ viewport: { width: 400, height: 600 } });
+  await fp.setContent(full);
+  const fm = await fp.evaluate(() => { const px = n => n / 96 * 25.4; const els = [...document.body.children]; const bottom = Math.max(...els.map(e => e.getBoundingClientRect().bottom)); const right = Math.max(...[...document.querySelectorAll('body *')].map(e => e.getBoundingClientRect().right));
+    const fonts = [...document.querySelectorAll('.ik div, .ik b, .nl .r, .nl .h')].map(e => parseFloat(getComputedStyle(e).fontSize)); return { bottom: px(bottom), right: px(right), minPt: Math.min(...fonts) * 72 / 96 }; });
+  await fp.close();
+  ck('1枚ラベル: 実寸で 57mm 以内・横 40mm 以内に収まり、一括表示と栄養成分の文字は 5.5pt 以上', fm.bottom <= 57 && fm.right <= 40.5 && fm.minPt >= 5.49, JSON.stringify(fm));
 
   // 追加食品
   await page.evaluate(() => rcFoodsOpen());

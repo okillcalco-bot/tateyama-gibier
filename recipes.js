@@ -297,11 +297,39 @@ async function rcFoodSave() {
   } catch (e) { toast('保存に失敗しました: ' + sbSafeMsg(e), 'error'); }
 }
 
-/* ── 栄養成分表示（食品表示用）・ラベル ── */
+/* ── 食品表示（一括表示）・栄養成分表示・ラベル ──
+   2026-09-21 「食品表示で必要なのは何？最低限揃えないといけないのを詰めて可能なら1枚にしたい。」
+   容器包装入り加工食品の義務表示（食品表示基準）:
+     名称／原材料名（重量順・アレルゲン）／添加物／原料原産地名／内容量／期限／保存方法／製造者（名称・住所）／栄養成分表示
+     冷凍食品はさらに 凍結前加熱の有無・加熱調理の必要性。
+   料理から自動で出るもの: 名称（商品名）・原材料名・内容量（1袋g）・栄養成分表示・製造者。
+   それ以外（期限の日数・保存方法・凍結前加熱・加熱調理・添加物・原料原産地名・アレルゲン）は料理ごとに label に持つ。
+   文字の大きさ: 表示可能面積 150cm² 以下は 5.5pt 以上でよい（40×60mm＝24cm²）。 */
+const RC_LABEL_DEFAULT = { product_type: '冷凍', expiry_days: 365, storage: '-18℃以下で保存', pre_heated: '加熱していません', need_heating: '加熱してお召し上がりください', additives: '', origin: '', allergens: '' };
+const RC_MAKER = '合同会社アルコ 館山ジビエセンター', RC_MAKER_ADDR = '千葉県館山市西長田1163-5';
+let rcLabelCurrent = null;
+function rcLabelSettings(r) { return Object.assign({}, RC_LABEL_DEFAULT, r.label || {}); }
+// 原料原産地名の既定: いちばん重い原材料が肉なら「いのしし肉（千葉県産）」
+function rcOriginDefault(r) {
+  const first = ((r.nutrition || {}).ingredients || [])[0] || '';
+  if (/いのしし|しか/.test(first)) return first + '（千葉県産）';
+  return first ? first + '（国産）' : '';
+}
+function rcExpiryStr(days) { const d = new Date(); d.setDate(d.getDate() + (Number(days) || 0)); return d.toLocaleDateString('ja-JP'); }
 function rcLabelData(r) {
-  const n = r.nutrition || {}; const prod = rcProducts.find(x => x.id === r.product_id);
+  const n = r.nutrition || {}; const prod = rcProducts.find(x => x.id === r.product_id); const st = rcLabelSettings(r);
   const basis = n.per_pack && n.pack_g ? { label: `1袋（${rcFmt(n.pack_g, 0)}g）あたり`, vals: n.per_pack } : { label: '100gあたり', vals: n.per100g || {} };
-  return { name: prod ? prod.name : r.name, recipe: r.name, basis, ingredients: (n.ingredients || []).join('、'), packG: n.pack_g, prod };
+  let ingredients = (n.ingredients || []).join('、');
+  if (st.allergens && st.allergens.trim()) ingredients += `（一部に${st.allergens.trim()}を含む）`;
+  const rows = [['名称', prod ? prod.name : r.name], ['原材料名', ingredients || '—']];
+  if (st.additives && st.additives.trim()) rows.push(['添加物', st.additives.trim()]);
+  rows.push(['原料原産地名', st.origin && st.origin.trim() ? st.origin.trim() : rcOriginDefault(r)]);
+  rows.push(['内容量', n.pack_g ? rcFmt(n.pack_g, 0) + 'g' : '—']);
+  rows.push([st.product_type === '冷凍' ? '消費期限' : '消費期限', rcExpiryStr(st.expiry_days)]);
+  rows.push(['保存方法', st.storage || '—']);
+  if (st.product_type === '冷凍') { rows.push(['凍結前加熱の有無', st.pre_heated || '—']); rows.push(['加熱調理の必要性', st.need_heating || '—']); }
+  rows.push(['製造者', RC_MAKER + '　' + RC_MAKER_ADDR]);
+  return { name: prod ? prod.name : r.name, recipe: r.name, basis, ingredients, packG: n.pack_g, prod, st, rows };
 }
 function rcLabelBoxHtml(d, cls) {
   return `<div class="${cls || 'rc-nl'}"><div class="rc-nl-h">栄養成分表示（${esc2(d.basis.label)}）</div>${RC_MAIN.map(m => `<div class="rc-nl-r"><span>${m.k}</span><span>${rcFmt(d.basis.vals[m.k], m.d)}${m.u}</span></div>`).join('')}<div class="rc-nl-f">推定値（日本食品標準成分表2020年版（八訂）増補2023年による計算値）</div></div>`;
@@ -309,25 +337,54 @@ function rcLabelBoxHtml(d, cls) {
 function rcLabelOpen(id) {
   const r = rcRecipes.find(x => x.id === id); if (!r) return;
   if (!r.nutrition || !r.nutrition.per100g) { toast('先に材料と重量を入れて保存してください', 'error'); return; }
-  const d = rcLabelData(r); rcLabelCurrent = r;
+  rcLabelCurrent = r;
+  const d = rcLabelData(r), st = d.st;
+  const sel = (id, opts, val) => `<select class="form-input" id="${id}">${opts.map(o => `<option${o === val ? ' selected' : ''}>${esc2(o)}</option>`).join('')}</select>`;
+  const missing = [];
+  if (!d.packG) missing.push('内容量（料理の「1袋の内容量」）');
+  if (!d.prod) missing.push('名称（商品と紐づけると商品名になります。今は料理名）');
   document.getElementById('rc-lbl-title').textContent = d.name;
   document.getElementById('rc-lbl-body').innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;">
-      <div>${rcLabelBoxHtml(d)}<div class="muted" style="margin-top:6px;">${d.packG ? `1袋 ${rcFmt(d.packG, 0)}g で計算。` : '1袋の内容量が未入力なので 100gあたり で表示。'}100gあたり: ${RC_MAIN.map(m => `${m.k} ${rcFmt((r.nutrition.per100g || {})[m.k], m.d)}${m.u}`).join('／')}</div></div>
-      <div style="font-size:12.5px;line-height:1.7;">
-        <div><b>名称</b> ${esc2(d.name)}${d.prod ? '' : '<span class="muted">（商品と紐づけると商品名になります）</span>'}</div>
-        <div><b>原材料名</b> ${esc2(d.ingredients || '—')}<div class="muted">重量の多い順。材料のメモに書いた表示名を優先します。アレルゲン（小麦・大豆など）は原料の表示を確認して書き足してください。</div></div>
-        <div><b>内容量</b> ${d.packG ? rcFmt(d.packG, 0) + 'g' : '—'}</div>
-        <div><b>製造者</b> 合同会社アルコ 館山ジビエセンター　千葉県館山市西長田1163-5</div>
+      <div>
+        <div class="rc-ik">${d.rows.map(([k, v]) => `<div class="rc-ik-r"><span>${esc2(k)}</span><span>${esc2(v)}</span></div>`).join('')}</div>
+        <div style="margin-top:10px;">${rcLabelBoxHtml(d)}</div>
+        <div class="muted" style="margin-top:6px;">${d.packG ? `1袋 ${rcFmt(d.packG, 0)}g で計算。` : '1袋の内容量が未入力なので 100gあたり で表示。'}100gあたり: ${RC_MAIN.map(m => `${m.k} ${rcFmt((r.nutrition.per100g || {})[m.k], m.d)}${m.u}`).join('／')}</div>
+      </div>
+      <div style="font-size:12.5px;line-height:1.6;">
+        <div style="font-weight:700;color:var(--gold);margin-bottom:6px;">表示の設定（この料理に保存されます）</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="form-group" style="margin:0"><label>区分</label>${sel('rc-lb-product_type', ['冷凍', '冷蔵'], st.product_type)}</div>
+          <div class="form-group" style="margin:0"><label>期限（印刷日から何日）</label><input class="form-input" id="rc-lb-expiry_days" type="number" min="1" value="${esc2(st.expiry_days)}"></div>
+          <div class="form-group" style="margin:0;grid-column:1/-1"><label>保存方法</label><input class="form-input" id="rc-lb-storage" value="${esc2(st.storage)}"></div>
+          <div class="form-group" style="margin:0"><label>凍結前加熱の有無（冷凍のみ）</label>${sel('rc-lb-pre_heated', ['加熱していません', '加熱してあります'], st.pre_heated)}</div>
+          <div class="form-group" style="margin:0"><label>加熱調理の必要性（冷凍のみ）</label>${sel('rc-lb-need_heating', ['加熱してお召し上がりください', '解凍してそのままお召し上がりいただけます'], st.need_heating)}</div>
+          <div class="form-group" style="margin:0;grid-column:1/-1"><label>原料原産地名（空なら「${esc2(rcOriginDefault(r))}」）</label><input class="form-input" id="rc-lb-origin" value="${esc2(st.origin)}" placeholder="${esc2(rcOriginDefault(r))}"></div>
+          <div class="form-group" style="margin:0;grid-column:1/-1"><label>アレルゲン（特定原材料8品目: えび・かに・くるみ・小麦・そば・卵・乳・落花生。「小麦・大豆」のように）</label><input class="form-input" id="rc-lb-allergens" value="${esc2(st.allergens)}" placeholder="例: 小麦・大豆"></div>
+          <div class="form-group" style="margin:0;grid-column:1/-1"><label>添加物（使っていなければ空）</label><input class="form-input" id="rc-lb-additives" value="${esc2(st.additives)}" placeholder="例: 調味料（アミノ酸等）"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;"><button class="btn btn-sm btn-primary" onclick="rcLabelSaveSettings()">設定を保存して表示を更新</button><span class="muted" id="rc-lb-saved"></span></div>
+        ${missing.length ? `<div style="margin-top:8px;color:var(--red);font-size:12px;">要入力: ${missing.map(esc2).join('／')}</div>` : ''}
       </div>
     </div>
     <div class="muted" style="margin-top:10px;line-height:1.7;">
-      ラベルの決まり: 表示可能面積がおおむね30cm²以下の包装（今の40×60mm精肉ラベル＝24cm²）は栄養成分表示・原材料名を省略できます。
-      道の駅などで売る加工品に付けるなら、下の「栄養成分・原材料ラベル（40×60mm）」を今のラベルの隣に貼るか、A4で印刷して掲示に使ってください。
+      <b>義務表示（食品表示基準・容器包装入り加工食品）</b>: 名称／原材料名（重量順・アレルゲン）／添加物／原料原産地名／内容量／期限／保存方法／製造者／栄養成分表示。冷凍食品は 凍結前加熱の有無・加熱調理の必要性 も。
+      表示可能面積が150cm²以下なら文字は5.5pt以上でよく、40×60mm（24cm²）1枚に全部入ります（「表示を全部入れた1枚」）。
+      なお30cm²以下の包装は原材料名・添加物・原料原産地名・内容量・栄養成分表示を省略でき、名称・期限・保存方法・製造者・アレルゲンは省略できません。
     </div>`;
   document.getElementById('rcLabelModal').style.display = 'block';
 }
-let rcLabelCurrent = null;
+async function rcLabelSaveSettings() {
+  const r = rcLabelCurrent; if (!r) return;
+  const g = id => (document.getElementById(id) || {}).value || '';
+  const label = { product_type: g('rc-lb-product_type'), expiry_days: Number(g('rc-lb-expiry_days')) || RC_LABEL_DEFAULT.expiry_days, storage: g('rc-lb-storage').trim(), pre_heated: g('rc-lb-pre_heated'), need_heating: g('rc-lb-need_heating'), origin: g('rc-lb-origin').trim(), allergens: g('rc-lb-allergens').trim(), additives: g('rc-lb-additives').trim() };
+  try {
+    await sb('PATCH', 'recipes', { label, updated_at: new Date().toISOString() }, '?id=eq.' + r.id);
+    r.label = label;
+    rcLabelOpen(r.id);
+    const el = document.getElementById('rc-lb-saved'); if (el) el.textContent = '保存しました';
+  } catch (e) { toast('表示の設定を保存できませんでした: ' + sbSafeMsg(e), 'error'); }
+}
 function rcLabelPrint(kind) {
   const r = rcLabelCurrent; if (!r) return;
   const d = rcLabelData(r);
@@ -336,13 +393,28 @@ function rcLabelPrint(kind) {
   const box = `<div class="nl"><div class="h">栄養成分表示${esc2(basisLabel)}</div>${RC_MAIN.map(m => `<div class="r"><span>${m.k}</span><span>${rcFmt(d.basis.vals[m.k], m.d)}${m.u}</span></div>`).join('')}<div class="f">推定値（八訂成分表による計算値）</div></div>`;
   let css, body;
   if (kind === 'a4') {
-    css = `@page{size:A4;margin:15mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Meiryo','Yu Gothic',sans-serif;color:#000}h1{font-size:18pt;margin-bottom:6mm}.g{display:grid;grid-template-columns:1fr 1fr;gap:10mm}.nl{border:1.5pt solid #000;padding:3mm 4mm;font-size:12pt;width:80mm}.nl .h{font-weight:bold;border-bottom:1pt solid #000;margin-bottom:2mm;padding-bottom:1mm}.nl .r{display:flex;justify-content:space-between;padding:.6mm 0}.nl .f{font-size:8pt;color:#333;margin-top:2mm}.t{font-size:11pt;line-height:1.8}.t b{display:inline-block;min-width:22mm}.s{font-size:9pt;color:#444;margin-top:8mm;line-height:1.6}`;
-    body = `<h1>${esc2(d.name)}</h1><div class="g"><div>${box}</div><div class="t"><div><b>名称</b>${esc2(d.name)}</div><div><b>原材料名</b>${esc2(d.ingredients || '—')}</div><div><b>内容量</b>${d.packG ? rcFmt(d.packG, 0) + 'g' : '—'}</div><div><b>製造者</b>合同会社アルコ 館山ジビエセンター<br><span style="margin-left:22mm">千葉県館山市西長田1163-5</span></div></div></div>
+    css = `@page{size:A4;margin:15mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Meiryo','Yu Gothic',sans-serif;color:#000}h1{font-size:18pt;margin-bottom:6mm}.g{display:grid;grid-template-columns:1fr 1fr;gap:10mm}.nl{border:1.5pt solid #000;padding:3mm 4mm;font-size:12pt;width:80mm}.nl .h{font-weight:bold;border-bottom:1pt solid #000;margin-bottom:2mm;padding-bottom:1mm}.nl .r{display:flex;justify-content:space-between;padding:.6mm 0}.nl .f{font-size:8pt;color:#333;margin-top:2mm}.ik{border:1.5pt solid #000;font-size:11pt}.ik div{display:grid;grid-template-columns:32mm 1fr;border-bottom:.5pt solid #000}.ik div:last-child{border-bottom:none}.ik span{padding:1.2mm 2mm;line-height:1.5}.ik span:first-child{border-right:.5pt solid #000;font-weight:bold}.s{font-size:9pt;color:#444;margin-top:8mm;line-height:1.6}`;
+    body = `<h1>${esc2(d.name)}</h1><div class="g"><div class="ik">${d.rows.map(([k, v]) => `<div><span>${esc2(k)}</span><span>${esc2(v)}</span></div>`).join('')}</div><div>${box}</div></div>
       <div class="s">レシピ: ${esc2(d.recipe)}／材料合計 ${rcFmt((r.nutrition || {}).sum_g, 0)}g・出来上がり ${rcFmt((r.nutrition || {}).yield_g, 0)}g・${(r.nutrition || {}).servings || 1}人分。100gあたり: ${RC_MAIN.map(m => `${m.k} ${rcFmt((r.nutrition.per100g || {})[m.k], m.d)}${m.u}`).join('／')}。計算日 ${((r.nutrition || {}).computed_at || '').slice(0, 10)}</div>`;
+  } else if (kind === 'full') {
+    // 表示を全部入れた1枚（40×60mm）。一括表示の文字は 5.5pt（表示可能面積150cm²以下の下限）。
+    // 余白は精肉ラベルと同じ実測値（左4.5mm・上1.8mm・下3mm）。
+    // 項目名を左の列にする表組みだと「凍結前加熱の有無」で折り返して高さが 66mm になった（実測）ので、
+    // 項目名を太字にして値を続ける流し込みにし、内容量と消費期限は1行にまとめる。栄養成分表示は横並び
+    css = `@page{size:40mm 60mm;margin:0}*{box-sizing:border-box;margin:0;padding:0}body{width:40mm;height:60mm;font-family:'Meiryo','Yu Gothic',sans-serif;padding:1.8mm .5mm 3mm 4.5mm;overflow:hidden;color:#000}
+      .n{font-size:8pt;font-weight:bold;line-height:1.2;margin-bottom:.6mm}
+      .ik{border:.5pt solid #000;padding:.4mm .7mm;font-size:5.5pt;line-height:1.25}.ik div{margin:0}.ik b{font-weight:bold}
+      .nl{margin-top:.8mm;font-size:5.5pt;line-height:1.3}.nl .h{font-weight:bold}.nl .r{display:inline-block;margin-right:1.6mm;white-space:nowrap}.nl .f{font-size:3.8pt;color:#333}`;
+    const nut = `<div class="nl"><div class="h">栄養成分表示${esc2(basisLabel)}</div>${RC_MAIN.map(m => `<span class="r">${m.k} ${rcFmt(d.basis.vals[m.k], m.d)}${m.u}</span>`).join('')}<div class="f">推定値（八訂成分表による計算値）</div></div>`;
+    const rows = d.rows.map(([k, v]) => [k, k === '製造者' ? RC_MAKER + ' ' + RC_MAKER_ADDR : v]);
+    const lines = []; for (let i = 0; i < rows.length; i++) { const [k, v] = rows[i];
+      if (k === '内容量' && rows[i + 1] && rows[i + 1][0] === '消費期限') { lines.push(`<div><b>内容量</b> ${esc2(v)}　<b>消費期限</b> ${esc2(rows[i + 1][1])}</div>`); i++; }
+      else lines.push(`<div><b>${esc2(k)}</b> ${esc2(v)}</div>`); }
+    body = `<div class="n">${esc2(d.name)}</div><div class="ik">${lines.join('')}</div>${nut}`;
   } else {
-    // 40×60mm（精肉ラベルと同じ用紙）。余白は pmLabelHtml と同じ実測値（左4.5mm・上1.8mm・下3mm）
+    // 栄養成分・原材料だけの補助ラベル（40×60mm・精肉ラベルの隣に貼る）
     css = `@page{size:40mm 60mm;margin:0}*{box-sizing:border-box;margin:0;padding:0}body{width:40mm;height:60mm;font-family:'Meiryo','Yu Gothic',sans-serif;padding:1.8mm .5mm 3mm 4.5mm;overflow:hidden;color:#000}.n{font-size:8pt;font-weight:bold;border-bottom:.5pt solid #000;padding-bottom:.4mm;line-height:1.2}.i{font-size:5.5pt;line-height:1.25;margin-top:.6mm}.i b{font-weight:bold}.nl{border:.6pt solid #000;padding:.8mm 1mm;margin-top:1mm;font-size:6.5pt}.nl .h{font-weight:bold;border-bottom:.4pt solid #000;margin-bottom:.4mm;padding-bottom:.2mm;font-size:6pt}.nl .r{display:flex;justify-content:space-between;line-height:1.35}.nl .f{font-size:3.8pt;color:#333;margin-top:.4mm}.mk{font-size:4pt;color:#333;margin-top:.8mm;line-height:1.25}`;
-    body = `<div class="n">${esc2(d.name)}</div><div class="i"><b>原材料名</b> ${esc2(d.ingredients || '—')}</div><div class="i"><b>内容量</b> ${d.packG ? rcFmt(d.packG, 0) + 'g' : '—'}　<b>保存方法</b> -18℃以下</div>${box}<div class="mk">製造者 合同会社アルコ 館山ジビエセンター<br>千葉県館山市西長田1163-5</div>`;
+    body = `<div class="n">${esc2(d.name)}</div><div class="i"><b>原材料名</b> ${esc2(d.ingredients || '—')}</div><div class="i"><b>内容量</b> ${d.packG ? rcFmt(d.packG, 0) + 'g' : '—'}　<b>保存方法</b> ${esc2(d.st.storage)}</div>${box}<div class="mk">製造者 ${RC_MAKER}<br>${RC_MAKER_ADDR}</div>`;
   }
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${css}</style></head><body>${body}</body></html>`;
   if (typeof pmPrintLabelHtml === 'function') pmPrintLabelHtml(html);
