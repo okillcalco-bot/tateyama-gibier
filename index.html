@@ -111,6 +111,11 @@ tr:hover td{background:var(--surface2);}
 .rc-nl-r{display:flex;justify-content:space-between;padding:2px 0;}
 .rc-nl-f{font-size:10px;color:#333;margin-top:4px;}
 .rc-prod-note{margin-top:8px;font-size:12px;cursor:pointer;border-top:1px dashed var(--border);padding-top:6px;}
+.rc-ik{border:2px solid var(--text);border-radius:4px;background:#fff;color:#000;font-size:12.5px;max-width:360px;}
+.rc-ik-r{display:grid;grid-template-columns:92px 1fr;border-bottom:1px solid #999;}
+.rc-ik-r:last-child{border-bottom:none;}
+.rc-ik-r span{padding:3px 6px;line-height:1.5;}
+.rc-ik-r span:first-child{border-right:1px solid #999;font-weight:700;}
 @media (max-width:600px){.rc-hit{grid-template-columns:auto 1fr;} .rc-hit-g,.rc-hit-e{display:none;}}
 .badge-blue{background:rgba(90,140,216,.15);color:var(--blue);border:1px solid rgba(90,140,216,.3);}
 .badge-gold{background:rgba(200,164,90,.15);color:var(--gold);border:1px solid rgba(200,164,90,.3);}
@@ -1394,7 +1399,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;flex-wrap:wrap;">
         <button class="btn" onclick="document.getElementById('rcLabelModal').style.display='none'">閉じる</button>
         <button class="btn" onclick="rcLabelPrint('a4')">🖨 A4で印刷</button>
-        <button class="btn btn-primary" onclick="rcLabelPrint('label')">🏷 栄養成分・原材料ラベル（40×60mm）</button>
+        <button class="btn" onclick="rcLabelPrint('label')">🏷 栄養成分・原材料だけ（40×60mm・補助）</button>
+        <button class="btn btn-primary" onclick="rcLabelPrint('full')">🏷 表示を全部入れた1枚（40×60mm）</button>
       </div>
     </div>
   </div>
