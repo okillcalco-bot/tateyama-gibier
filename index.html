@@ -88,6 +88,30 @@ tr:hover td{background:var(--surface2);}
 /* Badges */
 .badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600;letter-spacing:0.3px;}
 .badge-green{background:rgba(106,158,90,.15);color:var(--green);border:1px solid rgba(106,158,90,.3);}
+/* 料理・レシピ（recipes.js） */
+.rc-card{border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);padding:14px;}
+.rc-nvs{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:8px;}
+.rc-nv{background:var(--surface2);border-radius:6px;padding:4px 5px;text-align:center;}
+.rc-nv span{display:block;font-size:10px;color:var(--text2);white-space:nowrap;}
+.rc-nv b{font-size:13px;font-variant-numeric:tabular-nums;}
+.rc-nv small{font-size:9px;color:var(--text2);margin-left:1px;}
+.rc-results{position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);max-height:300px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.4);}
+.rc-results:empty{display:none;}
+.rc-hit{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--border);cursor:pointer;font-size:13px;}
+.rc-hit:hover{background:var(--surface2);}
+.rc-hit-no{font-size:11px;color:var(--gold);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.rc-hit-n small{color:var(--text2);}
+.rc-hit-g{font-size:11px;color:var(--text2);white-space:nowrap;}
+.rc-hit-e{font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.rc-table{width:100%;border-collapse:collapse;font-size:13px;}
+.rc-table th{font-size:11px;color:var(--text2);text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);white-space:nowrap;}
+.rc-table td{padding:5px 8px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.rc-nl{border:2px solid var(--text);border-radius:4px;padding:8px 12px;max-width:300px;background:#fff;color:#000;font-size:14px;}
+.rc-nl-h{font-weight:700;border-bottom:1px solid #000;padding-bottom:3px;margin-bottom:4px;}
+.rc-nl-r{display:flex;justify-content:space-between;padding:2px 0;}
+.rc-nl-f{font-size:10px;color:#333;margin-top:4px;}
+.rc-prod-note{margin-top:8px;font-size:12px;cursor:pointer;border-top:1px dashed var(--border);padding-top:6px;}
+@media (max-width:600px){.rc-hit{grid-template-columns:auto 1fr;} .rc-hit-g,.rc-hit-e{display:none;}}
 .badge-blue{background:rgba(90,140,216,.15);color:var(--blue);border:1px solid rgba(90,140,216,.3);}
 .badge-gold{background:rgba(200,164,90,.15);color:var(--gold);border:1px solid rgba(200,164,90,.3);}
 .badge-gray{background:rgba(138,134,112,.1);color:var(--text2);border:1px solid rgba(138,134,112,.3);}
@@ -486,6 +510,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <button class="tab-btn" data-tab="processing">&#x1F52A; 精肉入力<span class="nav-badge" id="nav-badge-processing"></span></button>
   <button class="tab-btn" data-tab="kakou">&#x1F356; 加工処理<span class="nav-badge" id="nav-badge-kakou"></span></button>
   <button class="tab-btn" data-tab="products">&#x1F6CD; 加工調理<span class="nav-badge" id="nav-badge-products"></span></button>
+  <button class="tab-btn" data-tab="recipes">&#x1F373; 料理・レシピ（栄養成分）</button>
   <button class="tab-btn" data-tab="inventory">&#x1F4E6; 在庫一覧</button>
   <button class="tab-btn" data-tab="event">&#x1F3EA; 出店シート</button>
   <button class="tab-btn" data-tab="shipping">&#x1F4E4; 出荷処理<span class="nav-badge" id="nav-badge-shipping"></span></button>
@@ -1269,6 +1294,107 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <thead><tr><th>日時</th><th>商品</th><th>区分</th><th>数量</th><th>担当</th><th>原料コード</th><th>メモ</th></tr></thead>
           <tbody id="product-moves-body"></tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 料理・レシピ（栄養成分つき）2026-09-21: 加工調理とは別に、レシピを蓄積し栄養成分を自動計算して商品と紐づける（recipes.js） -->
+  <div class="tab-panel" id="panel-recipes">
+    <div class="section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>🍳 料理・レシピ（栄養成分つき）</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-sm" onclick="manualOpen('recipes')">📖 使い方</button><button class="btn btn-sm" onclick="rcFoodsOpen()">🧂 追加食品（自社原料）</button><button class="btn btn-primary" onclick="rcOpenNew()">＋ 料理を追加</button></div>
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;line-height:1.7;">味付け肉・つくね・惣菜などの<strong>レシピ（材料と重量）</strong>をためる場所です。材料を入れると<strong>栄養成分（エネルギー・たんぱく質・脂質・炭水化物・食塩相当量ほか）</strong>を八訂成分表から自動で計算し、<strong>加工調理の商品と紐づけ</strong>られます。紐づけた商品は「栄養成分表示」を出せます（40×60mmラベル／A4）。<span id="rc-status"></span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+        <input class="form-input" id="rc-search" placeholder="料理名・材料で探す" style="max-width:260px;" oninput="rcRenderList()">
+        <select class="form-input" id="rc-cat" style="max-width:180px;" onchange="rcRenderList()"><option value="">すべての分類</option><option>味付け肉</option><option>味付けミンチ</option><option>惣菜・加工品</option><option>弁当・給食</option><option>試作</option><option>その他</option></select>
+        <span class="muted" id="rc-count" style="margin-left:auto;"></span>
+      </div>
+      <div id="rc-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr));gap:10px;"></div>
+    </div>
+  </div>
+
+  <!-- 料理の編集 -->
+  <div id="recipeModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:940px;margin:30px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:22px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);" id="recipeModalTitle">料理 新規登録</div>
+        <button onclick="document.getElementById('recipeModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">
+        <div class="form-group" style="grid-column:1/-1"><label>料理名 *</label><input class="form-input" id="rc-f-name" placeholder="例: 味付け肉 みそ" /></div>
+        <div class="form-group"><label>分類</label><select class="form-input" id="rc-f-category"></select></div>
+        <div class="form-group"><label>何人分（何袋分）</label><input class="form-input" id="rc-f-servings" type="number" step="0.5" min="0" inputmode="decimal" oninput="rcRecalc()" /></div>
+        <div class="form-group"><label>出来上がり重量（g・加熱後）</label><input class="form-input" id="rc-f-yield_g" type="number" step="1" min="0" inputmode="decimal" placeholder="空なら材料合計" oninput="rcRecalc()" /></div>
+        <div class="form-group"><label>担当者</label><select class="form-input" id="rc-f-created_by"></select></div>
+        <div class="form-group" style="grid-column:span 2"><label>紐づける商品（加工調理）</label><select class="form-input" id="rc-f-product_id" onchange="rcProductChanged()"></select></div>
+        <div class="form-group"><label>1袋の内容量（g・ラベル用）</label><input class="form-input" id="rc-f-pack_g" type="number" step="1" min="0" inputmode="decimal" oninput="rcRecalc()" /></div>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:var(--gold);margin:6px 0 6px;">材料（可食部の重さ・g）</div>
+      <div style="position:relative;">
+        <input class="form-input" id="rc-food-q" placeholder="食品を探す（例: いのしし／ぼたん肉／しょうゆ／みそ／にんにく）" oninput="rcFoodSearch()" autocomplete="off">
+        <div id="rc-food-results" class="rc-results"></div>
+      </div>
+      <div style="overflow-x:auto;margin-top:8px;"><table class="rc-table"><thead><tr><th>食品</th><th style="text-align:right;">重量 g</th><th>表示名・メモ</th><th></th></tr></thead><tbody id="rc-items"></tbody></table></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:12px 0 6px;">
+        <div style="font-size:13px;font-weight:700;color:var(--gold);">栄養成分（自動計算）</div>
+        <div style="font-size:12px;color:var(--text2);display:flex;gap:12px;flex-wrap:wrap;"><label><input type="checkbox" id="rc-show-en" onchange="rcRecalc()"> 栄養算の表示値も見る</label><label><input type="checkbox" id="rc-show-all" onchange="rcRecalc()"> ビタミン・ミネラルも見る</label></div>
+      </div>
+      <div id="rc-calc"></div>
+      <div style="display:grid;grid-template-columns:1fr;gap:10px;margin-top:12px;">
+        <div class="form-group" style="margin:0"><label>作り方・手順</label><textarea class="form-input" id="rc-f-steps" rows="4" placeholder="1. 肉をカットして… 2. たれに漬けて…"></textarea></div>
+        <div class="form-group" style="margin:0"><label>メモ（アレルゲン・仕入先・注意）</label><input class="form-input" id="rc-f-memo" /></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;align-items:center;">
+        <button class="btn" id="rc-delete-btn" style="margin-right:auto;color:var(--red);" onclick="rcDelete()">削除</button>
+        <button class="btn" onclick="document.getElementById('recipeModal').style.display='none'">キャンセル</button>
+        <button class="btn btn-primary" onclick="rcSave()">保存（栄養成分も計算）</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 追加食品（自社原料） -->
+  <div id="rcFoodModal" style="display:none;position:fixed;inset:0;z-index:610;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:860px;margin:40px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:22px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);">🧂 追加食品（成分表に無い自社原料）</div>
+        <button onclick="document.getElementById('rcFoodModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:8px;line-height:1.6;">市販のたれ・仕入れ調味料など、八訂成分表に無い原料を<strong>パッケージの栄養成分表示（100gあたり）</strong>から登録します。食塩相当量かナトリウムのどちらかを入れれば、もう一方は換算します。</div>
+      <div style="overflow-x:auto;"><table class="rc-table"><thead><tr><th>番号</th><th>原料名</th><th>kcal</th><th>水分</th><th>たんぱく質</th><th>脂質</th><th>炭水化物</th><th>Na mg</th><th>食塩 g</th><th></th></tr></thead><tbody id="rc-foods-body"></tbody></table></div>
+      <div style="margin-top:10px;"><button class="btn btn-primary btn-sm" onclick="rcFoodEdit('')">＋ 追加食品を登録</button></div>
+      <div id="rc-cf-form" style="display:none;margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">
+        <input type="hidden" id="rc-cf-id">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;">
+          <div class="form-group" style="grid-column:span 2"><label>原料名 *</label><input class="form-input" id="rc-cf-name" placeholder="例: 焼肉のたれ（○○社）" /></div>
+          <div class="form-group"><label>よみ（ひらがな・検索用）</label><input class="form-input" id="rc-cf-kana" /></div>
+          <div class="form-group"><label>メモ（仕入先・アレルゲン）</label><input class="form-input" id="rc-cf-memo" /></div>
+          <div class="form-group"><label>エネルギー kcal/100g</label><input class="form-input" id="rc-cf-エネルギー" type="number" step="0.1" inputmode="decimal" /></div>
+          <div class="form-group"><label>水分 g</label><input class="form-input" id="rc-cf-水分" type="number" step="0.1" inputmode="decimal" /></div>
+          <div class="form-group"><label>たんぱく質 g</label><input class="form-input" id="rc-cf-たんぱく質" type="number" step="0.1" inputmode="decimal" /></div>
+          <div class="form-group"><label>脂質 g</label><input class="form-input" id="rc-cf-脂質" type="number" step="0.1" inputmode="decimal" /></div>
+          <div class="form-group"><label>炭水化物 g</label><input class="form-input" id="rc-cf-炭水化物" type="number" step="0.1" inputmode="decimal" /></div>
+          <div class="form-group"><label>ナトリウム mg</label><input class="form-input" id="rc-cf-ナトリウム" type="number" step="1" inputmode="decimal" /></div>
+          <div class="form-group"><label>食塩相当量 g</label><input class="form-input" id="rc-cf-食塩相当量" type="number" step="0.01" inputmode="decimal" /></div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;"><button class="btn" onclick="document.getElementById('rc-cf-form').style.display='none'">やめる</button><button class="btn btn-primary" onclick="rcFoodSave()">保存</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 栄養成分表示（食品表示用） -->
+  <div id="rcLabelModal" style="display:none;position:fixed;inset:0;z-index:610;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:760px;margin:40px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:22px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);">🏷 栄養成分表示　<span id="rc-lbl-title" style="color:var(--text);"></span></div>
+        <button onclick="document.getElementById('rcLabelModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div id="rc-lbl-body"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;flex-wrap:wrap;">
+        <button class="btn" onclick="document.getElementById('rcLabelModal').style.display='none'">閉じる</button>
+        <button class="btn" onclick="rcLabelPrint('a4')">🖨 A4で印刷</button>
+        <button class="btn btn-primary" onclick="rcLabelPrint('label')">🏷 栄養成分・原材料ラベル（40×60mm）</button>
       </div>
     </div>
   </div>
@@ -2929,6 +3055,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'shipping') { loadShipping(); loadBaseOrders(); shipPausedRender(); shipActiveRestore(); fieldPhotosLoad(); setTimeout(maintainShippingScannerFocus, 50); }
     if (btn.dataset.tab === 'punch') loadPunch();
     if (btn.dataset.tab === 'products') loadProducts();
+    if (btn.dataset.tab === 'recipes') loadRecipes();
     if (btn.dataset.tab === 'kakou') loadKakou();
     if (btn.dataset.tab === 'aging') loadAging();
     if (btn.dataset.tab === 'hunters') loadHunters();
@@ -11385,7 +11512,7 @@ async function loadProducts() {
     grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;">商品が未登録です。「＋商品を追加」から登録してください。</div>';
   } else {
     grid.innerHTML = productsData.map(p => `
-      <div style="border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);padding:14px;">
+      <div style="border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);padding:14px;" data-product-id="${p.id}">
         <div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;">
           <div style="font-weight:600;font-size:14px;line-height:1.4;">${esc2(p.name)}</div>
           <span class="badge ${p.category === '卸売' ? 'badge-blue' : 'badge-gold'}">${esc2(p.category || '小売')}</span>
@@ -11403,6 +11530,7 @@ async function loadProducts() {
       </div>`).join('');
   }
   loadProductMoves();
+  if (typeof rcAnnotateProducts === 'function') rcAnnotateProducts();   // 料理・レシピとの紐づけ（recipes.js）
 }
 
 async function loadProductMoves() {
@@ -14263,6 +14391,14 @@ const MANUALS = [
       { h: '補充', tasks: [
         { t: '次亜塩素酸の補充', f: '毎日', sub: ['カップ2杯に対して水を線まで注ぐ'] }, { t: 'その他ビニール袋などの補充', f: '毎日' } ] },
     ], caution: '清掃が終わったら「清掃記録(HACCP)」タブの 解体室 で記録してください。この手順は一次版です。やりにくい所・抜けている所は沖まで。' },
+  { id: 'recipes', icon: '🍳', title: '⑬ 料理・レシピ（栄養成分の自動計算）', who: 'スタッフ・責任者', when: '味付け肉・惣菜などのレシピを決めたとき／商品のラベルに栄養成分を出すとき', where: '業務トップ →「料理・レシピ（栄養成分）」',
+    steps: [
+      { h: '「＋ 料理を追加」', d: '料理名・分類・何人分（何袋分）を入れます。加熱で重さが減る料理は「出来上がり重量」も入れると 100gあたり が正しくなります。' },
+      { h: '材料を検索して重量を入れる', d: '「いのしし」「ぼたん肉」「しょうゆ」などで探して選び、可食部の重さ（g）を入れます。○印は一般によく使う食品です。', tip: '成分表に無い市販のたれなどは「🧂 追加食品」にパッケージの栄養成分表示（100gあたり）を登録すると使えます。' },
+      { h: '栄養成分は自動で出る', d: '合計・1人分・100gあたり・1袋あたり のエネルギー・たんぱく質・脂質・炭水化物・食塩相当量。「ビタミン・ミネラルも見る」で全成分。計算は大阪市「栄養算」と同じ（八訂成分表 × 重量 ÷ 100）。' },
+      { h: '商品と紐づける', d: '加工調理の商品を選ぶと、商品名の「200g」から 1袋の内容量 が入ります。保存すると加工調理の商品カードにも料理と栄養成分が出ます。' },
+      { h: '「🏷 栄養成分表示」', d: '名称・原材料名（重量順）・内容量・製造者・栄養成分表示をまとめて確認。40×60mm ラベル（精肉ラベルと同じ用紙）か A4 で印刷できます。' },
+    ], caution: '数値は成分表による推定値です。表示可能面積がおおむね30cm²以下の小さな包装（今の40×60mmラベル）は栄養成分表示・原材料名を省略できます。アレルゲンは原料の表示を確認して書き足してください。' },
 ];
 function loadManual() {
   const box = document.getElementById('manual-index');
@@ -15081,5 +15217,6 @@ loadOrgInfo();
   }
   inputs[0].focus();
 })();
-</script></body>
+</script><script src="recipes.js"></script>
+</body>
 </html>
