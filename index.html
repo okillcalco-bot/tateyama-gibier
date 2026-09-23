@@ -12141,10 +12141,36 @@ async function loadKakouLog() {
         <td style="font-size:12px;color:var(--text2);">${esc2(sizes)}（計${g.n}パック）</td>
         <td style="color:var(--gold);font-size:12px;">${esc2(g.code)}</td>
         <td>${esc2(g.op)}</td>
-        <td><button class="btn btn-sm btn-primary" style="padding:3px 10px;font-size:12px;white-space:nowrap;" onclick="kkRepackOpen('${esc2(g.code)}')">追加パック</button></td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-sm btn-primary" style="padding:3px 10px;font-size:12px;" onclick="kkRepackOpen('${esc2(g.code)}')">追加パック</button>
+          <button class="btn btn-sm" style="padding:3px 10px;font-size:12px;" onclick="kkReprintBatch('${esc2(g.code)}')">🖨 ラベル再発行</button>
+        </td>
       </tr>`;
     }).join('') || '<tr><td colspan="6" class="empty-state">記録がありません</td></tr>';
   } catch (e) { body.innerHTML = '<tr><td colspan="6" class="empty-state">読み込みエラー</td></tr>'; }
+}
+
+// 登録済みバッチのラベルを（内容を変えずに）刷り直す。プリンタ詰まり・枚数不足などの再印刷用。
+async function kkReprintBatch(batchCode) {
+  if (!batchCode) return;
+  try {
+    const rows = await sb('GET', 'inventory', null, `?individual_code=eq.${encodeURIComponent(batchCode)}&tier=eq.3&deleted_at=is.null&select=ident_code,weight,weight_kg,species,part_name,process_type,scan_code&order=ident_code.asc`);
+    if (!rows.length) { toast(`「${batchCode}」の完成パックが見つかりませんでした`, 'error'); return; }
+    const prodName = rows[0].process_type || rows[0].part_name || '-';
+    const species = rows[0].species || '';
+    const packs = rows.map(r => ({ ident_code: r.ident_code, weight: parseFloat(r.weight != null ? r.weight : r.weight_kg) || 0, scan_code: r.scan_code }));
+    let materials = [];
+    let origin = '千葉県産';
+    try {
+      const logs = await sb('GET', 'processing_log', null, `?child_ident_code=eq.${encodeURIComponent(batchCode)}&select=parent_ident_code,individual_id`);
+      materials = logs.map(l => ({ individual_id: l.individual_id || l.parent_ident_code }));
+      const origins = [...new Set(materials.map(m => kkOriginOf(m.individual_id)).filter(Boolean))];
+      if (origins.length === 1) origin = origins[0];
+    } catch (e) {}
+    if (!confirm(`「${batchCode}」（${prodName}・${packs.length}パック）のラベルを刷り直します。内容は変更せず、同じラベルを再印刷します。よろしいですか？`)) return;
+    kkPrintLabels(packs, prodName, species, origin, materials);
+    toast(`「${batchCode}」のラベルを${packs.length}枚 再印刷しました`);
+  } catch (e) { toast('ラベルの再発行に失敗しました: ' + sbSafeMsg(e), 'error'); }
 }
 
 // 登録済みバッチに追加パックを登録・印刷（残りを別サイズで包装するとき）
