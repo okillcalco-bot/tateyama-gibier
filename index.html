@@ -276,8 +276,12 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .pm-close{background:none;border:1px solid var(--border);color:var(--text2);padding:5px 12px;border-radius:var(--radius);cursor:pointer;font-size:13px;transition:all .2s;font-family:inherit;}
 .pm-close:hover{border-color:var(--red);color:var(--red);}
 
-/* Body: 2-column landscape */
-.pm-body{flex:1;display:grid;grid-template-columns:55fr 45fr;gap:12px;padding:10px 14px;overflow:hidden;min-height:0;}
+/* Body: 2-column landscape
+   grid-template-rows を明示しないと行の高さが auto（中身の高さ）になり、.pm-right 内の
+   登録済み一覧（flex:1;min-height:0 で内側スクロールさせる想定）が高さをもらえず、
+   一覧まるごと下に隠れて見えなくなっていた（部位を10件以上登録すると再現）。
+   行を1fr・min0に固定し、.pm-left/.pm-right が実際にその高さで縮んでスクロールできるようにする。 */
+.pm-body{flex:1;display:grid;grid-template-columns:55fr 45fr;grid-template-rows:minmax(0,1fr);gap:12px;padding:10px 14px;overflow:hidden;min-height:0;}
 .pm-left{display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:0;}
 .pm-right{display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:0;}
 
@@ -345,8 +349,12 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
    全部位完了ボタンはこのセクションの内容と一緒にスクロールしないようにする。
    登録済みの部位が増えるとチップの一覧が伸びて、ボタンが画面端に押し出され
    押しにくくなっていた（現場のタブレットで「全部位完了」が画面下端でほぼ隠れる不具合）。
-   ヘッダー行（件数＋ボタン）を固定し、チップ一覧だけを内側でスクロールさせる。 */
-.pm-completed-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
+   ヘッダー行（件数＋ボタン）を固定し、チップ一覧だけを内側でスクロールさせる。
+   min-height:0 のままだと、横持ちの低い画面（実測1180×620）では上の計量パネルだけで
+   .pm-right の高さを使い切り、このセクションが0pxまで潰れて登録済み一覧が丸ごと
+   見えなくなっていた（スクロールしても出てこない = 中身がその時点で高さ0だったため）。
+   最低高さを確保し、それでも収まらない分は親 .pm-right 自体のスクロールに任せる。 */
+.pm-completed-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;flex:1;min-height:160px;display:flex;flex-direction:column;overflow:hidden;}
 .pm-completed-header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;flex-shrink:0;}
 .pm-completed-scroll{flex:1;min-height:0;overflow-y:auto;}
 .pm-completed-grid{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
