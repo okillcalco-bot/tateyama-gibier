@@ -516,16 +516,6 @@ textarea { min-height: 80px; resize: vertical; }
         <div id="hunterNameWarning" style="display:none;color:#e0a020;font-size:12px;font-weight:600;margin-top:4px;"></div>
       </div>
 
-      <!-- 公開ページ（ラベルQR「この肉の物語」）に捕獲者名を出してよいか（2026-09-18）。出さない人は写真の看板にも名前を入れない -->
-      <div class="form-row" id="hunterPublicRow">
-        <label class="form-label">「この肉の物語」（お客さん向けページ）に捕獲者名を出す</label>
-        <div class="toggle-group" data-field="hunter_name_public">
-          <div class="toggle-btn active" data-val="出す">出してよい</div>
-          <div class="toggle-btn" data-val="出さない">出さない</div>
-        </div>
-        <div class="field-note" style="font-size:11px;color:var(--text2);margin-top:4px;">出さない人は、写真の看板にも名前を入れません。前回の選択を覚えて次回の既定にします</div>
-      </div>
-
       <div class="form-row" style="position:relative;">
         <label class="form-label">搬入者（捕獲者と別のとき）</label>
         <input type="text" class="input" id="carrierName" placeholder="空欄＝捕獲者と同じ（かな・漢字で予測）" autocomplete="off" oninput="onCarrierInput()" onfocus="onCarrierInput()">
@@ -1496,6 +1486,7 @@ const state = {
   species: '', sex: '', weather: '', capture_city: '', capture_method: '', trap_part: '', juvenile: '成獣',
   finishing_method: '', gutting: 'なし',
   hunter_health: '良好', has_fetus: 'なし', processing_type: '分割', quality: '良', intake_method: '持込',
+  hunter_name_public: '出す',   // 画面の質問は撤去（2026-09-25）。既定「出してよい」を明示し、捕獲者選択で自動追従する
   captureAnomalies: new Set(), organAnomalies: new Set()
 };
 let todayData = [];

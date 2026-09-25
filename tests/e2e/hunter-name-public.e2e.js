@@ -1,9 +1,12 @@
-// 捕獲票: 「この肉の物語」（お客さん向けページ）に捕獲者名を出してよいか（2026-09-18 沖）
+// 捕獲票: 「この肉の物語」（お客さん向けページ）に捕獲者名を出してよいか（2026-09-18 沖／2026-09-25 UI撤去）
 //   きっかけ: 公開ページの写真（看板つきカメラ）に捕獲者名が焼き込まれていた。
+//   2026-09-25: 捕獲票でこの質問に答えてもらうのは難しいと判断し、画面のトグルUIは撤去。
+//   判断は捕獲者マスタ（hunters.name_public）の値を裏側で自動追従するだけにした（state.hunter_name_public）。
 //   1. 既定は「出してよい」。捕獲者マスタで「出さない」になっている人を選ぶと自動で「出さない」に切り替わる
 //   2. 登録の POST に hunter_name_public が入る（出さない → false）。保存後に捕獲者マスタへ今回の選択を PATCH
 //   3. 看板つきカメラの看板: hunter_name_public=false の個体は「捕獲者」行を入れない（true/未設定は入れる）
 //   4. 編集で開くと登録済みの値（true→出してよい、false/未確認→出さない）
+//   5. 画面上にこの質問のUI（トグル・ラベル）が無いこと
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
 
@@ -32,16 +35,16 @@ const HUNTERS = [
   });
   await page.goto('file://' + path.resolve(__dirname, '../../capture-form.html')); await page.waitForTimeout(800);
   const results = []; const T = (n, ok, got) => results.push([n, ok, got == null ? '' : String(got)]);
-  const toggle = () => page.evaluate(() => ({ st: state.hunter_name_public, on: [...document.querySelectorAll('[data-field="hunter_name_public"] .toggle-btn.active')].map(b => b.dataset.val).join() }));
+  const toggle = () => page.evaluate(() => ({ st: state.hunter_name_public }));
 
   // 1) 既定は出してよい
   const t0 = await toggle();
-  T('既定は「出してよい」', t0.st === '出す' && t0.on === '出す', JSON.stringify(t0));
+  T('既定は「出してよい」', t0.st === '出す', JSON.stringify(t0));
 
   // マスタで「出さない」の人を選ぶ → 出さない。未確認の人 → そのまま。true の人 → 出す
   await page.evaluate(() => pickHunterSuggest('塩倉千春')); await page.waitForTimeout(300);
   const t1 = await toggle();
-  T('マスタで「出さない」の人（塩倉）を選ぶと自動で「出さない」', t1.st === '出さない' && t1.on === '出さない', JSON.stringify(t1));
+  T('マスタで「出さない」の人（塩倉）を選ぶと自動で「出さない」', t1.st === '出さない', JSON.stringify(t1));
   await page.evaluate(() => pickHunterSuggest('沖浩志')); await page.waitForTimeout(300);
   const t2 = await toggle();
   T('マスタで「出してよい」の人（沖）を選ぶと「出してよい」に戻る', t2.st === '出す', JSON.stringify(t2));
@@ -49,6 +52,14 @@ const HUNTERS = [
   await page.evaluate(() => pickHunterSuggest('加藤茂')); await page.waitForTimeout(300);
   const t3 = await toggle();
   T('未確認の人（加藤）を選んでも直前の選択のまま（勝手に変えない）', t3.st === '出さない', JSON.stringify(t3));
+
+  // 5) 画面にこの質問のUIが無い（2026-09-25 撤去）
+  const uiGone = await page.evaluate(() => ({
+    row: document.getElementById('hunterPublicRow'),
+    toggleGroup: document.querySelector('[data-field="hunter_name_public"]'),
+    label: [...document.querySelectorAll('label')].some(l => l.textContent.includes('この肉の物語')),
+  }));
+  T('画面上にトグルUIが無い', !uiGone.row && !uiGone.toggleGroup && !uiGone.label, JSON.stringify({ row: !!uiGone.row, toggleGroup: !!uiGone.toggleGroup, label: uiGone.label }));
 
   // 2) 登録: 出さない → hunter_name_public=false、マスタへ PATCH
   await page.evaluate(() => { document.querySelector('[data-field="species"] .toggle-btn[data-val="キョン"]').click(); document.querySelector('[data-field="sex"] .toggle-btn[data-val="オス"]').click(); });
