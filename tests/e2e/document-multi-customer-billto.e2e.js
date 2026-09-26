@@ -110,20 +110,22 @@ const path = require('path');
   const custFilterOptions = await page.$$eval('#docCustomer option', os => os.map(o => o.textContent));
   ck('絞り込み用セレクトには発送実績のある顧客のみ出る', custFilterOptions.some(t => t.includes('A店')) && custFilterOptions.some(t => t.includes('B店')) && !custFilterOptions.some(t => t.includes('ノブレスオブリージュ')), custFilterOptions.join(','));
 
-  // ── 1) 単一顧客（A店のみ）: 従来どおり自動で宛名になる。品名に顧客タグは付かない ──
+  // ── 1) 単一顧客・仲卸業者の備考タグなし（B店のみ）: 従来どおり自動で宛名になる。品名に顧客タグは付かない ──
+  // (A店はノブレスオブリージュの備考タグ付きなので、この「素の単一顧客」ケースの検証にはB店を使う。
+  //  A店を使ったケースは 8) で検証する: 仲卸業者タグ付きの単一顧客は、宛名も自動でその仲卸業者になる)
   dialogs.length = 0; // 初期化中に出た「スタッフキー」等の無関係なダイアログを除外
-  await page.evaluate(() => { document.querySelectorAll('#docOrderList input[type=checkbox]').forEach(cb => cb.checked = (cb.dataset.oid === 'ord-a')); });
+  await page.evaluate(() => { document.querySelectorAll('#docOrderList input[type=checkbox]').forEach(cb => cb.checked = (cb.dataset.oid === 'ord-b')); });
   let [popup1] = await Promise.all([
     page.waitForEvent('popup'),
     page.evaluate(() => generateDoc('納品書')),
   ]);
   await popup1.waitForLoadState();
   let previewHtml = await popup1.content();
-  ck('単一顧客: プレビューに宛名(A店)が出る', previewHtml.includes('A店'), previewHtml.slice(0, 500));
-  ck('単一顧客: 品名に顧客タグ[A店]は付かない', !previewHtml.includes('[A店]'), previewHtml);
+  ck('単一顧客: プレビューに宛名(B店)が出る', previewHtml.includes('B店'), previewHtml.slice(0, 500));
+  ck('単一顧客: 品名に顧客タグ[B店]は付かない', !previewHtml.includes('[B店]'), previewHtml);
   ck('単一顧客: 出荷内訳（備考）は出ない', !previewHtml.includes('出荷内訳'), '');
-  let doc1 = postedDocuments.find(d => d.order_id === 'ord-a');
-  ck('単一顧客: documentsのcustomer_idはA店本人', !!doc1 && doc1.customer_id === 'cust-a', JSON.stringify(doc1));
+  let doc1 = postedDocuments.find(d => d.order_id === 'ord-b');
+  ck('単一顧客: documentsのcustomer_idはB店本人', !!doc1 && doc1.customer_id === 'cust-b', JSON.stringify(doc1));
   ck('単一顧客: アラートは出ない', dialogs.length === 0, dialogs.join(' / '));
   await popup1.close();
 
@@ -167,12 +169,51 @@ const path = require('path');
 
   // 備考（出荷内訳）: 「いつ・どこへ・何を送ったか」が日付ごとに自動で書かれる
   ck('複数顧客+請求先: 出荷内訳の見出しが出る', previewHtml.includes('出荷内訳'), '');
-  ck('複数顧客+請求先: 9/1にA店の内訳が出る', previewHtml.includes('9/1 A店（イノシシ　モモ　4kg）'), previewHtml);
-  ck('複数顧客+請求先: 9/2にB店の内訳が出る', previewHtml.includes('9/2 B店（イノシシ　ロース　2kg）'), previewHtml);
+  ck('複数顧客+請求先: 9/1にA店の内訳が出る', previewHtml.includes('9/1 A店 イノシシ　モモ　4kg'), previewHtml);
+  ck('複数顧客+請求先: 9/2にB店の内訳が出る', previewHtml.includes('9/2 B店 イノシシ　ロース　2kg'), previewHtml);
   ck('複数顧客+請求先: 日付順（9/1が9/2より前）に並ぶ', previewHtml.indexOf('9/1 A店') < previewHtml.indexOf('9/2 B店'), '');
   const doc0 = postedDocuments[0];
   ck('複数顧客+請求先: documentsにmemoとして備考が保存される', !!doc0 && doc0.memo && doc0.memo.includes('9/1 A店') && doc0.memo.includes('9/2 B店'), JSON.stringify(doc0));
   await popup2.close();
+
+  // ── 8) 単一顧客(A店)の注文1件だけを、請求先=ノブレスオブリージュで発行（2026-09-26）
+  //    以前はconsolidated（複数顧客をまとめた時）だけ出荷内訳を書いていたため、仲卸業者あてで
+  //    1顧客・1注文しか無い月は内訳が一切残らなかった。請求先が注文本来の顧客と違えば、
+  //    1件でも「いつ・どこへ・何を送ったか」を備考に書く。
+  postedDocuments.length = 0; postedDocOrders.length = 0; dialogs.length = 0;
+  await page.evaluate(() => { document.querySelectorAll('#docOrderList input[type=checkbox]').forEach(cb => cb.checked = (cb.dataset.oid === 'ord-a')); });
+  await page.fill('#docBillToInput', 'C0731 ノブレスオブリージュ');
+  await page.dispatchEvent('#docBillToInput', 'input');
+  const [popup3] = await Promise.all([
+    page.waitForEvent('popup'),
+    page.evaluate(() => generateDoc('見積書')),
+  ]);
+  await popup3.waitForLoadState();
+  const previewHtml3 = await popup3.content();
+  ck('単一顧客+仲卸請求先: 宛名はノブレスオブリージュ', previewHtml3.includes('ノブレスオブリージュ'), previewHtml3.slice(0, 500));
+  ck('単一顧客+仲卸請求先: 出荷内訳の見出しが出る', previewHtml3.includes('出荷内訳'), '');
+  ck('単一顧客+仲卸請求先: 9/1にA店の内訳が出る', previewHtml3.includes('9/1 A店 イノシシ　モモ　4kg'), previewHtml3);
+  const doc3 = postedDocuments[0];
+  ck('単一顧客+仲卸請求先: documentsにmemoとして備考が保存される', !!doc3 && doc3.memo && doc3.memo.includes('9/1 A店'), JSON.stringify(doc3));
+  await popup3.close();
+
+  // ── 9) 単一顧客(A店)・請求先を手で選ばない → 備考のタグ（ノブレスオブリージュ）から宛名を自動で決める（2026-09-26）
+  //    「1件ずつ処理」（docBatchIssueCurrent）はdocBillToを一切セットしないため、この自動判定が無いと
+  //    仲卸業者経由の顧客でも宛名が顧客本人になってしまっていた。
+  postedDocuments.length = 0; postedDocOrders.length = 0; dialogs.length = 0;
+  await page.fill('#docBillToInput', ''); await page.dispatchEvent('#docBillToInput', 'input');
+  await page.evaluate(() => { document.querySelectorAll('#docOrderList input[type=checkbox]').forEach(cb => cb.checked = (cb.dataset.oid === 'ord-a')); });
+  const [popup4] = await Promise.all([
+    page.waitForEvent('popup'),
+    page.evaluate(() => generateDoc('納品書')),
+  ]);
+  await popup4.waitForLoadState();
+  const previewHtml4 = await popup4.content();
+  ck('請求先未指定でも備考タグから宛名を自動判定（ノブレスオブリージュ）', previewHtml4.includes('ノブレスオブリージュ'), previewHtml4.slice(0, 500));
+  ck('請求先未指定・自動判定: 画面の請求先欄も自動で埋まる', (await page.$eval('#docBillToInput', el => el.value)).includes('ノブレスオブリージュ'), await page.$eval('#docBillToInput', el => el.value));
+  const doc4 = postedDocuments.find(d => d.order_id === 'ord-a');
+  ck('請求先未指定・自動判定: documentsのcustomer_idはノブレスオブリージュ', !!doc4 && doc4.customer_id === 'cust-w', JSON.stringify(doc4));
+  await popup4.close();
 
   ck('ページエラーなし', errors.length === 0, errors.join(' / '));
 

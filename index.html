@@ -4164,9 +4164,16 @@ async function recordDirectShipment(items, custName, opts) {
   // 単価を価格マスタ×顧客の価格ランクから決める（送料しか乗らない0円請求書になっていたバグの修正）。
   // タブの巡回順に依存させないよう、その場で価格マスタと顧客ランクを取り直す。
   let priceRank = 'standard';
+  let custNotes = '';
   if (customerId) {
-    try { const cs = await sb('GET', 'customers', null, `?id=eq.${customerId}&select=price_rank`); if (cs[0]) priceRank = cs[0].price_rank || 'standard'; } catch(e) {}
+    try { const cs = await sb('GET', 'customers', null, `?id=eq.${customerId}&select=price_rank,notes`); if (cs[0]) { priceRank = cs[0].price_rank || 'standard'; custNotes = cs[0].notes || ''; } } catch(e) {}
   }
+  // 仲卸業者経由の顧客（顧客マスタの備考にその名前がある）は、注文の備考(memo)にも自動で入れておく。
+  // order-admin.htmlの「備考検索」「出荷内訳の自動判定」「請求先の自動判定」がこのmemoを見るため、
+  // ここに入っていないと請求時に手で毎回書き足す必要があった（2026-09-26）。名前の一覧は
+  // order-admin.html の WHOLESALER_NAMES と揃えること。
+  const WHOLESALER_NAMES = ['トレタテ', 'ノブレスオブリージュ'];
+  const wholesalerTag = WHOLESALER_NAMES.find(w => custNotes.includes(w)) || null;
   let pmList = [];
   try { pmList = await sb('GET', 'price_master', null, '?select=*'); } catch(e) {}
 
@@ -4191,7 +4198,8 @@ async function recordDirectShipment(items, custName, opts) {
     status: '発送済',
     channel: '直販（注文なし）',
     total_amount: totalAmount,
-    notes: [opts.memo, opts.operator ? `担当:${opts.operator}` : ''].filter(Boolean).join(' / ') || null
+    notes: [opts.memo, opts.operator ? `担当:${opts.operator}` : ''].filter(Boolean).join(' / ') || null,
+    memo: wholesalerTag
   };
   if (customerId) orderBody.customer_id = customerId;
   const created = await sb('POST', 'orders', orderBody);

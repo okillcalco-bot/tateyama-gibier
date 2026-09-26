@@ -1932,7 +1932,7 @@ function buildShipmentNote(selected){
       if(i.qty) return `${name}　${i.qty}${i.unit||'枚'}`;
       return name;
     }).join('、');
-    (byDate[d]=byDate[d]||[]).push(`${o.customer_name||''}（${items}）`);
+    (byDate[d]=byDate[d]||[]).push(`${o.customer_name||''} ${items}`);
   });
   return Object.keys(byDate).sort().map(d=>{
     const dt=new Date(d+'T00:00:00');
@@ -1957,6 +1957,13 @@ async function computeDocNumber(type,dateStr){
   return prefix+String(max+1).padStart(3,'0');
 }
 
+// 仲卸業者経由の注文の見分け方: 顧客マスタの備考／注文の備考のどちらかに、この名前がそのまま入っている。
+// （2026-09-26）新しい仲卸業者が増えたら、この配列に名前を足すだけでよい。
+const WHOLESALER_NAMES=['トレタテ','ノブレスオブリージュ'];
+function wholesalerTagOf(o){
+  return WHOLESALER_NAMES.find(w=>(o.memo||'').includes(w))||null;
+}
+
 async function generateDoc(type,forcedOrders){
   const selected=forcedOrders||getSelectedDocOrders();
   if(!selected.length){alert('注文を選択してください');return}
@@ -1970,14 +1977,32 @@ async function generateDoc(type,forcedOrders){
     if(!confirm(`既に${type}が発行済みの注文が${dupOrders.length}件含まれています（${names}）。\n二重発行になる可能性があります。続けますか？`)) return;
   }
   // 選択注文の元の顧客（複数の可能性あり）と、書類の宛名にする請求先を分けて扱う。
-  // 請求先を明示していれば（仲卸業者など）それを使い、無指定かつ単一顧客ならその顧客をそのまま使う。
+  // 請求先を明示していれば（仲卸業者など）それを使う。無指定なら、選んだ注文が全て
+  // 同じ仲卸業者経由（備考にその名前が入っている）なら宛名も自動でその仲卸業者にする
+  // （2026-09-26。以前は「顧客が1人だけなら自動でその顧客」が先に効くため、仲卸業者経由の
+  // 顧客を1人だけ選んでも宛名が顧客本人になってしまい、1件ずつ処理でも毎回手で選び直す必要があった）。
+  // 仲卸業者が混在する・仲卸業者と直販が混在する場合は自動判定せず、これまでどおり手で選ぶ。
   const custIds=[...new Set(selected.map(o=>o.customer_id))];
   const billToSel=document.getElementById('docBillTo').value;
-  const billToId=billToSel || (custIds.length===1 ? custIds[0] : '');
+  let billToId=billToSel;
+  if(!billToId){
+    const tags=[...new Set(selected.map(wholesalerTagOf))];
+    if(tags.length===1 && tags[0]){
+      const w=allCustomers.find(c=>c.name===tags[0]);
+      if(w) billToId=w.id;
+    }
+  }
+  if(!billToId && custIds.length===1) billToId=custIds[0];
   if(!billToId){alert('複数の顧客の注文が選択されています。「請求先（宛名）」を選んでください。');return}
   const cust=allCustomers.find(c=>c.id===billToId);
   if(!cust){alert('請求先の顧客が見つかりません');return}
+  document.getElementById('docBillTo').value=billToId;
+  document.getElementById('docBillToInput').value=`${cust.code||''} ${cust.name||''}`.trim();
   const consolidated=custIds.length>1;
+  // 請求先（宛名）が注文本来の顧客と違う（仲卸業者あて等）ときは、1件だけでも「誰に何を送ったか」を
+  // 書類の備考に残す。以前は複数顧客をまとめた時（consolidated）だけ書いていたため、仲卸業者あてで
+  // 1顧客・1注文だけの請求書には出荷内訳が一切残らなかった（2026-09-26）。
+  const billToDiffersFromCustomer=selected.some(o=>o.customer_id!==billToId);
 
   // 請求書は納品日（無ければ注文日）の古い順に並べる
   const sorted=selected.slice().sort((a,b)=>(a.delivery_date||a.order_date||'').localeCompare(b.delivery_date||b.order_date||''));
@@ -2014,7 +2039,7 @@ async function generateDoc(type,forcedOrders){
   });
   if(!lines.length){alert('明細がありません');return}
 
-  const shipmentNote=consolidated?buildShipmentNote(sorted):'';
+  const shipmentNote=billToDiffersFromCustomer?buildShipmentNote(sorted):'';
   const s=invoiceSettings;
   const spec=INV_DOC_SPEC[type]||INV_DOC_SPEC['請求書'];
   const p={
