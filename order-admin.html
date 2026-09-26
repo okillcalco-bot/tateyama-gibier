@@ -3658,6 +3658,33 @@ async function invPullApply(){
     const m=pv==='lastMonth'?new Date(d.getFullYear(),d.getMonth()-1,1):d;
     sub.value=`${m.getFullYear()}年${m.getMonth()+1}月分`;
   }
+
+  // 仲卸業者経由の注文だけを取り込んだ場合は、宛名も自動でその仲卸業者にする（2026-09-26）。
+  // このタブは「請求先の顧客を選んでから、その顧客の注文を検索する」作りのため、
+  // 宛名欄には検索に使った顧客（実際のお店）がそのまま入ったまま発行されてしまい、
+  // 仲卸業者（トレタテ・ノブレスオブリージュ）への差し替え忘れが起きていた。
+  const wsTags=[...new Set(picked.map(wholesalerTagOf))];
+  if(wsTags.length===1 && wsTags[0]){
+    const w=allCustomers.find(c=>c.name===wsTags[0]);
+    if(w){
+      document.getElementById('invCustomerId').value=w.id;
+      const inputEl=document.getElementById('invCustomerInput'); if(inputEl) inputEl.value=`${w.code||''} ${w.name||''}`.trim();
+      document.getElementById('invName').value=w.name||'';
+      document.getElementById('invAddress').value=[w.address||'',w.building||''].filter(Boolean).join(' ');
+      const honEl=document.getElementById('invHonorific'); if(honEl) honEl.value=w.honorific||'御中';
+    }
+  }
+  // 宛名が注文本来の顧客と違う（仲卸業者あて等）ときは、書類発行タブと同じく
+  // 「いつ・どこへ・何を送ったか」を備考に自動で書く（手で書き足す前提にしない）。
+  const billToIdAfterPull=document.getElementById('invCustomerId').value;
+  if(picked.some(o=>o.customer_id!==billToIdAfterPull)){
+    const note=buildShipmentNote(picked);
+    const memoEl=document.getElementById('invMemo');
+    if(memoEl && note && !memoEl.value.includes('【出荷内訳】')){
+      memoEl.value=(memoEl.value?memoEl.value+'\n\n':'')+`【出荷内訳】\n${note}`;
+    }
+  }
+
   invUpdateLinkedNote();
   alert(`${picked.length}件の注文を明細に取り込みました。`);
 }
