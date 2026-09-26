@@ -36,7 +36,11 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
     { id: 'pm2', species: 'イノシシ', part_name: 'モモ', grade: '極上', price_standard: 3900, price_local: 3500 },
     { id: 'pm3', species: 'イノシシ', part_name: 'カタ', grade: '並', price_standard: 2200, price_local: 2000 },
   ];
-  const CUSTOMERS = { 'cust-a': { id: 'cust-a', price_rank: 'standard' }, 'cust-b': { id: 'cust-b', price_rank: 'local' } };
+  const CUSTOMERS = {
+    'cust-a': { id: 'cust-a', price_rank: 'standard' },
+    'cust-b': { id: 'cust-b', price_rank: 'local' },
+    'cust-w': { id: 'cust-w', price_rank: 'standard', notes: '請求はトレタテ経由' },
+  };
   const writes = { orders: [], order_items: [] };
   let lookupCustomerId = null;
 
@@ -107,6 +111,26 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   ck('価格マスタに無い部位は単価null（0円で確定しない）', writes.order_items[0].unit_price == null, JSON.stringify(writes.order_items[0]));
   const toastsSeen = await p.evaluate(() => window.__toasts);
   ck('単価が見つからないと警告トーストが出る', toastsSeen.some(t => t.type === 'error' && /単価/.test(t.msg) && /シンタマ/.test(t.msg)), JSON.stringify(toastsSeen));
+
+  // ── ⑥ 仲卸業者経由の顧客（顧客マスタの備考に業者名）は、注文のmemoにも自動でその名前が入る（2026-09-26）
+  //    order-admin.htmlの備考検索・出荷内訳・請求先自動判定はorders.memoを見るため、ここに入らないと
+  //    仲卸業者あての請求書を出す時に毎回手で書き足す必要があった。
+  writes.orders.length = 0; writes.order_items.length = 0;
+  lookupCustomerId = 'cust-w';
+  await p.evaluate(() => recordDirectShipment(
+    [{ id: 'inv-6', part_name: 'カタ', species: 'イノシシ', grade: '並', weight: 1 }],
+    'テスト仲卸先', {}
+  ));
+  ck('仲卸業者経由の顧客: 注文のmemoに業者名（トレタテ）が自動で入る', writes.orders[0].memo === 'トレタテ', JSON.stringify(writes.orders[0]));
+
+  // ── ⑦ 通常の顧客はmemoが入らない（null） ──
+  writes.orders.length = 0; writes.order_items.length = 0;
+  lookupCustomerId = 'cust-a';
+  await p.evaluate(() => recordDirectShipment(
+    [{ id: 'inv-7', part_name: 'カタ', species: 'イノシシ', grade: '並', weight: 1 }],
+    'A店', {}
+  ));
+  ck('通常の顧客: 注文のmemoはnullのまま', writes.orders[0].memo == null, JSON.stringify(writes.orders[0]));
 
   ck('JSエラーなし', !errs.some(e => /recordDirectShipment|directShipPrice/.test(e)), errs.join(' / '));
   console.log(out.join('\n'));
