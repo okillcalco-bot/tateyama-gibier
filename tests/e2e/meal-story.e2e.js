@@ -59,6 +59,13 @@ const STORY = {
   const html = await page.content();
   results.push(['座標を出さない', !/capture_lat|capture_lng/.test(html), '']);
 
+  // 2.5) ページの下の方に購入ページへの導線がある
+  const shopLink = await page.$eval('a[href="https://tateymgibier.base.shop/"]', el => ({
+    text: el.textContent, target: el.target, rel: el.rel,
+  })).catch(() => null);
+  results.push(['購入ページへのリンクがある', !!shopLink, JSON.stringify(shopLink)]);
+  results.push(['購入リンクは別タブで開く', shopLink && shopLink.target === '_blank' && /noopener/.test(shopLink.rel || ''), '']);
+
   // 3) 星も感想も無いと送れない
   await page.click('#send');
   await page.waitForTimeout(200);
