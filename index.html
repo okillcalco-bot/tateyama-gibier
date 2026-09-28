@@ -1285,12 +1285,18 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           <button class="btn btn-primary btn-sm" onclick="outletMoveOpen('納品')">🚚 納品を記録</button>
           <button class="btn btn-sm" onclick="outletMoveOpen('店頭販売')">🧾 販売報告を入力</button>
+          <button class="btn btn-sm" onclick="outletMoveOpen('期限切れ')" style="color:var(--red);">🗑 期限切れ・廃棄を記録</button>
+          <button class="btn btn-sm" onclick="outletMoveOpen('訂正')" style="color:var(--gold2);">✏️ 訂正を入力</button>
+          <button class="btn btn-sm" onclick="outletHistoryOpen()" style="color:var(--text2);">📜 履歴を見る</button>
           <button class="btn btn-sm" onclick="outletAdd()" style="color:var(--text2);">＋ 道の駅を追加</button>
           <button class="btn btn-sm" onclick="baseOpen()" style="color:var(--text2);">⚙ BASE連携</button>
         </div>
       </div>
       <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;">
         納品したら「🚚 納品を記録」（スマホからOK・センター在庫から差し引き）。メールで来る販売数は「🧾 販売報告」で入力すると店頭在庫が減ります。
+        賞味期限切れなどで廃棄した分は「🗑 期限切れ・廃棄を記録」（店頭在庫だけ減り、理由が履歴に残ります）。
+        販売報告を間違えたときは「✏️ 訂正を入力」（間違えた分を＋で戻し、正しい分を−で入れる。理由は必須・元の記録は消さず履歴に残ります）。
+        すべて「📜 履歴を見る」でいつでも確認できます。
         外回り用のスマホページ → <a href="outlet.html" style="font-weight:700;">🏪 納品・店頭在庫ページ</a>（使い方メモ・道の駅ごとの納品方法つき）
       </div>
       <div style="overflow-x:auto;">
@@ -1594,6 +1600,23 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">
         <button class="btn" onclick="document.getElementById('outletMoveModal').style.display='none'">キャンセル</button>
         <button class="btn btn-primary" style="font-size:15px;padding:10px 24px;" onclick="outletMoveSave()">記録する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 道の駅・店頭在庫の履歴（納品・販売・期限切れ・訂正を全部まとめて見る） -->
+  <div id="outletHistoryModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:720px;margin:30px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:22px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);">📜 店頭在庫の履歴</div>
+        <button onclick="document.getElementById('outletHistoryModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div class="form-group"><label>道の駅</label><select class="form-input" id="oh-outlet" onchange="outletHistoryLoad()"></select></div>
+      <div style="overflow-x:auto;max-height:60vh;overflow-y:auto;">
+        <table id="outlet-history-table">
+          <thead><tr><th>日時</th><th>種別</th><th>商品</th><th style="text-align:right;">数量</th><th>担当</th><th>メモ</th></tr></thead>
+          <tbody id="outlet-history-body"><tr><td class="empty-state">読み込み中...</td></tr></tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -12318,7 +12341,8 @@ async function loadOutletStock() {
     outletStockMap = {};
     moves.forEach(m => {
       const key = m.product_id + '|' + m.destination;
-      const d = m.movement_type === '納品' ? m.qty : m.movement_type === '棚卸調整' ? m.qty : -m.qty;
+      // 訂正は符号付きの数量をそのまま加える（棚卸調整と同じ扱い）。期限切れ・店頭販売は常に減る側。
+      const d = m.movement_type === '納品' || m.movement_type === '棚卸調整' || m.movement_type === '訂正' ? m.qty : -m.qty;
       outletStockMap[key] = (outletStockMap[key] || 0) + d;
     });
     if (!outlets.length) { body.innerHTML = '<tr><td class="empty-state">道の駅が未登録です</td></tr>'; return; }
@@ -12453,10 +12477,22 @@ async function baseSyncAll() {
 }
 
 let outletMoveType = '納品';
+// 店頭在庫の記録種別。画面表示名・数量の意味（入力欄の符号）をここでまとめて決める。
+// 訂正だけ符号付き入力（間違えた分を＋で戻し、正しい分を−で減らす）。他は常に0以上の入力。
+const OUTLET_MOVE_LABEL = { '納品': '納品', '店頭販売': '販売報告', '期限切れ': '期限切れ・廃棄', '訂正': '訂正' };
 function outletMoveOpen(type) {
   outletMoveType = type;
-  document.getElementById('outletMoveTitle').textContent = type === '納品' ? '🚚 納品を記録' : '🧾 販売報告を入力（メールの販売数）';
-  document.getElementById('om-qty-label').textContent = type === '納品' ? '納品する数量（商品ごと）' : '売れた数量（商品ごと）';
+  const label = OUTLET_MOVE_LABEL[type] || type;
+  document.getElementById('outletMoveTitle').textContent =
+    type === '納品' ? '🚚 納品を記録'
+    : type === '期限切れ' ? '🗑 期限切れ・廃棄を記録'
+    : type === '訂正' ? '✏️ 訂正を入力（間違った報告の修正）'
+    : '🧾 販売報告を入力（メールの販売数）';
+  document.getElementById('om-qty-label').textContent =
+    type === '納品' ? '納品する数量（商品ごと）'
+    : type === '期限切れ' ? '廃棄した数量（商品ごと）'
+    : type === '訂正' ? '増減（商品ごと・＋で在庫を戻す／−でさらに減らす）'
+    : '売れた数量（商品ごと）';
   document.getElementById('om-outlet').innerHTML = outletList.map(o => `<option>${esc2(o.name)}</option>`).join('');
   document.getElementById('om-date').value = new Date().toISOString().slice(0, 10);
   const staffSel = document.getElementById('om-staff');
@@ -12464,12 +12500,16 @@ function outletMoveOpen(type) {
   sb('GET', 'staff', null, '?is_active=eq.true&deleted_at=is.null&select=name&order=name.asc')
     .then(list => { staffSel.innerHTML = '<option value="">選択...</option>' + list.map(s => `<option>${esc2(s.name)}</option>`).join(''); })
     .catch(() => {});
+  const qtyMin = type === '訂正' ? '' : 'min="0"';
   document.getElementById('om-products').innerHTML = outletRetailProducts.map(p =>
     `<div style="display:flex;align-items:center;gap:8px;">
       <span style="flex:1;font-size:14px;">${esc2(p.name)}</span>
       <span style="font-size:11px;color:var(--text3);">在庫${p.stock_qty || 0}</span>
-      <input class="form-input om-qty" data-pid="${p.id}" type="number" min="0" inputmode="numeric" placeholder="0" style="width:90px;font-size:18px;text-align:right;" />
+      <input class="form-input om-qty" data-pid="${p.id}" type="number" ${qtyMin} inputmode="numeric" placeholder="0" style="width:90px;font-size:18px;text-align:right;" />
     </div>`).join('') || '<div class="empty-state">小売商品がありません</div>';
+  const noteLabelEl = document.querySelector('label[for="om-note"]') || document.getElementById('om-note').previousElementSibling;
+  if (noteLabelEl) noteLabelEl.textContent = type === '訂正' ? '理由（必須）' : 'メモ（任意）';
+  document.getElementById('om-note').placeholder = type === '訂正' ? '例: うま辛120g×2 → 250g×2 の入力ミス' : '例: 週末分';
   document.getElementById('om-note').value = '';
   document.getElementById('outletMoveModal').style.display = 'block';
 }
@@ -12479,9 +12519,12 @@ async function outletMoveSave() {
   const date = document.getElementById('om-date').value;
   const staff = document.getElementById('om-staff').value;
   const note = document.getElementById('om-note').value.trim() || null;
+  const label = OUTLET_MOVE_LABEL[outletMoveType] || outletMoveType;
   if (!outlet) { toast('道の駅を選択してください', 'error'); return; }
   if (!staff) { toast('担当者を選択してください', 'error'); return; }
-  const rows = [...document.querySelectorAll('.om-qty')].map(el => ({ pid: el.dataset.pid, qty: parseInt(el.value) || 0 })).filter(r => r.qty > 0);
+  if (outletMoveType === '訂正' && !note) { toast('訂正の理由を入力してください（履歴に残るため必須です）', 'error'); return; }
+  const rows = [...document.querySelectorAll('.om-qty')].map(el => ({ pid: el.dataset.pid, qty: parseInt(el.value) || 0 }))
+    .filter(r => outletMoveType === '訂正' ? r.qty !== 0 : r.qty > 0);
   if (!rows.length) { toast('数量を1つ以上入力してください', 'error'); return; }
   const prodById = {}; outletRetailProducts.forEach(p => prodById[p.id] = p);
   // 納品はセンター在庫の残数チェック
@@ -12493,8 +12536,9 @@ async function outletMoveSave() {
       }
     }
   }
-  const lines = rows.map(r => `・${prodById[r.pid].name} × ${r.qty}`).join('\n');
-  if (!confirm(`${outletMoveType === '納品' ? '納品' : '販売報告'}を記録しますか？\n\n${outlet} / ${date}\n${lines}`)) return;
+  const fmtQty = q => (outletMoveType === '訂正' && q > 0 ? '+' : '') + q;
+  const lines = rows.map(r => `・${prodById[r.pid].name} × ${fmtQty(r.qty)}`).join('\n');
+  if (!confirm(`${label}を記録しますか？\n\n${outlet} / ${date}\n${lines}${note ? '\n\n理由・メモ: ' + note : ''}`)) return;
   try {
     const ts = date + 'T12:00:00+09:00';
     await sb('POST', 'product_movements', rows.map(r => ({
@@ -12510,10 +12554,38 @@ async function outletMoveSave() {
       }
     }
     playFeedbackSound(true);
-    toast(`${outlet} への${outletMoveType === '納品' ? '納品' : '販売報告'} ${rows.length}品目を記録しました`);
+    toast(`${outlet} への${label} ${rows.length}品目を記録しました`);
     document.getElementById('outletMoveModal').style.display = 'none';
     loadProducts();
   } catch (e) { playFeedbackSound(false); toast('記録に失敗しました: ' + sbSafeMsg(e), 'error'); }
+}
+
+// ── 店頭在庫の履歴（納品・販売・期限切れ・訂正を全部まとめて時系列で見る） ──
+function outletHistoryOpen() {
+  const sel = document.getElementById('oh-outlet');
+  sel.innerHTML = outletList.map(o => `<option>${esc2(o.name)}</option>`).join('');
+  document.getElementById('outletHistoryModal').style.display = 'block';
+  outletHistoryLoad();
+}
+async function outletHistoryLoad() {
+  const body = document.getElementById('outlet-history-body');
+  const outlet = document.getElementById('oh-outlet').value;
+  if (!outlet) { body.innerHTML = '<tr><td class="empty-state">道の駅が未登録です</td></tr>'; return; }
+  body.innerHTML = '<tr><td class="empty-state">読み込み中...</td></tr>';
+  try {
+    const rows = await sb('GET', 'product_movements', null,
+      `?destination=eq.${encodeURIComponent(outlet)}&select=*&order=created_at.desc&limit=200`);
+    if (!rows.length) { body.innerHTML = '<tr><td class="empty-state">記録がありません</td></tr>'; return; }
+    const colorOf = t => t === '訂正' ? 'var(--gold2)' : t === '期限切れ' ? 'var(--red)' : t === '納品' ? 'var(--green)' : 'var(--text)';
+    body.innerHTML = rows.map(r => `<tr>
+      <td style="white-space:nowrap;font-size:12px;color:var(--text2);">${esc2((r.created_at || '').replace('T', ' ').slice(0, 16))}</td>
+      <td style="color:${colorOf(r.movement_type)};font-weight:600;">${esc2(OUTLET_MOVE_LABEL[r.movement_type] || r.movement_type)}</td>
+      <td>${esc2(r.product_name || '')}</td>
+      <td style="text-align:right;font-weight:700;${Number(r.qty) < 0 ? 'color:var(--red);' : ''}">${r.movement_type === '訂正' && Number(r.qty) > 0 ? '+' : ''}${r.qty}</td>
+      <td style="font-size:12px;">${esc2(r.staff_name || '')}</td>
+      <td style="font-size:12px;color:var(--text2);">${esc2(r.note || '')}</td>
+    </tr>`).join('');
+  } catch (e) { body.innerHTML = `<tr><td class="empty-state">読み込みエラー: ${esc2(e.message)}</td></tr>`; }
 }
 
 async function outletAdd() {
