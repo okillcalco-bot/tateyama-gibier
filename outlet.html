@@ -77,16 +77,27 @@ input, select { width: 100%; padding: 11px; border: 1px solid var(--border); bor
       <button class="bigbtn b1" id="btn-kansei" style="display:none;" onclick="openForm('完成')">🏭 完成を記録</button>
       <button class="bigbtn b2" id="btn-hanbai" onclick="openForm('店頭販売')">🧾 販売報告</button>
     </div>
+    <div class="btnrow" id="btnrow2">
+      <button class="bigbtn b2" id="btn-kigen" onclick="openForm('期限切れ')" style="color:var(--red);border-color:var(--red);">🗑 期限切れ・廃棄</button>
+      <button class="bigbtn b2" id="btn-teisei" onclick="openForm('訂正')" style="color:var(--gold2);">✏️ 訂正</button>
+      <button class="bigbtn b2" onclick="toggleHistory()">📜 履歴</button>
+    </div>
     <div class="card" id="form-area">
       <h2 id="form-title"></h2>
       <label>日付</label><input type="date" id="f-date">
       <label>担当者</label><select id="f-staff"><option value="">選択...</option></select>
       <label id="f-qty-label">数量（商品ごと）</label>
       <div id="f-products"></div>
+      <label id="f-note-label">メモ（任意）</label><input type="text" id="f-note" placeholder="例: 週末分">
       <div class="btnrow" style="margin-top:12px;">
         <button class="bigbtn b2" onclick="document.getElementById('form-area').style.display='none'">キャンセル</button>
         <button class="bigbtn b1" id="f-save" onclick="saveForm()">記録する</button>
       </div>
+    </div>
+    <div class="card" id="history-card" style="display:none;">
+      <h2>📜 <span id="o-name3"></span> の履歴</h2>
+      <table><thead><tr><th>日時</th><th>種別</th><th>商品</th><th class="num">数量</th></tr></thead>
+      <tbody id="history-body"><tr><td colspan="4">読み込み中...</td></tr></tbody></table>
     </div>
     <div class="card">
       <h2>📦 <span id="o-name2"></span> の店頭在庫</h2>
@@ -117,6 +128,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp
 
 let outlets = [], products = [], stockMap = {}, current = null, formType = '納品';
 let storeMode = null; // 納品先セルフ入力モード（?store=トークン）
+const MOVE_LABEL = { '納品': '納品', '完成': '完成', '店頭販売': '販売報告', '期限切れ': '期限切れ・廃棄', '訂正': '訂正' };
 
 async function load() {
   const [o, p, m] = await Promise.all([
@@ -127,7 +139,7 @@ async function load() {
   outlets = o; products = p; stockMap = {};
   m.forEach(x => {
     const k = x.product_id + '|' + x.destination;
-    const d = x.movement_type === '納品' ? x.qty : x.movement_type === '棚卸調整' ? x.qty : -x.qty;
+    const d = x.movement_type === '納品' || x.movement_type === '棚卸調整' || x.movement_type === '訂正' ? x.qty : -x.qty;
     stockMap[k] = (stockMap[k] || 0) + d;
   });
   const chipsEl = document.getElementById('chips');
@@ -189,7 +201,11 @@ async function loadSalesSummary() {
   }
 }
 
-function pick(name) { current = name; document.getElementById('form-area').style.display = 'none'; load(); document.getElementById('outlet-area').style.display = 'block'; }
+function pick(name) {
+  current = name; document.getElementById('form-area').style.display = 'none';
+  document.getElementById('history-card').style.display = 'none';
+  load(); document.getElementById('outlet-area').style.display = 'block';
+}
 
 function renderOutlet() {
   const isCenter = current === '__center__';
@@ -197,12 +213,14 @@ function renderOutlet() {
   if (!isCenter && !o) return;
   document.getElementById('o-name').textContent = isCenter ? 'センター' : o.name;
   document.getElementById('o-name2').textContent = isCenter ? 'センター（加工場）' : o.name;
+  document.getElementById('o-name3').textContent = isCenter ? 'センター（加工場）' : o.name;
   document.getElementById('notes-card').style.display = (isCenter || storeMode) ? 'none' : 'block';
   if (!isCenter && o) document.getElementById('o-notes').textContent = o.delivery_notes || '（まだ登録されていません。「✎ 編集」から納品手順を書けます）';
-  // ボタン構成: センター=完成記録+在庫修正案内 / 通常=納品+販売報告 / 店舗モード=販売報告のみ
+  // ボタン構成: センター=完成記録+在庫修正案内 / 通常=納品+販売報告+期限切れ+訂正 / 店舗モード=販売報告のみ
   document.getElementById('btn-nohin').style.display = (isCenter || storeMode) ? 'none' : 'block';
   document.getElementById('btn-kansei').style.display = isCenter ? 'block' : 'none';
   document.getElementById('btn-hanbai').style.display = isCenter ? 'none' : 'block';
+  document.getElementById('btnrow2').style.display = (isCenter || storeMode) ? 'none' : 'flex';
   // 在庫表
   document.getElementById('center-col').style.display = storeMode ? 'none' : '';
   document.getElementById('stock-col-label').textContent = isCenter ? 'センター在庫' : '店頭';
@@ -256,12 +274,24 @@ async function editNotes() {
 async function openForm(type) {
   formType = type;
   document.getElementById('form-title').textContent =
-    type === '納品' ? `🚚 ${current} へ納品` : type === '完成' ? '🏭 完成品をセンター在庫に追加' : `🧾 ${current === '__center__' ? 'センター' : current} の販売報告`;
-  document.getElementById('f-qty-label').textContent = type === '納品' ? '納品する数量' : type === '完成' ? 'できた数量' : '売れた数量';
+    type === '納品' ? `🚚 ${current} へ納品`
+    : type === '完成' ? '🏭 完成品をセンター在庫に追加'
+    : type === '期限切れ' ? `🗑 ${current} の期限切れ・廃棄`
+    : type === '訂正' ? `✏️ ${current} の訂正（間違った報告の修正）`
+    : `🧾 ${current === '__center__' ? 'センター' : current} の販売報告`;
+  document.getElementById('f-qty-label').textContent =
+    type === '納品' ? '納品する数量' : type === '完成' ? 'できた数量'
+    : type === '期限切れ' ? '廃棄した数量'
+    : type === '訂正' ? '増減（＋で在庫を戻す／−でさらに減らす）'
+    : '売れた数量';
   document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
+  const qtyMin = type === '訂正' ? '' : 'min="0"';
   document.getElementById('f-products').innerHTML = products.map(p =>
     `<div class="qtyrow"><span>${esc(p.name)}<br><small>センター在庫 ${p.stock_qty || 0}</small></span>
-     <input type="number" min="0" inputmode="numeric" placeholder="0" data-pid="${p.id}" class="f-qty"></div>`).join('');
+     <input type="number" ${qtyMin} inputmode="numeric" placeholder="0" data-pid="${p.id}" class="f-qty"></div>`).join('');
+  document.getElementById('f-note-label').textContent = type === '訂正' ? '理由（必須）' : 'メモ（任意）';
+  document.getElementById('f-note').placeholder = type === '訂正' ? '例: うま辛120g×2 → 250g×2 の入力ミス' : '例: 週末分';
+  document.getElementById('f-note').value = '';
   document.getElementById('form-area').style.display = 'block';
   document.getElementById('f-staff').style.display = storeMode ? 'none' : '';
   const staffLabel = [...document.querySelectorAll('#form-area label')].find(l => l.textContent === '担当者');
@@ -279,22 +309,26 @@ async function openForm(type) {
 async function saveForm() {
   const date = document.getElementById('f-date').value;
   const staff = storeMode ? window.__storeStaff : document.getElementById('f-staff').value;
+  const note = document.getElementById('f-note').value.trim() || null;
   if (!staff) { toast('担当者を選択してください'); return; }
-  const rows = [...document.querySelectorAll('.f-qty')].map(el => ({ pid: el.dataset.pid, qty: parseInt(el.value) || 0 })).filter(r => r.qty > 0);
+  if (formType === '訂正' && !note) { toast('訂正の理由を入力してください（履歴に残るため必須です）'); return; }
+  const rows = [...document.querySelectorAll('.f-qty')].map(el => ({ pid: el.dataset.pid, qty: parseInt(el.value) || 0 }))
+    .filter(r => formType === '訂正' ? r.qty !== 0 : r.qty > 0);
   if (!rows.length) { toast('数量を入力してください'); return; }
   const byId = {}; products.forEach(p => byId[p.id] = p);
   if (formType === '納品') {
     for (const r of rows) if ((byId[r.pid].stock_qty || 0) < r.qty) { toast(`「${byId[r.pid].name}」のセンター在庫が足りません`); return; }
   }
-  const typeLabel = formType === '納品' ? '納品' : formType === '完成' ? '完成' : '販売報告';
+  const typeLabel = MOVE_LABEL[formType] || formType;
   const place = current === '__center__' ? 'センター' : current;
-  if (!confirm(`${place} / ${date}\n` + rows.map(r => `・${byId[r.pid].name} × ${r.qty}`).join('\n') + `\n\nこの内容で${typeLabel}を記録しますか？`)) return;
+  const fmtQty = q => (formType === '訂正' && q > 0 ? '+' : '') + q;
+  if (!confirm(`${place} / ${date}\n` + rows.map(r => `・${byId[r.pid].name} × ${fmtQty(r.qty)}`).join('\n') + `${note ? '\n理由・メモ: ' + note : ''}\n\nこの内容で${typeLabel}を記録しますか？`)) return;
   const btn = document.getElementById('f-save'); btn.disabled = true;
   try {
     await sb('POST', 'product_movements', rows.map(r => ({
       product_id: r.pid, product_name: byId[r.pid].name, movement_type: formType, qty: r.qty,
       staff_name: staff, destination: (formType === '完成' || current === '__center__') ? null : current,
-      created_at: date + 'T12:00:00+09:00'
+      note: note, created_at: date + 'T12:00:00+09:00'
     })));
     if (formType === '納品' || formType === '完成') {
       for (const r of rows) {
@@ -314,6 +348,27 @@ async function saveForm() {
     load();
   } catch (e) { toast('記録に失敗しました'); }
   btn.disabled = false;
+}
+
+// ── 履歴（納品・販売・期限切れ・訂正を時系列で見る） ──
+async function toggleHistory() {
+  const card = document.getElementById('history-card');
+  if (card.style.display === 'block') { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  const body = document.getElementById('history-body');
+  body.innerHTML = '<tr><td colspan="4">読み込み中...</td></tr>';
+  try {
+    const isCenter = current === '__center__';
+    const q = isCenter ? '?destination=is.null' : `?destination=eq.${encodeURIComponent(current)}`;
+    const rows = await sb('GET', 'product_movements', null, `${q}&select=*&order=created_at.desc&limit=100`);
+    if (!rows.length) { body.innerHTML = '<tr><td colspan="4">記録がありません</td></tr>'; return; }
+    body.innerHTML = rows.map(r => `<tr>
+      <td style="font-size:12px;color:var(--text2);white-space:nowrap;">${esc((r.created_at || '').replace('T', ' ').slice(0, 16))}</td>
+      <td>${esc(MOVE_LABEL[r.movement_type] || r.movement_type)}</td>
+      <td>${esc(r.product_name || '')}${r.note ? `<br><small>${esc(r.note)}</small>` : ''}</td>
+      <td class="num" style="${Number(r.qty) < 0 ? 'color:var(--red);' : ''}">${r.movement_type === '訂正' && Number(r.qty) > 0 ? '+' : ''}${r.qty}</td>
+    </tr>`).join('');
+  } catch (e) { body.innerHTML = '<tr><td colspan="4">読み込みエラー</td></tr>'; }
 }
 
 // 納品先セルフ入力モード: outlet.html?store=<トークン> でその店専用（販売報告のみ）
