@@ -428,9 +428,11 @@ async function loadData() {
     return;
   }
 
-  allRecords = data || [];
+  // 駆除外（個人宅など駆除以外で捕獲）は市役所へ出す捕獲票の対象外。除いた件数は必ず表示する
+  const excluded = (data || []).filter(r => r.capture_category === '駆除外');
+  allRecords = (data || []).filter(r => r.capture_category !== '駆除外');
   renderTable();
-  showStatus('info', `✅ ${allRecords.length}件取得`);
+  showStatus('info', `✅ ${allRecords.length}件取得` + (excluded.length ? `（駆除外 ${excluded.length}件は市役所提出の対象外のため表示していません: ${excluded.map(r => r.label_id).join('・')}）` : ''));
 }
 
 // ============================================================

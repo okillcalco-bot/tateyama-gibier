@@ -304,7 +304,7 @@ function renderSheet(r, idx){
 // ---- データ取得 ----
 async function fetchIndividuals(fromD, toD){
   const params = new URLSearchParams();
-  params.set('select', 'label_id,serial_number,species,capture_date,capture_time,weather,capture_city,capture_area,hunter_name,hunter_health_ok,hunter_health_issues,capture_method,trap_part,finishing_method,hit_location,capture_anomalies,organ_anomalies,sex,weight_total,age_estimate,bleed_time,gutting,cooling_method,transport_start,receive_time,quality,recorder,butcher_staff,memo,special_notes,stomach_note');
+  params.set('select', 'label_id,serial_number,species,capture_date,capture_time,weather,capture_city,capture_area,hunter_name,hunter_health_ok,hunter_health_issues,capture_method,trap_part,finishing_method,hit_location,capture_anomalies,organ_anomalies,sex,weight_total,age_estimate,bleed_time,gutting,cooling_method,transport_start,receive_time,quality,recorder,butcher_staff,memo,special_notes,stomach_note,capture_category');
   params.append('species', 'neq.イノシシ');
   params.append('capture_date', 'gte.'+fromD);
   params.append('capture_date', 'lte.'+toD);
@@ -322,6 +322,8 @@ async function fetchIndividuals(fromD, toD){
     const id = String(r.label_id || '');
     if(id.startsWith('TGC-TEST') || id.startsWith('仮')) return false;
     if(r.serial_number == null) return false;
+    // 駆除外（個人宅など駆除以外で捕獲）は市役所提出の対象外
+    if(r.capture_category === '駆除外') return false;
     return true;
   });
 }
