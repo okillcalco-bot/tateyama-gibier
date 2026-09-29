@@ -1029,10 +1029,16 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         </div>
         <div class="form-group"><label>通し番号</label><input class="form-input" id="ind-f-serial_number" type="number" placeholder="例: 017" /></div>
         <div class="form-group"><label>種別</label>
-          <select class="form-input" id="ind-f-species">
+          <select class="form-input" id="ind-f-species" onchange="if(indGetVal('capture_category'))indShowNextNumbers()">
             <option value="">選択...</option>
             <option>イノシシ</option><option>シカ</option><option>アライグマ</option>
             <option>ハクビシン</option><option>キョン</option><option>タヌキ</option><option>ノウサギ</option>
+          </select>
+        </div>
+        <div class="form-group"><label>捕獲区分</label>
+          <select class="form-input" id="ind-f-capture_category" onchange="indShowNextNumbers()">
+            <option value="">駆除（市役所報告の対象）</option>
+            <option value="駆除外">駆除外（個人宅など・市役所報告に含めない）</option>
           </select>
         </div>
         <div class="form-group"><label>性別</label>
@@ -9360,7 +9366,7 @@ const IND_ALL_FIELDS = ['label_id','serial_number','species','sex','age_estimate
   'bleed_time','gutting','cooling_method','transport_start','receive_time','process_time',
   'recorder','hunter_health_issues','capture_anomalies','organ_anomalies','has_fetus','hunter_health_ok','memo',
   'intake_method','intake_staff','organs_use','hide_status','hide_location','processing_notes','butcher_staff',
-  'meat_rank','yield_rate','buyback_amount'];
+  'meat_rank','yield_rate','buyback_amount','capture_category'];
 
 function indSort(col) {
   if (indSortCol === col) indSortAsc = !indSortAsc;
@@ -9450,7 +9456,7 @@ function indRender() {
     <td><input type="checkbox" class="ind-chk" data-id="${i.label_id}" onchange="indUpdateBulkBtn()"></td>
     <td style="text-align:center;">${indSerialDisplay(i)}</td>
     <td style="color:var(--gold);font-weight:700;">${i.label_id}</td>
-    <td>${i.species || '-'}</td>
+    <td>${i.species || '-'}${i.capture_category === '駆除外' ? ' <span style="font-size:10.5px;color:var(--text2);border:1px solid var(--border);border-radius:4px;padding:0 4px;">駆除外</span>' : ''}</td>
     <td>${i.sex || '-'}</td>
     <td>${i.weight_total != null ? i.weight_total + ' kg' : '-'}</td>
     <td>${fmt(i.capture_date)}</td>
@@ -9837,7 +9843,7 @@ async function indShowTrash() {
     if (!data.length) { body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);">削除履歴なし</td></tr>'; return; }
     body.innerHTML = data.map(i => `<tr>
       <td style="color:var(--gold);font-weight:700;">${i.label_id}</td>
-      <td>${i.species || '-'}</td>
+      <td>${i.species || '-'}${i.capture_category === '駆除外' ? ' <span style="font-size:10.5px;color:var(--text2);border:1px solid var(--border);border-radius:4px;padding:0 4px;">駆除外</span>' : ''}</td>
       <td>${i.weight_total != null ? i.weight_total + ' kg' : '-'}</td>
       <td>${fmt(i.capture_date)}</td>
       <td>${i.hunter_name || '-'}</td>
@@ -10038,6 +10044,19 @@ async function indShowNextNumbers() {
   if (!hint) return;
   hint.textContent = '次の番号を確認中…';
   try {
+    // 駆除外（個人宅など）は駆除の番号列（市役所の台帳と一致）を進めないよう、別の番号列 TGC-08-<獣種>コNNN を使う。通し番号は付けない
+    if (indGetVal('capture_category') === '駆除外') {
+      const sp = indGetVal('species');
+      const pre = sp ? getIndividualPrefix(sp, indGetVal('capture_city')) : null;
+      if (!pre) { hint.textContent = '駆除外の個体: 種別（イノシシは市町村も）を選ぶと、駆除とは別の番号（例: TGC-08-アコ001）を案内します'; return; }
+      const kp = `TGC-08-${pre}コ`;
+      const rows = await sb('GET', 'individuals', null, `?label_id=like.${encodeURIComponent(kp)}*&select=label_id&order=label_id.desc&limit=1`);
+      const n = rows.length ? (parseInt(String(rows[0].label_id).replace(kp, ''), 10) || 0) + 1 : 1;
+      const next = kp + String(n).padStart(3, '0');
+      hint.innerHTML = `駆除外の次の番号 → <strong>${esc2(next)}</strong>（駆除の番号・通し番号とは別。市役所の捕獲票・様式には出ません）`
+        + `<button class="btn btn-sm" style="margin-left:8px;" onclick="indFillNext('','${esc2(next)}')">この番号を入れる</button>`;
+      return;
+    }
     // 通し番号は「削除した番号は詰めて使う」運用（2026-09-12 確認）。保存時の重複チェックも
     // 削除済みを無視するので、案内も生きている行だけで計算して両者を揃える
     // （以前は削除済みも数えていたため、532を削除→再利用した後に「次は537」と案内していた）。
@@ -10063,7 +10082,7 @@ async function indShowNextNumbers() {
 function indFillNext(serial, labelId) {
   document.getElementById('ind-f-serial_number').value = serial;
   document.getElementById('ind-f-label_id').value = labelId;
-  toast(`通し番号 ${serial} / ${labelId} を入れました`);
+  toast(serial === '' ? `${labelId} を入れました` : `通し番号 ${serial} / ${labelId} を入れました`);
 }
 
 /* 個体管理番号・通し番号の検証（手入力なので保存前に必ず確認する）
@@ -10171,6 +10190,12 @@ function indCollectWarnings() {
     ['receive_time','受入時刻'],['process_time','処理時刻'],['recorder','記録者']];
   const miss = need.filter(([f]) => !indGetVal(f)).map(([, l]) => l);
   if (miss.length) out.push(`台帳の未記載: ${miss.join('・')}`);
+  const lid = (document.getElementById('ind-f-label_id').value || '').trim();
+  const isKo = /^TGC-\d{2}-.+コ\d+$/.test(lid);   // 駆除外の番号列（例: TGC-08-アコ001）
+  if (indGetVal('capture_category') === '駆除外' && !isKo)
+    out.push(`駆除外なのに駆除の番号（${lid}）です。駆除外は「TGC-08-アコ001」のような別の番号にしてください（駆除の番号が市役所の台帳とずれます）`);
+  if (indGetVal('capture_category') !== '駆除外' && isKo)
+    out.push(`番号 ${lid} は駆除外の番号ですが、捕獲区分が「駆除」になっています`);
   return out;
 }
 
@@ -10206,6 +10231,7 @@ async function indSave() {
     const boolVal = id => { const v = indGetVal(id); return v === 'true' ? true : v === 'false' ? false : null; };
     const payload = {
       species:           indGetVal('species'),
+      capture_category:  indGetVal('capture_category'),
       sex:               indGetVal('sex'),
       age_estimate:      indGetVal('age_estimate'),
       weight_total:      numVal('weight_total'),
@@ -13353,7 +13379,9 @@ async function cityCapSearch() {
   }
   box.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:6px;">検索中...</div>';
   try {
-    cityCapResults = await sb('GET', 'individuals', null, `?deleted_at=is.null${filter}&${sel}&order=capture_date.desc,serial_number.desc&limit=15`);
+    // 駆除外（個人宅など駆除以外で捕獲）は有害鳥獣捕獲票の対象外なので候補に出さない
+    cityCapResults = (await sb('GET', 'individuals', null, `?deleted_at=is.null${filter}&${sel},capture_category&order=capture_date.desc,serial_number.desc&limit=15`))
+      .filter(r => r.capture_category !== '駆除外');
   } catch (e) { box.innerHTML = `<div style="font-size:12px;color:var(--red);padding:6px;">検索に失敗しました: ${esc2(sbSafeMsg(e))}</div>`; return; }
   if (!cityCapResults.length) { box.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:6px;">該当する個体がありません（センターに搬入していない個体は下に手入力してください）</div>'; return; }
   box.innerHTML = cityCapResults.map((r, i) => `<button type="button" class="cc-hit" onclick="cityCapPick(${i})" style="display:block;width:100%;text-align:left;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text);cursor:pointer;margin-bottom:4px;font-size:13px;line-height:1.5;">
