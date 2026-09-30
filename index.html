@@ -6752,7 +6752,8 @@ async function pmDeleteCompleted(index) {
   try {
     if (item.ident_code) {
       await sb('PATCH', 'inventory', { deleted_at: new Date().toISOString() }, `?ident_code=eq.${encodeURIComponent(item.ident_code)}&deleted_at=is.null`);
-      try { await sb('DELETE', 'processing_log', null, `?child_ident_code=eq.${encodeURIComponent(item.ident_code)}`); } catch (e) { /* ログ削除失敗は業務を止めない */ }
+      try { await sb('DELETE', 'processing_log', null, `?child_ident_code=eq.${encodeURIComponent(item.ident_code)}`); }
+      catch (e) { toast('在庫からは削除しましたが、加工の記録（トレーサビリティ）を消せませんでした: ' + sbSafeMsg(e), 'error'); }
     }
     pmCompletedParts.splice(index, 1);
     // 直前登録カードが削除対象なら隠す
@@ -11995,7 +11996,9 @@ async function kkSubmit() {
       parent_ident_code: batchCode, child_ident_code: p.ident_code,
       weight: null, result_weight_kg: packW, process_type: processType, operator: operator, individual_id: null
     }));
-    try { await sb('POST', 'processing_log', logRows); } catch (e) { /* ログ失敗は業務を止めない */ }
+    // 保存に失敗しても加工処理は止めないが、黙って捨てない（2026-09 加工ログが1件も保存されていなかった事故の再発防止）
+    try { await sb('POST', 'processing_log', logRows); }
+    catch (e) { toast('加工は記録しましたが、原料とのつながり（トレーサビリティ）を保存できませんでした。管理者に連絡してください: ' + sbSafeMsg(e), 'error'); }
 
     // 4. 店頭在庫（袋SKU）へ「完成」を反映（選択時のみ）：センター店頭在庫を個数分ふやす
     if (skuProd) {
@@ -12364,7 +12367,7 @@ async function kkRepackSubmit() {
     try {
       const logRows = packs.map(p => ({ parent_ident_code: b.batchCode, child_ident_code: p.ident_code, weight: null, result_weight_kg: w, process_type: b.prodName, operator: operator, individual_id: null }));
       await sb('POST', 'processing_log', logRows);
-    } catch (e) { /* ログ失敗は業務を止めない */ }
+    } catch (e) { toast('パックは登録しましたが、バッチとのつながり（トレーサビリティ）を保存できませんでした。管理者に連絡してください: ' + sbSafeMsg(e), 'error'); }
     kkPrintLabels(packs, b.prodName, b.species, b.origin, []);
     playFeedbackSound(true);
     toast(`追加パックを登録しました（${b.prodName} ${w}kg × ${n}パック）`);
