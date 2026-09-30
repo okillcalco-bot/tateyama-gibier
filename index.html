@@ -956,6 +956,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
         <span>個体一覧</span>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn" onclick="halfFinderOpen()">🔍 タグなし半身を探す</button>
           <button class="btn" onclick="indShowTrash()" id="indTrashBtn">🗑 削除履歴</button>
           <button class="btn btn-danger" id="indBulkDelBtn" style="display:none;" onclick="indBulkDelete()">選択削除</button>
           <button class="btn btn-primary" onclick="indOpenNew()">＋ 新規登録</button>
@@ -1622,6 +1623,31 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <table id="outlet-history-table">
           <thead><tr><th>日時</th><th>種別</th><th>商品</th><th style="text-align:right;">数量</th><th>担当</th><th>メモ</th></tr></thead>
           <tbody id="outlet-history-body"><tr><td class="empty-state">読み込み中...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- タグなし半身の照合 -->
+  <div id="halfFinderModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:880px;margin:30px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:22px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="font-size:17px;font-weight:700;color:var(--gold);">🔍 タグなし半身を探す</div>
+        <button onclick="document.getElementById('halfFinderModal').style.display='none'" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);line-height:1.7;margin-bottom:10px;">
+        半身の重さを量って入れると、体重から見て合う個体のうち「まだ精肉していない」「精肉したのに肉が明らかに少ない」「枝肉が半分しか登録されていない」個体を出します。
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
+        <div class="form-group" style="margin:0;"><label>半身の重さ(kg)</label><input class="form-input" id="hf-weight" type="number" step="0.1" inputmode="decimal" placeholder="例: 9.5" style="max-width:120px;" oninput="halfFinderRender()"></div>
+        <div class="form-group" style="margin:0;"><label>種別</label><select class="form-input" id="hf-species" onchange="halfFinderRun()"><option>イノシシ</option><option>シカ</option><option value="">すべて</option></select></div>
+        <div class="form-group" style="margin:0;"><label>捕獲日</label><select class="form-input" id="hf-days" onchange="halfFinderRun()"><option value="14">2週間以内</option><option value="21" selected>3週間以内</option><option value="45">45日以内</option></select></div>
+      </div>
+      <div id="hf-summary" style="font-size:12px;color:var(--text2);margin-bottom:8px;"></div>
+      <div style="overflow-x:auto;max-height:60vh;overflow-y:auto;">
+        <table>
+          <thead><tr><th>個体番号</th><th>捕獲日</th><th style="text-align:right;">体重</th><th style="text-align:right;">半身の目安</th><th style="text-align:right;">登録済みの肉</th><th>状態</th><th>ない主な部位</th><th>捕獲者・地区</th></tr></thead>
+          <tbody id="hf-body"><tr><td class="empty-state">読み込み中...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -12612,6 +12638,86 @@ async function outletHistoryLoad() {
       <td style="font-size:12px;color:var(--text2);">${esc2(r.note || '')}</td>
     </tr>`).join('');
   } catch (e) { body.innerHTML = `<tr><td class="empty-state">読み込みエラー: ${esc2(e.message)}</td></tr>`; }
+}
+
+/* タグなし半身の照合（2026-09-29 実測）
+   イノシシの枝肉（全体）は体重の50〜58%（中央値≈53%）→ 半身は体重×26.5%前後。
+   部位に分けた精肉の歩留まりは25〜37%（中央値≈31%）。半身が丸ごと残っていれば通常の半分前後になる。
+   半身も「枝肉（全体）」で登録されるため、枝肉の合計が体重の40%未満なら半分しか登録されていない。 */
+const HALF_RATIO = 0.265, HALF_TOL = 0.04, EDA_FULL_MIN = 0.40, CUT_LOW_FACTOR = 0.7;
+const HF_PRIMALS = [['モモ', /モモ/], ['ロース', /^(骨付き )?ロース/], ['カタ', /カタ|肩ロース/], ['バラ', /バラ/], ['ヒレ', /ヒレ/]];
+let hfRows = [], hfMedian = null;
+function halfFinderOpen() {
+  document.getElementById('halfFinderModal').style.display = 'block';
+  halfFinderRun();
+}
+async function halfFinderRun() {
+  const body = document.getElementById('hf-body');
+  body.innerHTML = '<tr><td colspan="8" class="empty-state">読み込み中...</td></tr>';
+  const days = parseInt(document.getElementById('hf-days').value, 10) || 21;
+  const sp = document.getElementById('hf-species').value;
+  const since = evYmd(new Date(Date.now() - days * 864e5));
+  try {
+    let q = `?deleted_at=is.null&capture_date=gte.${since}&select=label_id,species,weight_total,capture_date,capture_city,capture_area,hunter_name&order=capture_date.desc&limit=1000`;
+    if (sp) q += `&species=eq.${encodeURIComponent(sp)}`;
+    const inds = (await sb('GET', 'individuals', null, q)).filter(i => /^TGC-/.test(i.label_id) && Number(i.weight_total) > 0);
+    const inv = [];
+    for (let k = 0; k < inds.length; k += 60) {
+      const ids = inds.slice(k, k + 60).map(i => '"' + i.label_id + '"').join(',');
+      inv.push(...await sb('GET', 'inventory', null, `?individual_id=in.(${encodeURIComponent(ids)})&deleted_at=is.null&select=individual_id,part_name,weight`));
+    }
+    const by = {};
+    inv.forEach(r => (by[r.individual_id] = by[r.individual_id] || []).push(r));
+    const rows = inds.map(i => {
+      const bw = Number(i.weight_total), packs = by[i.label_id] || [];
+      const meat = packs.reduce((a, r) => a + (Number(r.weight) || 0), 0);
+      const eda = packs.filter(r => /枝肉/.test(r.part_name || '')).reduce((a, r) => a + (Number(r.weight) || 0), 0);
+      return { i, bw, meat, eda, y: meat / bw, packs };
+    });
+    const cutY = rows.filter(r => r.meat > 0 && r.eda === 0).map(r => r.y).sort((a, b) => a - b);
+    hfMedian = cutY.length >= 5 ? cutY[Math.floor(cutY.length / 2)] : 0.31;
+    hfRows = rows.map(r => {
+      let kind = null;
+      if (r.meat === 0) kind = 'まだ精肉していない';
+      // 片側を枝肉・もう片側を部位分けした個体もあるので、枝肉だけでなく肉の合計で見る
+      else if (r.eda > 0 && r.meat / r.bw < EDA_FULL_MIN) kind = '枝肉が半分だけ登録';
+      else if (r.eda === 0 && r.y < hfMedian * CUT_LOW_FACTOR) kind = '精肉したが肉が少ない';
+      const parts = r.packs.map(p => p.part_name || '');
+      const missing = r.eda === 0 && r.meat > 0 ? HF_PRIMALS.filter(([, re]) => !parts.some(p => re.test(p))).map(([n]) => n) : [];
+      return { ...r, kind, missing, half: r.bw * HALF_RATIO };
+    }).filter(r => r.kind);
+    halfFinderRender();
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="8" class="empty-state" style="color:var(--red);">読み込みエラー: ${esc2(e.message || String(e))}</td></tr>`;
+  }
+}
+function halfFinderRender() {
+  const body = document.getElementById('hf-body');
+  const w = parseFloat(document.getElementById('hf-weight').value);
+  const hasW = w > 0;
+  const list = hfRows.map(r => ({ ...r, fits: hasW ? (w >= r.bw * (HALF_RATIO - HALF_TOL) && w <= r.bw * (HALF_RATIO + HALF_TOL)) : true }))
+    .filter(r => r.fits)
+    .sort((a, b) => hasW ? Math.abs(a.half - w) - Math.abs(b.half - w) : (b.i.capture_date || '').localeCompare(a.i.capture_date || ''));
+  document.getElementById('hf-summary').textContent =
+    `候補 ${list.length}頭${hasW ? `（半身 ${w}kg に体重が合う個体・近い順）` : '（重さを入れると絞り込みます）'}　／　`
+    + `目安: 半身＝体重×${Math.round(HALF_RATIO * 1000) / 10}%前後、精肉の歩留まり中央値 ${Math.round(hfMedian * 1000) / 10}%（これの${CUT_LOW_FACTOR * 100}%未満を「少ない」）`;
+  if (!list.length) { body.innerHTML = '<tr><td colspan="8" class="empty-state">当てはまる個体はありません。期間を広げるか、重さを確かめてください。</td></tr>'; return; }
+  const today = new Date(evYmd(new Date()) + 'T00:00:00');
+  body.innerHTML = list.map((r, idx) => {
+    const d = r.i.capture_date ? Math.round((today - new Date(r.i.capture_date + 'T00:00:00')) / 864e5) : null;
+    const meatTxt = r.meat > 0 ? `${r.meat.toFixed(2)}kg（${Math.round(r.y * 100)}%）` : '—';
+    const top = hasW && idx === 0 ? 'background:rgba(212,175,55,.12);' : '';
+    return `<tr style="${top}">
+      <td><a href="#" onclick="document.getElementById('halfFinderModal').style.display='none';indOpenEdit('${esc2(r.i.label_id)}');return false;"><b>${esc2(r.i.label_id)}</b></a></td>
+      <td style="white-space:nowrap;">${esc2(r.i.capture_date || '')}${d != null ? `<br><small style="color:var(--text2);">${d}日前</small>` : ''}</td>
+      <td style="text-align:right;">${r.bw}kg</td>
+      <td style="text-align:right;font-weight:700;">${r.half.toFixed(1)}kg</td>
+      <td style="text-align:right;">${meatTxt}</td>
+      <td>${esc2(r.kind)}</td>
+      <td style="font-size:12px;">${esc2(r.missing.join('・'))}</td>
+      <td style="font-size:12px;">${esc2(r.i.hunter_name || '')}<br><small style="color:var(--text2);">${esc2((r.i.capture_city || '') + (r.i.capture_area || ''))}</small></td>
+    </tr>`;
+  }).join('');
 }
 
 async function outletAdd() {
