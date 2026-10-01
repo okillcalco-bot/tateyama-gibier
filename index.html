@@ -2039,7 +2039,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <input class="form-input" id="rad-copy-month" type="month" style="max-width:160px;">
           <button class="btn" onclick="radCopyForDaicho()">📋 台帳転記用にコピー</button>
-          <button class="btn btn-primary" onclick="radGenerateReport()">🖨 搬入・処理管理台帳（市役所提出）</button>
+          <button class="btn btn-primary" onclick="radGenerateReport()">🖨 搬入・処理管理台帳（PDF・印刷）</button>
+          <button class="btn" onclick="radLedgerExcel()">📊 同じ台帳をExcelで</button>
         </div>
       </div>
       <div style="overflow-x:auto;">
@@ -2057,7 +2058,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
       <div style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.7;">
         ※「搬入・処理管理台帳」は<strong>選んだ月に検査した個体</strong>を通し番号順に、1枚3頭で打ち出します。
-        確認者印は「沖」で入ります。ファイル名は<strong>開始の個体番号〜終了の個体番号</strong>になります。
+        確認者印は「沖」で入ります。ファイル名は<strong>開始の個体番号〜終了の個体番号</strong>になります。<br>
+        PDFは印刷画面で「PDFに保存」。1枚が長くなっても自動で縮めて<strong>必ず1ページに3頭</strong>で収めます。Excelは市役所が修正・印刷範囲を設定できる形（3頭ごとに改ページ＋1頭1行の一覧シート）です。
       </div>
     </div>
   </div>
@@ -14328,12 +14330,24 @@ async function radCopyForDaicho() {
   } catch (e) { toast('コピーに失敗しました: ' + sbSafeMsg(e), 'error'); }
 }
 
-/* 市役所提出用「イノシシの搬入・処理管理台帳」を生成（1枚3個体・台帳の個体別シートと同じ様式）
-   月を選ぶと、その月に検査した個体を通し番号順に並べて打ち出す。
+/* 市役所提出用「イノシシの搬入・処理管理台帳」（1枚3個体・台帳の個体別シートと同じ様式）
+   月を選ぶと、その月に検査した個体を通し番号順に並べる。PDF（印刷）と Excel の2通りで出せる。
    ファイル名は「イノシシ搬入・処理管理台帳◯月分（開始の個体番号~終了の個体番号）」 */
-async function radGenerateReport() {
+const RAD_METHOD = { '箱罠': '檻', 'くくり罠': '括り', '囲い罠': '囲い' };   // 台帳の言い回し
+const radJwa = d => { if (!d) return ''; const [y, m, dd] = String(d).split('-'); return y ? `令和${(+y) - 2018}年${+m}月${+dd}日` : ''; };
+const radSeireki = d => { if (!d) return ''; const [y, m, dd] = String(d).split('-'); return y ? `${y}年${+m}月${+dd}日` : ''; };
+// 「08:05」→「午前8時5分」。pad=true なら分を2桁（捕獲日時は台帳が2桁のため）
+const radJtime = (t, pad) => {
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(t || '').trim());
+  if (!m) return '';
+  const h = +m[1], mi = +m[2];
+  return `${h < 12 ? '午前' : '午後'}${h % 12 === 0 ? 12 : h % 12}時${pad ? String(mi).padStart(2, '0') : mi}分`;
+};
+const radIsBelow = r => { const v = (r.radiation_result || '検出下限値以下').trim(); return !v || v === '検出下限値以下' || v === 'なし'; };
+const radLedgerName = (month, rows) => `イノシシ搬入・処理管理台帳${+month.split('-')[1]}月分（${rows[0].label_id}~${rows[rows.length - 1].label_id}）`;
+async function radLedgerRows() {
   const month = document.getElementById('rad-copy-month').value;
-  if (!month) { toast('月を選んでください', 'error'); return; }
+  if (!month) { toast('月を選んでください', 'error'); return null; }
   let rows;
   try {
     rows = await sb('GET', 'individuals', null,
@@ -14342,24 +14356,18 @@ async function radGenerateReport() {
       `capture_method,finishing_method,bleed_time,sex,weight_total,receive_time,process_time,recorder,` +
       `radiation_test_date,radiation_result_date,radiation_result` +
       `&order=serial_number.asc.nullslast,label_id.asc`);
-  } catch (e) { toast('取得に失敗しました: ' + sbSafeMsg(e), 'error'); return; }
-  if (!rows.length) { toast('その月の検査記録はありません', 'error'); return; }
+  } catch (e) { toast('取得に失敗しました: ' + sbSafeMsg(e), 'error'); return null; }
+  if (!rows.length) { toast('その月の検査記録はありません', 'error'); return null; }
+  return { month, rows };
+}
+
+async function radGenerateReport() {
+  const got = await radLedgerRows();
+  if (!got) return;
+  const { month, rows } = got;
+  const jwa = radJwa, seireki = radSeireki, jtime = radJtime, METHOD = RAD_METHOD;
 
   const esc = s => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-  // 令和の年月日（2026年 → 令和8年）
-  const jwa = d => { if (!d) return ''; const [y, m, dd] = String(d).split('-'); return y ? `令和${(+y) - 2018}年${+m}月${+dd}日` : ''; };
-  const seireki = d => { if (!d) return ''; const [y, m, dd] = String(d).split('-'); return y ? `${y}年${+m}月${+dd}日` : ''; };
-  // 「08:05」→「午前8時5分」。pad=true なら分を2桁（捕獲日時は台帳が2桁のため）
-  const jtime = (t, pad) => {
-    const m = /^(\d{1,2}):(\d{2})/.exec(String(t || '').trim());
-    if (!m) return '';
-    const h = +m[1], mi = +m[2];
-    const ampm = h < 12 ? '午前' : '午後';
-    const h12 = h % 12 === 0 ? 12 : h % 12;
-    return `${ampm}${h12}時${pad ? String(mi).padStart(2, '0') : mi}分`;
-  };
-  // 台帳の言い回しに合わせる（箱罠→檻・くくり罠→括り）
-  const METHOD = { '箱罠': '檻', 'くくり罠': '括り', '囲い罠': '囲い' };
   const stamp = '<span class="stamp">沖</span>';
   // 検査結果は通常「検出下限値以下」。その場合は台帳と同じく丸で囲う
   const csCell = (r) => {
@@ -14428,7 +14436,7 @@ async function radGenerateReport() {
     body{font-family:"Yu Gothic","YuGothic","Hiragino Kaku Gothic ProN","Hiragino Sans",
       "Noto Sans JP","MS PGothic",sans-serif;color:#000;
       -webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    .sheet{page-break-after:always;max-width:168mm;margin:0 auto;}
+    .sheet{page-break-after:always;break-inside:avoid;max-width:168mm;margin:0 auto;}
     .sheet:last-child{page-break-after:auto;}
     .ttl{text-align:center;font-size:15pt;font-weight:700;margin-bottom:12px;}
     .fac{text-align:right;font-size:9.5pt;margin-bottom:6px;}
@@ -14458,11 +14466,14 @@ async function radGenerateReport() {
       color:#c00;font-size:14px;font-weight:700;text-align:center;}`;
 
   // ファイル名は「◯月分（開始の個体番号~終了の個体番号）」（印刷ダイアログの既定名になる）
-  const name = `イノシシ搬入・処理管理台帳${+month.split('-')[1]}月分` +
-    `（${rows[0].label_id}~${rows[rows.length - 1].label_id}）`;
+  const name = radLedgerName(month, rows);
   const html = '<!doctype html><html><head><meta charset="utf-8"><title>' + esc(name) + '</title><style>' + css +
     '</style></head><body>' + sheets.join('') +
-    '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.focus();window.print();},400);};</scr' + 'ipt></body></html>';
+    '<scr' + 'ipt>' +
+    // 1枚がA4の印字範囲（297-18-14mm）を超えたら縮めて必ず1ページに収める。
+    // 環境（Windowsの游ゴシック・Edge等）で住所が折り返すと1枚が2ページに割れ、7月分が44枚→88ページになっていた（2026-10）
+    'function fitSheets(){var mm=96/25.4,max=(297-18-14-3)*mm;document.querySelectorAll(".sheet").forEach(function(s){s.style.zoom="";var h=s.getBoundingClientRect().height;if(h>max)s.style.zoom=(max/h).toFixed(3);});}' +
+    'window.onload=function(){fitSheets();setTimeout(function(){window.focus();window.print();},400);};</scr' + 'ipt></body></html>';
   const w = window.open('', '_blank');
   if (w) { w.document.open(); w.document.write(html); w.document.close(); }
   else {
@@ -14471,6 +14482,130 @@ async function radGenerateReport() {
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
   toast(`${rows.length}頭ぶん（${Math.ceil(rows.length / 3)}枚）を作成しました：${rows[0].label_id}〜${rows[rows.length - 1].label_id}`);
+}
+
+/* 同じ台帳を Excel（.xlsx）で出す。市役所が修正・印刷範囲の設定をできるように（2026-10 市役所から依頼）。
+   シート「台帳」: 3頭ずつのブロックを縦に並べ、ブロックごとに改ページ（A4縦・横幅1ページに合わせる）。
+   シート「一覧」: 1頭1行（並べ替え・修正用）。ライブラリは使わず SpreadsheetML を makeZip で包む。 */
+async function radLedgerExcel() {
+  const got = await radLedgerRows();
+  if (!got) return;
+  const { month, rows } = got;
+  const x = v => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const col = i => String.fromCharCode(65 + i);
+  // スタイル: 1=枠線・中央・折返し 2=表題 3=右寄せ（枠なし） 4=枠線・見出し（薄い灰）
+  const cell = (ref, v, st) => (v === '' || v == null)
+    ? `<c r="${ref}" s="${st}"/>`
+    : (typeof v === 'number' ? `<c r="${ref}" s="${st}"><v>${v}</v></c>` : `<c r="${ref}" s="${st}" t="inlineStr"><is><t xml:space="preserve">${x(v)}</t></is></c>`);
+  let r = 0; const sheetRows = []; const merges = []; const breaks = [];
+  const put = (vals, opt = {}) => {
+    r++;
+    const cs = vals.map((v, i) => cell(col(i) + r, v, i === 0 ? (opt.headSt || 4) : (opt.st || 1))).join('');
+    sheetRows.push(`<row r="${r}"${opt.ht ? ` ht="${opt.ht}" customHeight="1"` : ''}>${cs}</row>`);
+  };
+  const title = (text, st, ht) => { r++; sheetRows.push(`<row r="${r}" ht="${ht}" customHeight="1">${cell('A' + r, text, st)}${cell('B' + r, '', st)}${cell('C' + r, '', st)}${cell('D' + r, '', st)}</row>`); merges.push(`A${r}:D${r}`); };
+  const blank = () => { r++; sheetRows.push(`<row r="${r}" ht="8" customHeight="1"/>`); };
+  for (let i = 0; i < rows.length; i += 3) {
+    const g = rows.slice(i, i + 3); while (g.length < 3) g.push(null);
+    const f = fn => g.map(a => a ? fn(a) : '');
+    title('イノシシの搬入・処理管理台帳', 2, 26);
+    title('施設名：館山ジビエセンター', 3, 18);
+    put(['個体管理番号', ...f(a => a.label_id)], { ht: 20 });
+    put(['捕獲日時', ...f(a => `${radJwa(a.capture_date)}\n${radJtime(a.capture_time, true)}`)], { ht: 32 });
+    put(['捕獲方法', ...f(a => RAD_METHOD[a.capture_method] || a.capture_method || '')], { ht: 20 });
+    put(['捕獲場所', ...f(a => [a.capture_city, a.capture_area].filter(Boolean).join(''))], { ht: 20 });
+    put(['捕獲者', ...f(a => a.hunter_name || '')], { ht: 20 });
+    put(['止め刺し方法', ...f(a => a.finishing_method || '')], { ht: 20 });
+    put(['放血時刻', ...f(a => radJtime(a.bleed_time))], { ht: 20 });
+    put(['放血場所', ...f(a => a.capture_area || '')], { ht: 20 });
+    put(['性別', ...f(a => a.sex || '')], { ht: 20 });
+    put(['体重', ...f(a => a.weight_total ? `${a.weight_total}kg` : '')], { ht: 20 });
+    put(['受入時刻', ...f(a => radJtime(a.receive_time))], { ht: 20 });
+    put(['処理日時', ...f(a => radJtime(a.process_time))], { ht: 22 });
+    put(['記録者', ...f(a => a.recorder || '沖')], { ht: 20 });
+    put(['確認者印', ...f(() => '沖')], { ht: 24 });
+    blank();
+    put(['検査日', ...f(a => radSeireki(a.radiation_test_date))], { ht: 20 });
+    put(['検査機関', ...f(() => '館山市')], { ht: 20 });
+    put(['結果判明日', ...f(a => radSeireki(a.radiation_result_date || a.radiation_test_date))], { ht: 20 });
+    const cs = a => radIsBelow(a) ? '検出下限値以下' : `${String(a.radiation_result).replace(/Bq\/kg/i, '').trim()} Bq/kg`;
+    put(['検査結果 セシウム134', ...f(cs)], { ht: 22 });
+    put(['検査結果 セシウム137', ...f(cs)], { ht: 22 });
+    put(['検査結果 セシウム合計', ...f(cs)], { ht: 22 });
+    put(['確認者印', ...f(() => '沖')], { ht: 24 });
+    blank();
+    put(['廃棄日', '', '', ''], { ht: 20 });
+    put(['廃棄方法', '', '', ''], { ht: 20 });
+    put(['確認者印', '', '', ''], { ht: 24 });
+    put(['市町村 確認印', '', '', ''], { ht: 24 });
+    if (i + 3 < rows.length) breaks.push(r);   // ブロックごとに改ページ
+  }
+  const sheet1 = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>
+<cols><col min="1" max="1" width="20" customWidth="1"/><col min="2" max="4" width="26" customWidth="1"/></cols>
+<sheetData>${sheetRows.join('')}</sheetData>
+<mergeCells count="${merges.length}">${merges.map(m => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>
+<printOptions horizontalCentered="1"/>
+<pageMargins left="0.6" right="0.6" top="0.6" bottom="0.5" header="0.3" footer="0.3"/>
+<pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/>
+<rowBreaks count="${breaks.length}" manualBreakCount="${breaks.length}">${breaks.map(b => `<brk id="${b}" max="16383" man="1"/>`).join('')}</rowBreaks>
+</worksheet>`;
+  // 一覧（1頭1行）
+  const H = ['通し番号', '個体管理番号', '捕獲日', '捕獲時刻', '捕獲方法', '捕獲場所', '捕獲者', '止め刺し方法', '放血時刻', '性別', '体重(kg)', '受入時刻', '処理時刻', '記録者', '検査日', '結果判明日', '検査結果'];
+  const listRows = [`<row r="1">${H.map((h, i) => cell(col(i) + 1, h, 4)).join('')}</row>`];
+  rows.forEach((a, k) => {
+    const n = k + 2;
+    const vals = [a.serial_number == null ? '' : Number(a.serial_number), a.label_id, a.capture_date || '', a.capture_time || '', RAD_METHOD[a.capture_method] || a.capture_method || '',
+      [a.capture_city, a.capture_area].filter(Boolean).join(''), a.hunter_name || '', a.finishing_method || '', a.bleed_time || '', a.sex || '',
+      a.weight_total == null || a.weight_total === '' ? '' : Number(a.weight_total), a.receive_time || '', a.process_time || '', a.recorder || '沖',
+      a.radiation_test_date || '', a.radiation_result_date || a.radiation_test_date || '', radIsBelow(a) ? '検出下限値以下' : String(a.radiation_result)];
+    listRows.push(`<row r="${n}">${vals.map((v, i) => cell(col(i) + n, v, 1)).join('')}</row>`);
+  });
+  const sheet2 = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<cols><col min="1" max="1" width="9" customWidth="1"/><col min="2" max="2" width="16" customWidth="1"/><col min="3" max="17" width="13" customWidth="1"/></cols>
+<sheetData>${listRows.join('')}</sheetData><pageSetup paperSize="9" orientation="landscape"/></worksheet>`;
+  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="2"><font><sz val="10"/><name val="游ゴシック"/><family val="3"/><charset val="128"/></font><font><b/><sz val="14"/><name val="游ゴシック"/><family val="3"/><charset val="128"/></font></fonts>
+<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF2F2F2"/><bgColor indexed="64"/></patternFill></fill></fills>
+<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="5">
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="2" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+</cellXfs>
+<cellStyles count="1"><cellStyle name="標準" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+  const enc = new TextEncoder();
+  const files = [
+    ['[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`],
+    ['_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
+    ['xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="台帳" sheetId="1" r:id="rId1"/><sheet name="一覧" sheetId="2" r:id="rId2"/></sheets>
+<definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">台帳!$A$1:$D$${r}</definedName></definedNames></workbook>`],
+    ['xl/_rels/workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
+    ['xl/styles.xml', styles],
+    ['xl/worksheets/sheet1.xml', sheet1],
+    ['xl/worksheets/sheet2.xml', sheet2],
+  ].map(([name, text]) => ({ name, data: enc.encode(text) }));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(makeZip(files));
+  a.download = radLedgerName(month, rows) + '.xlsx';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  toast(`Excelを作成しました：${rows.length}頭（${Math.ceil(rows.length / 3)}ブロック・1ブロック1ページ）`);
 }
 
 // 翌月の1日を返す。「2026-09」のような日なしの文字列は日付として読めず
