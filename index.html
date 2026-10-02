@@ -1653,6 +1653,26 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     </div>
   </div>
 
+  <!-- 新しいお客さんへの出荷: その場で顧客登録（住所はあとでも可） -->
+  <div id="shipNewCustModal" style="display:none;position:fixed;inset:0;z-index:700;background:rgba(0,0,0,.7);overflow-y:auto;">
+    <div style="max-width:520px;margin:40px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:20px;">
+      <div style="font-size:17px;font-weight:700;color:var(--gold);margin-bottom:6px;">🆕 新しいお客さんです</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:10px;">
+        「<strong id="snc-name"></strong>」は顧客台帳にありません。このまま顧客として登録し、出荷とつなげます（請求書作成でこのお客さんを選ぶと出てきます）。<br>
+        住所・電話が分からない・時間が無いときは<strong>「あとで」</strong>でOK。あとで送り状の写真や Google マップのリンクを送れば住所を入れます。
+      </div>
+      <div class="form-group"><label>住所（〒から。分かれば）</label><input class="form-input" id="snc-address" placeholder="例: 〒150-0002 東京都渋谷区渋谷1-6-8 渋谷井上ビル1F" autocomplete="off"></div>
+      <div class="form-group"><label>電話（分かれば）</label><input class="form-input" id="snc-phone" inputmode="tel" placeholder="例: 03-6427-1442" autocomplete="off"></div>
+      <div class="form-group"><label>価格</label><select class="form-input" id="snc-rank">
+        <option value="standard">スタンダード</option><option value="local">ローカル</option><option value="startmember">スタートメンバー</option></select></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:12px;">
+        <button class="btn" id="snc-cancel">キャンセル</button>
+        <button class="btn" id="snc-later">住所はあとで（このまま出荷）</button>
+        <button class="btn btn-primary" id="snc-save">この内容で登録して出荷</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 個体QRラベル印刷モーダル（KML-506 / A4 24面） -->
   <div id="qrLabelModal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.7);overflow-y:auto;">
     <div style="max-width:680px;margin:24px auto 60px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--gold2);padding:22px;">
@@ -2525,6 +2545,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div id="ship-direct-paused" style="margin-top:10px;"></div>
       <div id="ship-direct-summary" style="margin-top:10px;"></div>
       <div id="ship-direct-list" style="margin-top:10px;"></div>
+      <div id="ship-pending-cust" style="margin-top:10px;"></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
         <div class="form-group" style="margin:0;flex:1;min-width:220px;"><label>出荷先（お店名を検索 or そのまま入力）</label>
           <input class="form-input" id="ship-direct-cust" list="shipCustDatalist" placeholder="例: 山海亭 / 一般のお客様" autocomplete="off" />
@@ -3631,6 +3652,41 @@ async function shipDirectShowPicker(indBase) {
   return true;
 }
 
+// 新しいお客さんの登録を聞く。戻り値: {address, phone, rank} / {later:true, rank} / null（キャンセル）
+function shipNewCustomerAsk(name) {
+  return new Promise(resolve => {
+    const m = document.getElementById('shipNewCustModal');
+    document.getElementById('snc-name').textContent = name;
+    ['snc-address', 'snc-phone'].forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('snc-rank').value = 'standard';
+    const done = v => { m.style.display = 'none'; resolve(v); };
+    const rank = () => document.getElementById('snc-rank').value;
+    document.getElementById('snc-cancel').onclick = () => done(null);
+    document.getElementById('snc-later').onclick = () => done({ later: true, rank: rank() });
+    document.getElementById('snc-save').onclick = () => {
+      const address = document.getElementById('snc-address').value.trim();
+      const phone = document.getElementById('snc-phone').value.trim();
+      if (!address && !phone) { toast('住所か電話を入れてください（分からなければ「住所はあとで」）', 'error'); return; }
+      done({ address, phone, rank: rank() });
+    };
+    m.style.display = 'block';
+    document.getElementById('snc-address').focus();
+  });
+}
+
+// 住所が未登録のまま出荷したお客さん（あとで送り状の写真・Google マップから住所を入れる）
+async function shipPendingCustLoad() {
+  const box = document.getElementById('ship-pending-cust');
+  if (!box) return;
+  try {
+    const rows = await sb('POST', 'rpc/staff_pending_customers', {});
+    if (!rows || !rows.length) { box.innerHTML = ''; return; }
+    box.innerHTML = `<div style="border:1px solid var(--gold);border-radius:var(--radius);padding:8px 10px;font-size:13px;line-height:1.7;">
+      📮 <strong>住所が未登録のお客さん ${rows.length}件</strong>（送り状の写真か Google マップのリンクを送れば登録します）<br>
+      ${rows.map(r => `${esc2(r.name)}<span style="color:var(--text2);font-size:12px;">（${esc2(r.code)}${r.last_order_date ? '・' + esc2(r.last_order_date) + ' 出荷' : ''}）</span>`).join('　')}</div>`;
+  } catch (e) { box.innerHTML = `<div style="font-size:12px;color:var(--red);">住所未登録のお客さんの一覧を読めませんでした: ${esc2(sbSafeMsg(e))}</div>`; }
+}
+
 async function shipDirectConfirm() {
   // スタッフキーは求めない（キーが要るのは顧客マスタの操作だけ。2026-08-12）
   shipCustResolveTyped();   // ひらがな・別名のままなら台帳の正式名に直してから確定する
@@ -3639,6 +3695,16 @@ async function shipDirectConfirm() {
   const operator = document.getElementById('ship-operator') ? document.getElementById('ship-operator').value : '';
   if (!shipDirectItems.length) { toast('先に商品をスキャンしてください', 'error'); return; }
   if (!custName) { toast('出荷先（お店名など）を入力してください', 'error'); return; }
+  // 顧客台帳に無い出荷先は、その場で顧客として登録する（住所はあとでも可）。
+  // 名前だけで出荷すると注文が顧客につながらず、請求書作成で出てこなかった（直近30日で7件、2026-10）。
+  // 判定は staff_lookup_customer_id（スタッフキー不要）で行う。通信に失敗したときは聞かずに進め、recordDirectShipment 側で登録を試みる。
+  let newCustomer = null;
+  let knownId;
+  try { knownId = await sb('POST', 'rpc/staff_lookup_customer_id', { p_name: custName }); } catch (e) { knownId = undefined; }
+  if (knownId === null || knownId === '') {
+    newCustomer = await shipNewCustomerAsk(custName);
+    if (!newCustomer) return;
+  }
   const totalW = shipDirectItems.reduce((s,i)=>s+(parseFloat(i.weight)||0),0);
   // 受け渡し方法と送料も確認画面に出す（送料の入れ忘れをここで気づけるように）
   const _dm = document.getElementById('ship-direct-method')?.value || '手渡し';
@@ -3665,10 +3731,12 @@ async function shipDirectConfirm() {
       const fv = parseInt(document.getElementById('ship-direct-freight').value, 10);
       if (isFinite(fv) && fv >= 0) delivery.freight = fv;
     }
-    const { orderCode } = await recordDirectShipment(shipDirectItems, custName, { memo, operator, delivery });
+    const { orderCode, createdCustomer } = await recordDirectShipment(shipDirectItems, custName, { memo, operator, delivery, newCustomer });
 
     playFeedbackSound(true);
-    toast(`直販出荷を記録しました: ${custName} へ ${shipDirectItems.length}点（${orderCode}）`);
+    toast(`直販出荷を記録しました: ${custName} へ ${shipDirectItems.length}点（${orderCode}）`
+      + (createdCustomer ? (newCustomer && newCustomer.address ? '。新しいお客さんとして顧客台帳に登録しました' : '。新しいお客さんとして登録しました（住所はあとで：送り状の写真か Google マップを送ってください）') : ''));
+    if (createdCustomer) { shipPendingCustLoad(); loadShipping(); }
     shipDirectItems = [];
     shipDirectRender();
     document.getElementById('ship-direct-cust').value = '';
@@ -4217,12 +4285,24 @@ async function recordDirectShipment(items, custName, opts) {
   // 顧客台帳に完全一致があれば紐付ける（キー不要のRPC: 名前が一意のときだけidが返る）
   let customerId = null;
   try { customerId = await sb('POST', 'rpc/staff_lookup_customer_id', { p_name: custName }) || null; } catch(e) {}
+  // 台帳に無ければその場で登録してつなぐ（住所・電話は分かれば。無ければ【住所未登録】として登録）
+  let createdCustomer = false;
+  const nc = opts.newCustomer || {};
+  if (!customerId) {
+    try {
+      const rid = await sb('POST', 'rpc/staff_register_customer_on_ship', { p_name: custName, p_address: nc.address || null, p_phone: nc.phone || null, p_price_rank: nc.rank || 'standard' });
+      if (typeof rid !== 'string' || !rid) throw new Error('登録結果が空でした');
+      customerId = rid; createdCustomer = true;
+    } catch (e) {
+      toast('出荷先を顧客台帳に登録できませんでした（出荷は記録します。あとで顧客をつないでください）: ' + sbSafeMsg(e), 'error');
+    }
+  }
 
   // 単価を価格マスタ×顧客の価格ランクから決める（送料しか乗らない0円請求書になっていたバグの修正）。
   // タブの巡回順に依存させないよう、その場で価格マスタと顧客ランクを取り直す。
-  let priceRank = 'standard';
+  let priceRank = createdCustomer ? (nc.rank || 'standard') : 'standard';
   let custNotes = '';
-  if (customerId) {
+  if (customerId && !createdCustomer) {
     try { const cs = await sb('GET', 'customers', null, `?id=eq.${customerId}&select=price_rank,notes`); if (cs[0]) { priceRank = cs[0].price_rank || 'standard'; custNotes = cs[0].notes || ''; } } catch(e) {}
   }
   // 仲卸業者経由の顧客（顧客マスタの備考にその名前がある）は、注文の備考(memo)にも自動で入れておく。
@@ -4291,7 +4371,7 @@ async function recordDirectShipment(items, custName, opts) {
   if (unpriced.length) {
     toast(`⚠ ${unpriced.length}件は価格マスタに単価が無く0円のままです（${[...new Set(unpriced.map(p => p.i.part_name))].join('・')}）。請求前に単価を確認してください`, 'error');
   }
-  return { orderId, orderCode, unpriced: unpriced.map(p => p.i) };
+  return { orderId, orderCode, unpriced: unpriced.map(p => p.i), createdCustomer };
 }
 
 async function changeStatus(id, code) {
@@ -4713,6 +4793,7 @@ async function fieldPhotoResolve(id) {
 
 async function loadShipping() {
   // スタッフキーは求めない（キーが要るのは顧客マスタの操作だけ。2026-08-12）
+  shipPendingCustLoad();
   const container = document.getElementById('ship-orders');
   container.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
   // 直販の出荷先候補（顧客台帳）。名前を手入力すれば staff_lookup_customer_id が紐付けを解決する。
