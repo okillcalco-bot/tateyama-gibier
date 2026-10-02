@@ -1025,6 +1025,7 @@ async function init(){
     renderCustomers(); // 会社情報・注文実績がそろってから案内文の見本を出し直す
     const h=(location.hash||'').replace('#','');
     if(h && document.querySelector('.tab[data-tab="'+h+'"]')) switchTab(h);
+    olOpenFromQuery();
   }catch(e){console.error(e)}
 }
 
@@ -1036,6 +1037,7 @@ async function refreshAll(){
 // ── Supabase Loaders ──
 async function loadOrders(){
   allOrders=await sb('GET','orders','',`?select=*,order_items(*,inventory(grade))&order=created_at.desc&limit=500`);
+  await olLoadReviewStates(allOrders.map(o=>o.id));
   renderStatusCards();
   renderOrders();
   renderShipping();
@@ -1597,12 +1599,14 @@ function renderOrders(){
       <td>${o.delivery_date||'--'}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(summary||'--')}</td>
       <td>${amt}</td>
-      <td><span class="badge badge-${o.status||''}">${o.status||'--'}</span></td>
+      <td><span class="badge badge-${o.status||''}">${o.status||'--'}</span>${olBadge(o.id)}</td>
       <td>
         <button class="btn btn-outline btn-sm" onclick="showOrderDetail('${o.id}')">詳細</button>
         <select class="btn-sm" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px;font-size:.75rem" onchange="changeStatus('${o.id}',this.value);this.selectedIndex=0">
           <option value="">変更</option>
-          <option value="受注">受注</option><option value="確認済">確認済</option><option value="発送済">発送済</option><option value="納品完了">納品完了</option><option value="キャンセル">キャンセル</option>
+          ${olNeedsReview(o.id)
+            ?'<option value="キャンセル">キャンセル</option>'
+            :'<option value="受注">受注</option><option value="確認済">確認済</option><option value="発送済">発送済</option><option value="納品完了">納品完了</option><option value="キャンセル">キャンセル</option>'}
         </select>
       </td>
     </tr>`}).join('');
@@ -1640,6 +1644,106 @@ async function odLoadAllocations(orderId){
   }catch(e){ el.textContent=''; }
 }
 
+/* ── シーモルト取込（メール注文の連携）: 要確認・原文数量・温度帯・出典・履歴 ──
+   補助表は order_link スキーマ（DB側）。要確認のうちは DB のトリガーが確認済・出荷・引当・請求を拒否する。
+   ここは表示と、人が未確認項目を確認する操作だけ。 */
+let olStates={};          // order_id → {review_state, external_order_id, unresolved[]}
+let olInstalled=true;     // 連携のDB側が未適用の環境では何も出さない
+const OL_LABEL={temp_zone_unknown:'温度帯の記載なし',fresh_meaning_unconfirmed:'「フレッシュ」の意味（冷蔵か）',whole_carcass_count:'頭数注文（枝肉）'};
+async function olRpc(fn,args){
+  const headers={'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Content-Type':'application/json'};
+  const sk=staffKeyGet(); if(sk) headers['x-staff-key']=sk;
+  const res=await fetch(`${SB_URL}/rest/v1/rpc/${fn}`,{method:'POST',headers,body:JSON.stringify(args||{})});
+  const t=await res.text();
+  if(!res.ok){ const e=new Error(t); e.status=res.status; throw e; }
+  return t?JSON.parse(t):null;
+}
+async function olLoadReviewStates(ids){
+  olStates={};
+  if(!olInstalled||!ids.length) return;
+  try{
+    for(let i=0;i<ids.length;i+=500){
+      const rows=await olRpc('order_link_review_states',{p_order_ids:ids.slice(i,i+500)});
+      (rows||[]).forEach(r=>{olStates[r.order_id]=r;});
+    }
+  }catch(e){
+    if(e.status===404||/PGRST202|Could not find the function/.test(e.message)){ olInstalled=false; return; }  // 連携が未適用
+    console.error('取込の確認状態の読込エラー',e);
+    alert('シーモルト取込の「要確認」状態を読み込めませんでした。要確認の注文は確認済・出荷に進めません（DB側で止まります）。\n'+String(e.message||e).slice(0,200));
+  }
+}
+function olNeedsReview(id){ return olStates[id]&&olStates[id].review_state==='needs_review'; }
+function olBadge(id){
+  const st=olStates[id]; if(!st) return '';
+  return st.review_state==='needs_review'
+    ?` <span class="badge" style="background:var(--red);color:#fff" title="${esc((st.unresolved||[]).map(u=>OL_LABEL[u]||u).join('・'))}">要確認（取込）</span>`
+    :` <span class="badge" style="background:var(--surface2,#333);color:var(--text2)" title="外部注文ID ${esc(st.external_order_id||'なし')}">取込</span>`;
+}
+async function olLoadDetail(orderId){
+  const el=document.getElementById('odLink'); if(!el) return;
+  el.innerHTML='<div style="font-size:.82rem;color:var(--text2);margin-top:12px">シーモルト取込の情報を読み込み中…</div>';
+  let d;
+  try{ d=await olRpc('order_link_order_detail',{p_order_id:orderId}); }
+  catch(e){ el.innerHTML=`<div style="color:var(--red);font-size:.85rem;margin-top:12px">取込の情報を読み込めませんでした: ${esc(String(e.message||e).slice(0,200))}</div>`; return; }
+  if(!d){ el.innerHTML=''; return; }
+  const TZ={fresh:'フレッシュ（要確認）',chilled:'冷蔵',frozen:'冷凍',unknown:'記載なし'};
+  const needs=d.review_state==='needs_review';
+  const rows=d.items.map(i=>{
+    const un=i.confirm_state==='needs_review';
+    const tzq=un&&(i.review_items||[]).some(r=>r==='temp_zone_unknown'||r==='fresh_meaning_unconfirmed');
+    return `<tr style="${un?'background:rgba(220,38,38,.08)':''}">
+      <td>${i.line_no}</td><td>${esc(i.raw_text)}</td><td>${esc(i.raw_qty_text)}</td>
+      <td>${i.normalized_kg!=null?i.normalized_kg+'kg':'—（'+esc(i.unit)+'のため重量未確定）'}</td>
+      <td>${esc(TZ[i.temp_zone]||i.temp_zone)}${i.temp_text?'<br><span style="font-size:.75rem;color:var(--text2)">原文: '+esc(i.temp_text)+'</span>':''}</td>
+      <td>${esc(i.wish_text||'')}</td>
+      <td>${un?(i.review_items||[]).map(r=>esc(OL_LABEL[r]||r)).join('<br>')
+        +`<div style="margin-top:4px">${tzq?`<select class="ol-tz" data-item="${i.order_item_id}"><option value="">温度帯を選ぶ</option><option value="chilled">冷蔵</option><option value="frozen">冷凍</option></select>`:''}
+          <label style="font-size:.78rem"><input type="checkbox" class="ol-ok" data-item="${i.order_item_id}"> 確認した</label></div>`:'確認済み'}</td></tr>`;
+  }).join('');
+  const srcs=(d.sources||[]).map(s=>`<li>${esc(s.role)}: ${esc(s.filename||'メール本文')}${s.pages?' p.'+esc(s.pages.join(',')):''}（${esc(s.account)}・${s.received_at?esc(fmtJst(s.received_at)):''}）${s.link&&/^https:\/\//.test(s.link)?` <a href="${esc(s.link)}" target="_blank" rel="noopener noreferrer">原本</a>`:''}</li>`).join('');
+  const hist=(d.history||[]).map(h=>`<li>${esc(fmtJst(h.at))} ${esc(h.by||'')}: ${esc(h.tool)} → ${esc(h.outcome)}${h.user_request?'（依頼: '+esc(h.user_request)+'）':''}</li>`).join('');
+  el.innerHTML=`<div style="margin-top:14px;padding:10px;border:1px solid ${needs?'var(--red)':'var(--border)'};border-radius:8px">
+    <div style="font-weight:700;margin-bottom:6px">シーモルト取込 ${needs?'<span class="badge" style="background:var(--red);color:#fff">要確認</span>':'<span class="badge">確認済み</span>'}</div>
+    <div style="font-size:.85rem;margin-bottom:6px">外部注文ID: <strong>${esc(d.external_order_id||'（番号なし・出典で識別）')}</strong> ／ 発行元: ${esc(d.issuer_account)}${d.link_kind==='linked_existing'?' ／ 既存の注文に結び付け':''}${d.reviewed_by?' ／ 確認: '+esc(d.reviewed_by):''}</div>
+    <div class="table-wrap"><table><thead><tr><th>行</th><th>原文</th><th>原文数量</th><th>kg換算</th><th>温度帯</th><th>希望条件</th><th>未確認項目</th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${needs?`<div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:8px;flex-wrap:wrap">
+      <input id="olBy" placeholder="確認した人の名前" style="padding:6px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text)">
+      <button class="btn btn-green" onclick="olConfirm('${orderId}',${Number(d.revision)})">確認した項目を保存</button></div>`:''}
+    <div style="font-size:.8rem;color:var(--text2);margin-top:8px">出典<ul style="margin:4px 0 0 18px">${srcs||'<li>なし</li>'}</ul></div>
+    <div style="font-size:.8rem;color:var(--text2);margin-top:6px">登録履歴<ul style="margin:4px 0 0 18px">${hist||'<li>なし</li>'}</ul></div>
+  </div>`;
+}
+function fmtJst(t){ try{ return new Date(t).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ return String(t||''); } }
+async function olConfirm(orderId,revision){
+  const by=(document.getElementById('olBy').value||'').trim();
+  if(!by){alert('確認した人の名前を入れてください');return}
+  const res=[...document.querySelectorAll('#odLink .ol-ok')].filter(c=>c.checked).map(c=>{
+    const tz=document.querySelector(`#odLink .ol-tz[data-item="${c.dataset.item}"]`);
+    return {order_item_id:c.dataset.item,confirmed:true,...(tz&&tz.value?{temp_zone:tz.value}:{})};
+  });
+  if(!res.length){alert('「確認した」にチェックを入れてください');return}
+  if(!staffKeyGet()&&!(await staffKeyEnsure())) return;
+  try{
+    const r=await olRpc('order_link_confirm_review',{p_order_id:orderId,p_expected_revision:revision,p_resolutions:res,p_by:by});
+    alert(r.review_state==='confirmed'?'すべて確認しました。通常の受注として進められます':`保存しました（残り ${r.remaining} 件の未確認項目）`);
+    await loadOrders();
+    showOrderDetail(orderId);
+  }catch(e){ alert('保存できませんでした: '+String(e.message||e).slice(0,300)); }
+}
+async function olOpenFromQuery(){
+  const code=new URLSearchParams(location.search).get('order');
+  if(!code) return;
+  let o=allOrders.find(x=>x.order_code===code);
+  if(!o){   // 直近500件より古い注文は番号で取り直す
+    try{
+      const rows=await sb('GET','orders','',`?order_code=eq.${encodeURIComponent(code)}&select=*,order_items(*,inventory(grade))`);
+      if(rows.length){ o=rows[0]; allOrders.push(o); await olLoadReviewStates(allOrders.map(x=>x.id)); }
+    }catch(e){ alert('注文を読み込めませんでした: '+String(e.message||e).slice(0,200)); return; }
+  }
+  if(o) showOrderDetail(o.id);
+  else alert(`注文 ${code} が見つかりません（番号違い、または表示する権限がありません）`);
+}
+
 function showOrderDetail(id){
   const o=allOrders.find(x=>x.id===id);
   if(!o) return;
@@ -1661,17 +1765,19 @@ function showOrderDetail(id){
     ${o.memo?`<div style="margin-bottom:12px;font-size:.85rem"><strong>備考:</strong> ${esc(o.memo)}</div>`:''}
     <div class="table-wrap"><table>
       <thead><tr><th>種別</th><th>部位</th><th>重量(kg)</th><th>単価</th><th>金額</th></tr></thead>
-      <tbody>${items.map(i=>`<tr><td>${esc(i.species||'')}</td><td>${esc(i.part_name||'')}</td><td>${i.weight_kg?i.weight_kg:(i.qty?i.qty+(i.unit||'枚'):'--')}</td><td>&yen;${Number(i.unit_price||0).toLocaleString()}</td><td>&yen;${Number(i.subtotal||i.amount||0).toLocaleString()}</td></tr>`).join('')}</tbody>
+      <tbody>${items.map(i=>`<tr><td>${esc(i.species||'')}</td><td>${esc(i.part_name||'')}</td><td>${i.weight_kg?i.weight_kg:(i.qty?i.qty+(i.unit||'枚'):'--')}</td><td>${i.unit_price!=null?'&yen;'+Number(i.unit_price).toLocaleString():'未確定'}</td><td>${(i.subtotal??i.amount)!=null?'&yen;'+Number(i.subtotal??i.amount).toLocaleString():'未確定'}</td></tr>`).join('')}</tbody>
     </table></div>
-    <div style="text-align:right;font-size:1.1rem;font-weight:700;color:var(--gold);margin:12px 0">合計: &yen;${Number(o.total_amount||0).toLocaleString()}</div>
+    <div style="text-align:right;font-size:1.1rem;font-weight:700;color:var(--gold);margin:12px 0">合計: ${o.total_amount!=null?'&yen;'+Number(o.total_amount).toLocaleString():'未確定（出荷時の実重量で決まります）'}</div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">`;
   const flow={'受注':'確認済','確認済':'発送済','発送済':'納品完了'};
-  if(flow[o.status]) html+=`<button class="btn btn-green" onclick="changeStatus('${o.id}','${flow[o.status]}');closeModal('orderDetailModal')">${flow[o.status]}にする</button>`;
+  if(olNeedsReview(o.id)) html+=`<span style="font-size:.82rem;color:var(--red);align-self:center">シーモルト取込の「要確認」です。下の未確認項目を確認するまで確認済・出荷・請求へ進めません</span>`;
+  else if(flow[o.status]) html+=`<button class="btn btn-green" onclick="changeStatus('${o.id}','${flow[o.status]}');closeModal('orderDetailModal')">${flow[o.status]}にする</button>`;
   if(o.status!=='キャンセル'&&o.status!=='納品完了') html+=`<button class="btn btn-danger" onclick="changeStatus('${o.id}','キャンセル');closeModal('orderDetailModal')">キャンセル</button>`;
-  html+=`</div><div id="odAlloc"></div>`;
+  html+=`</div><div id="odLink"></div><div id="odAlloc"></div>`;
   document.getElementById('odContent').innerHTML=html;
   openModal('orderDetailModal');
   odLoadAllocations(id);
+  if(olStates[id]) olLoadDetail(id);
 }
 
 // ── B2 CSV Export ──

@@ -4718,7 +4718,34 @@ function shipScanShowResult(ok, html) {
   el.innerHTML = (ok ? '✅ ' : '⛔ ') + html;
 }
 
+/* シーモルト取込の「要確認」注文（order_link）。選んだだけで確認済にしない・割当や出荷に進めない。
+   DB 側のトリガーでも拒否される。連携のDB側が未適用の環境では関数が無いので何もしない。 */
+let shipReviewStates = {}, shipReviewInstalled = true;
+async function shipLoadReviewStates(ids) {
+  shipReviewStates = {};
+  if (!shipReviewInstalled || !ids.length) return;
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/rpc/order_link_review_states`, {
+      method: 'POST', headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_order_ids: ids.slice(0, 1000) })
+    });
+    const t = await res.text();
+    if (!res.ok) {
+      if (res.status === 404 || /PGRST202/.test(t)) { shipReviewInstalled = false; return; }
+      throw new Error(t.slice(0, 200));
+    }
+    (t ? JSON.parse(t) : []).forEach(r => { shipReviewStates[r.order_id] = r; });
+  } catch (e) {
+    toast('取込注文の「要確認」状態を読み込めませんでした（要確認の注文は出荷に進めません）: ' + sbSafeMsg(e), 'error');
+  }
+}
+function shipNeedsReview(id) { return !!(shipReviewStates[id] && shipReviewStates[id].review_state === 'needs_review'); }
+
 async function shipSelectOrder(orderId) {
+  if (shipNeedsReview(orderId)) {
+    toast('この注文はシーモルト取込の「要確認」です。受発注管理の注文詳細で未確認項目を確認してから割当してください', 'error');
+    return;
+  }
   shipSelectedOrderId = orderId;
   const cached = shipOrdersCache[orderId];
   // 新規（受注）を選んだら、その場で受付＝確認済にする（受発注管理を開かなくても発送まで進める）
@@ -4829,6 +4856,7 @@ async function loadShipping() {
     }
 
     shipOrdersCache = {};
+    await shipLoadReviewStates(orders.map(o => o.id));
     let html = '';
     for (const order of orders) {
       const items = await sb('GET', 'order_items', null, `?order_id=eq.${order.id}&select=*`);
@@ -4837,7 +4865,10 @@ async function loadShipping() {
       const totalWeight = items.reduce((s, i) => s + (parseFloat(i.weight_kg || i.weight) || 0), 0);
       const allAssigned = items.length > 0 && assignedCount === items.length;
       const isNew = order.status === '受注';
-      const statusHtml = isNew
+      const review = shipNeedsReview(order.id);
+      const statusHtml = review
+        ? `<span class="badge badge-red">⚠ 要確認（シーモルト取込）— 受発注管理の注文詳細で確認するまで割当・出荷できません</span>`
+        : isNew
         ? `<span class="badge badge-gold">🆕 新しい注文 — 「この注文に割当」で受付されます</span>`
         : allAssigned
         ? `<span class="badge badge-green">✅ 全行割当済み — 出荷確定できます</span>`
@@ -4850,7 +4881,7 @@ async function loadShipping() {
             <div class="order-meta" style="margin-top:4px;">割当 <strong>${assignedCount} / ${items.length}行</strong> ・ 必要重量合計 <strong>${totalWeight.toFixed(1)}kg</strong> ${statusHtml}</div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;">
-            <button class="btn btn-sm${isNew ? ' btn-primary' : ''}" onclick="shipSelectOrder('${order.id}')">📌 この注文に割当</button>
+            <button class="btn btn-sm${isNew && !review ? ' btn-primary' : ''}" onclick="shipSelectOrder('${order.id}')"${review ? ' disabled title="要確認のため割当できません"' : ''}>📌 この注文に割当</button>
             <button class="btn btn-sm" onclick="waybillOpenFromOrder('${order.id}')">🚚 送り状</button>
             <button class="btn btn-primary btn-sm" onclick="shipOrder('${order.id}')" id="ship-btn-${order.id}" disabled>出荷確定</button>
           </div>

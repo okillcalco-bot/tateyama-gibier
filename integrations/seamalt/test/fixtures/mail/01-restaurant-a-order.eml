@@ -1,0 +1,19 @@
+Message-ID: <demo-a-0001@restaurant-a.example>
+Date: Thu, 01 Oct 2026 09:12:00 +0900
+From: レストランA（架空） <orders@restaurant-a.example>
+To: center@tateyama-gibier.example
+Subject: ご注文 O-DEMO-001
+Content-Type: multipart/mixed; boundary="b1"
+
+--b1
+Content-Type: text/plain; charset=utf-8
+
+いつもお世話になっております。添付の注文書のとおりお願いします。
+※テスト用の架空メールです。
+--b1
+Content-Type: application/pdf; name="O-DEMO-001.pdf"
+Content-Disposition: attachment; filename="O-DEMO-001.pdf"
+X-Attachment-Id: att-a-0001
+
+(添付: ../O-DEMO-001.pdf)
+--b1--

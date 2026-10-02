@@ -1,0 +1,18 @@
+Message-ID: <demo-b-0001@bistro-b.example>
+Date: Thu, 01 Oct 2026 11:00:00 +0900
+From: ビストロB（架空） <chef@bistro-b.example>
+To: center@tateyama-gibier.example
+Subject: 注文書 O-DEMO-002
+Content-Type: multipart/mixed; boundary="b4"
+
+--b4
+Content-Type: text/plain; charset=utf-8
+
+注文書を添付します。冷凍でお願いします。
+--b4
+Content-Type: application/pdf; name="O-DEMO-002.pdf"
+Content-Disposition: attachment; filename="O-DEMO-002.pdf"
+X-Attachment-Id: att-b-0001
+
+(添付: ../O-DEMO-002.pdf)
+--b4--

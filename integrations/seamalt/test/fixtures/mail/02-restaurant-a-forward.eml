@@ -1,0 +1,21 @@
+Message-ID: <demo-a-0002@tateyama-gibier.example>
+Date: Thu, 01 Oct 2026 10:30:00 +0900
+From: 事務担当（架空） <office@tateyama-gibier.example>
+To: center@tateyama-gibier.example
+Subject: Fwd: ご注文 O-DEMO-001
+Content-Type: multipart/mixed; boundary="b2"
+
+--b2
+Content-Type: text/plain; charset=utf-8
+
+転送します（同じ注文です）。
+---------- Forwarded message ---------
+From: orders@restaurant-a.example
+Subject: ご注文 O-DEMO-001
+--b2
+Content-Type: application/pdf; name="O-DEMO-001.pdf"
+Content-Disposition: attachment; filename="O-DEMO-001.pdf"
+X-Attachment-Id: att-a-0002
+
+(添付: ../O-DEMO-001.pdf と同じファイル)
+--b2--

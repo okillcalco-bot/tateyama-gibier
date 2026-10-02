@@ -1,0 +1,8 @@
+{
+  "name": "seamalt-order-link",
+  "private": true,
+  "type": "module",
+  "description": "館山ジビエ受発注とシーモルト（ChatGPT dot）の連携MCP。ローカル試験用の依存だけを持つ",
+  "scripts": { "test": "node test/run-all.mjs" },
+  "devDependencies": { "pg": "8.13.1" }
+}

@@ -1,0 +1,18 @@
+Message-ID: <demo-a-0004@restaurant-a.example>
+Date: Fri, 02 Oct 2026 09:00:00 +0900
+From: レストランA（架空） <orders@restaurant-a.example>
+To: center@tateyama-gibier.example
+Subject: 注文書2件（O-DEMO-004 / O-DEMO-005）
+Content-Type: multipart/mixed; boundary="b6"
+
+--b6
+Content-Type: text/plain; charset=utf-8
+
+1つのPDFに注文書が2枚入っています。
+--b6
+Content-Type: application/pdf; name="O-DEMO-004_005.pdf"
+Content-Disposition: attachment; filename="O-DEMO-004_005.pdf"
+X-Attachment-Id: att-a-0004
+
+(添付: ../O-DEMO-004_005.pdf  1ページ目=O-DEMO-004, 2ページ目=O-DEMO-005)
+--b6--
