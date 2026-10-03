@@ -315,6 +315,7 @@ let orderC;
     && p.review_items.some(r => (r.items || []).includes('temp_zone_unknown') && r.items.includes('whole_carcass_count')), p.review_items);
   T('C preview: 枝肉は価格マスタの「枝肉（全体）」に揃える・1頭を1パック扱いしない（kg なし）', p.items[0].part_name === '枝肉（全体）' && p.items[0].normalized_kg === null && p.items[0].unit === '頭', p.items[0]);
   const c = await tool(OWNER, 'order_import_commit', commitArgs(p, 'commit-C-0001'));
+  orderC = c.order;
   T('C commit: 要確認の受注として保存', c.outcome === 'created' && c.review_state === 'needs_review', c.review_state);
   const g1 = await tool(OWNER, 'orders_get', { order_id: orderC.order_id });
   const g2 = await tool(OWNER, 'orders_get', { order_id: orderC.order_id });
