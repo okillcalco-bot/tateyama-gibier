@@ -32,6 +32,8 @@ await admin.connect();
 await admin.query(fs.readFileSync(path.join(here, 'sql/00_prod_snapshot.sql'), 'utf8'));
 await admin.query(fs.readFileSync(path.join(root, 'sql/10_order_link.sql'), 'utf8'));
 await admin.query(`alter role seamalt_mcp login`);   // 検証用（trust 認証）。本番のパスワードは本人が設定する
+await admin.query(`do $$ begin if not exists (select 1 from pg_roles where rolname = 'supabase_auth_admin') then create role supabase_auth_admin nologin; end if; end $$`);
+await admin.query(fs.readFileSync(path.join(root, 'sql/30_access_token_hook_aud.sql'), 'utf8'));
 
 const ISS = 'https://auth.test/auth/v1';
 const RESOURCE = 'https://mcp.test/functions/v1/seamalt-mcp/mcp';
@@ -599,6 +601,33 @@ let orderC;
   T('段階Bの切戻しと同時に、連携の新しい書込みは止まる（取込を続けない）', paused.outcome === 'forbidden' && paused.reason === 'writes_paused', paused.reason);
   T('連携停止中も読取りはでき、登録済みの注文・外部参照・監査は残る', (await tool(OWNER, 'orders_get', { order_id: orderA.order_id })).outcome === 'read'
     && (await count('select count(*) n from order_link.external_refs')) > 5 && (await count('select count(*) n from order_link.runs')) > 10, '');
+}
+
+// ============================================================================
+// 14. aud の差し替え（Custom Access Token Hook 案）
+// ============================================================================
+{
+  await admin.query(`insert into order_link.oauth_audiences(client_id, aud) values ('chatgpt-1', '${RESOURCE}'), ('old-client', 'https://old.example/mcp');
+                     update order_link.oauth_audiences set revoked_at = now() where client_id = 'old-client'`);
+  const hook = async (ev, role = 'supabase_auth_admin') => {
+    await admin.query('begin');
+    try { await admin.query(`set local role ${role}`); const r = await admin.query('select order_link.access_token_hook($1::jsonb) h', [JSON.stringify(ev)]); await admin.query('commit'); return r.rows[0].h; }
+    catch (e) { await admin.query('rollback'); return { error: e.message }; }
+  };
+  const base = { aud: 'authenticated', sub: 'u1', role: 'authenticated', session_id: 's1', email: 'a@example.com' };
+  const h1 = await hook({ client_id: 'chatgpt-1', claims: base, authentication_method: 'oauth_provider/authorization_code' });
+  T('フック: 許可リストの client_id だけ aud を MCP の URL にする（他のクラームは残す）', h1.claims.aud === RESOURCE && h1.claims.sub === 'u1' && h1.claims.session_id === 's1' && h1.claims.role === 'authenticated', h1.claims);
+  T('フック: 通常のログイン（client_id なし）は aud を変えない', (await hook({ claims: base, authentication_method: 'password' })).claims.aud === 'authenticated', '');
+  T('フック: 許可リストにないクライアント・取り消したクライアントは変えない', (await hook({ client_id: 'other', claims: base })).claims.aud === 'authenticated'
+    && (await hook({ client_id: 'old-client', claims: base })).claims.aud === 'authenticated', '');
+  T('フック: anon・authenticated・seamalt_mcp は実行できない', /permission denied/.test((await hook({ claims: base }, 'anon')).error || '')
+    && /permission denied/.test((await hook({ claims: base }, 'authenticated')).error || '') && /permission denied/.test((await hook({ claims: base }, 'seamalt_mcp')).error || ''), '');
+  const strict = createHandler({ config: { ...config, audiences: [RESOURCE] }, db: createDb(mcpPool),
+    jwks: createJwksCache({ jwksUrl: 'https://auth.test/jwks', fetchImpl: async () => ({ ok: true, json: async () => ({ keys: [pubJwk] }) }) }) });
+  const call = async t => (await strict(new Request(RESOURCE, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + t },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }) }))).status;
+  T('MCP を aud=MCP の URL だけにすると、aud=authenticated のトークンは 401・差し替え後のトークンは通る',
+    (await call(await tok('user-owner', { aud: 'authenticated' }))) === 401 && (await call(OWNER)) === 200, '');
 }
 
 // ── 後片付け・結果 ──────────────────────────────────────────────

@@ -31,6 +31,10 @@
 3. 登録済みの注文・外部参照・出典・監査は**消さない**。orders/order_items の認可を全開放に戻さない（段階Bを入れた後で連携だけ止める場合）。
 4. 要確認ガードは残す（取込済みの要確認注文が確認なしに出荷へ進まないように）。外すのは要確認が0件になってから。
 
+## 実運用前に直す課題
+- ヤマトB2 CSV の荷扱いが常に「冷凍」（冷蔵の取込注文でも冷凍になる）→ 06 の 5
+- aud の差し替え（`sql/30_access_token_hook_aud.sql`）→ 06 の 2
+
 ## 既知の残課題（今回の認可移行の範囲外）
 - shipments / documents / document_orders / inventory など計56表が anon キーで全行読み書きできる。documents には請求先の住所が入る。orders と同じ「スタッフキー必須」への移行を別途提案予定（段階Aと同じ方法で先に計測する）。
 - anon / authenticated の TRUNCATE 権限（PostgREST からは呼べない）を剥がす。
