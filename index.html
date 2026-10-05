@@ -2546,6 +2546,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div id="ship-direct-summary" style="margin-top:10px;"></div>
       <div id="ship-direct-list" style="margin-top:10px;"></div>
       <div id="ship-pending-cust" style="margin-top:10px;"></div>
+      <div id="ship-pick-check" style="margin-top:10px;"></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
         <div class="form-group" style="margin:0;flex:1;min-width:220px;"><label>出荷先（お店名を検索 or そのまま入力）</label>
           <input class="form-input" id="ship-direct-cust" list="shipCustDatalist" placeholder="例: 山海亭 / 一般のお客様" autocomplete="off" />
@@ -3213,6 +3214,32 @@ async function loadAnalysisHub() {
   }
 })();
 
+/* ── どうやってパックを選んだかを残す（2026-10-05） ──
+   出荷済の記録なのに現物がセンターに残っていた、が3回続いた（ラベルを読まずに同じ重さ・同じロットの
+   番号を一覧から選んだため）。order_items.pick_method に scan / typed / picker / dropdown を残し、
+   picker・dropdown（ラベルを読んでいない）は「現物確認が必要な出荷」に出す。
+   バーコードリーダーは1文字ずつ機械の速さで打つので、入力の間隔で「読んだ／手で打った」を見分ける。
+   見分けを誤っても scan と typed の取り違えだけで、要確認（picker/dropdown）には影響しない。 */
+const _scanTimes = {};
+function scanTrack(id) {
+  const el = document.getElementById(id); if (!el) return;
+  el.addEventListener('input', e => {
+    const t = _scanTimes[id] || (_scanTimes[id] = { ts: [], paste: false });
+    if (!el.value) { t.ts = []; t.paste = false; return; }
+    if (e.inputType === 'insertFromPaste') t.paste = true;
+    t.ts.push(performance.now());
+  });
+}
+function scanVia(id) {
+  const t = _scanTimes[id]; _scanTimes[id] = { ts: [], paste: false };
+  if (window._shipVia) { const v = window._shipVia; window._shipVia = null; return v; }
+  if (!t || t.paste || t.ts.length < 6) return 'typed';
+  const avg = (t.ts[t.ts.length - 1] - t.ts[0]) / (t.ts.length - 1);
+  return avg < 35 ? 'scan' : 'typed';
+}
+scanTrack('ship-scan-code');
+scanTrack('ship-direct-code');
+
 /* 出荷スキャン欄: スキャナーのEnterで読取登録 */
 document.getElementById('ship-scan-code').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
@@ -3586,6 +3613,7 @@ async function shipDirectScan() {
   const input = document.getElementById('ship-direct-code');
   const raw = input.value;                       // 照合には読み取ったそのままを渡す
   const code = normIdent(raw);                   // 表示・個体番号の切り出し用
+  const via = scanVia('ship-direct-code');       // scan / typed / picker（一覧からタップ）
   input.value = '';
   input.focus();
   if (!code) return;
@@ -3619,6 +3647,7 @@ async function shipDirectScan() {
         if (inds.length) inv.species = inds[0].species || '';
       } catch(e) {}
     }
+    inv._via = via;
     shipDirectItems.push(inv);
     shipDirectRender();
     playFeedbackSound(true);
@@ -3649,7 +3678,7 @@ async function shipDirectShowPicker(indBase) {
   const btns = packs.map(p => {
     const done = added.has(p.ident_code);
     return `<button type="button" class="btn" ${done ? 'disabled' : ''} style="display:block;width:100%;text-align:left;margin:4px 0;padding:10px;font-size:14px;${done ? 'opacity:.5;' : ''}" `
-      + `onclick="document.getElementById('ship-direct-code').value='${esc(p.ident_code)}';shipDirectScan();">`
+      + `onclick="window._shipVia='picker';document.getElementById('ship-direct-code').value='${esc(p.ident_code)}';shipDirectScan();">`
       + `${done ? '✓ 追加済 ' : '📦 '}${esc(p.part_name || '-')}　${Number(p.weight || 0).toFixed(1)}kg　<span style="color:#888;font-size:11px;">${esc(p.ident_code)}</span></button>`;
   }).join('');
   pick.innerHTML = `<div style="border:1px solid var(--gold);border-radius:var(--radius);padding:8px 10px;">
@@ -3693,6 +3722,37 @@ async function shipPendingCustLoad() {
       📮 <strong>住所が未登録のお客さん ${rows.length}件</strong>（送り状の写真か Google マップのリンクを送れば登録します）<br>
       ${rows.map(r => `${esc2(r.name)}<span style="color:var(--text2);font-size:12px;">（${esc2(r.code)}${r.last_order_date ? '・' + esc2(r.last_order_date) + ' 出荷' : ''}）</span>`).join('　')}</div>`;
   } catch (e) { box.innerHTML = `<div style="font-size:12px;color:var(--red);">住所未登録のお客さんの一覧を読めませんでした: ${esc2(sbSafeMsg(e))}</div>`; }
+}
+
+/* 現物確認が必要な出荷: ラベルを読まずに一覧・ドロップダウンで選んだパック（2026-10-05）
+   「出荷済なのに現物が残っている」の元。箱に入れた現物の番号と合っているか、確かめたら✓を押す。
+   違っていたら番号を控えて管理者へ（記録の付け替えは個別に行う）。読めなければ赤で出す（黙って空にしない）。 */
+const PICK_LABEL = { picker: '一覧から選択', dropdown: 'ドロップダウンで選択' };
+async function shipPickCheckLoad() {
+  const box = document.getElementById('ship-pick-check');
+  if (!box) return;
+  try {
+    const rows = await sb('GET', 'order_items', null,
+      `?pick_method=in.(picker,dropdown)&pick_checked_at=is.null&inventory_id=not.is.null&select=id,part_name,weight,pick_method,created_at,inventory(ident_code,scan_code),orders(order_code,customer_name,order_date,status)&order=created_at.desc&limit=200`);
+    const list = (rows || []).filter(r => !r.orders || r.orders.status !== 'キャンセル');
+    if (!list.length) { box.innerHTML = ''; return; }
+    box.innerHTML = `<div style="border:1px solid var(--red);border-radius:var(--radius);padding:8px 10px;font-size:13px;line-height:1.7;">
+      🔎 <strong>現物確認が必要な出荷 ${list.length}件</strong>（ラベルを読まずに一覧・ドロップダウンで選んだパック。箱の現物の番号と同じか確かめて✓）
+      ${list.map(r => `<div class="pick-row" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:6px 0;border-top:1px solid var(--border);">
+        <span style="flex:1;min-width:220px;"><strong>${esc2(r.inventory?.ident_code || '-')}</strong>
+          <span style="color:var(--text2);">${esc2(r.part_name || '')} ${r.weight != null ? Number(r.weight).toFixed(2) + 'kg' : ''}</span><br>
+          <span style="color:var(--text2);font-size:12px;">${esc2(r.orders?.order_date || '')} ${esc2(r.orders?.customer_name || '')}（${esc2(r.orders?.order_code || '')}）・${esc2(PICK_LABEL[r.pick_method] || r.pick_method)}</span></span>
+        <button type="button" class="btn btn-sm" onclick="shipPickCheckOk('${esc2(r.id)}', this)">✓ 現物と同じ</button></div>`).join('')}</div>`;
+  } catch (e) { box.innerHTML = `<div style="font-size:12px;color:var(--red);">現物確認が必要な出荷の一覧を読めませんでした: ${esc2(sbSafeMsg(e))}</div>`; }
+}
+async function shipPickCheckOk(id, btn) {
+  if (btn) btn.disabled = true;
+  const who = (document.getElementById('ship-operator') || {}).value || '';
+  try {
+    await sb('PATCH', 'order_items', { pick_checked_at: new Date().toISOString(), pick_checked_by: who || null }, `?id=eq.${id}`);
+    toast('確認済みにしました');
+    shipPickCheckLoad();
+  } catch (e) { if (btn) btn.disabled = false; toast('確認を保存できませんでした: ' + sbSafeMsg(e), 'error'); }
 }
 
 async function shipDirectConfirm() {
@@ -3745,6 +3805,7 @@ async function shipDirectConfirm() {
     toast(`直販出荷を記録しました: ${custName} へ ${shipDirectItems.length}点（${orderCode}）`
       + (createdCustomer ? (newCustomer && newCustomer.address ? '。新しいお客さんとして顧客台帳に登録しました' : '。新しいお客さんとして登録しました（住所はあとで：送り状の写真か Google マップを送ってください）') : ''));
     if (createdCustomer) { shipPendingCustLoad(); loadShipping(); }
+    else shipPickCheckLoad();
     shipDirectItems = [];
     shipDirectRender();
     document.getElementById('ship-direct-cust').value = '';
@@ -4365,7 +4426,8 @@ async function recordDirectShipment(items, custName, opts) {
     amount: amount,
     subtotal: amount,
     price_rank_applied: unitPrice != null ? priceRank : null,
-    price_source: unitPrice != null ? 'price_master' : null
+    price_source: unitPrice != null ? 'price_master' : null,
+    pick_method: i._via || null
   })));
 
   const shipBody = { order_id: orderId, shipment_date: now.toISOString().slice(0,10), status: '出荷済',
@@ -4832,6 +4894,7 @@ async function fieldPhotoResolve(id) {
 async function loadShipping() {
   // スタッフキーは求めない（キーが要るのは顧客マスタの操作だけ。2026-08-12）
   shipPendingCustLoad();
+  shipPickCheckLoad();
   const container = document.getElementById('ship-orders');
   container.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
   // 直販の出荷先候補（顧客台帳）。名前を手入力すれば staff_lookup_customer_id が紐付けを解決する。
@@ -4982,7 +5045,7 @@ async function shipScanOfferPacks(indBase, headline) {
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/'/g, '&#39;');
   const btns = packs.map(pk =>
     `<button type="button" class="btn" style="display:block;width:100%;text-align:left;margin:4px 0;padding:10px;font-size:14px;" `
-    + `onclick="document.getElementById('ship-scan-code').value='${esc(pk.ident_code)}';handleShippingScan();">`
+    + `onclick="window._shipVia='picker';document.getElementById('ship-scan-code').value='${esc(pk.ident_code)}';handleShippingScan();">`
     + `📦 ${esc(pk.part_name || '-')}　${Number(pk.weight || 0).toFixed(1)}kg　<span style="color:#888;font-size:11px;">${esc(pk.ident_code)}</span></button>`
   ).join('');
   shipScanShowResult(false, `${esc(headline)} ${packs.length}件。割り当てる部位をタップしてください:<div style="margin-top:6px;">${btns}</div>`);
@@ -4996,6 +5059,7 @@ async function handleShippingScan() {
   // 照合は読み取ったそのまま（invScanFilter）。表示・個体番号の切り出しにはフル桁を使う
   const raw = input.value;
   const code = normIdent(raw);
+  const via = scanVia('ship-scan-code');         // scan / typed / picker（一覧からタップ）
 
   if (!code) {
     shipScanFail('バーコードが空です。スキャンし直すか、識別コードを入力してください。');
@@ -5084,7 +5148,7 @@ async function handleShippingScan() {
     }
 
     // 割当を保存: order_items に在庫を紐付け、在庫を引当済にする
-    await sb('PATCH', 'order_items', { inventory_id: inv.id }, `?id=eq.${target.id}`);
+    await sb('PATCH', 'order_items', { inventory_id: inv.id, pick_method: via }, `?id=eq.${target.id}`);
     await sb('PATCH', 'inventory', { status: '引当済', updated_at: new Date().toISOString() }, `?id=eq.${inv.id}`);
 
     const w = parseFloat(inv.weight || inv.weight_kg) || 0;
@@ -5184,7 +5248,7 @@ async function shipOrderConfirmed(orderId, dropdownAssignments) {
 
     // ドロップダウン割当分: order_items に紐付けてから出荷済へ
     for (const a of dropdownAssignments) {
-      await sb('PATCH', 'order_items', { inventory_id: a.inventoryId }, `?id=eq.${a.orderItemId}`);
+      await sb('PATCH', 'order_items', { inventory_id: a.inventoryId, pick_method: 'dropdown' }, `?id=eq.${a.orderItemId}`);
       await sb('PATCH', 'inventory', { status: '出荷済', updated_at: new Date().toISOString() }, `?id=eq.${a.inventoryId}`);
     }
     // スキャン割当済み分（引当済）: 出荷済へ
