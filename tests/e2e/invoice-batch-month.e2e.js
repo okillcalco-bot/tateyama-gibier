@@ -106,8 +106,16 @@ const invOthers = (h, me) => !['A食堂', 'B商店', 'トレタテ', 'ノブレ�
 
   const results = []; const ck = (n, c, g) => results.push([n, !!c, g == null ? '' : String(g)]);
 
+  // 0. 期間は3か月前まで選べ、月の名前が出る
+  const opts = await page.$$eval('#invBatchPeriod option', os => os.map(o => o.textContent));
+  ck('月まとめの期間は今月〜3か月前まで、年月つきで選べる（最初は先月）', (await page.$eval('#invBatchPeriod', el => el.value)) === '1' && JSON.stringify(opts) === JSON.stringify(['2026年10月（今月）', '2026年9月（先月）', '2026年8月（2か月前）', '2026年7月（3か月前）']), JSON.stringify(opts));
+  const r3 = await page.evaluate(() => { document.getElementById('invBatchPeriod').value = '3'; const r = invBatchRange(); document.getElementById('invBatchPeriod').value = '1'; return r; });
+  ck('3か月前は 7/1〜7/31・件名「2026年7月分」', r3.from === '2026-07-01' && r3.to === '2026-07-31' && r3.label === '2026年7月分', JSON.stringify(r3));
+  const p3 = await page.evaluate(() => { document.getElementById('invPullPeriod').value = '3'; const r = invPullRange(); document.getElementById('invPullPeriod').value = 'thisMonth'; return r; });
+  ck('「注文から取り込む」も3か月前まで選べる', p3 && p3.from === '2026-07-01' && p3.to === '2026-07-31', JSON.stringify(p3));
+
   // 1〜4. 集計
-  await page.evaluate(() => { document.getElementById('invBatchPeriod').value = 'lastMonth'; return invBatchSearch(); });
+  await page.evaluate(() => { document.getElementById('invBatchPeriod').value = '1'; return invBatchSearch(); });
   await page.waitForTimeout(300);
   ck('先月（9/1〜9/30）の注文を取りに行く', orderQueries.some(q => /order_date=gte\.2026-09-01/.test(q) && /order_date=lte\.2026-09-30/.test(q)), orderQueries[0]);
   const groups = await page.evaluate(() => invBatchGroups.map(g => ({ name: g.cust.name, n: g.orders.length, codes: g.orders.map(o => o.order_code), total: g.total, use: g._use, warn: g.warn })));
