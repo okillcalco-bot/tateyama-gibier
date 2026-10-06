@@ -501,6 +501,33 @@ th,td{padding:8px 6px;font-size:.8rem}
         <div id="invEditBanner" style="display:none;background:rgba(240,192,64,.14);border:1px solid #c9a52c;border-radius:var(--radius);padding:8px 12px;font-size:.8rem;margin-bottom:10px"></div>
         <div id="invLinkedNote" style="display:none;background:rgba(90,140,216,.10);border:1px solid #2f66b5;border-radius:var(--radius);padding:8px 12px;font-size:.8rem;margin-bottom:10px"></div>
 
+        <!-- 月まとめ発行（顧客ごとに1枚・まとめてPDF） -->
+        <div style="border:1px solid var(--gold);border-radius:var(--radius);padding:12px;background:var(--surface2);margin:16px 0">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <strong style="font-size:.9rem">📚 月まとめ発行（顧客ごとに1枚・まとめてPDF）</strong>
+            <span style="font-size:.72rem;color:var(--text2)">未請求の注文を請求先ごとに集計し、全員分の請求書を1つのPDFに</span>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
+            <div class="form-group" style="margin:0;min-width:130px"><label>期間</label>
+              <select id="invBatchPeriod" onchange="invBatchSearch()">
+                <option value="lastMonth" selected>先月</option>
+                <option value="thisMonth">今月</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0;flex:1;min-width:140px"><label>&nbsp;</label>
+              <button class="btn btn-outline" style="width:100%" onclick="invBatchSearch()">🔍 請求先ごとに集計</button>
+            </div>
+          </div>
+          <div id="invBatchResult" style="margin-top:8px;font-size:.8rem;color:var(--text2)">期間を選んで「請求先ごとに集計」を押してください。</div>
+          <div id="invBatchList" style="max-height:320px;overflow-y:auto;margin-top:6px"></div>
+          <div id="invBatchActions" style="display:none;margin-top:8px;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" onclick="invBatchPreview()">プレビュー（番号なし）</button>
+            <button class="btn btn-gold btn-sm" onclick="invBatchIssue()">🖨 選んだ請求先の請求書をまとめて発行（PDF）</button>
+            <button class="btn btn-outline btn-sm" onclick="invBatchToggleAll(true)">全て選択</button>
+            <button class="btn btn-outline btn-sm" onclick="invBatchToggleAll(false)">選択解除</button>
+          </div>
+        </div>
+
         <!-- 注文から取り込む（締め請求） -->
         <div style="border:1px dashed var(--border2);border-radius:var(--radius);padding:12px;background:var(--surface2);margin:16px 0">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
@@ -3863,58 +3890,11 @@ async function invPullApply(){
     const rows=await sb('GET','inventory','',`?id=in.(${invIds.join(',')})&select=id,grade`);
     rows.forEach(r=>{gradeMap[r.id]=r.grade;});
   }
-  const cust=allCustomers.find(c=>c.id===document.getElementById('invCustomerId').value);
-  const rank=cust?.price_rank||'standard';
-
-  // 同じ納品日・同じ部位（サブ部位の括弧は丸めて）・同じ肉ランクは1行にまとめる
-  const groups=new Map();
-  // 送料は注文（＝出荷）ごとに別行で積む（書類発行タブのgenerateDoc()と同じ扱い）。
-  // 以前はorder_itemsしか見ていなかったため、注文に紐づく送料が請求書に一切反映されなかった。
-  const freightLines=[];
-  picked.forEach(o=>{
-    (o.order_items||[]).forEach(it=>{
-      const qty=Number(it.weight_kg!=null?it.weight_kg:it.weight)||0;
-      const grade=it.grade_snapshot||gradeMap[it.inventory_id]||null;
-      const base=invPartBase(it.part_name);
-      const key=[o.delivery_date||'',it.species||'',base,grade||''].join('|');
-      if(!groups.has(key)) groups.set(key,{delivery_date:o.delivery_date,species:it.species,base,grade,qty:0,amt:0,anyPrice:null});
-      const g=groups.get(key);
-      g.qty+=qty;
-      g.amt+=Number(it.subtotal!=null?it.subtotal:it.amount)||0;
-      if(g.anyPrice==null && it.unit_price!=null) g.anyPrice=it.unit_price;
-    });
-    const ship=(o.shipments||[])[0];
-    if(ship && Number(ship.freight)>0){
-      // shipments.freightはもともと税抜（現場の送料入力欄も「税抜」表記）なので変換不要
-      const d=o.delivery_date?new Date(o.delivery_date+'T00:00:00'):null;
-      const dLabel=d?`${d.getMonth()+1}/${d.getDate()}納品　`:'';
-      const label=dLabel+'送料'+(ship.size_code?`（${ship.is_cool?'クール':''}${ship.size_code}）`:'');
-      freightLines.push({name:label,qty:1,unit:'個',price:Number(ship.freight),tax:10});
-    }
-    if(!invLinkedOrderIds.includes(o.id)) invLinkedOrderIds.push(o.id);
-  });
-
+  picked.forEach(o=>{ if(!invLinkedOrderIds.includes(o.id)) invLinkedOrderIds.push(o.id); });
   // 既存の空行を捨てて、まとめた明細を積む
   const keep=invLines.filter(l=>(l.name||'').trim()!==''||invLineAmount(l)>0);
-  groups.forEach(g=>{
-    const d=g.delivery_date?new Date(g.delivery_date+'T00:00:00'):null;
-    const dLabel=d?`${d.getMonth()+1}/${d.getDate()}納品　`:'';
-    const gradeLabel=(g.grade&&g.grade!=='並')?`（${g.grade}）`:'';
-    const name=`${dLabel}${[g.species||'',g.base||''].filter(Boolean).join(' ')}${gradeLabel}`||'商品';
-    // 価格マスタに種類・部位・肉ランクが一致する単価があれば、顧客の価格ランクで自動計算
-    const pm=allPriceMaster.find(p=>p.species===g.species&&p.part_name===g.base&&(p.grade||'並')===(g.grade||'並'));
-    const pmPrice=pm?(pm['price_'+rank]??pm.price_standard):null;
-    // 一致がなければ元の単価、それも無ければ金額から逆算して明細金額を一致させる
-    const priceInclusive=pmPrice!=null?pmPrice:(g.anyPrice!=null?g.anyPrice:(g.qty?Math.round(g.amt/g.qty):g.amt));
-    const qty=Math.round(g.qty*100)/100;
-    // 価格マスタの単価・order_items.unit_priceはいずれも税込のため、明細に積む前に税抜相当へ変換する
-    // （invCalcLines()は税抜として税率を上乗せするため、そのまま渡すと二重課税になる）
-    const inclusiveAmount=Math.round(qty*priceInclusive);
-    const exclusiveAmount=Math.round(inclusiveAmount/1.08);
-    const price=qty?Math.round(exclusiveAmount/qty):exclusiveAmount;
-    keep.push({name, qty, unit:'kg', price, tax:8});
-  });
-  keep.push(...freightLines);
+  const _cust=allCustomers.find(c=>c.id===document.getElementById('invCustomerId').value);
+  keep.push(...invBuildLinesFromOrders(picked,gradeMap,_cust?.price_rank||'standard'));
   invLines=keep.length?keep:[newInvLine()];
   renderInvLines();
 
@@ -3955,6 +3935,231 @@ async function invPullApply(){
 
   invUpdateLinkedNote();
   alert(`${picked.length}件の注文を明細に取り込みました。`);
+}
+
+/* 注文→請求書の明細（「注文から取り込む」と「月まとめ発行」で共通。2026-10-06）
+   - 同じ納品日・同じ部位（サブ部位の括弧は丸める）・同じ肉ランクは1行にまとめる
+   - 金額は注文に記録された金額（税込）から作る。以前は価格マスタで単価を引き直していたため、
+     顧客別単価（那珂川の枝肉1,500円/kg、齋藤様のペットフード649円/kg など）が請求書で標準単価に戻るおそれがあった
+   - 重さも金額も0の行（出荷時に置き換えた依頼内容・出さなかった残り）は載せない
+   - 重さの無い有料行（毛皮など）は「枚」で数える（以前は数量0で金額0円になっていた）
+   - 送料は注文（＝出荷）ごとに別行・10%（shipments.freight は税抜） */
+function invBuildLinesFromOrders(orders,gradeMap,rank){
+  gradeMap=gradeMap||{};
+  const groups=new Map(), freightLines=[];
+  (orders||[]).forEach(o=>{
+    (o.order_items||[]).forEach(it=>{
+      const qty=Number(it.weight_kg!=null?it.weight_kg:it.weight)||0;
+      const amt=Number(it.subtotal!=null?it.subtotal:it.amount)||0;
+      if(!(qty>0) && !amt) return;
+      const grade=it.grade_snapshot||gradeMap[it.inventory_id]||null;
+      const base=invPartBase(it.part_name);
+      const isCount=!(qty>0);
+      const key=[o.delivery_date||o.order_date||'',it.species||'',base,grade||'',isCount?'n':'kg'].join('|');
+      if(!groups.has(key)) groups.set(key,{delivery_date:o.delivery_date||o.order_date,species:it.species,base,grade,isCount,qty:0,n:0,amt:0});
+      const g=groups.get(key);
+      g.qty+=qty; g.amt+=amt;
+      if(isCount){ const up=Number(it.unit_price)||0; g.n+=up?Math.max(1,Math.round(amt/up)):1; }
+    });
+    const ship=(o.shipments||[])[0];
+    if(ship && Number(ship.freight)>0){
+      const d=(o.delivery_date||o.order_date)?new Date((o.delivery_date||o.order_date)+'T00:00:00'):null;
+      const dLabel=d?`${d.getMonth()+1}/${d.getDate()}納品　`:'';
+      freightLines.push({name:dLabel+'送料'+(ship.size_code?`（${ship.is_cool?'クール':''}${ship.size_code}）`:''),qty:1,unit:'個',price:Number(ship.freight),tax:10});
+    }
+  });
+  const lines=[];
+  [...groups.values()].sort((a,b)=>(a.delivery_date||'').localeCompare(b.delivery_date||'')).forEach(g=>{
+    const d=g.delivery_date?new Date(g.delivery_date+'T00:00:00'):null;
+    const dLabel=d?`${d.getMonth()+1}/${d.getDate()}納品　`:'';
+    const gradeLabel=(g.grade&&g.grade!=='並')?`（${g.grade}）`:'';
+    const name=`${dLabel}${[g.species||'',g.base||''].filter(Boolean).join(' ')}${gradeLabel}`||'商品';
+    // 金額の入っていない古い注文だけは、価格マスタ（顧客の価格ランク）で補う
+    if(!g.amt && g.qty>0){
+      const pm=(typeof allPriceMaster!=='undefined'?allPriceMaster:[]).find(p=>p.species===g.species&&p.part_name===g.base&&(p.grade||'並')===(g.grade||'並'));
+      const pmPrice=pm?(pm['price_'+(rank||'standard')]??pm.price_standard):null;
+      if(pmPrice!=null) g.amt=Math.round(Math.round(g.qty*100)/100*pmPrice);
+    }
+    // 注文の金額は税込。invCalcLines()は明細を税抜として税率を上乗せするため、ここで税抜相当に変換する
+    const exclusiveAmount=Math.round(g.amt/1.08);
+    const qty=g.isCount?g.n:Math.round(g.qty*100)/100;
+    const price=qty?Math.round(exclusiveAmount/qty):exclusiveAmount;
+    lines.push({name,qty:qty||1,unit:g.isCount?'枚':'kg',price,tax:8});
+  });
+  return lines.concat(freightLines);
+}
+
+/* ── 月まとめ発行（2026-10-06）──
+   期間内の未請求の注文を請求先ごとに集め（仲卸業者経由はその業者あて）、1請求先1枚の請求書を
+   まとめて発行し、全員分を1つの印刷ウィンドウ（1請求先1ページ）に出す。PDFとして保存すれば1ファイルにまとまる。 */
+let invBatchGroups=[];
+function invBatchRange(){
+  const v=document.getElementById('invBatchPeriod')?.value||'lastMonth';
+  const now=new Date();
+  const m=v==='thisMonth'?now.getMonth():now.getMonth()-1;
+  const from=new Date(now.getFullYear(),m,1), to=new Date(now.getFullYear(),m+1,0);
+  return {from:fmtDate(from),to:fmtDate(to),label:`${from.getFullYear()}年${from.getMonth()+1}月分`};
+}
+async function invChunkedGet(table,col,ids,select){
+  const out=[];
+  for(let i=0;i<ids.length;i+=80){
+    const part=ids.slice(i,i+80);
+    out.push(...await sb('GET',table,'',`?${col}=in.(${part.join(',')})&select=${select}`));
+  }
+  return out;
+}
+async function invBatchSearch(){
+  const res=document.getElementById('invBatchResult'), list=document.getElementById('invBatchList'), acts=document.getElementById('invBatchActions');
+  const r=invBatchRange();
+  res.textContent='集計中…'; list.innerHTML=''; acts.style.display='none'; invBatchGroups=[];
+  try{
+    const orders=await sb('GET','orders','',`?status=in.(${INV_BILLABLE.join(',')})&order_date=gte.${r.from}&order_date=lte.${r.to}&select=*,order_items(*),shipments(freight,size_code,is_cool)&order=delivery_date.asc,order_date.asc`);
+    // 請求済み（取消されていない請求書に紐付いている注文）は除く
+    const billed=new Set();
+    if(orders.length){
+      const links=await invChunkedGet('document_orders','order_id',orders.map(o=>o.id),'order_id,document_id');
+      if(links.length){
+        const docs=await invChunkedGet('documents','id',[...new Set(links.map(l=>l.document_id))],'id,status,doc_type');
+        const alive=new Set(docs.filter(d=>d.status!=='取消'&&(d.doc_type||'請求書')==='請求書').map(d=>d.id));
+        links.forEach(l=>{ if(alive.has(l.document_id)) billed.add(l.order_id); });
+      }
+    }
+    const unbilled=orders.filter(o=>!billed.has(o.id));
+    const invIds=[...new Set(unbilled.flatMap(o=>(o.order_items||[]).map(it=>it.inventory_id).filter(Boolean)))];
+    const gradeMap={};
+    if(invIds.length) (await invChunkedGet('inventory','id',invIds,'id,grade')).forEach(x=>{gradeMap[x.id]=x.grade;});
+    // 請求先ごとにまとめる（仲卸業者のタグがある注文はその業者あて）
+    const byKey=new Map(), noCust=[];
+    unbilled.forEach(o=>{
+      const tag=wholesalerTagOf(o);
+      const cust=tag?allCustomers.find(c=>c.name===tag):allCustomers.find(c=>c.id===o.customer_id);
+      if(!cust){ noCust.push(o); return; }
+      if(!byKey.has(cust.id)) byKey.set(cust.id,{cust,orders:[]});
+      byKey.get(cust.id).orders.push(o);
+    });
+    invBatchGroups=[...byKey.values()].map(g=>{
+      const lines=invBuildLinesFromOrders(g.orders,gradeMap,g.cust.price_rank||'standard').map(l=>({...l,amount:invLineAmount(l)}));
+      const c=invCalcLines(lines);
+      const warn=[];
+      if(!g.cust.address) warn.push('住所未登録');
+      if(g.orders.some(o=>(o.order_items||[]).some(it=>it.unit_price==null&&Number(it.weight_kg||0)>0))) warn.push('単価未設定の明細あり');
+      return {...g,lines,total:c.total,warn,_use:c.total>0};
+    }).sort((a,b)=>(a.cust.name||'').localeCompare(b.cust.name||'','ja'));
+    const sum=invBatchGroups.filter(g=>g._use).reduce((s,g)=>s+g.total,0);
+    res.innerHTML=`${r.label}：未請求 <strong>${unbilled.length}件</strong> → 請求先 <strong>${invBatchGroups.length}件</strong>（合計 &yen;${sum.toLocaleString()} 税込）`+
+      (billed.size?` ／ 請求済み ${billed.size}件は除外`:'')+
+      (noCust.length?`<div style="color:var(--red);margin-top:4px">⚠ 顧客につながっていない注文が ${noCust.length}件あり、集計に入っていません: ${esc(noCust.map(o=>`${o.order_code}（${o.customer_name||'名前なし'}）`).join('、'))}</div>`:'');
+    invBatchRender();
+  }catch(e){ res.innerHTML=`<span style="color:var(--red)">集計できませんでした: ${esc(String(e.message||e))}</span>`; }
+}
+function invBatchRender(){
+  const list=document.getElementById('invBatchList'), acts=document.getElementById('invBatchActions');
+  if(!invBatchGroups.length){ list.innerHTML=''; acts.style.display='none'; return; }
+  list.innerHTML=invBatchGroups.map((g,i)=>`<label style="display:flex;gap:8px;align-items:flex-start;padding:7px 6px;border-bottom:1px solid var(--border)">
+    <input type="checkbox" class="inv-batch-cb" ${g._use?'checked':''} onchange="invBatchGroups[${i}]._use=this.checked" style="margin-top:3px;accent-color:var(--gold)">
+    <span style="flex:1;min-width:0">
+      <strong style="font-size:.82rem">${esc(g.cust.name||'')}</strong>
+      <span style="color:var(--text2);font-size:.75rem"> 注文${g.orders.length}件</span>
+      ${g.warn.map(w=>`<span style="font-size:.68rem;background:rgba(200,60,60,.12);color:#b03030;border-radius:4px;padding:1px 5px;margin-left:4px">${esc(w)}</span>`).join('')}
+      <span style="float:right;font-weight:700;font-size:.8rem">&yen;${g.total.toLocaleString()}</span>
+    </span></label>`).join('');
+  acts.style.display='flex';
+}
+function invBatchToggleAll(on){ invBatchGroups.forEach(g=>{g._use=on;}); invBatchRender(); }
+function invBatchPayload(g){
+  const s=invoiceSettings, c=g.cust, r=invBatchRange();
+  const date=today();
+  const note=g.orders.some(o=>o.customer_id!==c.id)?buildShipmentNote(g.orders):'';
+  return {
+    name:c.name||'', honorific:c.honorific||'御中',
+    address:[c.address||'',c.building||''].filter(Boolean).join(' '),
+    subject:r.label, date, due:endOfNextMonth(date),
+    memo:note?`【出荷内訳】\n${note}`:'',
+    customer_id:c.id, order_ids:g.orders.map(o=>o.id), type:'請求書', proviso:'',
+    bank:s.bank||'',
+    issuer:{issuer_name:s.issuer_name,issuer_sub:s.issuer_sub,postal:s.postal,address:s.address,tel:s.tel,email:s.email,reg_number:s.reg_number},
+    seal:s.seal_data_url||'',
+    lines:g.lines.map(l=>({name:l.name,qty:l.qty,unit:l.unit,price:l.price,tax:l.tax,amount:invLineAmount(l)}))
+  };
+}
+// 複数の書類を1つの印刷ウィンドウに（1書類1ページ）。PDF保存すれば1ファイルにまとまる
+function invPrintHtmlMulti(items,title){
+  const docs=items.map(x=>invPrintHtml(x.p,x.number,x.opts||{}));
+  const style=(docs[0].match(/<style>[\s\S]*?<\/style>/)||[''])[0];
+  const sheets=docs.map(h=>(h.match(/<div class="sheet">[\s\S]*?<\/div>\s*<div class="noprint">/)||[''])[0].replace(/<div class="noprint">$/,''));
+  return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>${esc(title)}</title>${style}
+<style>.pb{page-break-after:always;break-after:page}.pb:last-child{page-break-after:auto;break-after:auto}</style></head><body>
+${sheets.map(s=>`<div class="pb">${s}</div>`).join('\n')}
+<div class="noprint"><button onclick="window.print()">🖨 印刷 / PDF保存（${items.length}件）</button><button onclick="window.close()">閉じる</button></div>
+</body></html>`;
+}
+function invOpenHtml(html){
+  const w=window.open('','_blank');
+  if(!w){alert('ポップアップがブロックされました。ブラウザの設定で許可してください。');return false}
+  w.document.open(); w.document.write(html); w.document.close();
+  return true;
+}
+function invBatchChosen(){
+  const chosen=invBatchGroups.filter(g=>g._use);
+  if(!chosen.length){alert('請求先を選んでください');return null}
+  return chosen;
+}
+function invBatchPreview(){
+  const chosen=invBatchChosen(); if(!chosen) return;
+  invOpenHtml(invPrintHtmlMulti(chosen.map(g=>({p:invBatchPayload(g),number:null,opts:{draft:true}})),`請求書_${invBatchRange().label}_プレビュー_${chosen.length}件`));
+}
+async function invNextNumber(type,dateStr){
+  const d=dateStr?new Date(dateStr+'T00:00:00'):new Date();
+  const prefix=`${invSpec(type).prefix}-${d.getFullYear()}${pad(d.getMonth()+1)}-`;
+  const rows=await sb('GET','documents','',`?doc_number=like.${prefix}*&select=doc_number`,{cache:'no-store'});
+  let max=0;
+  rows.forEach(r=>{const m=(r.doc_number||'').match(/-(\d+)$/);if(m){const n=parseInt(m[1],10);if(n>max)max=n;}});
+  return prefix+String(max+1).padStart(3,'0');
+}
+// 1枚発行（番号確定・明細・注文の紐付け）。失敗は投げる（握り潰さない）
+async function invIssuePayloadNow(p){
+  const c=invCalcLines(p.lines);
+  for(let attempt=0;attempt<4;attempt++){
+    const number=await invNextNumber(p.type,p.date);
+    const header={doc_type:p.type,doc_number:number,customer_id:p.customer_id,issue_date:p.date,due_date:p.due||null,
+      total_amount:c.total,tax_amount:c.taxTotal,status:'発行済',billing_status:p.type==='請求書'?'未入金':null,
+      partner_name:p.name,subject:p.subject||null,honorific:p.honorific,partner_address:p.address||null,
+      memo:p.memo||null,source:'invoice_batch',snapshot:p};
+    let rows;
+    try{ rows=await sb('POST','documents',[header]); }
+    catch(e){ const m=String(e.message||''); if(m.includes('23505')||m.includes('duplicate')) continue; throw e; }
+    const docId=rows[0]&&rows[0].id;
+    if(!docId) throw new Error('書類の保存結果が空でした');
+    await sb('POST','document_items',p.lines.map((l,i)=>({document_id:docId,line_no:i+1,name:l.name,quantity:l.qty,unit:l.unit||null,unit_price:l.price,tax_rate:l.tax!=null?l.tax:8,amount:l.amount||0})));
+    if(p.order_ids&&p.order_ids.length) await sb('POST','document_orders',p.order_ids.map(oid=>({document_id:docId,order_id:oid})));
+    return {number,docId,total:c.total};
+  }
+  throw new Error('請求番号の採番が競合しました。もう一度お試しください');
+}
+async function invBatchIssue(){
+  const chosen=invBatchChosen(); if(!chosen) return;
+  const sum=chosen.reduce((s,g)=>s+g.total,0);
+  const warn=chosen.filter(g=>g.warn.length);
+  if(!confirm(`${invBatchRange().label}の請求書を ${chosen.length}件 まとめて発行します（合計 ¥${sum.toLocaleString()} 税込）。\n\n`+
+    chosen.map(g=>`・${g.cust.name}　¥${g.total.toLocaleString()}${g.warn.length?'　⚠'+g.warn.join('・'):''}`).join('\n')+
+    `\n\n発行すると請求番号が確定し、取り込んだ注文は請求済みになります。${warn.length?`\n⚠ 注意のある請求先が ${warn.length}件あります。`:''}\nよろしいですか？`)) return;
+  // 先に印刷ウィンドウを開いておく（あとで開くとポップアップとしてブロックされるため）
+  const w=window.open('','_blank');
+  if(w) w.document.write('<p style="font-family:sans-serif;padding:24px">発行中…</p>');
+  const done=[], failed=[];
+  for(const g of chosen){
+    const p=invBatchPayload(g);
+    try{ const r=await invIssuePayloadNow(p); done.push({p,number:r.number}); }
+    catch(e){ failed.push(`${g.cust.name}: ${String(e.message||e)}`); }
+  }
+  if(done.length){
+    const html=invPrintHtmlMulti(done,`請求書_${invBatchRange().label}_${done.length}件`);
+    if(w){ w.document.open(); w.document.write(html); w.document.close(); } else invOpenHtml(html);
+  }else if(w){ w.close(); }
+  loadInvoiceList();
+  invBatchSearch();
+  if(failed.length) alert(`⚠ ${failed.length}件は発行できませんでした（発行できた ${done.length}件は印刷画面に出ています）。\n\n`+failed.join('\n'));
+  else alert(`${done.length}件の請求書を発行しました。印刷画面で「印刷 / PDF保存」を押すと、1つのPDFにまとまります（1請求先1ページ）。`);
 }
 
 function invUpdateLinkedNote(){
