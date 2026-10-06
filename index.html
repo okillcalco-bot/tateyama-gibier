@@ -4452,7 +4452,8 @@ async function recordDirectShipment(items, custName, opts) {
   // order-admin.htmlの「備考検索」「出荷内訳の自動判定」「請求先の自動判定」がこのmemoを見るため、
   // ここに入っていないと請求時に手で毎回書き足す必要があった（2026-09-26）。名前の一覧は
   // order-admin.html の WHOLESALER_NAMES と揃えること。
-  const WHOLESALER_NAMES = ['トレタテ', 'ノブレスオブリージュ'];
+  // 請求先が別の会社になるお店の請求先名（仲卸業者のほか、植山様→エフユーアイジャパンのような運営会社あても同じ扱い）
+  const WHOLESALER_NAMES = ['トレタテ', 'ノブレスオブリージュ', 'エフユーアイジャパン'];
   const wholesalerTag = WHOLESALER_NAMES.find(w => custNotes.includes(w)) || null;
   let pmList = [];
   try { pmList = await sb('GET', 'price_master', null, '?select=*'); } catch(e) {}

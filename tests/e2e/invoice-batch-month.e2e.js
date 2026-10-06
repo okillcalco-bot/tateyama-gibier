@@ -29,6 +29,7 @@ const path = require('path');
     { id: 'c-c', code: 'C3', name: 'Cビストロ', price_rank: 'standard', address: '東京都C区', is_active: true },
     { id: 'c-w', code: 'C0731', name: 'ノブレスオブリージュ', price_rank: 'standard', address: '東京都W区', honorific: '御中', is_active: true },
     { id: 'c-z', code: 'C9', name: 'Z誤送', price_rank: 'standard', address: '千葉県', is_active: true },
+    { id: 'c-u', code: 'C0532', name: '植山', price_rank: 'standard', address: '東京都港区', notes: '依頼主コード:tgc\nエフユーアイジャパン', is_active: true },
     { id: 'c-t', code: 'C10', name: 'トレタテ', price_rank: 'standard', address: '東京都T区', is_active: true },
     { id: 'c-o', code: 'C11', name: 'OTG', price_rank: 'standard', address: '東京都品川区', notes: 'トレタテ\n出荷登録の画面で登録', is_active: true },
   ];
@@ -95,6 +96,7 @@ const path = require('path');
   const G = n => groups.find(g => g.name === n) || {};
   ck('請求済みの注文は入れない（A食堂は2件）', G('A食堂').n === 2 && !G('A食堂').codes.includes('DIR-0910-BILLED'), JSON.stringify(G('A食堂')));
   ck('仲卸業者のタグがある注文は業者あて（Cビストロではなくノブレスオブリージュ）', G('ノブレスオブリージュ').n === 1 && !groups.some(g => g.name === 'Cビストロ'), JSON.stringify(groups.map(g => g.name)));
+  ck('運営会社あて（植山→エフユーアイジャパン）も顧客の備考で請求先にまとめる', await page.evaluate(() => wholesalerTagOf({ memo: null, customer_id: 'c-u' })) === 'エフユーアイジャパン', '');
   ck('注文の備考に無くても、顧客の備考に「トレタテ」があればトレタテあてにまとめる', G('トレタテ').n === 1 && (G('トレタテ').codes || []).includes('DIR-1006-OTG') && !groups.some(g => g.name === 'OTG'), JSON.stringify(groups.map(g => g.name)));
   const resTxt = await page.$eval('#invBatchResult', el => el.innerText);
   ck('顧客につながっていない注文は赤字で知らせる', /顧客につながっていない注文が 1件/.test(resTxt) && /DIR-0912-NOCUST/.test(resTxt), resTxt.slice(0, 200));
