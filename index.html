@@ -2556,6 +2556,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <button class="btn" id="ship-direct-pause" onclick="shipDirectPause()" style="font-size:15px;padding:12px 18px;" disabled title="今のリストを保存して、別の出荷を先に処理できます">⏸ 一時停止</button>
         <button class="btn btn-primary" id="ship-direct-confirm" onclick="shipDirectConfirm()" style="font-size:16px;padding:12px 24px;" disabled>出荷確定</button>
       </div>
+      <div id="ship-direct-openorders" style="margin-top:8px;"></div>
 
       <!-- 受け渡し方法と送料。請求書・納品書の送料欄はここから作られる -->
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);">
@@ -3382,8 +3383,8 @@ let shipDirectItems = [];
 document.getElementById('ship-direct-code').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); shipDirectScan(); }
 });
-document.getElementById('ship-direct-cust').addEventListener('input', () => { shipDirectUpdateConfirm(); shipActiveSave(); shipDirectFreightAuto(false); });
-document.getElementById('ship-direct-cust').addEventListener('change', () => { shipCustResolveTyped(); });
+document.getElementById('ship-direct-cust').addEventListener('input', () => { shipDirectUpdateConfirm(); shipActiveSave(); shipDirectFreightAuto(false); shipOpenOrdersSoon(); });
+document.getElementById('ship-direct-cust').addEventListener('change', () => { shipCustResolveTyped(); shipOpenOrdersSoon(); });
 // 送料を手で入れたら、実行中の自動計算の結果は捨てる（手入力が最優先）
 document.getElementById('ship-direct-freight')?.addEventListener('input', () => { shipFreightSeq++; shipActiveSave(); });
 document.getElementById('ship-direct-memo').addEventListener('input', shipActiveSave);
@@ -3556,6 +3557,7 @@ function shipDirectPause() {
   document.getElementById('ship-direct-cust').value = '';
   document.getElementById('ship-direct-memo').value = '';
   shipDirectRender();
+  shipOpenOrdersLoad();
   toast('一時停止しました。「⏸ 一時停止中」から再開できます', 'info');
 }
 
@@ -3573,6 +3575,7 @@ function shipPausedResume(id) {
   document.getElementById('ship-direct-cust').value = entry.cust || '';
   document.getElementById('ship-direct-memo').value = entry.memo || '';
   shipDirectRender();
+  shipOpenOrdersLoad();
   toast('再開しました: ' + (entry.cust || '（宛先未設定）'), 'info');
 }
 
@@ -3755,6 +3758,64 @@ async function shipPickCheckOk(id, btn) {
   } catch (e) { if (btn) btn.disabled = false; toast('確認を保存できませんでした: ' + sbSafeMsg(e), 'error'); }
 }
 
+/* ── 出荷先に未出荷の注文があれば、この出荷でその注文を納品済みにする（2026-10-06） ──
+   注文の行ごとにパックを割り当てる仕組みは、注文の品名（「キョン一頭分」「猪赤つなぎセット」「半身」など）が
+   在庫の部位名と合わず候補が出ないため、ほとんど使われていなかった。8/1以降の注文11件のうち
+   3件は注文を残したまま別の「注文なし出荷」で送り（二重請求の危険）、3件はパック0のまま出荷済になっていた。
+   → 行の割り当てはやめ、出荷先を選んだら未出荷の注文を出し、スキャンした現物をそのまま注文の明細にする。 */
+let shipOpenOrders = [];
+let shipOpenOrdersSeq = 0;
+let shipOpenOrdersTimer = null;
+function shipOpenOrdersSoon() {
+  clearTimeout(shipOpenOrdersTimer);
+  shipOpenOrdersTimer = setTimeout(shipOpenOrdersLoad, 400);
+}
+function shipOpenOrderSummary(o) {
+  const its = o.order_items || [];
+  const s = its.slice(0, 4).map(i => {
+    const kg = i.requested_kg != null ? i.requested_kg : i.weight_kg;
+    return (i.part_name || '-') + (kg != null && Number(kg) > 0 ? ` ${Number(kg)}kg` : '');
+  }).join('・');
+  return s + (its.length > 4 ? ` ほか${its.length - 4}行` : '');
+}
+async function shipOpenOrdersLoad() {
+  const box = document.getElementById('ship-direct-openorders');
+  const name = _shipCurCust();
+  const seq = ++shipOpenOrdersSeq;
+  if (!name) { shipOpenOrders = []; if (box) box.innerHTML = ''; return; }
+  const sel = '&status=in.(受注,確認済)&select=id,order_code,order_date,status,customer_id,notes,memo,order_items(id,part_name,weight_kg,requested_kg,inventory_id)&order=order_date.asc';
+  let rows = [];
+  try {
+    let cid = null;
+    try { cid = await sb('POST', 'rpc/staff_lookup_customer_id', { p_name: name }) || null; } catch (e) {}
+    const byName = await sb('GET', 'orders', null, `?customer_name=eq.${encodeURIComponent(name)}${sel}`);
+    const byId = cid ? await sb('GET', 'orders', null, `?customer_id=eq.${cid}${sel}`) : [];
+    const seen = new Set();
+    rows = [...(byName || []), ...(byId || [])].filter(o => !seen.has(o.id) && seen.add(o.id));
+  } catch (e) {
+    if (seq !== shipOpenOrdersSeq) return;
+    shipOpenOrders = [];
+    // 読めなかったことを黙って空にしない（二重請求の見落としにつながるため）
+    if (box) box.innerHTML = `<div style="color:var(--red);font-size:13px;">⚠ このお客さんの未出荷の注文を確認できませんでした: ${esc2(sbSafeMsg(e))}</div>`;
+    return;
+  }
+  if (seq !== shipOpenOrdersSeq) return;
+  shipOpenOrders = rows.map(o => ({ ...o, _use: true }));   // 最初からチェックを入れておく
+  shipOpenOrdersRender();
+}
+function shipOpenOrdersRender() {
+  const box = document.getElementById('ship-direct-openorders');
+  if (!box) return;
+  if (!shipOpenOrders.length) { box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="ship-open-orders" style="border:2px solid var(--gold);border-radius:8px;padding:10px 12px;">
+    <div style="font-weight:700;margin-bottom:6px;">📋 このお客さんの未出荷の注文 ${shipOpenOrders.length}件</div>
+    ${shipOpenOrders.map((o, idx) => `<label style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:14px;line-height:1.5;">
+      <input type="checkbox" ${o._use ? 'checked' : ''} onchange="shipOpenOrders[${idx}]._use=this.checked" style="margin-top:4px;">
+      <span>この出荷で <b>${esc2(o.order_code)}</b>（${esc2(o.order_date || '')}・${esc2(shipOpenOrderSummary(o))}）を納品済みにする</span></label>`).join('')}
+    <div style="font-size:12px;color:var(--text3);margin-top:4px;">行ごとの割り当ては要りません。スキャンしたパックが実際の重さでこの注文の明細になります（注文の依頼行は0円の「依頼内容」として残ります）。</div>
+  </div>`;
+}
+
 async function shipDirectConfirm() {
   // スタッフキーは求めない（キーが要るのは顧客マスタの操作だけ。2026-08-12）
   shipCustResolveTyped();   // ひらがな・別名のままなら台帳の正式名に直してから確定する
@@ -3785,7 +3846,15 @@ async function shipDirectConfirm() {
     _dl = `受け渡し: 発送（${_cr} ${_sz}サイズ${_cl}）\n送料: ` +
       (isFinite(_fv) && _fv >= 0 ? `¥${_fv.toLocaleString()}（税抜）` : '未入力（あとで請求書に反映されません）');
   }
-  if (!confirm(`注文なし出荷を確定しますか？\n\n出荷先: ${custName}\n${_dl}\n商品: ${shipDirectItems.length}点 / ${totalW.toFixed(2)}kg\n${shipDirectItems.map(i=>`・${i.ident_code}（${i.part_name||'-'}）`).join('\n')}\n\n在庫が「出荷済」になります。`)) return;
+  // 未出荷の注文がこのお客さんにあるのに使わないときは、二重にならないか確かめる
+  const fulfillOrders = shipOpenOrders.filter(o => o._use);
+  if (shipOpenOrders.length && !fulfillOrders.length) {
+    if (!confirm(`${custName} には未出荷の注文が ${shipOpenOrders.length}件あります（${shipOpenOrders.map(o => o.order_code).join('・')}）。\n\n注文に入れずに「注文なし出荷」として確定すると、注文が残ったままになり二重請求のおそれがあります。\n\nこのまま注文なし出荷にしますか？`)) return;
+  }
+  const _head = fulfillOrders.length
+    ? `注文 ${fulfillOrders.map(o => o.order_code).join('・')} の出荷として確定しますか？\n（スキャンした${shipDirectItems.length}点がこの注文の明細になります。注文の依頼行は0円の「依頼内容」として残ります）`
+    : '注文なし出荷を確定しますか？';
+  if (!confirm(`${_head}\n\n出荷先: ${custName}\n${_dl}\n商品: ${shipDirectItems.length}点 / ${totalW.toFixed(2)}kg\n${shipDirectItems.map(i=>`・${i.ident_code}（${i.part_name||'-'}）`).join('\n')}\n\n在庫が「出荷済」になります。`)) return;
 
   const btn = document.getElementById('ship-direct-confirm');
   btn.disabled = true;
@@ -3799,10 +3868,10 @@ async function shipDirectConfirm() {
       const fv = parseInt(document.getElementById('ship-direct-freight').value, 10);
       if (isFinite(fv) && fv >= 0) delivery.freight = fv;
     }
-    const { orderCode, createdCustomer } = await recordDirectShipment(shipDirectItems, custName, { memo, operator, delivery, newCustomer });
+    const { orderCode, createdCustomer } = await recordDirectShipment(shipDirectItems, custName, { memo, operator, delivery, newCustomer, fulfillOrders });
 
     playFeedbackSound(true);
-    toast(`直販出荷を記録しました: ${custName} へ ${shipDirectItems.length}点（${orderCode}）`
+    toast((fulfillOrders.length ? `注文 ${orderCode} を出荷済にしました: ${custName} へ ${shipDirectItems.length}点` : `直販出荷を記録しました: ${custName} へ ${shipDirectItems.length}点（${orderCode}）`)
       + (createdCustomer ? (newCustomer && newCustomer.address ? '。新しいお客さんとして顧客台帳に登録しました' : '。新しいお客さんとして登録しました（住所はあとで：送り状の写真か Google マップを送ってください）') : ''));
     if (createdCustomer) { shipPendingCustLoad(); loadShipping(); }
     else shipPickCheckLoad();
@@ -3810,6 +3879,8 @@ async function shipDirectConfirm() {
     shipDirectRender();
     document.getElementById('ship-direct-cust').value = '';
     document.getElementById('ship-direct-memo').value = '';
+    shipOpenOrders = []; shipOpenOrdersSeq++; shipOpenOrdersRender();
+    if (fulfillOrders.length && typeof loadShipping === 'function') loadShipping();
     loadDashboard();
   } catch(e) {
     playFeedbackSound(false);
@@ -4398,6 +4469,11 @@ async function recordDirectShipment(items, custName, opts) {
   const unpriced = priced.filter(p => p.unitPrice == null);
   const totalAmount = priced.reduce((s, p) => s + (p.amount || 0), 0);
 
+  // 未出荷の注文をこの出荷で納品済みにする（出荷画面で注文にチェックを入れたとき）。
+  // スキャンした現物を実際の重さでその注文の明細にし、注文の依頼行は0円の「依頼内容」として残す。
+  const fulfill = (opts.fulfillOrders || []).filter(o => o && o.id);
+  if (fulfill.length) return recordFulfillOrders(fulfill, priced, items, custName, customerId, priceRank, wholesalerTag, opts, now, unpriced, createdCustomer);
+
   const orderBody = {
     order_code: orderCode,
     customer_name: custName,
@@ -4441,6 +4517,64 @@ async function recordDirectShipment(items, custName, opts) {
   }
   // 単価が見つからなかった部位は、請求時まで気付かず0円になっていた事故の再発防止として
   // その場で必ず知らせる（サイレント失敗を作らない）
+  if (unpriced.length) {
+    toast(`⚠ ${unpriced.length}件は価格マスタに単価が無く0円のままです（${[...new Set(unpriced.map(p => p.i.part_name))].join('・')}）。請求前に単価を確認してください`, 'error');
+  }
+  return { orderId, orderCode, unpriced: unpriced.map(p => p.i), createdCustomer };
+}
+
+async function recordFulfillOrders(fulfill, priced, items, custName, customerId, priceRank, wholesalerTag, opts, now, unpriced, createdCustomer) {
+  const target = fulfill[0];
+  const orderId = target.id, orderCode = target.order_code;
+  const today = ymdLocal(now);
+  const scannedIds = new Set(items.map(i => i.id));
+  const keptInv = new Set();
+  // 1) 注文の行のうち、スキャンしたパックが付いている行はそのまま。それ以外（未割当・スキャンしなかったパック）は
+  //    0円の「依頼内容」にする。引当済のまま残っていたパックは在庫に戻す（箱に入っていない現物のため）
+  for (const o of fulfill) {
+    const rows = await sb('GET', 'order_items', null, `?order_id=eq.${o.id}&select=id,part_name,weight_kg,requested_kg,inventory_id`);
+    for (const r of rows || []) {
+      if (o.id === orderId && r.inventory_id && scannedIds.has(r.inventory_id)) { keptInv.add(r.inventory_id); continue; }
+      const req = r.requested_kg != null ? Number(r.requested_kg) : (r.weight_kg != null ? Number(r.weight_kg) : null);
+      await sb('PATCH', 'order_items', {
+        weight: 0, weight_kg: 0, requested_kg: 0, subtotal: 0, amount: 0, inventory_id: null,
+        price_source: `依頼内容（${today} 出荷時にスキャンした現物へ置換。依頼: ${r.part_name || '-'}${req ? ' ' + req + 'kg' : ''}）`
+      }, `?id=eq.${r.id}`);
+      if (r.inventory_id) await sb('PATCH', 'inventory', { status: '在庫', updated_at: now.toISOString() }, `?id=eq.${r.inventory_id}&status=eq.引当済`);
+    }
+  }
+  // 2) スキャンした現物を注文の明細として追加
+  const add = priced.filter(p => !keptInv.has(p.i.id));
+  if (add.length) {
+    await sb('POST', 'order_items', add.map(({ i, weight, unitPrice, amount }) => ({
+      order_id: orderId, inventory_id: i.id, part_name: i.part_name || '-', species: i.species || null,
+      weight, weight_kg: weight, grade_snapshot: i.grade || null, unit_price: unitPrice, amount, subtotal: amount,
+      price_rank_applied: unitPrice != null ? priceRank : null, price_source: unitPrice != null ? 'price_master' : null,
+      pick_method: i._via || null
+    })));
+  }
+  // 3) 注文を発送済に。合計は明細から取り直す
+  const all = await sb('GET', 'order_items', null, `?order_id=eq.${orderId}&select=subtotal`);
+  const total = (all || []).reduce((s, r) => s + (Number(r.subtotal) || 0), 0);
+  const note = [`${today} 出荷画面で納品（スキャン${items.length}点）`, opts.memo, opts.operator ? `担当:${opts.operator}` : ''].filter(Boolean).join(' / ');
+  const ob = { status: '発送済', delivery_date: today, total_amount: total, updated_at: now.toISOString(),
+               notes: [target.notes, note].filter(Boolean).join(' ／ ') };
+  if (customerId && !target.customer_id) ob.customer_id = customerId;
+  if (wholesalerTag && !(target.memo || '').includes(wholesalerTag)) ob.memo = [target.memo, wholesalerTag].filter(Boolean).join(' ');
+  await sb('PATCH', 'orders', ob, `?id=eq.${orderId}`);
+  for (const o of fulfill.slice(1)) {
+    await sb('PATCH', 'orders', { status: '発送済', delivery_date: today, total_amount: 0, updated_at: now.toISOString(),
+      notes: [o.notes, `${today} ${orderCode} の出荷に含めて納品（明細は ${orderCode}）`].filter(Boolean).join(' ／ ') }, `?id=eq.${o.id}`);
+  }
+  // 4) 出荷と在庫
+  const shipBody = { order_id: orderId, shipment_date: today, status: '出荷済',
+    notes: `注文 ${orderCode} の出荷 ${custName}${opts.operator ? ' 担当:' + opts.operator : ''}` };
+  if (customerId) shipBody.customer_id = customerId;
+  if (opts.delivery) Object.assign(shipBody, opts.delivery);
+  await sb('POST', 'shipments', shipBody);
+  for (const i of items) {
+    await sb('PATCH', 'inventory', { status: '出荷済', updated_at: now.toISOString() }, `?id=eq.${i.id}`);
+  }
   if (unpriced.length) {
     toast(`⚠ ${unpriced.length}件は価格マスタに単価が無く0円のままです（${[...new Set(unpriced.map(p => p.i.part_name))].join('・')}）。請求前に単価を確認してください`, 'error');
   }
