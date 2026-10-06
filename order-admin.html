@@ -188,6 +188,8 @@ th,td{padding:8px 6px;font-size:.8rem}
 .dcard .db{padding:10px 12px;font-size:12.5px;line-height:1.7}
 .dcard .db b{font-size:14px;display:block;overflow-wrap:anywhere}
 .dcard .dact{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.inv-fix-btn{font-size:.68rem;background:rgba(200,60,60,.12);color:#b03030;border:1px solid rgba(176,48,48,.35);border-radius:4px;padding:1px 6px;margin-left:4px;cursor:pointer;text-decoration:underline dotted}
+.inv-fix-btn:hover{background:rgba(200,60,60,.22)}
 </style>
 </head>
 <body>
@@ -750,6 +752,14 @@ th,td{padding:8px 6px;font-size:.8rem}
 </div>
 
 <!-- Order Detail Modal -->
+<!-- 月まとめ発行: 注意（単価未入力・顧客未接続）をその場で直す -->
+<div class="modal-overlay" id="invFixModal">
+  <div class="modal modal-wide">
+    <span class="modal-close" onclick="closeModal('invFixModal')">&times;</span>
+    <h2 id="invFixTitle">入力されていない項目を直す</h2>
+    <div id="invFixContent"></div>
+  </div>
+</div>
 <div class="modal-overlay" id="orderDetailModal">
   <div class="modal modal-wide">
     <span class="modal-close" onclick="closeModal('orderDetailModal')">&times;</span>
@@ -3170,6 +3180,8 @@ async function saveCustomer(){
     closeModal('custModal');
     await loadCustomers();
     populateCustomerDropdowns();
+    // 月まとめ発行の「住所未登録」から開いたときは、集計をやり直して注意を消す
+    if(typeof invBatchGroups!=='undefined'&&invBatchGroups.length) invBatchSearch();
   }catch(e){alert('保存エラー: '+e.message)}
 }
 
@@ -4000,6 +4012,7 @@ function invBuildLinesFromOrders(orders,gradeMap,rank){
    期間内の未請求の注文を請求先ごとに集め（仲卸業者経由はその業者あて）、1請求先1枚の請求書を
    まとめて発行し、全員分を1つの印刷ウィンドウ（1請求先1ページ）に出す。PDFとして保存すれば1ファイルにまとまる。 */
 let invBatchGroups=[];
+let invBatchNoCust=[];
 function invBatchRange(){
   const v=document.getElementById('invBatchPeriod')?.value||'lastMonth';
   const now=new Date();
@@ -4039,6 +4052,7 @@ async function invBatchSearch(){
     if(invIds.length) (await invChunkedGet('inventory','id',invIds,'id,grade')).forEach(x=>{gradeMap[x.id]=x.grade;});
     // 請求先ごとにまとめる（仲卸業者のタグがある注文はその業者あて）
     const byKey=new Map(), noCust=[];
+    invBatchNoCust=noCust;
     unbilled.forEach(o=>{
       const tag=wholesalerTagOf(o);
       const cust=tag?allCustomers.find(c=>c.name===tag):allCustomers.find(c=>c.id===o.customer_id);
@@ -4051,14 +4065,14 @@ async function invBatchSearch(){
       const c=invCalcLines(lines);
       const warn=[];
       if(!g.cust.address) warn.push('住所未登録');
-      if(g.orders.some(o=>(o.order_items||[]).some(it=>it.unit_price==null&&Number(it.weight_kg||0)>0))) warn.push('単価未設定の明細あり');
+      if(g.orders.some(o=>(o.order_items||[]).some(invItemNeedsPrice))) warn.push('単価未入力の明細あり');
       return {...g,lines,total:c.total,warn,_use:c.total>0};
     }).sort((a,b)=>(a.cust.name||'').localeCompare(b.cust.name||'','ja'));
     const sum=invBatchGroups.filter(g=>g._use).reduce((s,g)=>s+g.total,0);
     res.innerHTML=`${r.label}：未請求 <strong>${unbilled.length}件</strong> → 請求先 <strong>${invBatchGroups.length}件</strong>（合計 &yen;${sum.toLocaleString()} 税込）`+
       (billed.size?` ／ 請求済み ${billed.size}件は除外`:'')+
       (baseCount?` ／ BASEの注文 ${baseCount}件は対象外（支払い済み）`:'')+
-      (noCust.length?`<div style="color:var(--red);margin-top:4px">⚠ 顧客につながっていない注文が ${noCust.length}件あり、集計に入っていません: ${esc(noCust.map(o=>`${o.order_code}（${o.customer_name||'名前なし'}）`).join('、'))}</div>`:'');
+      (noCust.length?`<div style="color:var(--red);margin-top:4px">⚠ 顧客につながっていない注文が ${noCust.length}件あり、集計に入っていません（押すと顧客を選べます）: ${noCust.map((o,k)=>`<button type="button" class="inv-fix-btn" onclick="invFixCustomer(${k})">${esc(o.order_code)}（${esc(o.customer_name||'名前なし')}）</button>`).join(' ')}</div>`:'');
     invBatchRender();
   }catch(e){ res.innerHTML=`<span style="color:var(--red)">集計できませんでした: ${esc(String(e.message||e))}</span>`; }
 }
@@ -4070,10 +4084,89 @@ function invBatchRender(){
     <span style="flex:1;min-width:0">
       <strong style="font-size:.82rem">${esc(g.cust.name||'')}</strong>
       <span style="color:var(--text2);font-size:.75rem"> 注文${g.orders.length}件</span>
-      ${g.warn.map(w=>`<span style="font-size:.68rem;background:rgba(200,60,60,.12);color:#b03030;border-radius:4px;padding:1px 5px;margin-left:4px">${esc(w)}</span>`).join('')}
+      ${g.warn.map(w=>`<button type="button" class="inv-fix-btn" title="押すと入力できます" onclick="invFixWarn(event,${i},'${w}')">✏ ${esc(w)}</button>`).join('')}
       <span style="float:right;font-weight:700;font-size:.8rem">&yen;${g.total.toLocaleString()}</span>
     </span></label>`).join('');
   acts.style.display='flex';
+}
+/* ── 月まとめ発行の注意をその場で直す（2026-10-06）──
+   「住所未登録」→ 顧客編集、「単価未入力の明細あり」→ 単価の入力、「顧客につながっていない注文」→ 顧客を選んで紐付け。
+   直したら集計をやり直して注意を消す。保存に失敗したら必ず画面に出す。 */
+function invItemNeedsPrice(it){ return Number(it.weight_kg||it.weight||0)>0 && !(Number(it.subtotal!=null?it.subtotal:it.amount)>0); }
+function invFixWarn(ev,i,w){
+  if(ev){ ev.preventDefault(); ev.stopPropagation(); }
+  const g=invBatchGroups[i]; if(!g) return;
+  if(w==='住所未登録'){ openEditCustomer(g.cust.id); return; }
+  invFixPrices(i);
+}
+function invFixPrices(i){
+  const g=invBatchGroups[i]; if(!g) return;
+  const rank=g.cust.price_rank||'standard';
+  const rows=[];
+  g.orders.forEach(o=>(o.order_items||[]).forEach(it=>{ if(invItemNeedsPrice(it)) rows.push({o,it}); }));
+  const pmPrice=it=>{
+    const base=invPartBase(it.part_name);
+    const pm=allPriceMaster.find(p=>p.species===it.species&&(p.part_name===it.part_name||p.part_name===base)&&(p.grade||'並')===(it.grade_snapshot||'並'));
+    return pm?(pm['price_'+rank]??pm.price_standard):'';
+  };
+  document.getElementById('invFixTitle').textContent=`単価を入れる — ${g.cust.name}`;
+  document.getElementById('invFixContent').innerHTML=`<div style="font-size:.8rem;color:var(--text2);margin-bottom:8px">単価は税込・1kgあたり。価格表に単価がある部位は最初から入れてあります（確認して保存してください）。</div>
+    <div class="table-wrap"><table><thead><tr><th>納品日</th><th>注文</th><th>品目</th><th style="text-align:right">重さ(kg)</th><th style="text-align:right">単価(円/kg・税込)</th><th style="text-align:right">金額</th></tr></thead><tbody>
+    ${rows.map((r,k)=>`<tr><td>${esc(r.o.delivery_date||r.o.order_date||'')}</td><td>${esc(r.o.order_code||'')}</td><td>${esc((r.it.species||'')+' '+(r.it.part_name||''))}</td>
+      <td style="text-align:right">${Number(r.it.weight_kg||r.it.weight)}</td>
+      <td style="text-align:right"><input type="number" min="0" step="1" class="inv-fix-price" data-k="${k}" value="${escAttr(pmPrice(r.it))}" style="width:110px;text-align:right" oninput="invFixPreview(this,${Number(r.it.weight_kg||r.it.weight)})"></td>
+      <td style="text-align:right" id="invFixAmt${k}">${pmPrice(r.it)!==''?'&yen;'+Math.round(Number(r.it.weight_kg||r.it.weight)*pmPrice(r.it)).toLocaleString():'-'}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button class="btn btn-outline" onclick="closeModal('invFixModal')">閉じる</button><button class="btn btn-gold" id="invFixSave">保存して集計し直す</button></div>`;
+  document.getElementById('invFixSave').onclick=()=>invFixPricesSave(rows);
+  openModal('invFixModal');
+}
+function invFixPreview(el,w){
+  const v=parseFloat(el.value); const t=document.getElementById('invFixAmt'+el.dataset.k);
+  if(t) t.innerHTML=v>0?'&yen;'+Math.round(w*v).toLocaleString():'-';
+}
+async function invFixPricesSave(rows){
+  const inputs=[...document.querySelectorAll('#invFixContent .inv-fix-price')];
+  const todo=inputs.map(el=>({r:rows[parseInt(el.dataset.k,10)],price:parseFloat(el.value)})).filter(x=>x.r&&x.price>0);
+  if(!todo.length){alert('単価を入力してください');return}
+  const btn=document.getElementById('invFixSave'); if(btn) btn.disabled=true;
+  try{
+    const touched=new Set();
+    for(const {r,price} of todo){
+      const w=Number(r.it.weight_kg||r.it.weight);
+      const amt=Math.round(w*price);
+      await sb('PATCH','order_items',{unit_price:price,subtotal:amt,amount:amt,price_source:`月まとめ発行で入力（${today()}）`},`?id=eq.${r.it.id}`);
+      touched.add(r.o.id);
+    }
+    for(const oid of touched){
+      const its=await sb('GET','order_items','',`?order_id=eq.${oid}&select=subtotal`);
+      await sb('PATCH','orders',{total_amount:its.reduce((s,x)=>s+(Number(x.subtotal)||0),0)},`?id=eq.${oid}`);
+    }
+    closeModal('invFixModal');
+    invBatchSearch();
+  }catch(e){ alert('単価を保存できませんでした: '+String(e.message||e)); if(btn) btn.disabled=false; }
+}
+function invFixCustomer(k){
+  const o=invBatchNoCust[k]; if(!o) return;
+  populateInvCustomerDatalist();
+  document.getElementById('invFixTitle').textContent=`顧客を選ぶ — ${o.order_code}`;
+  document.getElementById('invFixContent').innerHTML=`<div style="font-size:.85rem;margin-bottom:8px">出荷先「${esc(o.customer_name||'名前なし')}」（${esc(o.delivery_date||o.order_date||'')}・&yen;${Number(o.total_amount||0).toLocaleString()}）をどのお客さんの注文にしますか？</div>
+    <input type="text" id="invFixCust" list="invCustomerList" placeholder="店舗名・コードで検索" autocomplete="off" style="width:100%">
+    <div style="font-size:.75rem;color:var(--text2);margin-top:6px">台帳に無いお店は、顧客管理タブで登録してから選んでください。</div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button class="btn btn-outline" onclick="closeModal('invFixModal')">閉じる</button><button class="btn btn-gold" id="invFixCustSave">この顧客につなぐ</button></div>`;
+  document.getElementById('invFixCustSave').onclick=()=>invFixCustomerSave(o);
+  openModal('invFixModal');
+}
+async function invFixCustomerSave(o){
+  const v=(document.getElementById('invFixCust').value||'').trim();
+  const c=allCustomers.find(x=>`${x.code} ${x.name}`===v)||allCustomers.filter(x=>x.is_active!==false).find(x=>custMatches(x,v));
+  if(!c){alert('顧客が見つかりません。候補から選んでください');return}
+  try{
+    await sb('PATCH','orders',{customer_id:c.id},`?id=eq.${o.id}`);
+    await sb('PATCH','shipments',{customer_id:c.id},`?order_id=eq.${o.id}&customer_id=is.null`);
+    closeModal('invFixModal');
+    invBatchSearch();
+  }catch(e){ alert('顧客をつなげませんでした: '+String(e.message||e)); }
 }
 function invBatchToggleAll(on){ invBatchGroups.forEach(g=>{g._use=on;}); invBatchRender(); }
 function invBatchPayload(g){

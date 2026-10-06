@@ -41,6 +41,8 @@ const path = require('path');
       order_items: [it('モモ（ソト）', 1.0, 2600), it('キョン（一頭分・ご希望）', 0, 3000, { subtotal: 0, amount: 0, weight_kg: 0, weight: 0 })], shipments: [] },
     { id: 'o3', order_code: 'DIR-0915', customer_id: 'c-b', customer_name: 'B商店', order_date: '2026-09-15', delivery_date: '2026-09-15', status: '発送済', memo: null,
       order_items: [it('カタ', 2, 2200)], shipments: [{ freight: 800, size_code: 60, is_cool: true }] },
+    { id: 'o10', order_code: 'DIR-0918-NOPRICE', customer_id: 'c-b', customer_name: 'B商店', order_date: '2026-09-18', delivery_date: '2026-09-18', status: '発送済', memo: null,
+      order_items: [it('ネック', 1.5, 0, { id: 'it-np', unit_price: null, subtotal: null, amount: null })], shipments: [] },
     { id: 'o4', order_code: 'DIR-0916', customer_id: 'c-c', customer_name: 'Cビストロ', order_date: '2026-09-16', delivery_date: '2026-09-16', status: '発送済', memo: 'ノブレスオブリージュ',
       order_items: [it('内臓', 2.9, 1000)], shipments: [{ freight: 1300, size_code: 100, is_cool: true }] },
     { id: 'o5', order_code: 'DIR-0910-BILLED', customer_id: 'c-a', customer_name: 'A食堂', order_date: '2026-09-10', delivery_date: '2026-09-10', status: '発送済', memo: null,
@@ -56,8 +58,11 @@ const path = require('path');
   ];
   let orderQueries = [];
   const docs = [], docItems = [], docOrders = [];
+  const patches = [];
   await page.route('**/rest/v1/**', async rt => {
     const req = rt.request(); const url = decodeURIComponent(req.url()); const m = req.method();
+    if (m === 'PATCH') { patches.push({ url, body: JSON.parse(req.postData() || '{}') }); }
+    if (m === 'GET' && /\/order_items\?order_id=eq\.o10/.test(url)) return rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ subtotal: 1800 }]) });
     const J = (x, st) => rt.fulfill({ status: st || 200, contentType: 'application/json', body: JSON.stringify(x) });
     const body = () => JSON.parse(req.postData() || '[]');
     if (/\/customers\b/.test(url)) return J(CUSTS);
@@ -110,6 +115,30 @@ const path = require('path');
   ck('明細は注文の金額（顧客別単価1,500円/kg）から作り、価格マスタ（3,000円）で引き直さない', eda && eda.qty === 10 && eda.price === Math.round(Math.round(15000 / 1.08) / 10), JSON.stringify(eda));
   ck('0円・0kgの依頼内容の行は載せない', !aLines.some(l => /キョン/.test(l.name)), JSON.stringify(aLines.map(l => l.name)));
   ck('送料は別行（10%・税抜そのまま）', aLines.some(l => /9\/3納品　送料（クール100）/.test(l.name) && l.price === 1300 && l.tax === 10), JSON.stringify(aLines));
+
+  // 9. 注意を押すと入力できる
+  ck('B商店に「単価未入力の明細あり」が出る', (G('B商店').warn || []).includes('単価未入力の明細あり'), JSON.stringify(G('B商店')));
+  const bIdx = groups.findIndex(g => g.name === 'B商店');
+  await page.evaluate(i => document.querySelectorAll('#invBatchList label')[i].querySelector('button.inv-fix-btn').click(), bIdx);
+  await page.waitForTimeout(150);
+  const custModal = await page.evaluate(() => ({ open: document.getElementById('custModal')?.classList.contains('show'), name: document.getElementById('cfName')?.value }));
+  ck('「住所未登録」を押すと、その顧客の編集画面が開く（チェックは切り替わらない）', custModal.open && custModal.name === 'B商店' && (await page.evaluate(i => invBatchGroups[i]._use, bIdx)) === true, JSON.stringify(custModal));
+  await page.evaluate(() => closeModal('custModal'));
+  await page.evaluate(i => [...document.querySelectorAll('#invBatchList label')[i].querySelectorAll('button.inv-fix-btn')].find(b => /単価/.test(b.textContent)).click(), bIdx);
+  await page.waitForTimeout(150);
+  const fixTxt = await page.$eval('#invFixContent', el => el.innerText.replace(/\s+/g, ' '));
+  ck('「単価未入力の明細あり」を押すと、その明細の単価入力が開く', /ネック/.test(fixTxt) && /DIR-0918-NOPRICE/.test(fixTxt) && await page.evaluate(() => document.getElementById('invFixModal').classList.contains('show')), fixTxt.slice(0, 160));
+  await page.evaluate(() => { const el = document.querySelector('#invFixContent .inv-fix-price'); el.value = '1200'; el.dispatchEvent(new Event('input')); document.getElementById('invFixSave').click(); });
+  await page.waitForTimeout(500);
+  const pIt = patches.find(x => /order_items\?id=eq\.it-np/.test(x.url)), pOr = patches.find(x => /orders\?id=eq\.o10/.test(x.url));
+  ck('保存すると単価・金額（1.5kg×1,200円=1,800円）と注文の合計を書き、集計し直す', pIt && pIt.body.unit_price === 1200 && pIt.body.subtotal === 1800 && pOr && pOr.body.total_amount === 1800 && !(await page.evaluate(() => document.getElementById('invFixModal').classList.contains('show'))), JSON.stringify([pIt && pIt.body, pOr && pOr.body]));
+  await page.evaluate(() => document.querySelector('#invBatchResult button.inv-fix-btn').click());
+  await page.waitForTimeout(150);
+  await page.evaluate(() => { document.getElementById('invFixCust').value = 'C1 A食堂'; document.getElementById('invFixCustSave').click(); });
+  await page.waitForTimeout(400);
+  const pCu = patches.find(x => /orders\?id=eq\.o6/.test(x.url));
+  ck('顧客につながっていない注文を押すと顧客を選べ、つなぐと注文に顧客を書く', pCu && pCu.body.customer_id === 'c-a', JSON.stringify(pCu && pCu.body));
+  await page.waitForTimeout(300);
 
   // 6〜8. まとめて発行
   await page.evaluate(() => {
