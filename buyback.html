@@ -67,6 +67,22 @@ tr:last-child td { border-bottom:none; }
 .detail-row table td { font-size:12.5px; padding:4px 8px; }
 .note { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:14px 18px; font-size:12.5px; line-height:1.8; color:var(--text2); margin-bottom:20px; }
 .note b { color:var(--text); }
+.nv { position:fixed; inset:0; z-index:1000; background:#fff; color:#111; overflow:auto; display:none; font-family:'Noto Sans JP','Yu Gothic',sans-serif; }
+.nv.on { display:block; }
+.nv-bar { position:sticky; top:0; display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:10px 16px; background:#f3f1ec; border-bottom:1px solid #ccc; }
+.nv-bar .btn { font-size:15px; }
+.nv-body { max-width:1100px; margin:0 auto; padding:20px 16px 48px; }
+.nv-title { font-size:1.35em; font-weight:700; margin:0 0 .3em; }
+.nv-name { font-size:1.6em; font-weight:700; margin:.2em 0; }
+.nv-total { font-size:1.6em; font-weight:700; margin:.4em 0 .6em; }
+.nv-prov { background:#fff4d6; border:1px solid #e0b84a; border-radius:6px; padding:.5em .8em; margin:.5em 0; font-size:.9em; }
+.nv table { border-collapse:collapse; width:100%; margin-top:.5em; }
+.nv th, .nv td { border:1px solid #555; padding:.45em .55em; white-space:nowrap; font-size:1em; color:#111; background:#fff; }
+.nv th { background:#eee; font-weight:600; letter-spacing:0; }
+.nv .n { text-align:right; font-variant-numeric:tabular-nums; }
+.nv .tot td { font-weight:700; background:#f6f6f6; }
+.nv .sub { font-size:.8em; color:#333; line-height:1.6; margin-top:.6em; }
+.nv-scroll { overflow-x:auto; }
 .rule-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; }
 .rule-grid label { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12.5px; color:var(--text2); }
 .rule-grid input { width:110px; }
@@ -102,6 +118,16 @@ tr:last-child td { border-bottom:none; }
 
 <div class="main">
   <div id="statusBar" class="status-bar"></div>
+  <!-- 通知書の表を画面で見る（捕獲者さんに見せる用。その人の分だけ・大きな文字） -->
+  <div id="noticeView" class="nv" role="dialog" aria-modal="true" aria-label="買取内容">
+    <div class="nv-bar">
+      <button class="btn btn-secondary" onclick="noticeViewZoom(-1)">Ａ−</button>
+      <button class="btn btn-secondary" onclick="noticeViewZoom(1)">Ａ＋</button>
+      <button class="btn btn-secondary" id="nvPrint" onclick="noticeViewPrint()">🖨 この人の通知書を印刷</button>
+      <button class="btn btn-accent" style="margin-left:auto" onclick="noticeViewClose()">✕ 閉じる</button>
+    </div>
+    <div class="nv-body" id="nvBody"></div>
+  </div>
   <div class="tabs">
     <button class="tab on" data-p="calc" onclick="showTab('calc')">計算</button>
     <button class="tab" data-p="notice" onclick="showTab('notice')">通知書</button>
@@ -147,6 +173,7 @@ tr:last-child td { border-bottom:none; }
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <select id="nOne"><option value="">全員</option></select>
         <button class="btn btn-accent" onclick="printNotices()">🖨 通知書を印刷</button>
+        <button class="btn btn-secondary" onclick="noticeViewOpenSelected()">👁 選んだ人の表を画面で見る</button>
         <button class="btn btn-secondary" onclick="printAnnouncement()">📢 告知文（受入状況・買取価格表）を印刷</button>
         <span class="muted">通知書は支払先ごとに改ページ。明細が多い人は別紙が付きます。</span>
       </div>
@@ -400,7 +427,7 @@ function renderAll(){
   // 支払先
   const rk = it => it.yield_rank ? `${it.yield_rank}（${it.yield_pct!=null?it.yield_pct+'%':'—'}）` : (it.pending ? '<span class="tag tag-red">未確定</span>' : '—');
   document.getElementById('payeeBody').innerHTML = r.payees.length ? r.payees.map((p,idx) => `
-    <tr class="payee-row" onclick="toggleDetail(${idx})"><td><b>${esc(p.payee)}</b>${p.items.some(i=>i.hunter && normName(i.hunter)!==normName(p.payee)) ? '<br><span class="muted">捕獲者: '+esc([...new Set(p.items.map(i=>i.hunter).filter(Boolean))].join('・'))+'</span>' : ''}</td>
+    <tr class="payee-row" onclick="toggleDetail(${idx})"><td><b>${esc(p.payee)}</b> <button class="btn btn-secondary btn-sm nv-open" onclick="event.stopPropagation();noticeViewOpen(${idx})" title="提出時（通知書）と同じ表を大きな文字で見る">👁 表で見る</button>${p.items.some(i=>i.hunter && normName(i.hunter)!==normName(p.payee)) ? '<br><span class="muted">捕獲者: '+esc([...new Set(p.items.map(i=>i.hunter).filter(Boolean))].join('・'))+'</span>' : ''}</td>
       <td class="td-num">${p.heads}${p.pending?`<br><span class="tag tag-red">未確定${p.pending}</span>`:''}</td><td class="td-num">${yen(p.boar)}</td><td class="td-num">${yen(p.other)}</td><td class="td-num">${p.pickups||'—'}</td>
       <td class="td-num" onclick="event.stopPropagation()"><input type="number" step="1" value="${p.adjust||0}" style="width:90px;padding:3px 6px" onchange="setAdjust('${esc(p.payee)}', this.value, null)"><br><input type="text" placeholder="メモ" value="${esc(p.adjust_note)}" style="width:120px;padding:3px 6px;font-size:11px;margin-top:3px" onchange="setAdjust('${esc(p.payee)}', null, this.value)"></td>
       <td class="td-num"><b>${yen(p.pay)}</b></td>
@@ -580,6 +607,42 @@ function printNotices(){
   if (!list.length) { showStatus('error','出力する支払先がありません'); return; }
   printDoc('買取金のご通知', NOTICE_CSS, list.map(p=>noticeHtml(p, opts)).join(''));
 }
+/* 通知書の「買取内容」の表を、印刷せずに画面で大きく見る（2026-10-04）。
+   捕獲者さんに「いくらになる？」と聞かれたときに、一覧（全員の名前・口座が並ぶ小さな表）ではなく、
+   提出する通知書と同じ表をその人の分だけ見せる。表の中身は noticeRows / noticeTotalRows をそのまま使う
+   （印刷と画面で数字や列がずれないように）。確定前は「現時点の計算」と必ず表示する。 */
+let nvZoom = 0;
+const NV_SIZES = [18, 21, 24, 28, 32];
+function noticeViewOpen(idx){
+  const r = D.result; const p = r && r.payees[idx]; if (!p) return;
+  D.nvPayee = p.payee;
+  const period = `${reiwa(D.run.fiscal_year)}${D.run.half}`;
+  const fixed = D.run.status === '確定';
+  const prov = [];
+  if (!fixed) prov.push('現時点の計算です（' + (D.run.status === '下書き' ? '下書き' : '未確定') + '）。精肉や調整で金額が変わることがあります。');
+  if (p.pending) prov.push(`精肉待ちの個体が ${p.pending}頭あり、その分の金額はまだ入っていません。`);
+  document.getElementById('nvBody').innerHTML = `
+    <div class="nv-title">${esc(period)}　捕獲個体の買取内容</div>
+    <div class="nv-name">${esc(p.payee)}　様</div>
+    ${prov.length ? `<div class="nv-prov">⚠ ${prov.map(esc).join('<br>')}</div>` : ''}
+    <div class="nv-total">買取合計金額　${Number(p.pay).toLocaleString()} 円${p.pending ? '（確定分）' : ''}</div>
+    <div class="nv-scroll"><table>${NOTICE_THEAD}<tbody>${noticeRows(p.items)}${noticeTotalRows(p)}</tbody></table></div>
+    ${NOTICE_SUB}`;
+  noticeViewApplyZoom();
+  document.getElementById('noticeView').classList.add('on');
+  document.body.style.overflow = 'hidden';
+}
+function noticeViewOpenSelected(){
+  const r = D.result; if (!r) { showStatus('error','先に計算してください'); return; }
+  const only = document.getElementById('nOne').value;
+  if (!only) { showStatus('error','画面で見る人を選んでください（全員はまとめて見られません）'); return; }
+  noticeViewOpen(r.payees.findIndex(p => p.payee === only));
+}
+function noticeViewApplyZoom(){ document.getElementById('noticeView').style.fontSize = NV_SIZES[nvZoom] + 'px'; }
+function noticeViewZoom(d){ nvZoom = Math.max(0, Math.min(NV_SIZES.length - 1, nvZoom + d)); noticeViewApplyZoom(); }
+function noticeViewClose(){ document.getElementById('noticeView').classList.remove('on'); document.body.style.overflow = ''; }
+function noticeViewPrint(){ const one = document.getElementById('nOne'); const prev = one.value; one.value = D.nvPayee; printNotices(); one.value = prev; }
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.getElementById('noticeView').classList.contains('on')) noticeViewClose(); });
 function printBank(){
   const r = D.result; if (!r) return;
   const rows = r.payees.filter(p=>p.pay>0).map(p=>({p,b:p.bank||{}})).sort((a,b)=>(a.b.bank||'ん').localeCompare(b.b.bank||'ん','ja')||(a.b.branch||'').localeCompare(b.b.branch||'','ja'));

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>連携の許可 | 館山ジビエ</title>
+<!--
+  Supabase Auth（OAuth 2.1 サーバー）の同意画面。【本番未配置】承認後にサイト直下へ置き、
+  Supabase ダッシュボード「Authentication > OAuth Server」の Authorization Path に /oauth-consent.html を設定する。
+  ここでは本人が Supabase Auth にメールのワンタイムリンクでログインし、シーモルト（ChatGPT）への許可を確認する。
+  許可しても、MCP で何ができるかは DB の order_link.principals（主体ごとの read / import）で決まる。
+  公開キー（anon）以外の秘密値は置かない。
+-->
+<style>
+:root{--bg:#f6f4ef;--card:#fff;--text:#1f2a1f;--muted:#5d665d;--line:#d9d4c7;--acc:#2f5d3a;--warn:#9a3b1f}
+@media (prefers-color-scheme:dark){:root{--bg:#141714;--card:#1d211d;--text:#e9ece6;--muted:#a3ab9f;--line:#333a33;--acc:#7fb38c;--warn:#f0a080}}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.7 system-ui,-apple-system,"Hiragino Sans","Yu Gothic UI",sans-serif}
+main{max-width:520px;margin:32px auto;padding:0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px}
+h1{font-size:20px;margin:0 0 12px}
+.muted{color:var(--muted);font-size:14px}
+ul{padding-left:20px}
+button{font:inherit;padding:10px 18px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text);cursor:pointer}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+input{font:inherit;padding:9px;border-radius:8px;border:1px solid var(--line);width:100%;box-sizing:border-box;background:var(--card);color:var(--text)}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.err{color:var(--warn)}
+</style>
+</head>
+<body>
+<main><div class="card" id="box"><p class="muted">読み込み中…</p></div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
+const SB_KEY = 'REPLACE_WITH_PUBLIC_ANON_KEY_FROM_index.html';   // 公開キー（index.html の SB_KEY と同じ）。配置時に差し替える
+const sb = supabase.createClient(SB_URL, SB_KEY);
+const box = document.getElementById('box');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const authId = new URLSearchParams(location.search).get('authorization_id');
+
+function show(html) { box.innerHTML = html; }
+function fail(msg) { show(`<h1>連携の許可</h1><p class="err">${esc(msg)}</p>`); }
+
+async function main() {
+  if (!authId || !/^[A-Za-z0-9-]{8,100}$/.test(authId)) return fail('許可の依頼が見つかりません。シーモルトの画面からやり直してください。');
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return showLogin();
+  const { data, error } = await sb.auth.oauth.getAuthorizationDetails(authId);
+  if (error) return fail('許可の依頼を確認できませんでした: ' + error.message);
+  if (data && data.redirect_url && !('authorization_id' in data)) { location.href = data.redirect_url; return; }   // 許可済み
+  const client = data.client || {};
+  show(`<h1>シーモルトとの連携を許可しますか</h1>
+    <p><strong>${esc(client.client_name || client.name || client.client_id || '（名前なし）')}</strong> が、
+       <strong>${esc(session.user.email)}</strong> として館山ジビエの受発注に接続しようとしています。</p>
+    <ul>
+      <li>受注の検索・1件の確認（読取）</li>
+      <li>依頼したときだけ、メール注文を取込候補にして、確認後に「受注」として登録</li>
+    </ul>
+    <p class="muted">在庫の確保・出荷・請求・顧客へのメール送信・ステータスの自由な変更はできません。
+       実際に使える範囲は、館山ジビエ側の連携設定（担当者ごとの権限）で決まります。戻り先: ${esc(data.redirect_uri || '')}</p>
+    <div class="row"><button class="primary" id="ok">許可する</button><button id="ng">許可しない</button></div>`);
+  document.getElementById('ok').onclick = () => decide(true);
+  document.getElementById('ng').onclick = () => decide(false);
+}
+async function decide(ok) {
+  const { data, error } = ok ? await sb.auth.oauth.approveAuthorization(authId) : await sb.auth.oauth.denyAuthorization(authId);
+  if (error) return fail((ok ? '許可' : '拒否') + 'の処理に失敗しました: ' + error.message);
+  location.href = data.redirect_url;
+}
+function showLogin() {
+  show(`<h1>本人確認</h1><p>登録済みのメールアドレスにログイン用のリンクを送ります。</p>
+    <input id="em" type="email" autocomplete="email" placeholder="メールアドレス">
+    <div class="row"><button class="primary" id="send">リンクを送る</button></div><p id="msg" class="muted"></p>`);
+  document.getElementById('send').onclick = async () => {
+    const email = document.getElementById('em').value.trim();
+    if (!email) return;
+    // 新しいユーザーは作らない（既存の本人だけ）。戻り先は同じ許可依頼
+    const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: location.href } });
+    document.getElementById('msg').textContent = error ? '送れませんでした: ' + error.message : 'メールのリンクを開いてください（この画面に戻ります）。';
+  };
+}
+main().catch(e => fail(String(e && e.message || e)));
+</script>
+</body>
+</html>

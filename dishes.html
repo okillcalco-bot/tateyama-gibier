@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>ジビエ料理ギャラリー — 館山ジビエセンター</title>
+<meta name="description" content="館山ジビエセンターのイノシシ・シカなどのジビエが、お店でこんな料理になりました。いつ・どこで獲れた個体かもあわせて紹介します。">
+<meta property="og:title" content="ジビエ料理ギャラリー — 館山ジビエセンター">
+<meta property="og:description" content="館山の山で獲れたジビエが、お店でこんな料理になりました。">
+<meta property="og:type" content="website">
+<style>
+/* 公開ページ（ログイン不要）。外部フォント・外部スクリプトは読み込まない。
+   データは public_dish_gallery()（センターが公開した投稿だけ）から取る */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{color-scheme:light;
+ --bg:#ffffff;--surface:#faf8f2;--surface2:#f1eee4;--border:#e5e0d2;--border2:#d4ccb6;
+ --gold:#8a6a1f;--gold2:#6e521a;--text:#23211a;--text2:#6a6455;--text3:#948d78;--green:#3f7a3f;--red:#c0392b}
+html{-webkit-text-size-adjust:100%}
+body{font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+ background:var(--bg);color:var(--text);line-height:1.7;-webkit-font-smoothing:antialiased}
+a{color:var(--gold)}
+button{font-family:inherit;color:inherit;background:none;border:none;font-size:inherit;cursor:pointer}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px}
+header{padding:36px 0 18px;text-align:center;border-bottom:1px solid var(--border)}
+header .org{font-size:12px;letter-spacing:.18em;color:var(--gold);font-weight:700}
+header h1{font-size:clamp(22px,5.4vw,32px);line-height:1.4;margin:6px 0 10px;font-weight:800}
+header p{font-size:13.5px;color:var(--text2);max-width:620px;margin:0 auto}
+.flow{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 6px;margin:16px auto 0;font-size:12px;color:var(--text2)}
+.flow span{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:2px 10px}
+.flow span+span::before{content:'→';color:var(--text3);margin:0 6px 0 -2px}
+.flow span+span{padding-left:6px}
+.filters{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:16px 0 4px}
+.filters button{min-height:40px;padding:0 16px;border:1px solid var(--border2);border-radius:20px;font-size:13px;color:var(--text2);background:#fff}
+.filters button.on{background:var(--gold);border-color:var(--gold);color:#fff;font-weight:700}
+.count{text-align:center;font-size:12px;color:var(--text3);margin:4px 0 12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px;padding-bottom:28px}
+@media (max-width:400px){.grid{grid-template-columns:1fr}}
+.card{border:1px solid var(--border);border-radius:14px;overflow:hidden;background:#fff;display:flex;flex-direction:column}
+.ph{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--surface2);cursor:zoom-in}
+.cb{padding:14px 16px 16px;display:flex;flex-direction:column;gap:8px;flex:1}
+.dn{font-size:17px;font-weight:800;line-height:1.45;overflow-wrap:anywhere}
+.shop{font-size:13px;color:var(--gold);font-weight:700}
+.shop small{color:var(--text3);font-weight:400;margin-left:6px}
+.dd{font-size:13.5px;color:var(--text2);white-space:pre-wrap;overflow-wrap:anywhere}
+.inds{display:flex;flex-direction:column;gap:6px;margin-top:2px}
+.ind{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 10px;font-size:12.5px;line-height:1.6}
+.ind b{color:var(--text)}
+.ind .lid{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--text3);margin-left:4px}
+.more{margin-top:auto;border-top:1px dashed var(--border);padding-top:8px}
+.more summary{list-style:none;font-size:12.5px;color:var(--gold);font-weight:700;cursor:pointer;min-height:36px;display:flex;align-items:center}
+.more summary::-webkit-details-marker{display:none}
+.more summary::before{content:'＋';margin-right:6px}
+.more[open] summary::before{content:'－'}
+.more .sd{font-size:13px;color:var(--text2);white-space:pre-wrap;overflow-wrap:anywhere;margin:2px 0 6px}
+.links{display:flex;flex-wrap:wrap;gap:8px}
+.links a{display:inline-flex;align-items:center;min-height:36px;padding:0 12px;border:1px solid var(--border2);border-radius:18px;font-size:12.5px;text-decoration:none;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.state{text-align:center;padding:48px 16px;color:var(--text2);font-size:14px}
+.state.err{color:var(--red)}
+footer{border-top:1px solid var(--border);padding:22px 0 calc(28px + env(safe-area-inset-bottom));text-align:center;font-size:12.5px;color:var(--text2)}
+footer b{color:var(--text)}
+#lb{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;padding:16px;z-index:50;cursor:zoom-out}
+#lb.on{display:flex}
+#lb img{max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px}
+#lb button{position:absolute;top:10px;right:14px;font-size:30px;color:#fff;min-width:44px;min-height:44px}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="org">館山ジビエセンター</div>
+    <h1>館山のジビエが、<br>こんな料理になりました</h1>
+    <p>千葉県館山市・南房総市の山で獲れたイノシシやシカは、センターで精肉され、全国のお店へ届きます。
+      お店のみなさんが仕上げた料理を、どの個体（いつ・どこで・どう獲れた）のお肉かとあわせて紹介します。</p>
+    <div class="flow"><span>山で捕獲</span><span>センターで精肉・放射能検査</span><span>お店へ</span><span>料理に</span></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="filters" id="filters" hidden></div>
+  <div class="count" id="count"></div>
+  <div class="grid" id="grid"></div>
+  <div class="state" id="state">読み込み中…</div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <b>館山ジビエセンター</b>（運営：合同会社アルコ）　千葉県館山市大戸37<br>
+    掲載している料理・お店の紹介は、各店舗の了承を得て掲載しています。<br>
+    お取引のご相談は <a href="customer-signup.html">こちら</a> から。
+  </div>
+</footer>
+
+<div id="lb" onclick="lbClose()"><button aria-label="閉じる" onclick="lbClose()">×</button><img id="lb-img" alt=""></div>
+
+<script>
+'use strict';
+const SB_URL='https://clpdyrehdgzgiidbfucj.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const photoUrl = p => SB_URL + '/storage/v1/object/public/dish-photos/' + encodeURIComponent(p).replace(/%2F/g, '/');
+// 外部リンクは http(s) だけ通す（DB側でも検査済み。念のため画面でも）
+const safeUrl = u => /^https?:\/\/[^\s"'<>]+$/.test(u || '') ? u : '';
+const igUrl = h => { const m = String(h || '').trim().replace(/^@/, ''); return /^[A-Za-z0-9._]{1,30}$/.test(m) ? 'https://www.instagram.com/' + m + '/' : ''; };
+
+let posts = [], species = '';
+
+function indLine(i) {
+  const head = [i.species, i.sex].filter(Boolean).join('・');
+  const cap = [i.capture_month, i.capture_city, i.capture_method].filter(Boolean).join('　');
+  return `<div class="ind"><b>${esc(head || '個体')}</b><span class="lid">${esc(i.label_id)}</span><br>捕獲：${esc(cap || '—')}</div>`;
+}
+
+function card(p) {
+  const s = p.shop || {};
+  const inds = p.individuals || [];
+  const web = safeUrl(s.url), ig = igUrl(s.instagram);
+  const hasMore = s.description || web || ig;
+  return `<article class="card">
+    <img class="ph" src="${esc(photoUrl(p.photo_path))}" alt="${esc(p.dish_name)}" loading="lazy" onclick="lbOpen(this.src)">
+    <div class="cb">
+      <div class="dn">${esc(p.dish_name)}</div>
+      <div class="shop">${esc(s.name)}${s.area ? `<small>${esc(s.area)}</small>` : ''}</div>
+      ${p.description ? `<div class="dd">${esc(p.description)}</div>` : ''}
+      ${inds.length ? `<div class="inds">${inds.map(indLine).join('')}</div>` : ''}
+      ${hasMore ? `<details class="more"><summary>お店について</summary>
+        ${s.description ? `<div class="sd">${esc(s.description)}</div>` : ''}
+        <div class="links">${web ? `<a href="${esc(web)}" target="_blank" rel="noopener nofollow">🌐 ホームページ</a>` : ''}${ig ? `<a href="${esc(ig)}" target="_blank" rel="noopener nofollow">📷 Instagram</a>` : ''}</div>
+      </details>` : ''}
+    </div></article>`;
+}
+
+function render() {
+  const list = species ? posts.filter(p => (p.individuals || []).some(i => i.species === species)) : posts;
+  $('grid').innerHTML = list.map(card).join('');
+  $('count').textContent = posts.length ? `${list.length}品の料理` : '';
+  $('state').hidden = posts.length > 0;
+  if (!posts.length) { $('state').className = 'state'; $('state').textContent = 'ただいま掲載の準備中です。お店のみなさんの料理を順次ご紹介します。'; }
+  const sps = [...new Set(posts.flatMap(p => (p.individuals || []).map(i => i.species)).filter(Boolean))];
+  $('filters').hidden = sps.length < 2;
+  $('filters').innerHTML = ['', ...sps].map(sp => `<button class="${sp === species ? 'on' : ''}" data-sp="${esc(sp)}" onclick="pick(this.dataset.sp)">${sp ? esc(sp) : 'すべて'}</button>`).join('');
+}
+function pick(sp) { species = sp; render(); }
+function lbOpen(src) { $('lb-img').src = src; $('lb').classList.add('on'); }
+function lbClose() { $('lb').classList.remove('on'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') lbClose(); });
+
+(async function load() {
+  try {
+    const res = await fetch(SB_URL + '/rest/v1/rpc/public_dish_gallery', {
+      method: 'POST', headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' }, body: '{}' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    posts = (await res.json()) || [];
+    render();
+  } catch (e) {
+    $('state').className = 'state err';
+    $('state').textContent = '読み込みに失敗しました。時間をおいてもう一度開いてください。（' + e.message + '）';
+  }
+})();
+</script>
+</body>
+</html>

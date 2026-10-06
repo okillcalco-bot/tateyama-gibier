@@ -1,0 +1,12 @@
+-- シーモルト連携の停止（切戻し）。新しい書込みを止め、登録済みの注文・外部参照・出典・監査は保持する。
+-- 実注文は削除しない。orders / order_items の認可（RLS）は変更しない（全開放に戻さない）。
+-- 段階1（推奨・即時）: 取込を止める。読取りツールは使える
+update order_link.settings set value = 'true'::jsonb, updated_at = now() where key = 'writes_paused';
+-- 段階2（完全停止）: MCP からの接続そのものを止める
+--   alter role seamalt_mcp nologin;
+--   Edge Function seamalt-mcp を削除または無効化（Supabase ダッシュボード）
+-- 「要確認」のガードは残す（取込済みの要確認注文が確認なしに出荷へ進まないように）。
+-- ガードまで外す場合は、要確認の注文が0件であることを確認してから:
+--   select count(*) from order_link.external_refs where review_state = 'needs_review';  -- 0 であること
+--   drop trigger order_link_guard_status on public.orders; …（10_order_link.sql のトリガー6つ）
+-- 再開: update order_link.settings set value = 'false'::jsonb where key = 'writes_paused';  /  alter role seamalt_mcp login;

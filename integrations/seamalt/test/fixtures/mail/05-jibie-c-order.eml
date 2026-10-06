@@ -1,0 +1,18 @@
+Message-ID: <demo-c-0001@jibie-c.example>
+Date: Fri, 02 Oct 2026 08:00:00 +0900
+From: ジビエ食堂C（架空） <info@jibie-c.example>
+To: center@tateyama-gibier.example
+Subject: アライグマの注文 O-DEMO-003
+Content-Type: multipart/mixed; boundary="b5"
+
+--b5
+Content-Type: text/plain; charset=utf-8
+
+アライグマを1頭お願いします。
+--b5
+Content-Type: application/pdf; name="O-DEMO-003.pdf"
+Content-Disposition: attachment; filename="O-DEMO-003.pdf"
+X-Attachment-Id: att-c-0001
+
+(添付: ../O-DEMO-003.pdf)
+--b5--

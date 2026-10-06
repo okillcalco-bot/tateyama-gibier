@@ -180,6 +180,14 @@ th,td{padding:8px 6px;font-size:.8rem}
   .portal-issue-btn,.portal-unlock-btn{width:100%;flex:none}
   .pwi-actions .btn{flex:none;width:100%}
 }
+/* 料理ギャラリー（管理） */
+.dfa{display:grid;gap:4px;font-size:12.5px;color:var(--text2)}
+.dfa input,.dfa textarea{font-size:14px;padding:7px 9px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)}
+.dcard{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface)}
+.dcard img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--surface2)}
+.dcard .db{padding:10px 12px;font-size:12.5px;line-height:1.7}
+.dcard .db b{font-size:14px;display:block;overflow-wrap:anywhere}
+.dcard .dact{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 </style>
 </head>
 <body>
@@ -213,9 +221,48 @@ th,td{padding:8px 6px;font-size:.8rem}
   <div class="tab" data-tab="pricing" onclick="switchTab('pricing')">&#x1f3f7;&#xfe0f; 価格マスタ</div>
   <div class="tab" data-tab="pproducts" onclick="switchTab('pproducts')">&#x1f6d2; ポータル商品</div>
   <div class="tab" data-tab="reserve" onclick="switchTab('reserve')">&#x23f3; 予約・掲示板・相談</div>
+  <div class="tab" data-tab="dishes" onclick="switchTab('dishes')">&#x1f37d;&#xfe0f; 料理ギャラリー</div>
 </div>
 
 <div class="main">
+  <!-- 料理ギャラリー: お店の料理を、使った個体の情報つきで公開ページ dishes.html に載せる（2026-10-05）
+       掲載はお店の了承が前提。お店の投稿は「確認待ち」で届き、ここで公開する。LINE等で写真をもらった分は代理登録 -->
+  <div class="tab-content" id="tab-dishes">
+    <div style="font-size:12.5px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:12px;line-height:1.8;">
+      お店の料理を<strong>写真・お店の紹介・使った個体（捕獲の時期・場所・方法）</strong>つきで、誰でも見られる
+      <a href="dishes.html" target="_blank" rel="noopener" style="font-weight:700">ジビエ料理ギャラリー</a>に載せます。
+      お店はご注文ページの「🍽 料理」から投稿でき、ここで<strong>公開</strong>を押すと載ります。お店が取り下げた投稿は公開できません。
+      <button class="btn btn-outline btn-sm" style="margin-left:6px" onclick="dishCopyGalleryUrl()">🔗 ギャラリーのURLをコピー</button>
+    </div>
+    <div class="filter-bar">
+      <select id="dishFilter" onchange="renderDishAdmin()">
+        <option value="確認待ち">確認待ち</option><option value="公開">公開中</option><option value="非公開">非公開・取り下げ</option><option value="">すべて</option>
+      </select>
+      <button class="btn btn-outline btn-sm" onclick="loadDishAdmin()">↻ 再読込</button>
+      <span id="dishAdminMsg" style="font-size:12.5px;color:var(--text2)"></span>
+    </div>
+    <div id="dishAdminList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:22px"></div>
+
+    <details style="border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;background:var(--surface)">
+      <summary style="font-weight:700;cursor:pointer;min-height:36px;display:flex;align-items:center">＋ 代理で登録する（LINEなどで写真と掲載の了承をもらった場合）</summary>
+      <div style="display:grid;gap:10px;margin-top:10px;max-width:560px">
+        <label class="dfa">お店（顧客）<input id="dxCust" list="dxCustList" placeholder="顧客コードか名前で検索" onchange="dishProxyPickCustomer()"><datalist id="dxCustList"></datalist></label>
+        <label class="dfa">掲載するお店の名前<input id="dxShopName" maxlength="60"></label>
+        <label class="dfa">お店の紹介<textarea id="dxShopDesc" maxlength="600" rows="3"></textarea></label>
+        <label class="dfa">地域（市区町村まで）<input id="dxShopArea" maxlength="40"></label>
+        <label class="dfa">ホームページ<input id="dxShopUrl" maxlength="300" placeholder="https://"></label>
+        <label class="dfa">Instagram<input id="dxShopIg" maxlength="60" placeholder="@"></label>
+        <label class="dfa">掲載の了承を確認した人（必須）<input id="dxConsentBy" maxlength="40" placeholder="例）沖（LINEで了承 10/5）"></label>
+        <label class="dfa">写真<input type="file" id="dxPhoto" accept="image/*"></label>
+        <label class="dfa">料理名<input id="dxDish" maxlength="80"></label>
+        <label class="dfa">ひとこと<textarea id="dxDesc" maxlength="600" rows="3"></textarea></label>
+        <div class="dfa">使ったお肉の個体（このお店へのお届け記録から）<div id="dxLabels" style="font-size:12.5px;max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:6px;padding:4px 8px">お店を選ぶと表示されます</div></div>
+        <label style="font-size:13px"><input type="checkbox" id="dxPublish" checked> すぐに公開する</label>
+        <div><button class="btn btn-gold" id="dxSend" onclick="dishProxySubmit()">登録する</button> <span id="dxMsg" style="font-size:12.5px"></span></div>
+      </div>
+    </details>
+  </div>
+
   <!-- Tab 0: 出荷データ（一次データ：いつ・どこに・何を・どれくらい送ったか） -->
   <div class="tab-content active" id="tab-shipdata">
     <div class="filter-bar">
@@ -1025,6 +1072,7 @@ async function init(){
     renderCustomers(); // 会社情報・注文実績がそろってから案内文の見本を出し直す
     const h=(location.hash||'').replace('#','');
     if(h && document.querySelector('.tab[data-tab="'+h+'"]')) switchTab(h);
+    olOpenFromQuery();
   }catch(e){console.error(e)}
 }
 
@@ -1036,6 +1084,7 @@ async function refreshAll(){
 // ── Supabase Loaders ──
 async function loadOrders(){
   allOrders=await sb('GET','orders','',`?select=*,order_items(*,inventory(grade))&order=created_at.desc&limit=500`);
+  await olLoadReviewStates(allOrders.map(o=>o.id));
   renderStatusCards();
   renderOrders();
   renderShipping();
@@ -1153,6 +1202,107 @@ function switchTab(tab){
   if(tab==='pproducts') loadPortalProducts();
   if(tab==='reserve'){ loadReservations(); loadBulletins(); loadInquiries(); }
   if(tab==='invoice') openInvoiceTab();
+  if(tab==='dishes') loadDishAdmin();
+}
+
+/* ══════════ 料理ギャラリー（管理） ══════════
+   表は直接読めない（RLS）。スタッフキー付きの staff_dish_* 関数だけを通す（olRpc がヘッダを付ける）。 */
+let dishAdmin={posts:[],shops:[]};
+const dishPhotoUrl=p=>`${SB_URL}/storage/v1/object/public/dish-photos/${encodeURIComponent(p).replace(/%2F/g,'/')}`;
+function dishIndText(i){ return [i.label_id,[i.species,i.sex].filter(Boolean).join('・'),[i.capture_month,i.capture_city,i.capture_method].filter(Boolean).join(' ')].filter(Boolean).join('　'); }
+async function loadDishAdmin(){
+  const msg=document.getElementById('dishAdminMsg');
+  if(!await staffKeyEnsure()) { msg.textContent='スタッフキーが必要です'; return; }
+  msg.textContent='読み込み中…';
+  try{
+    dishAdmin=await olRpc('staff_dish_list',{})||{posts:[],shops:[]};
+    msg.textContent=`確認待ち ${dishAdmin.posts.filter(p=>p.status==='確認待ち').length}件 ／ 公開中 ${dishAdmin.posts.filter(p=>p.status==='公開').length}件`;
+  }catch(e){ msg.textContent='読み込めませんでした: '+e.message; msg.style.color='var(--red)'; return; }
+  renderDishAdmin();
+  const dl=document.getElementById('dxCustList');
+  if(dl && !dl.options.length) dl.innerHTML=(allCustomers||[]).filter(c=>c.is_active!==false).map(c=>`<option value="${escAttr((c.code||'')+' '+(c.name||''))}">`).join('');
+}
+function renderDishAdmin(){
+  const f=document.getElementById('dishFilter').value;
+  const list=dishAdmin.posts.filter(p=>!f||p.status===f);
+  document.getElementById('dishAdminList').innerHTML=list.length?list.map(p=>`
+    <div class="dcard"><a href="${escAttr(dishPhotoUrl(p.photo_path))}" target="_blank" rel="noopener"><img src="${escAttr(dishPhotoUrl(p.photo_path))}" alt="" loading="lazy"></a>
+      <div class="db"><b>${esc(p.dish_name)}</b>
+        <div>${esc(p.shop_name||p.customer_name)} <span style="color:var(--text3)">（${esc(p.customer_name)}）</span></div>
+        ${p.description?`<div style="color:var(--text2);white-space:pre-wrap">${esc(p.description)}</div>`:''}
+        ${(p.individuals||[]).map(i=>`<div style="color:var(--text3)">🐗 ${esc(dishIndText(i))}</div>`).join('')}
+        <div style="color:var(--text3)">${esc(p.source)}・了承: ${esc(p.consent_by||'お店')}・${esc((p.created_at||'').slice(0,10))}${p.withdrawn_at?'・<span style="color:var(--red)">お店が取り下げ</span>':''}</div>
+        <div class="dact">
+          <span style="font-weight:700;color:${p.status==='公開'?'var(--green)':p.status==='確認待ち'?'var(--amber,#a9741c)':'var(--text3)'}">${esc(p.status)}</span>
+          ${p.status!=='公開'&&!p.withdrawn_at?`<button class="btn btn-gold btn-sm" onclick="dishSetStatus('${esc(p.id)}','公開')">公開する</button>`:''}
+          ${p.status!=='非公開'?`<button class="btn btn-outline btn-sm" onclick="dishSetStatus('${esc(p.id)}','非公開')">非公開にする</button>`:''}
+        </div></div></div>`).join(''):'<div style="color:var(--text3);font-size:13px">該当する投稿はありません</div>';
+}
+async function dishSetStatus(id,status){
+  if(!confirm(status==='公開'?'この料理をギャラリーに公開しますか？（誰でも見られます）':'この料理を非公開にしますか？')) return;
+  try{ await olRpc('staff_dish_set_status',{p_post_id:id,p_status:status,p_by:'センター'}); await loadDishAdmin(); }
+  catch(e){ alert('変更できませんでした: '+e.message); }
+}
+function dishCopyGalleryUrl(){
+  const url=GALLERY_URL;
+  (navigator.clipboard?navigator.clipboard.writeText(url):Promise.reject()).then(()=>alert('コピーしました\n'+url)).catch(()=>prompt('このURLをコピーしてください',url));
+}
+function dishProxyCustomer(){
+  const v=(document.getElementById('dxCust').value||'').trim();
+  const code=v.split(/\s+/)[0];
+  return (allCustomers||[]).find(c=>c.code===code)||(allCustomers||[]).find(c=>c.name===v)||null;
+}
+async function dishProxyPickCustomer(){
+  const c=dishProxyCustomer(), box=document.getElementById('dxLabels');
+  if(!c){ box.textContent='顧客が見つかりません（候補から選んでください）'; return; }
+  const shop=(dishAdmin.shops||[]).find(s=>s.customer_id===c.id);
+  document.getElementById('dxShopName').value=shop?.display_name||c.name||'';
+  document.getElementById('dxShopDesc').value=shop?.description||'';
+  document.getElementById('dxShopArea').value=shop?.area||'';
+  document.getElementById('dxShopUrl').value=shop?.url||'';
+  document.getElementById('dxShopIg').value=shop?.instagram||'';
+  box.textContent='読み込み中…';
+  try{
+    const labels=await olRpc('staff_dish_customer_labels',{p_customer_id:c.id})||[];
+    box.innerHTML=labels.length?labels.map(l=>`<label style="display:flex;gap:6px;align-items:center;min-height:30px"><input type="checkbox" class="dx-lab" value="${escAttr(l.label_id)}"> ${esc(l.label_id)} <span style="color:var(--text3)">${esc(l.species||'')}・${esc(l.parts||'')}（${esc(l.last_date||'')}）</span></label>`).join(''):'この1年のお届け記録に個体番号の付いたお肉がありません（選ばなくても登録できます）';
+  }catch(e){ box.textContent='個体の読み込みに失敗: '+e.message; }
+}
+async function dishShrinkImage(file){
+  const im=await new Promise((ok,ng)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>ng(new Error('写真を読み込めませんでした'));i.src=URL.createObjectURL(file);});
+  const sc=Math.min(1,1600/Math.max(im.naturalWidth,im.naturalHeight));
+  const c=document.createElement('canvas'); c.width=Math.round(im.naturalWidth*sc); c.height=Math.round(im.naturalHeight*sc);
+  c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+  for(const q of [0.85,0.75,0.6,0.45]){ const b=await new Promise(r=>c.toBlob(r,'image/jpeg',q)); if(b&&b.size<=2.9*1024*1024) return b; }
+  throw new Error('写真が大きすぎます');
+}
+async function dishProxySubmit(){
+  const msg=document.getElementById('dxMsg'); msg.style.color='var(--red)'; msg.textContent='';
+  const g=id=>document.getElementById(id).value.trim();
+  const c=dishProxyCustomer();
+  if(!c){ msg.textContent='お店（顧客）を候補から選んでください'; return; }
+  if(!g('dxShopName')){ msg.textContent='掲載するお店の名前を入れてください'; return; }
+  if(!g('dxConsentBy')){ msg.textContent='掲載の了承を確認した人を入れてください'; return; }
+  const file=document.getElementById('dxPhoto').files[0];
+  if(!file){ msg.textContent='写真を選んでください'; return; }
+  if(!g('dxDish')){ msg.textContent='料理名を入れてください'; return; }
+  if(g('dxShopUrl') && !/^https?:\/\/\S+$/.test(g('dxShopUrl'))){ msg.textContent='ホームページは https:// から'; return; }
+  const btn=document.getElementById('dxSend'); btn.disabled=true; msg.style.color='var(--text2)'; msg.textContent='登録中…';
+  try{
+    await olRpc('staff_dish_shop_save',{p_customer_id:c.id,p_display_name:g('dxShopName'),p_description:g('dxShopDesc'),
+      p_area:g('dxShopArea'),p_url:g('dxShopUrl'),p_instagram:g('dxShopIg'),p_consent_by:g('dxConsentBy')});
+    const blob=await dishShrinkImage(file);
+    const path='p/'+crypto.randomUUID()+'.jpg';
+    const up=await fetch(`${SB_URL}/storage/v1/object/dish-photos/${path}`,{method:'POST',
+      headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`,'Content-Type':'image/jpeg','x-upsert':'false'},body:blob});
+    if(!up.ok) throw new Error('写真のアップロードに失敗（HTTP '+up.status+'）: '+(await up.text()));
+    const labels=[...document.querySelectorAll('.dx-lab:checked')].map(x=>x.value);
+    await olRpc('staff_dish_post',{p_customer_id:c.id,p_dish_name:g('dxDish'),p_description:g('dxDesc'),p_photo_path:path,
+      p_label_ids:labels,p_consent_by:g('dxConsentBy'),p_publish:document.getElementById('dxPublish').checked});
+    ['dxDish','dxDesc'].forEach(id=>document.getElementById(id).value=''); document.getElementById('dxPhoto').value='';
+    msg.style.color='var(--green)'; msg.textContent='登録しました';
+    await loadDishAdmin();
+  }catch(e){ msg.style.color='var(--red)'; msg.textContent='登録できませんでした: '+e.message; }
+  btn.disabled=false;
 }
 
 /* ══════════ ポータル商品（お客様の注文サイトに出す商品マスタ） ══════════
@@ -1597,12 +1747,14 @@ function renderOrders(){
       <td>${o.delivery_date||'--'}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(summary||'--')}</td>
       <td>${amt}</td>
-      <td><span class="badge badge-${o.status||''}">${o.status||'--'}</span></td>
+      <td><span class="badge badge-${o.status||''}">${o.status||'--'}</span>${olBadge(o.id)}</td>
       <td>
         <button class="btn btn-outline btn-sm" onclick="showOrderDetail('${o.id}')">詳細</button>
         <select class="btn-sm" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px;font-size:.75rem" onchange="changeStatus('${o.id}',this.value);this.selectedIndex=0">
           <option value="">変更</option>
-          <option value="受注">受注</option><option value="確認済">確認済</option><option value="発送済">発送済</option><option value="納品完了">納品完了</option><option value="キャンセル">キャンセル</option>
+          ${olNeedsReview(o.id)
+            ?'<option value="キャンセル">キャンセル</option>'
+            :'<option value="受注">受注</option><option value="確認済">確認済</option><option value="発送済">発送済</option><option value="納品完了">納品完了</option><option value="キャンセル">キャンセル</option>'}
         </select>
       </td>
     </tr>`}).join('');
@@ -1640,6 +1792,106 @@ async function odLoadAllocations(orderId){
   }catch(e){ el.textContent=''; }
 }
 
+/* ── シーモルト取込（メール注文の連携）: 要確認・原文数量・温度帯・出典・履歴 ──
+   補助表は order_link スキーマ（DB側）。要確認のうちは DB のトリガーが確認済・出荷・引当・請求を拒否する。
+   ここは表示と、人が未確認項目を確認する操作だけ。 */
+let olStates={};          // order_id → {review_state, external_order_id, unresolved[]}
+let olInstalled=true;     // 連携のDB側が未適用の環境では何も出さない
+const OL_LABEL={temp_zone_unknown:'温度帯の記載なし',fresh_meaning_unconfirmed:'「フレッシュ」の意味（冷蔵か）',whole_carcass_count:'頭数注文（枝肉）'};
+async function olRpc(fn,args){
+  const headers={'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Content-Type':'application/json'};
+  const sk=staffKeyGet(); if(sk) headers['x-staff-key']=sk;
+  const res=await fetch(`${SB_URL}/rest/v1/rpc/${fn}`,{method:'POST',headers,body:JSON.stringify(args||{})});
+  const t=await res.text();
+  if(!res.ok){ const e=new Error(t); e.status=res.status; throw e; }
+  return t?JSON.parse(t):null;
+}
+async function olLoadReviewStates(ids){
+  olStates={};
+  if(!olInstalled||!ids.length) return;
+  try{
+    for(let i=0;i<ids.length;i+=500){
+      const rows=await olRpc('order_link_review_states',{p_order_ids:ids.slice(i,i+500)});
+      (rows||[]).forEach(r=>{olStates[r.order_id]=r;});
+    }
+  }catch(e){
+    if(e.status===404||/PGRST202|Could not find the function/.test(e.message)){ olInstalled=false; return; }  // 連携が未適用
+    console.error('取込の確認状態の読込エラー',e);
+    alert('シーモルト取込の「要確認」状態を読み込めませんでした。要確認の注文は確認済・出荷に進めません（DB側で止まります）。\n'+String(e.message||e).slice(0,200));
+  }
+}
+function olNeedsReview(id){ return olStates[id]&&olStates[id].review_state==='needs_review'; }
+function olBadge(id){
+  const st=olStates[id]; if(!st) return '';
+  return st.review_state==='needs_review'
+    ?` <span class="badge" style="background:var(--red);color:#fff" title="${esc((st.unresolved||[]).map(u=>OL_LABEL[u]||u).join('・'))}">要確認（取込）</span>`
+    :` <span class="badge" style="background:var(--surface2,#333);color:var(--text2)" title="外部注文ID ${esc(st.external_order_id||'なし')}">取込</span>`;
+}
+async function olLoadDetail(orderId){
+  const el=document.getElementById('odLink'); if(!el) return;
+  el.innerHTML='<div style="font-size:.82rem;color:var(--text2);margin-top:12px">シーモルト取込の情報を読み込み中…</div>';
+  let d;
+  try{ d=await olRpc('order_link_order_detail',{p_order_id:orderId}); }
+  catch(e){ el.innerHTML=`<div style="color:var(--red);font-size:.85rem;margin-top:12px">取込の情報を読み込めませんでした: ${esc(String(e.message||e).slice(0,200))}</div>`; return; }
+  if(!d){ el.innerHTML=''; return; }
+  const TZ={fresh:'フレッシュ（要確認）',chilled:'冷蔵',frozen:'冷凍',unknown:'記載なし'};
+  const needs=d.review_state==='needs_review';
+  const rows=d.items.map(i=>{
+    const un=i.confirm_state==='needs_review';
+    const tzq=un&&(i.review_items||[]).some(r=>r==='temp_zone_unknown'||r==='fresh_meaning_unconfirmed');
+    return `<tr style="${un?'background:rgba(220,38,38,.08)':''}">
+      <td>${i.line_no}</td><td>${esc(i.raw_text)}</td><td>${esc(i.raw_qty_text)}</td>
+      <td>${i.normalized_kg!=null?i.normalized_kg+'kg':'—（'+esc(i.unit)+'のため重量未確定）'}</td>
+      <td>${esc(TZ[i.temp_zone]||i.temp_zone)}${i.temp_text?'<br><span style="font-size:.75rem;color:var(--text2)">原文: '+esc(i.temp_text)+'</span>':''}</td>
+      <td>${esc(i.wish_text||'')}</td>
+      <td>${un?(i.review_items||[]).map(r=>esc(OL_LABEL[r]||r)).join('<br>')
+        +`<div style="margin-top:4px">${tzq?`<select class="ol-tz" data-item="${i.order_item_id}"><option value="">温度帯を選ぶ</option><option value="chilled">冷蔵</option><option value="frozen">冷凍</option></select>`:''}
+          <label style="font-size:.78rem"><input type="checkbox" class="ol-ok" data-item="${i.order_item_id}"> 確認した</label></div>`:'確認済み'}</td></tr>`;
+  }).join('');
+  const srcs=(d.sources||[]).map(s=>`<li>${esc(s.role)}: ${esc(s.filename||'メール本文')}${s.pages?' p.'+esc(s.pages.join(',')):''}（${esc(s.account)}・${s.received_at?esc(fmtJst(s.received_at)):''}）${s.link&&/^https:\/\//.test(s.link)?` <a href="${esc(s.link)}" target="_blank" rel="noopener noreferrer">原本</a>`:''}</li>`).join('');
+  const hist=(d.history||[]).map(h=>`<li>${esc(fmtJst(h.at))} ${esc(h.by||'')}: ${esc(h.tool)} → ${esc(h.outcome)}${h.user_request?'（依頼: '+esc(h.user_request)+'）':''}</li>`).join('');
+  el.innerHTML=`<div style="margin-top:14px;padding:10px;border:1px solid ${needs?'var(--red)':'var(--border)'};border-radius:8px">
+    <div style="font-weight:700;margin-bottom:6px">シーモルト取込 ${needs?'<span class="badge" style="background:var(--red);color:#fff">要確認</span>':'<span class="badge">確認済み</span>'}</div>
+    <div style="font-size:.85rem;margin-bottom:6px">外部注文ID: <strong>${esc(d.external_order_id||'（番号なし・出典で識別）')}</strong> ／ 発行元: ${esc(d.issuer_account)}${d.link_kind==='linked_existing'?' ／ 既存の注文に結び付け':''}${d.reviewed_by?' ／ 確認: '+esc(d.reviewed_by):''}</div>
+    <div class="table-wrap"><table><thead><tr><th>行</th><th>原文</th><th>原文数量</th><th>kg換算</th><th>温度帯</th><th>希望条件</th><th>未確認項目</th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${needs?`<div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:8px;flex-wrap:wrap">
+      <input id="olBy" placeholder="確認した人の名前" style="padding:6px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text)">
+      <button class="btn btn-green" onclick="olConfirm('${orderId}',${Number(d.revision)})">確認した項目を保存</button></div>`:''}
+    <div style="font-size:.8rem;color:var(--text2);margin-top:8px">出典<ul style="margin:4px 0 0 18px">${srcs||'<li>なし</li>'}</ul></div>
+    <div style="font-size:.8rem;color:var(--text2);margin-top:6px">登録履歴<ul style="margin:4px 0 0 18px">${hist||'<li>なし</li>'}</ul></div>
+  </div>`;
+}
+function fmtJst(t){ try{ return new Date(t).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ return String(t||''); } }
+async function olConfirm(orderId,revision){
+  const by=(document.getElementById('olBy').value||'').trim();
+  if(!by){alert('確認した人の名前を入れてください');return}
+  const res=[...document.querySelectorAll('#odLink .ol-ok')].filter(c=>c.checked).map(c=>{
+    const tz=document.querySelector(`#odLink .ol-tz[data-item="${c.dataset.item}"]`);
+    return {order_item_id:c.dataset.item,confirmed:true,...(tz&&tz.value?{temp_zone:tz.value}:{})};
+  });
+  if(!res.length){alert('「確認した」にチェックを入れてください');return}
+  if(!staffKeyGet()&&!(await staffKeyEnsure())) return;
+  try{
+    const r=await olRpc('order_link_confirm_review',{p_order_id:orderId,p_expected_revision:revision,p_resolutions:res,p_by:by});
+    alert(r.review_state==='confirmed'?'すべて確認しました。通常の受注として進められます':`保存しました（残り ${r.remaining} 件の未確認項目）`);
+    await loadOrders();
+    showOrderDetail(orderId);
+  }catch(e){ alert('保存できませんでした: '+String(e.message||e).slice(0,300)); }
+}
+async function olOpenFromQuery(){
+  const code=new URLSearchParams(location.search).get('order');
+  if(!code) return;
+  let o=allOrders.find(x=>x.order_code===code);
+  if(!o){   // 直近500件より古い注文は番号で取り直す
+    try{
+      const rows=await sb('GET','orders','',`?order_code=eq.${encodeURIComponent(code)}&select=*,order_items(*,inventory(grade))`);
+      if(rows.length){ o=rows[0]; allOrders.push(o); await olLoadReviewStates(allOrders.map(x=>x.id)); }
+    }catch(e){ alert('注文を読み込めませんでした: '+String(e.message||e).slice(0,200)); return; }
+  }
+  if(o) showOrderDetail(o.id);
+  else alert(`注文 ${code} が見つかりません（番号違い、または表示する権限がありません）`);
+}
+
 function showOrderDetail(id){
   const o=allOrders.find(x=>x.id===id);
   if(!o) return;
@@ -1661,17 +1913,19 @@ function showOrderDetail(id){
     ${o.memo?`<div style="margin-bottom:12px;font-size:.85rem"><strong>備考:</strong> ${esc(o.memo)}</div>`:''}
     <div class="table-wrap"><table>
       <thead><tr><th>種別</th><th>部位</th><th>重量(kg)</th><th>単価</th><th>金額</th></tr></thead>
-      <tbody>${items.map(i=>`<tr><td>${esc(i.species||'')}</td><td>${esc(i.part_name||'')}</td><td>${i.weight_kg?i.weight_kg:(i.qty?i.qty+(i.unit||'枚'):'--')}</td><td>&yen;${Number(i.unit_price||0).toLocaleString()}</td><td>&yen;${Number(i.subtotal||i.amount||0).toLocaleString()}</td></tr>`).join('')}</tbody>
+      <tbody>${items.map(i=>`<tr><td>${esc(i.species||'')}</td><td>${esc(i.part_name||'')}</td><td>${i.weight_kg?i.weight_kg:(i.qty?i.qty+(i.unit||'枚'):'--')}</td><td>${i.unit_price!=null?'&yen;'+Number(i.unit_price).toLocaleString():'未確定'}</td><td>${(i.subtotal??i.amount)!=null?'&yen;'+Number(i.subtotal??i.amount).toLocaleString():'未確定'}</td></tr>`).join('')}</tbody>
     </table></div>
-    <div style="text-align:right;font-size:1.1rem;font-weight:700;color:var(--gold);margin:12px 0">合計: &yen;${Number(o.total_amount||0).toLocaleString()}</div>
+    <div style="text-align:right;font-size:1.1rem;font-weight:700;color:var(--gold);margin:12px 0">合計: ${o.total_amount!=null?'&yen;'+Number(o.total_amount).toLocaleString():'未確定（出荷時の実重量で決まります）'}</div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">`;
   const flow={'受注':'確認済','確認済':'発送済','発送済':'納品完了'};
-  if(flow[o.status]) html+=`<button class="btn btn-green" onclick="changeStatus('${o.id}','${flow[o.status]}');closeModal('orderDetailModal')">${flow[o.status]}にする</button>`;
+  if(olNeedsReview(o.id)) html+=`<span style="font-size:.82rem;color:var(--red);align-self:center">シーモルト取込の「要確認」です。下の未確認項目を確認するまで確認済・出荷・請求へ進めません</span>`;
+  else if(flow[o.status]) html+=`<button class="btn btn-green" onclick="changeStatus('${o.id}','${flow[o.status]}');closeModal('orderDetailModal')">${flow[o.status]}にする</button>`;
   if(o.status!=='キャンセル'&&o.status!=='納品完了') html+=`<button class="btn btn-danger" onclick="changeStatus('${o.id}','キャンセル');closeModal('orderDetailModal')">キャンセル</button>`;
-  html+=`</div><div id="odAlloc"></div>`;
+  html+=`</div><div id="odLink"></div><div id="odAlloc"></div>`;
   document.getElementById('odContent').innerHTML=html;
   openModal('orderDetailModal');
   odLoadAllocations(id);
+  if(olStates[id]) olLoadDetail(id);
 }
 
 // ── B2 CSV Export ──
@@ -2246,6 +2500,8 @@ function wipeIssuedSecrets(rerender){
    ご案内先は新しいスマホ注文画面 order.html（旧 order-portal.html は
    リニューアル中のため注文を受け付けない＝案内してはいけない）。 */
 const ORDER_URL='https://tateyama-gibier.vercel.app/order.html';
+// ジビエ料理ギャラリー（誰でも見られる・2026-10-05）。注文ページの案内と一緒に送る
+const GALLERY_URL='https://tateyama-gibier.vercel.app/dishes.html';
 let orgInfo={name:'館山ジビエセンター',address:'千葉県館山市西長田1163-5',phone:'',email:''};
 let custFiltered=[];
 let orderedCustomerIds=new Set();
@@ -2351,6 +2607,8 @@ function buildPortalMsg(c,channel){
       '在庫のない商品は予約もできます。','',
       '▼ご注文ページ',ORDER_URL,'　ログインID：'+id,'　仮パスワード：'+pw,
       '　※はじめのログインで、ご自身のパスワードへの変更をお願いします。','',
+      '▼ジビエ料理ギャラリー（お店のみなさんの料理を、獲れた個体の情報つきで紹介しています）',GALLERY_URL,
+      '　貴店の料理も、ご注文ページの「🍽 料理」から写真を載せていただけます（掲載はご了承いただいた場合のみ）。','',
       'お電話・SNSでのご注文も、これまでどおり承ります。',
       orgInfo.name+(tel?('　'+('TEL '+orgInfo.phone)):'')].join('\n');
   }
@@ -2361,6 +2619,8 @@ function buildPortalMsg(c,channel){
       '在庫の無い商品は予約もできます。','',
       '【ご注文ページ】'+ORDER_URL,'【ログインID】'+id,'【仮パスワード】'+pw,
       '　※はじめのログインで、ご自身のパスワードへの変更をお願いします。','',
+      '【ジビエ料理ギャラリー】'+GALLERY_URL,
+      '　お店のみなさんの料理を紹介しています。貴店の料理もご注文ページの「🍽 料理」から掲載できます（ご了承いただいた場合のみ）。','',
       '※このご案内は大切に保管してください。','※お電話・SNSでのご注文もこれまでどおり承ります。','',orgFooter()].join('\n');
   }
 
@@ -2389,6 +2649,9 @@ function buildPortalMsg(c,channel){
     '■ ご注文の流れ',
     '　1. 上のページを開く\n　2. ログインIDと仮パスワードを入れる\n　3. ご自身のパスワードを設定する\n　4. ご希望の部位と数量を選んで注文する',
     '','はじめのログインで、ご自身のパスワードへの変更をお願いします（以後はそのパスワードでログインいただけます）。','',
+    '■ ジビエ料理ギャラリー','　'+GALLERY_URL,
+    '　館山ジビエセンターのお肉を使ったお店の料理を、獲れた個体（時期・場所・方法）の情報とあわせて紹介しています。',
+    '　貴店の料理も、ご注文ページの「🍽 料理」から写真とお店の紹介を掲載していただけます（掲載はご了承いただいた場合のみ・いつでも取り下げ可）。','',
     'お電話・SNSでのご注文も、これまでどおり承っております。','',
     'ご不明な点がございましたら、お気軽にお問い合わせください。','',
     '今後ともよろしくお願いいたします。','',
@@ -2798,11 +3061,13 @@ function pwiText(kind){
   const p=_pwIssue;
   if(kind==='line'){
     return [p.name+p.honorific,'','▼ご注文ページ',p.url,'　ログインID：'+p.loginId,'　仮パスワード：'+p.pw,
-      '　※はじめのログインで、ご自身のパスワードへの変更をお願いします。'].join('\n');
+      '　※はじめのログインで、ご自身のパスワードへの変更をお願いします。','',
+      '▼ジビエ料理ギャラリー（お店の料理を紹介しています）',GALLERY_URL].join('\n');
   }
   return [p.name+p.honorific+' 注文サイトのご案内','',
     'ご注文ページ：'+p.url,'ログインID：'+p.loginId,'仮パスワード：'+p.pw,'有効期限：'+p.exp,'',
-    '※はじめのログインで、ご自身のパスワードへの変更をお願いします。'].join('\n');
+    '※はじめのログインで、ご自身のパスワードへの変更をお願いします。','',
+    'ジビエ料理ギャラリー：'+GALLERY_URL].join('\n');
 }
 async function pwiCopy(text){
   if(!text){alert('コピーする内容がありません');return}

@@ -201,6 +201,23 @@ body.kb .bar{display:none}
 .htotal small{font-size:11px;color:var(--text3);font-weight:400}
 .hship{font-size:12.5px;color:var(--green);margin-top:6px}
 .hbtns{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+/* 料理ギャラリーへの投稿 */
+#scr-dish{max-width:480px;margin:0 auto;padding:0 14px 40px}
+#scr-dish .sec{padding:16px 0 4px}
+#scr-dish .note{padding:10px 0 6px}
+#scr-dish .err{text-align:left}
+#scr-dish .err.ok{color:var(--green)}
+.dlab{display:flex;align-items:center;gap:8px;min-height:44px;padding:4px 0;border-bottom:1px solid var(--border);cursor:pointer}
+.dlab input{width:20px;height:20px;accent-color:var(--gold);flex-shrink:0}
+.dlab small{color:var(--text3)}
+.dmine{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.dmine img{width:84px;height:84px;object-fit:cover;border-radius:8px;flex-shrink:0;background:var(--surface2)}
+.dmine .dm{flex:1;min-width:0;font-size:13px}
+.dmine .dm b{display:block;font-size:14px}
+.dst{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:10px;border:1px solid var(--border2);color:var(--text2);margin:3px 0}
+.dst.s-公開{color:var(--green);border-color:var(--green)}
+.dst.s-確認待ち{color:var(--amber);border-color:var(--amber)}
+.dmine .wd{margin-top:4px;min-height:36px;padding:0 12px;border:1px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text2)}
 .hbtns button{min-height:40px;padding:0 14px;border:1px solid var(--gold);background:transparent;color:var(--gold);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
 </style>
 </head>
@@ -242,7 +259,7 @@ body.kb .bar{display:none}
 
 <!-- ══════════ 画面1: 選ぶ ══════════ -->
 <div id="scr-list" class="hidden">
-  <div class="hdr"><b id="h-name"></b><div style="display:flex;gap:6px"><button onclick="openHistory()">🧾 注文履歴</button><button onclick="doLogout()">ログアウト</button></div></div>
+  <div class="hdr"><b id="h-name"></b><div style="display:flex;gap:6px"><button onclick="openDish()">🍽 料理</button><button onclick="openHistory()">🧾 注文履歴</button><button onclick="doLogout()">ログアウト</button></div></div>
 
   <!-- おすすめ掲示板（センターが選んだ売れ筋・おすすめ） -->
   <div id="bulletins" class="hidden"></div>
@@ -376,6 +393,47 @@ body.kb .bar{display:none}
   <div id="hist-rows" style="margin-top:8px"></div>
 </div>
 
+<!-- ══════════ 画面: 料理ギャラリーへの投稿 ══════════
+     お店の料理（写真・説明）を、使った個体の情報つきで公開ページ dishes.html に載せる。
+     掲載はお店の同意が前提。投稿はセンターが確認してから公開。取り下げはいつでもできる。 -->
+<div id="scr-dish" class="hidden">
+  <div class="hdr" style="margin:0 -14px"><b>こんな料理になりました</b><button onclick="showScreen('list')">← 戻る</button></div>
+  <div class="note" style="margin-top:10px">館山ジビエセンターのお肉を使った料理を、写真とお店の紹介つきで
+    <a href="dishes.html" target="_blank" rel="noopener" style="color:var(--gold);font-weight:700">ジビエ料理ギャラリー</a>
+    （どなたでも見られるページ）に掲載します。どの個体（いつ・どこで獲れた）のお肉かも一緒に載ります。
+    投稿はセンターが確認してから公開します。掲載はいつでも取り下げられます。</div>
+
+  <div class="sec">① お店の紹介 <small id="dish-shop-state"></small></div>
+  <div class="fgrp"><label>掲載するお店の名前（必須・60文字まで）</label><input id="ds-name" maxlength="60"></div>
+  <div class="fgrp"><label>お店の紹介（600文字まで）</label><textarea id="ds-desc" maxlength="600" placeholder="例）炭火でジビエを楽しめるビストロです。館山の猪を季節のソースで。"></textarea></div>
+  <div class="fgrp"><label>地域（市区町村まで。番地は書かないでください）</label><input id="ds-area" maxlength="40" placeholder="例）東京都江東区"></div>
+  <div class="fgrp"><label>お店のホームページ（https:// から）</label><input id="ds-url" maxlength="300" inputmode="url" placeholder="https://"></div>
+  <div class="fgrp"><label>Instagram（@から始まるアカウント名）</label><input id="ds-ig" maxlength="60" placeholder="@"></div>
+  <label class="sliceopt" style="font-size:13px;margin:4px 0 2px"><input type="checkbox" id="ds-consent">
+    上の紹介を、どなたでも見られるページに掲載することに同意します</label>
+  <button class="btn-main" id="ds-save" onclick="dishSaveShop()">お店の紹介を保存</button>
+  <div class="err" id="ds-msg"></div>
+
+  <div class="sec" style="margin-top:8px">② 料理を投稿</div>
+  <div id="dp-locked" class="note">先に「① お店の紹介」を保存してください。</div>
+  <div id="dp-form" class="hidden">
+    <div class="fgrp"><label>写真（必須）</label>
+      <input type="file" id="dp-photo" accept="image/*" style="height:auto;padding:10px;width:100%" onchange="dishPreview()">
+      <img id="dp-prev" class="hidden" alt="" style="display:block;width:100%;max-height:260px;object-fit:cover;border-radius:8px;margin-top:8px"></div>
+    <div class="fgrp"><label>料理名（必須・80文字まで）</label><input id="dp-name" maxlength="80" placeholder="例）猪肩ロースのロースト 柚子胡椒ソース"></div>
+    <div class="fgrp"><label>ひとこと（600文字まで）</label><textarea id="dp-desc" maxlength="600" placeholder="例）脂の甘さが活きるよう低温でじっくり火を入れました。"></textarea></div>
+    <div class="fgrp"><label>使ったお肉の個体（わかれば選んでください）</label>
+      <div id="dp-labels" style="font-size:13px"></div></div>
+    <label class="sliceopt" style="font-size:13px;margin:4px 0 2px"><input type="checkbox" id="dp-consent">
+      この写真と説明を、どなたでも見られるページに掲載することに同意します（写真は自分たちで撮影・または掲載の許可を得たものです）</label>
+    <button class="btn-main" id="dp-send" onclick="dishPost()">投稿する（センターの確認後に公開）</button>
+    <div class="err" id="dp-msg"></div>
+  </div>
+
+  <div class="sec" style="margin-top:8px">③ これまでの投稿</div>
+  <div id="dish-mine" style="padding:0 0 30px"></div>
+</div>
+
 <script>
 'use strict';
 const SB_URL='https://clpdyrehdgzgiidbfucj.supabase.co';
@@ -438,7 +496,26 @@ const api = (() => {
     submitInquiry: (body, reqId) => rpc('portal_submit_inquiry', { p_token: tok(), p_body: body, p_request_id: reqId }),
     traceIndividual: (label) => rpc('portal_trace_individual', { p_token: tok(), p_label: label }),
     myOrders: () => rpc('portal_my_orders', { p_token: tok(), p_limit: 50 }),
-    issueDoc: (orderId, docType) => rpc('portal_issue_document', { p_token: tok(), p_order_id: orderId, p_doc_type: docType })
+    issueDoc: (orderId, docType) => rpc('portal_issue_document', { p_token: tok(), p_order_id: orderId, p_doc_type: docType }),
+    // 料理ギャラリー（掲載はお店の同意が前提・センター確認後に公開）
+    dishMine: () => rpc('portal_dish_mine', { p_token: tok() }),
+    dishShopSave: (s) => rpc('portal_dish_shop_save', { p_token: tok(), p_display_name: s.name, p_description: s.desc,
+      p_area: s.area, p_url: s.url, p_instagram: s.ig, p_consent: s.consent }),
+    dishPost: (p) => rpc('portal_dish_post', { p_token: tok(), p_dish_name: p.name, p_description: p.desc,
+      p_photo_path: p.path, p_label_ids: p.labels, p_consent: p.consent }),
+    dishWithdraw: (id) => rpc('portal_dish_withdraw', { p_token: tok(), p_post_id: id }),
+    // 写真は公開バケットへ追加のみ（上書き不可）。公開ページに出るのはセンターが公開した投稿の写真だけ
+    async uploadDishPhoto(blob, path) {
+      const res = await fetch(SB_URL + '/storage/v1/object/dish-photos/' + path, {
+        method: 'POST',
+        headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': blob.type || 'image/jpeg', 'x-upsert': 'false' },
+        body: blob
+      });
+      if (!res.ok) {
+        let msg = ''; try { const j = await res.json(); msg = j.message || j.error || ''; } catch (e) {}
+        const err = new Error('写真をアップロードできませんでした（' + (msg || 'HTTP ' + res.status) + '）'); err.status = res.status; throw err;
+      }
+    }
   };
 })();
 
@@ -489,7 +566,7 @@ function forceRelogin() {
 
 /* ══════════ 画面の切替（戻る対応） ══════════ */
 function showScreen(name) {
-  ['login', 'changepw', 'list', 'confirm', 'done', 'history'].forEach(s => $('scr-' + s).classList.toggle('hidden', s !== name));
+  ['login', 'changepw', 'list', 'confirm', 'done', 'history', 'dish'].forEach(s => $('scr-' + s).classList.toggle('hidden', s !== name));
   window.scrollTo(0, 0);
   if (history.state?.scr !== name) history.pushState({ scr: name }, '', '#' + name);
 }
@@ -499,10 +576,11 @@ window.addEventListener('popstate', e => {
   // カートは sessionStorage にあるので、戻っても消えない
   if (scr === 'confirm' && cartGet().length) showScreenNoPush('confirm');
   else if (scr === 'done') showScreenNoPush('list');
+  else if (scr === 'dish' || scr === 'history') showScreenNoPush(scr);
   else showScreenNoPush('list');
 });
 function showScreenNoPush(name) {
-  ['login', 'changepw', 'list', 'confirm', 'done', 'history'].forEach(s => $('scr-' + s).classList.toggle('hidden', s !== name));
+  ['login', 'changepw', 'list', 'confirm', 'done', 'history', 'dish'].forEach(s => $('scr-' + s).classList.toggle('hidden', s !== name));
   window.scrollTo(0, 0);
 }
 
@@ -627,6 +705,122 @@ async function enterList() {
   if (!currentSpecies || !speciesList.includes(currentSpecies)) currentSpecies = speciesList[0] || '';
   $('last-warn').innerHTML = '';   // 一覧の読み直しでだけ警告を消す
   renderAll();
+}
+
+/* ══════════ 料理ギャラリーへの投稿 ══════════ */
+let dishData = null;
+const DISH_PHOTO_URL = p => SB_URL + '/storage/v1/object/public/dish-photos/' + encodeURIComponent(p).replace(/%2F/g, '/');
+function dishExpired(e) { return sessionExpired(e) || /有効期限が切れ/.test(String(e && e.message || '')); }
+function dishMsg(id, text, ok) { const el = $(id); el.textContent = text || ''; el.classList.toggle('ok', !!ok); }
+
+async function openDish() {
+  showScreen('dish');
+  $('dish-mine').innerHTML = '<div class="note">読み込み中…</div>';
+  try { dishData = await api.dishMine(); }
+  catch (e) {
+    if (dishExpired(e)) { forceRelogin(); return; }
+    $('dish-mine').innerHTML = '<div class="note" style="color:var(--red)">読み込みに失敗しました（' + esc(e.message) + '）。もう一度お試しください。</div>';
+    return;
+  }
+  const s = dishData.shop;
+  $('ds-name').value = s ? s.display_name : (dishData.customer_name || customer.name || '');
+  $('ds-desc').value = s?.description || ''; $('ds-area').value = s?.area || '';
+  $('ds-url').value = s?.url || ''; $('ds-ig').value = s?.instagram || '';
+  $('ds-consent').checked = !!s?.consent_at;
+  $('dish-shop-state').textContent = s?.consent_at ? '掲載に同意済み' : '未登録';
+  $('dp-locked').classList.toggle('hidden', !!s?.consent_at);
+  $('dp-form').classList.toggle('hidden', !s?.consent_at);
+  const labels = dishData.labels || [];
+  $('dp-labels').innerHTML = labels.length
+    ? labels.map(l => `<label class="dlab"><input type="checkbox" class="dp-lab" value="${esc(l.label_id)}">
+        <span>${esc(l.label_id)} <small>${esc(l.species || '')}・${esc(l.parts || '')}（${esc(jdate(l.last_date))}お届け）</small></span></label>`).join('')
+    : '<div class="note" style="padding:4px 0">この1年のお届け記録に個体番号の付いたお肉がありません（選ばなくても投稿できます）。</div>';
+  renderDishMine();
+}
+
+function renderDishMine() {
+  const posts = dishData?.posts || [];
+  $('dish-mine').innerHTML = posts.length ? posts.map(p => `
+    <div class="dmine"><img src="${esc(DISH_PHOTO_URL(p.photo_path))}" alt="" loading="lazy">
+      <div class="dm"><b>${esc(p.dish_name)}</b>
+        <span class="dst s-${esc(p.status)}">${p.status === '確認待ち' ? 'センター確認待ち' : esc(p.status)}</span>
+        <div style="color:var(--text3);font-size:11.5px">${esc(jdate(p.created_at))}投稿${(p.individuals || []).length ? '・' + (p.individuals || []).map(i => esc(i.label_id)).join('、') : ''}</div>
+        ${p.status !== '非公開' ? `<button class="wd" onclick="dishWithdraw('${esc(p.id)}')">掲載を取り下げる</button>` : ''}
+      </div></div>`).join('') : '<div class="note">まだ投稿はありません。</div>';
+}
+
+async function dishSaveShop() {
+  const s = { name: $('ds-name').value.trim(), desc: $('ds-desc').value.trim(), area: $('ds-area').value.trim(),
+    url: $('ds-url').value.trim(), ig: $('ds-ig').value.trim(), consent: $('ds-consent').checked };
+  if (!s.name) { dishMsg('ds-msg', 'お店の名前を入力してください'); return; }
+  if (s.url && !/^https?:\/\/\S+$/.test(s.url)) { dishMsg('ds-msg', 'ホームページは https:// から入力してください'); return; }
+  if (s.ig && !/^@?[A-Za-z0-9._]{1,30}$/.test(s.ig)) { dishMsg('ds-msg', 'Instagram はアカウント名（英数字・ . _ ）で入力してください'); return; }
+  if (!s.consent) { dishMsg('ds-msg', '掲載への同意にチェックを入れてください'); return; }
+  const btn = $('ds-save'); btn.disabled = true;
+  try {
+    await api.dishShopSave(s);
+    dishMsg('ds-msg', '保存しました', true);
+    await openDish();
+    dishMsg('ds-msg', '保存しました', true);
+  } catch (e) {
+    if (dishExpired(e)) { forceRelogin(); return; }
+    dishMsg('ds-msg', '保存できませんでした：' + e.message);
+  }
+  btn.disabled = false;
+}
+
+function dishPreview() {
+  const f = $('dp-photo').files[0], img = $('dp-prev');
+  if (!f) { img.classList.add('hidden'); return; }
+  img.src = URL.createObjectURL(f); img.classList.remove('hidden');
+}
+
+// スマホの写真（数MB）をそのまま送らない: 長辺1600pxのJPEGに縮める（3MB以下になるまで画質を下げる）
+async function dishShrink(file) {
+  const bmp = await new Promise((ok, ng) => { const im = new Image(); im.onload = () => ok(im); im.onerror = () => ng(new Error('写真を読み込めませんでした（JPEG・PNGの写真を選んでください）')); im.src = URL.createObjectURL(file); });
+  const sc = Math.min(1, 1600 / Math.max(bmp.naturalWidth, bmp.naturalHeight));
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.naturalWidth * sc); c.height = Math.round(bmp.naturalHeight * sc);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  for (const q of [0.85, 0.75, 0.6, 0.45]) {
+    const b = await new Promise(r => c.toBlob(r, 'image/jpeg', q));
+    if (b && b.size <= 2.9 * 1024 * 1024) return b;
+  }
+  throw new Error('写真が大きすぎます。別の写真を選んでください');
+}
+
+let dishPosting = false;
+async function dishPost() {
+  if (dishPosting) return;
+  const f = $('dp-photo').files[0], name = $('dp-name').value.trim(), desc = $('dp-desc').value.trim();
+  const labels = [...document.querySelectorAll('.dp-lab:checked')].map(x => x.value);
+  if (!f) { dishMsg('dp-msg', '写真を選んでください'); return; }
+  if (!name) { dishMsg('dp-msg', '料理名を入力してください'); return; }
+  if (!$('dp-consent').checked) { dishMsg('dp-msg', '掲載への同意にチェックを入れてください'); return; }
+  dishPosting = true;
+  const btn = $('dp-send'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 送信中…';
+  dishMsg('dp-msg', '');
+  try {
+    const blob = await dishShrink(f);
+    const path = 'p/' + crypto.randomUUID() + '.jpg';
+    await api.uploadDishPhoto(blob, path);
+    await api.dishPost({ name, desc, path, labels, consent: true });
+    $('dp-photo').value = ''; $('dp-name').value = ''; $('dp-desc').value = ''; $('dp-consent').checked = false;
+    $('dp-prev').classList.add('hidden');
+    await openDish();
+    dishMsg('dp-msg', '投稿しました。センターで確認してから公開します。', true);
+  } catch (e) {
+    if (dishExpired(e)) { forceRelogin(); return; }
+    dishMsg('dp-msg', '投稿できませんでした：' + e.message);
+  } finally {
+    dishPosting = false; btn.disabled = false; btn.textContent = '投稿する（センターの確認後に公開）';
+  }
+}
+
+async function dishWithdraw(id) {
+  if (!confirm('この料理の掲載を取り下げますか？（すぐに公開ページから消えます）')) return;
+  try { await api.dishWithdraw(id); toast('取り下げました'); await openDish(); }
+  catch (e) { if (dishExpired(e)) { forceRelogin(); return; } toast('取り下げできませんでした：' + e.message, 'error'); }
 }
 
 /* ══════════ 注文履歴・納品状況 ══════════ */

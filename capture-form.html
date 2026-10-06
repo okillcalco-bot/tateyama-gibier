@@ -584,6 +584,17 @@ textarea { min-height: 80px; resize: vertical; }
           <div class="toggle-btn" data-val="ノウサギ" style="text-align:center;grid-column:span 2;">ノウサギ</div>
         </div>
       </div>
+      <!-- 捕獲区分（アライグマ・ハクビシンだけ）。駆除外＝市役所からの持込・個人宅など駆除以外の個体。
+           市役所へ出す駆除の台帳・番号（TGC-08-ア001〜）とは別に TGC-08-アコ001〜 を付け、放血・搬送・看板写真を求めない（2026-10-05） -->
+      <div class="form-row" id="categoryRow" style="display:none;">
+        <label class="form-label">捕獲区分</label>
+        <div class="toggle-group" data-field="capture_category" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="toggle-btn" data-val="駆除" style="text-align:center;">駆除（市役所へ報告）</div>
+          <div class="toggle-btn" data-val="駆除外" style="text-align:center;">駆除外（市役所から持込・個人宅など）</div>
+        </div>
+        <div id="categoryNote" style="display:none;font-size:12px;color:var(--gold-light);font-weight:600;margin-top:6px;line-height:1.6;">
+          駆除外：個体番号は TGC-08-アコ／ハコ の別番号になり、市役所の捕獲票・様式には入りません。放血・搬送の時刻と看板写真は不要です（分かれば入れてください）。</div>
+      </div>
       <!-- 個体番号は搬入登録時に自動採番するので入力中は非表示（値はJSが保持）。修正時のみ表示・編集可 -->
       <div class="form-row" id="serialRow" style="display:none;">
         <div id="serialEditNote" style="display:none;font-size:12px;color:var(--gold-light);font-weight:600;margin-bottom:6px;">✏️ 個体番号は必要なら手直しできます（仮-番号の確定など）</div>
@@ -836,7 +847,7 @@ textarea { min-height: 80px; resize: vertical; }
       </div>
       <div class="form-row" style="display:flex;flex-wrap:wrap;gap:12px 28px;align-items:flex-start;">
         <div style="flex:1 1 150px;min-width:0;">
-          <label class="form-label">放血開始<span class="req-badge">必須</span></label>
+          <label class="form-label">放血開始<span class="req-badge" id="bleedReqBadge">必須</span></label>
           <div class="time-wrap">
             <input type="time" class="input time-track" id="bleedTime" oninput="checkBleedingToIntakeTime()">
             <button type="button" class="now-btn" onclick="setNow('bleedTime')">今</button>
@@ -845,7 +856,7 @@ textarea { min-height: 80px; resize: vertical; }
           <div id="hunterBleedHint" style="display:none;color:var(--gold-light);font-size:11px;font-weight:600;margin-top:4px;">⏱ 放血から1時間以内を目安に搬入してください</div>
         </div>
         <div style="flex:1 1 150px;min-width:0;">
-          <label class="form-label">搬送開始<span class="req-badge">必須</span></label>
+          <label class="form-label">搬送開始<span class="req-badge" id="transportReqBadge">必須</span></label>
           <div class="time-wrap">
             <input type="time" class="input" id="transportStart">
             <button type="button" class="now-btn" onclick="setNow('transportStart')">今</button>
@@ -1136,8 +1147,10 @@ async function sb(method, table, body, query = '') {
 function getIndividualPrefix(species, city) {
   if (species === 'イノシシ') return city === '南房総市' ? 'M' : 'T';
   if (species === 'シカ')     return 'シ';   // 館山市・南房総市を区別せず共通（2026-08-12）
-  if (species === 'アライグマ') return 'ア';
-  if (species === 'ハクビシン') return 'ハ';
+  // 駆除外（市役所からの持込・個人宅など）は駆除の番号列と分ける: TGC-08-アコ### / ハコ###
+  const ko = (typeof state !== 'undefined' && state.capture_category === '駆除外') ? 'コ' : '';
+  if (species === 'アライグマ') return 'ア' + ko;
+  if (species === 'ハクビシン') return 'ハ' + ko;
   if (species === 'キョン')    return 'キ';
   if (species === 'タヌキ')    return 'タ';
   if (species === 'ノウサギ')  return 'ウ';
@@ -1224,7 +1237,8 @@ async function refreshIndividualNumber() {
     let dbNext = 1, dbOk = false;
     try {
       const rows = await sb('GET', 'individuals', null,
-        `?label_id=like.TGC-08-${prefix}*&deleted_at=is.null&select=serial_number,label_id,capture_date,hunter_name&order=serial_number.desc.nullslast&limit=1`);
+        // 駆除の番号（ア###）を探すときは駆除外（アコ###）を混ぜない。駆除外は通し番号を持たないので番号の大きい順で見る
+        `?label_id=like.TGC-08-${prefix}*${/コ$/.test(prefix) ? '' : `&label_id=not.like.TGC-08-${prefix}コ*`}&deleted_at=is.null&select=serial_number,label_id,capture_date,hunter_name&order=serial_number.desc.nullslast,label_id.desc&limit=1`);
       if (rows.length > 0) {
         const fromLabel = parseInt(String(rows[0].label_id || '').replace(`TGC-08-${prefix}`, ''), 10);
         dbNext = Math.max(rows[0].serial_number || 0, isNaN(fromLabel) ? 0 : fromLabel) + 1;
@@ -2081,7 +2095,26 @@ function setupToggles() {
   });
 }
 
+/* 捕獲区分（アライグマ・ハクビシンだけ）。それ以外の種に切り替えたら区分は消す */
+const CATEGORY_SPECIES = ['アライグマ', 'ハクビシン'];
+function isKujoGai() { return CATEGORY_SPECIES.includes(state.species) && state.capture_category === '駆除外'; }
+function refreshCategoryRow() {
+  const row = document.getElementById('categoryRow'); if (!row) return;
+  const show = CATEGORY_SPECIES.includes(state.species);
+  row.style.display = show ? '' : 'none';
+  if (!show && state.capture_category) {
+    state.capture_category = '';
+    row.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+  }
+  const ko = isKujoGai();
+  const note = document.getElementById('categoryNote'); if (note) note.style.display = ko ? '' : 'none';
+  ['bleedReqBadge', 'transportReqBadge'].forEach(id => {
+    const b = document.getElementById(id); if (b) { b.textContent = ko ? '任意' : '必須'; b.style.opacity = ko ? '.55' : ''; }
+  });
+}
 function onToggleChange(field, val) {
+  if (field === 'species' || field === 'capture_category') refreshCategoryRow();
+  if (field === 'capture_category') refreshIndividualNumber();
   if (field === 'capture_city') { clearAreaDone(); updateAreaDropdown(val); }
   if (field === 'species' || field === 'capture_city') refreshIndividualNumber();
   if (field === 'gutting') {
@@ -2653,7 +2686,11 @@ function loadForEdit(rec) {
   sv('memo', rec.memo);
   ['species','sex','weather','capture_city','capture_method',
    'finishing_method','hit_location','gutting','hunter_health',
-   'has_fetus','quality','intake_method'].forEach(function(field) {
+   'has_fetus','quality','intake_method','capture_category'].forEach(function(field) {
+    if (field === 'capture_category') {   // 駆除の個体を開いたときに前の区分が残らないように
+      state.capture_category = '';
+      document.querySelectorAll('[data-field="capture_category"] .toggle-btn').forEach(b => b.classList.remove('active'));
+    }
     const val = rec[field]; if (!val) return;
     const grp = document.querySelector('[data-field="' + field + '"]'); if (!grp) return;
     grp.querySelectorAll('.toggle-btn').forEach(function(b) { b.classList.remove('active'); });
@@ -2661,6 +2698,7 @@ function loadForEdit(rec) {
       if (b.dataset.val === val) { b.classList.add('active'); state[field] = val; }
     });
   });
+  refreshCategoryRow();
   if (rec.sex === 'オス') {
     const fg = document.querySelector('[data-field="has_fetus"]');
     if (fg) { fg.style.opacity = '0.4'; fg.style.pointerEvents = 'none'; }
@@ -3068,8 +3106,8 @@ const MISSING_CHECKS = [
   { label: '止めさし方法', get: () => state.finishing_method },
   { label: '被弾部位（銃のとき）', get: () => (state.finishing_method === '銃')
       ? (document.querySelector('[data-field="hit_location"] .toggle-btn.active')?.dataset.val || '') : 'skip' },
-  { label: '放血時刻', get: () => document.getElementById('bleedTime')?.value },
-  { label: '搬送開始時刻', get: () => document.getElementById('transportStart')?.value },
+  { label: '放血時刻', get: () => isKujoGai() ? 'skip' : document.getElementById('bleedTime')?.value },
+  { label: '搬送開始時刻', get: () => isKujoGai() ? 'skip' : document.getElementById('transportStart')?.value },
   { label: '施設受入時刻', get: () => window.staffFieldMode ? 'skip' : document.getElementById('receiveTime')?.value },
   { label: '引取・出張の担当', get: () => (state.intake_method && state.intake_method !== '持込')
       ? (document.getElementById('intakeStaff')?.value || '') : 'skip' },
@@ -3093,7 +3131,7 @@ function collectWarnings() {
       out.push(`地区名「${area}」は地区マスタにありません` + (near.length ? `（似た地区: ${near.join('・')}）` : ''));
     }
   }
-  const mins = bleedToIntakeMinutes();
+  const mins = isKujoGai() ? null : bleedToIntakeMinutes();
   if (mins !== null && mins > 60) out.push(`放血から受入まで ${mins}分（目安の1時間を超えています）`);
   // 持込日が今日でない。前日に開いた画面をそのまま使うと前日の日付が残る（TGC-08-T297の事故）。
   // 前日搬入をあとから登録することも実際にあるので、止めずに確認だけする。
@@ -3243,6 +3281,8 @@ async function handleSubmit() {
       capture_time: document.getElementById('captureTime').value,
       weather: state.weather,
       capture_city: state.capture_city,
+      // 捕獲区分: 駆除外だけ書く（駆除・他種は null＝これまでどおり市役所報告の対象）
+      capture_category: isKujoGai() ? '駆除外' : null,
       capture_area: document.getElementById('captureArea').value,
       hunter_name: document.getElementById('hunterName').value,
       hunter_name_public: state.hunter_name_public !== '出さない',   // 「この肉の物語」に捕獲者名を出してよいか
@@ -3561,6 +3601,7 @@ function resetForm() {
   // Restore defaults
   state.gutting = 'なし'; state.has_fetus = 'なし'; state.hunter_health = '良好';
   state.quality = '良'; state.intake_method = '持込';
+  if (typeof refreshCategoryRow === 'function') setTimeout(refreshCategoryRow, 0);
   state.hunter_name_public = '出す';   // 既定は出してよい。出さない人だけ選び直す（捕獲者マスタの前回の選択で自動で切り替わる）
   // Re-activate default buttons
   setHunterPublicToggle('出す');
@@ -3683,7 +3724,9 @@ function renderList() {
     const emojiMap = {'イノシシ':'&#x1F417;','シカ':'&#x1F98C;','アライグマ':'&#x1F99D;','ハクビシン':'&#x1F43C;','キョン':'&#x1F98C;','タヌキ':'&#x1F99D;','ノウサギ':'&#x1F430;'};
     const emoji = emojiMap[r.species] || '&#x1F43E;';
     const qClass = r.quality === '良' ? 'q-good' : r.quality === '可' ? 'q-ok' : 'q-bad';
-    const photoBadge = r.image_url
+    const photoBadge = r.capture_category === '駆除外'
+      ? `<span style="font-size:12px;font-weight:700;color:var(--text2,#888);border:1px solid currentColor;border-radius:6px;padding:1px 7px;">駆除外</span>`
+      : r.image_url
       ? `<button type="button" onclick="event.stopPropagation();photoCapture('${r.id}')" style="background:none;border:none;color:#6a9e5a;font-weight:700;font-size:13px;cursor:pointer;padding:2px 4px;">📷済</button>`
       : `<button type="button" onclick="event.stopPropagation();photoCapture('${r.id}')" style="background:#d0703c;border:none;color:#fff;font-weight:800;font-size:13px;cursor:pointer;padding:3px 9px;border-radius:6px;">📷 撮影</button>`;
     return `<div class="card" onclick='showBoard(${JSON.stringify(r).replace(/'/g, "&#39;")})'>
