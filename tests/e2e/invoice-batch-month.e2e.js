@@ -29,6 +29,8 @@ const path = require('path');
     { id: 'c-c', code: 'C3', name: 'Cビストロ', price_rank: 'standard', address: '東京都C区', is_active: true },
     { id: 'c-w', code: 'C0731', name: 'ノブレスオブリージュ', price_rank: 'standard', address: '東京都W区', honorific: '御中', is_active: true },
     { id: 'c-z', code: 'C9', name: 'Z誤送', price_rank: 'standard', address: '千葉県', is_active: true },
+    { id: 'c-t', code: 'C10', name: 'トレタテ', price_rank: 'standard', address: '東京都T区', is_active: true },
+    { id: 'c-o', code: 'C11', name: 'OTG', price_rank: 'standard', address: '東京都品川区', notes: 'トレタテ\n出荷登録の画面で登録', is_active: true },
   ];
   const it = (part, kg, price, extra) => ({ species: 'イノシシ', part_name: part, weight_kg: kg, weight: kg, unit_price: price, subtotal: Math.round(kg * price), amount: Math.round(kg * price), inventory_id: null, grade_snapshot: '並', ...(extra || {}) });
   const ORDERS = [
@@ -48,6 +50,8 @@ const path = require('path');
       order_items: [it('スネ', 0, 1600, { subtotal: 0, amount: 0, weight_kg: 0, weight: 0 })], shipments: [] },
     { id: 'o8', order_code: 'BASE-XYZ', channel: 'BASEネットショップ', customer_id: null, customer_name: '西中 真一（BASE）', order_date: '2026-09-12', delivery_date: '2026-09-12', status: '発送済', memo: null,
       order_items: [it('スライス', 0.3, 5000)], shipments: [] },
+    { id: 'o9', order_code: 'DIR-1006-OTG', customer_id: 'c-o', customer_name: 'OTG', order_date: '2026-09-25', delivery_date: '2026-09-25', status: '発送済', memo: null,
+      order_items: [it('ロース', 1, 3800)], shipments: [] },
   ];
   let orderQueries = [];
   const docs = [], docItems = [], docOrders = [];
@@ -91,6 +95,7 @@ const path = require('path');
   const G = n => groups.find(g => g.name === n) || {};
   ck('請求済みの注文は入れない（A食堂は2件）', G('A食堂').n === 2 && !G('A食堂').codes.includes('DIR-0910-BILLED'), JSON.stringify(G('A食堂')));
   ck('仲卸業者のタグがある注文は業者あて（Cビストロではなくノブレスオブリージュ）', G('ノブレスオブリージュ').n === 1 && !groups.some(g => g.name === 'Cビストロ'), JSON.stringify(groups.map(g => g.name)));
+  ck('注文の備考に無くても、顧客の備考に「トレタテ」があればトレタテあてにまとめる', G('トレタテ').n === 1 && (G('トレタテ').codes || []).includes('DIR-1006-OTG') && !groups.some(g => g.name === 'OTG'), JSON.stringify(groups.map(g => g.name)));
   const resTxt = await page.$eval('#invBatchResult', el => el.innerText);
   ck('顧客につながっていない注文は赤字で知らせる', /顧客につながっていない注文が 1件/.test(resTxt) && /DIR-0912-NOCUST/.test(resTxt), resTxt.slice(0, 200));
   ck('BASEの注文（支払い済み）は対象外で、赤字の一覧にも出さない', !/BASE-XYZ/.test(resTxt) && /BASEの注文 1件は対象外/.test(resTxt), resTxt.slice(0, 200));
@@ -113,10 +118,10 @@ const path = require('path');
   let confirmMsg = '';
   page.on('dialog', async d => { confirmMsg = d.message(); await d.accept(); });
   await page.evaluate(() => invBatchIssue()); await page.waitForTimeout(800);
-  ck('確認画面に件数・合計・各請求先が出る', /請求書を 3件 まとめて発行/.test(confirmMsg) && /A食堂/.test(confirmMsg) && /B商店/.test(confirmMsg) && /ノブレスオブリージュ/.test(confirmMsg), confirmMsg.split('\n').slice(0, 2).join(' / '));
-  ck('請求先ごとに書類1枚（チェックを外したZ誤送は出さない）', docs.length === 3 && !docs.some(d => d.partner_name === 'Z誤送'), JSON.stringify(docs.map(d => d.partner_name)));
+  ck('確認画面に件数・合計・各請求先が出る', /請求書を 4件 まとめて発行/.test(confirmMsg) && /A食堂/.test(confirmMsg) && /B商店/.test(confirmMsg) && /ノブレスオブリージュ/.test(confirmMsg), confirmMsg.split('\n').slice(0, 2).join(' / '));
+  ck('請求先ごとに書類1枚（チェックを外したZ誤送は出さない）', docs.length === 4 && !docs.some(d => d.partner_name === 'Z誤送'), JSON.stringify(docs.map(d => d.partner_name)));
   const nums = docs.map(d => d.doc_number).sort();
-  ck('番号は連番（INV-202610-001〜003）', JSON.stringify(nums) === JSON.stringify(['INV-202610-001', 'INV-202610-002', 'INV-202610-003']), JSON.stringify(nums));
+  ck('番号は連番（INV-202610-001〜004）', JSON.stringify(nums) === JSON.stringify(['INV-202610-001', 'INV-202610-002', 'INV-202610-003', 'INV-202610-004']), JSON.stringify(nums));
   const dA = docs.find(d => d.partner_name === 'A食堂');
   ck('A食堂の書類に注文2件を紐付け（二重請求防止）', docOrders.filter(x => x.document_id === dA.id).map(x => x.order_id).sort().join(',') === 'o1,o2', JSON.stringify(docOrders));
   ck('件名は「2026年9月分」、明細も保存', dA.subject === '2026年9月分' && docItems.some(x => x.document_id === dA.id && /枝肉/.test(x.name)), dA.subject);
@@ -124,14 +129,14 @@ const path = require('path');
   ck('業者あての請求書には【出荷内訳】が入る', dW && /【出荷内訳】/.test(dW.memo || '') && /Cビストロ/.test(dW.memo || ''), dW && dW.memo);
   const html = await page.evaluate(() => (window.__opened[0] || {}).document?._h || '');
   const pages = (html.match(/class="pb"/g) || []).length;
-  ck('印刷画面は1つで、1請求先1ページ（改ページ）', (await page.evaluate(() => window.__opened.length)) === 1 && pages === 3 && /page-break-after:always/.test(html), pages);
+  ck('印刷画面は1つで、1請求先1ページ（改ページ）', (await page.evaluate(() => window.__opened.length)) === 1 && pages === 4 && /page-break-after:always/.test(html), pages);
   ck('印刷画面に各社の宛名と番号が入る', ['A食堂', 'B商店', 'ノブレスオブリージュ', 'INV-202610-001', 'INV-202610-003'].every(s => html.includes(s)), '');
   // 実際にA4でPDFにして、ページ数が請求先の数と同じか測る（1請求先が2ページにはみ出さないか）
   const pp = await ctx.newPage();
   await pp.setContent(html, { waitUntil: 'load' });
   const pdf = (await pp.pdf({ format: 'A4', preferCSSPageSize: true })).toString('latin1');
   const pdfPages = (pdf.match(/\/Type\s*\/Page[^s]/g) || []).length;
-  ck('A4のPDFにすると3ページ（1請求先1ページ）', pdfPages === 3, pdfPages);
+  ck('A4のPDFにすると4ページ（1請求先1ページ）', pdfPages === 4, pdfPages);
   ck('ページエラーなし', errors.length === 0, errors.join(' / '));
 
   await browser.close();
