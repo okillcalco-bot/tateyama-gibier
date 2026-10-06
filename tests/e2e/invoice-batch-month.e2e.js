@@ -24,8 +24,9 @@ const path = require('path');
   const errors = []; page.on('pageerror', e => errors.push(e.message));
 
   const CUSTS = [
-    { id: 'c-a', code: 'C1', name: 'A食堂', price_rank: 'standard', address: '東京都A区1-1', honorific: '御中', is_active: true },
-    { id: 'c-b', code: 'C2', name: 'B商店', price_rank: 'standard', address: null, honorific: '様', is_active: true },
+    { id: 'c-a', code: 'C1', name: 'A食堂', price_rank: 'standard', address: '〒123-4567 東京都A区1-1', building: 'Aビル2F', honorific: '御中', is_active: true, billing_method: 'paper' },
+    { id: 'c-b', code: 'C2', name: 'B商店', price_rank: 'standard', address: null, honorific: '様', is_active: true, billing_method: 'paper' },
+    { id: 'c-k', code: 'C12', name: 'K現金', price_rank: 'standard', address: '館山市', is_active: true, billing_method: 'cash' },
     { id: 'c-c', code: 'C3', name: 'Cビストロ', price_rank: 'standard', address: '東京都C区', is_active: true },
     { id: 'c-w', code: 'C0731', name: 'ノブレスオブリージュ', price_rank: 'standard', address: '東京都W区', honorific: '御中', is_active: true },
     { id: 'c-z', code: 'C9', name: 'Z誤送', price_rank: 'standard', address: '千葉県', is_active: true },
@@ -43,6 +44,8 @@ const path = require('path');
       order_items: [it('カタ', 2, 2200)], shipments: [{ freight: 800, size_code: 60, is_cool: true }] },
     { id: 'o10', order_code: 'DIR-0918-NOPRICE', customer_id: 'c-b', customer_name: 'B商店', order_date: '2026-09-18', delivery_date: '2026-09-18', status: '発送済', memo: null,
       order_items: [it('ネック', 1.5, 0, { id: 'it-np', unit_price: null, subtotal: null, amount: null })], shipments: [] },
+    { id: 'o11', order_code: 'DIR-0919-CASH', customer_id: 'c-k', customer_name: 'K現金', order_date: '2026-09-19', delivery_date: '2026-09-19', status: '発送済', memo: null,
+      order_items: [it('ミンチ用', 2, 1600)], shipments: [] },
     { id: 'o4', order_code: 'DIR-0916', customer_id: 'c-c', customer_name: 'Cビストロ', order_date: '2026-09-16', delivery_date: '2026-09-16', status: '発送済', memo: 'ノブレスオブリージュ',
       order_items: [it('内臓', 2.9, 1000)], shipments: [{ freight: 1300, size_code: 100, is_cool: true }] },
     { id: 'o5', order_code: 'DIR-0910-BILLED', customer_id: 'c-a', customer_name: 'A食堂', order_date: '2026-09-10', delivery_date: '2026-09-10', status: '発送済', memo: null,
@@ -115,6 +118,30 @@ const path = require('path');
   ck('明細は注文の金額（顧客別単価1,500円/kg）から作り、価格マスタ（3,000円）で引き直さない', eda && eda.qty === 10 && eda.price === Math.round(Math.round(15000 / 1.08) / 10), JSON.stringify(eda));
   ck('0円・0kgの依頼内容の行は載せない', !aLines.some(l => /キョン/.test(l.name)), JSON.stringify(aLines.map(l => l.name)));
   ck('送料は別行（10%・税抜そのまま）', aLines.some(l => /9\/3納品　送料（クール100）/.test(l.name) && l.price === 1300 && l.tax === 10), JSON.stringify(aLines));
+
+  // 10. 請求書の送り方
+  ck('請求なし（現金）の請求先は最初からチェックを外す', G('K現金').use === false && G('K現金').total > 0, JSON.stringify(G('K現金')));
+  const methodTxt = await page.$eval('#invBatchList', el => el.innerText);
+  ck('一覧に送り方の札が出る（紙で郵送・請求なし・未設定）', /📮 紙で郵送/.test(methodTxt) && /💴 請求なし（現金）/.test(methodTxt) && /送り方未設定/.test(methodTxt), '');
+  // 宛名ラベル（紙で郵送・チェック済みの請求先だけ）
+  await page.evaluate(() => { window.__lbl = null; window.open = () => { const w = { document: { _h: '', open() {}, write(h) { this._h += h; }, close() {} }, close() {} }; window.__lbl = w; return w; }; window.prompt = () => '2';   /* 使いかけのシート: 2枚目から（1枚目は空き） */ window.alert = m => { window.__alert = m; }; });
+  await page.evaluate(() => invBatchLabels());
+  const lbl = await page.evaluate(() => window.__lbl ? window.__lbl.document._h : '');
+  ck('宛名ラベルは「紙で郵送」の請求先だけ（A食堂・B商店。現金・未設定は出さない）', /A食堂　御中/.test(lbl) && /B商店　様/.test(lbl) && !/K現金/.test(lbl) && !/ノブレスオブリージュ/.test(lbl), '');
+  ck('郵便番号と住所を分けて載せ、建物名も付ける', /〒123-4567/.test(lbl) && /東京都A区1-1 Aビル2F/.test(lbl), '');
+  ck('住所の無い請求先は「住所未登録」と出して知らせる', /住所未登録/.test(lbl) && /B商店/.test(await page.evaluate(() => window.__alert || '')), '');
+  // 実寸: KML-506（A4・70×33.9mm・3列×8段・上余白12.9mm）に合っているか測る
+  const lp = await ctx.newPage();
+  await lp.setContent(lbl.replace(/<script>[\s\S]*?<\/script>/, ''), { waitUntil: 'load' });
+  const geo = await lp.evaluate(() => { const px = 96 / 25.4; const ls = [...document.querySelectorAll('.lbl')].map(e => e.getBoundingClientRect()); return { n: ls.length, top: +(ls[0].top / px).toFixed(1), w: +(ls[0].width / px).toFixed(1), h: +(ls[0].height / px).toFixed(1), x3: +(ls[2].left / px).toFixed(1), y2: +(ls[1].top / px).toFixed(1) }; });
+  ck('ラベルの実寸がKML-506どおり（上12.9mm・幅70mm・高さ33.9mm・3列目の左端140mm）', geo.top === 12.9 && geo.w === 70 && geo.h === 33.9 && geo.x3 === 140, JSON.stringify(geo));
+  const lpdf = (await lp.pdf({ preferCSSPageSize: true })).toString('latin1');
+  ck('宛名ラベルはA4 1枚に収まる', (lpdf.match(/\/Type\s*\/Page[^s]/g) || []).length === 1, '');
+  // 顧客マスタで送り方を選んで保存できる
+  await page.evaluate(() => { openEditCustomer('c-c'); document.getElementById('cfBillingMethod').value = 'pdf'; return saveCustomer(); });
+  await page.waitForTimeout(300);
+  const pSave = patches.find(x => /customers\?id=eq\.c-c/.test(x.url));
+  ck('顧客マスタで請求書の送り方を選んで保存できる', pSave && pSave.body.billing_method === 'pdf', JSON.stringify(pSave && pSave.body.billing_method));
 
   // 9. 注意を押すと入力できる
   ck('B商店に「単価未入力の明細あり」が出る', (G('B商店').warn || []).includes('単価未入力の明細あり'), JSON.stringify(G('B商店')));

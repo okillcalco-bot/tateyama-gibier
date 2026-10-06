@@ -189,6 +189,10 @@ th,td{padding:8px 6px;font-size:.8rem}
 .dcard .db b{font-size:14px;display:block;overflow-wrap:anywhere}
 .dcard .dact{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .inv-fix-btn{font-size:.68rem;background:rgba(200,60,60,.12);color:#b03030;border:1px solid rgba(176,48,48,.35);border-radius:4px;padding:1px 6px;margin-left:4px;cursor:pointer;text-decoration:underline dotted}
+.inv-method-btn{font-size:.68rem;border-radius:4px;padding:1px 6px;margin-left:4px;cursor:pointer;border:1px solid var(--border2);background:var(--surface);color:var(--text2)}
+.inv-method-btn.m-paper{background:rgba(201,165,44,.16);color:#8a6d10;border-color:#c9a52c}
+.inv-method-btn.m-cash{background:rgba(90,140,90,.14);color:#3d7a34;border-color:#3d7a34}
+.inv-method-btn.m-pdf{background:rgba(90,140,216,.12);color:#2f66b5;border-color:#2f66b5}
 .inv-fix-btn:hover{background:rgba(200,60,60,.22)}
 </style>
 </head>
@@ -525,6 +529,7 @@ th,td{padding:8px 6px;font-size:.8rem}
           <div id="invBatchActions" style="display:none;margin-top:8px;gap:8px;flex-wrap:wrap">
             <button class="btn btn-outline btn-sm" onclick="invBatchPreview()">プレビュー（番号なし）</button>
             <button class="btn btn-gold btn-sm" onclick="invBatchIssue()">🖨 選んだ請求先の請求書をまとめて発行（PDF）</button>
+            <button class="btn btn-outline btn-sm" onclick="invBatchLabels()" title="顧客マスタで「紙で郵送」にしている請求先の宛名ラベル（コメリ KML-506・A4 24面）">🏷 紙で送る請求先の宛名ラベル（KML-506）</button>
             <button class="btn btn-outline btn-sm" onclick="invBatchToggleAll(true)">全て選択</button>
             <button class="btn btn-outline btn-sm" onclick="invBatchToggleAll(false)">選択解除</button>
           </div>
@@ -948,6 +953,14 @@ th,td{padding:8px 6px;font-size:.8rem}
       </div>
       <div class="form-group"><label>デフォルト商品</label><input type="text" id="cfDefaultItem"></div>
       <div class="form-group"><label>時間帯</label><input type="text" id="cfTimeZone" value="0000"></div>
+    </div>
+    <div class="form-group"><label>請求書の送り方</label>
+      <select id="cfBillingMethod">
+        <option value="">未設定</option>
+        <option value="pdf">📧 PDFで送る</option>
+        <option value="paper">📮 紙で郵送する（月まとめ発行で宛名ラベルを印刷）</option>
+        <option value="cash">💴 請求なし（その場で現金）</option>
+      </select>
     </div>
     <div class="form-group"><label>既定の配送業者（複数可）</label>
       <div id="cfCarriers" style="display:flex;gap:16px;flex-wrap:wrap;padding:6px 0;">
@@ -2973,6 +2986,7 @@ async function openAddCustomer(){
   document.getElementById('cfHonorific').value='様';
   document.getElementById('cfTimeZone').value='0000';
   document.getElementById('cfRank').value='standard';
+  document.getElementById('cfBillingMethod').value='';
   document.getElementById('cfActive').value='true';
   document.getElementById('cfPortalEnabled').checked=false;
   renderPortalCard(null);   // 未保存＝未発行・停止中で初期化
@@ -2999,6 +3013,7 @@ function openEditCustomer(id){
   document.getElementById('cfCompany2').value=c.company2||'';
   document.getElementById('cfHonorific').value=c.honorific||'様';
   document.getElementById('cfRank').value=c.price_rank||'standard';
+  document.getElementById('cfBillingMethod').value=c.billing_method||'';
   document.getElementById('cfActive').value=c.is_active===false?'false':'true';
   document.getElementById('cfDefaultItem').value=c.default_item||'';
   document.getElementById('cfTimeZone').value=c.default_time_zone||'0000';
@@ -3163,6 +3178,7 @@ async function saveCustomer(){
     company2:document.getElementById('cfCompany2').value,
     honorific:document.getElementById('cfHonorific').value,
     price_rank:document.getElementById('cfRank').value,
+    billing_method:document.getElementById('cfBillingMethod').value||null,
     is_active:document.getElementById('cfActive').value==='true',
     default_item:document.getElementById('cfDefaultItem').value,
     default_time_zone:document.getElementById('cfTimeZone').value,
@@ -4066,7 +4082,8 @@ async function invBatchSearch(){
       const warn=[];
       if(!g.cust.address) warn.push('住所未登録');
       if(g.orders.some(o=>(o.order_items||[]).some(invItemNeedsPrice))) warn.push('単価未入力の明細あり');
-      return {...g,lines,total:c.total,warn,_use:c.total>0};
+      const method=g.cust.billing_method||'';
+      return {...g,lines,total:c.total,warn,method,_use:c.total>0&&method!=='cash'};   // 請求なし（現金）は最初から外す
     }).sort((a,b)=>(a.cust.name||'').localeCompare(b.cust.name||'','ja'));
     const sum=invBatchGroups.filter(g=>g._use).reduce((s,g)=>s+g.total,0);
     res.innerHTML=`${r.label}：未請求 <strong>${unbilled.length}件</strong> → 請求先 <strong>${invBatchGroups.length}件</strong>（合計 &yen;${sum.toLocaleString()} 税込）`+
@@ -4084,6 +4101,7 @@ function invBatchRender(){
     <span style="flex:1;min-width:0">
       <strong style="font-size:.82rem">${esc(g.cust.name||'')}</strong>
       <span style="color:var(--text2);font-size:.75rem"> 注文${g.orders.length}件</span>
+      <button type="button" class="inv-method-btn m-${g.method||'none'}" title="請求書の送り方（押すと顧客の設定を開きます）" onclick="invFixWarn(event,${i},'送り方')">${INV_BILLING_LABEL[g.method||'']}</button>
       ${g.warn.map(w=>`<button type="button" class="inv-fix-btn" title="押すと入力できます" onclick="invFixWarn(event,${i},'${w}')">✏ ${esc(w)}</button>`).join('')}
       <span style="float:right;font-weight:700;font-size:.8rem">&yen;${g.total.toLocaleString()}</span>
     </span></label>`).join('');
@@ -4096,7 +4114,7 @@ function invItemNeedsPrice(it){ return Number(it.weight_kg||it.weight||0)>0 && !
 function invFixWarn(ev,i,w){
   if(ev){ ev.preventDefault(); ev.stopPropagation(); }
   const g=invBatchGroups[i]; if(!g) return;
-  if(w==='住所未登録'){ openEditCustomer(g.cust.id); return; }
+  if(w==='住所未登録'||w==='送り方'){ openEditCustomer(g.cust.id); return; }
   invFixPrices(i);
 }
 function invFixPrices(i){
@@ -4167,6 +4185,43 @@ async function invFixCustomerSave(o){
     closeModal('invFixModal');
     invBatchSearch();
   }catch(e){ alert('顧客をつなげませんでした: '+String(e.message||e)); }
+}
+const INV_BILLING_LABEL={'':'送り方未設定',pdf:'📧 PDF',paper:'📮 紙で郵送',cash:'💴 請求なし（現金）'};
+/* 紙で郵送する請求先の宛名ラベル（コメリ KML-506-100：A4 24面 70×33.9mm・3列×8段・上下余白12.9mm・左右0）
+   業務アプリの捕獲者の宛名ラベル（index.html hunterPrintLabels）と同じ用紙・同じレイアウト。
+   対象は月まとめ発行の一覧でチェックが入っていて、顧客マスタの送り方が「紙で郵送」の請求先。 */
+const INV_LABEL_SHEET={cols:3,rows:8,w:70,h:33.9,top:12.9};
+function invLabelSplitAddress(c){
+  const raw=[c.address||'',c.building||''].filter(Boolean).join(' ').trim();
+  const m=raw.match(/〒?\s*([0-9０-９]{3})[-－ー]?([0-9０-９]{4})/);
+  const toHalf=x=>x.replace(/[０-９]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0));
+  const zip=m?toHalf(m[1])+'-'+toHalf(m[2]):'';
+  const adr=(m?raw.replace(m[0],''):raw).replace(/^[\s　]+/,'');
+  return {zip,adr};
+}
+function invBatchLabels(){
+  const targets=invBatchGroups.filter(g=>g._use&&g.method==='paper');
+  if(!targets.length){alert('チェックの入っている請求先に「紙で郵送」の顧客がいません。\n顧客マスタの「請求書の送り方」で「紙で郵送する」を選んでください（一覧の送り方の札を押すと設定できます）。');return}
+  const S=INV_LABEL_SHEET, per=S.cols*S.rows;
+  const ans=prompt(`宛名ラベル ${targets.length}件を印刷します（コメリ KML-506・A4 24面）。\n${targets.map(g=>'・'+g.cust.name).join('\n')}\n\n使いかけのシートなら、何枚目のラベルから使うか（1〜${per}）。\n枠線を試し刷りしたい場合は「枠」と入れてください。`,'1');
+  if(ans==null) return;
+  const frame=/枠/.test(ans); const start=Math.min(per,Math.max(1,parseInt(ans,10)||1));
+  const noAddr=targets.filter(g=>!g.cust.address);
+  if(noAddr.length) alert(`住所が無い請求先 ${noAddr.length}件（${noAddr.map(g=>g.cust.name).join('、')}）はラベルに「住所未登録」と出ます。`);
+  const cells=Array(start-1).fill(null).concat(targets.map(g=>g.cust));
+  const sheets=[]; for(let i=0;i<cells.length;i+=per) sheets.push(cells.slice(i,i+per));
+  const cell=c=>{
+    if(!c) return `<div class="lbl${frame?' f':''}"></div>`;
+    const a=invLabelSplitAddress(c);
+    return `<div class="lbl${frame?' f':''}">${c.address?`<div class="zip">${a.zip?'〒'+esc(a.zip):''}</div><div class="adr">${esc(a.adr)}</div>`:'<div class="zip"></div><div class="adr miss">住所未登録（顧客マスタに登録してください）</div>'}<div class="nm">${esc(c.name||'')}　${esc(c.honorific||'御中')}</div></div>`;
+  };
+  const css=`@page{size:A4;margin:0} html,body{margin:0;padding:0} body{font-family:"Noto Sans JP","Yu Gothic","Hiragino Sans",sans-serif;color:#000}
+    .sheet{width:210mm;height:297mm;box-sizing:border-box;padding-top:${S.top}mm;display:grid;grid-template-columns:repeat(${S.cols},${S.w}mm);grid-auto-rows:${S.h}mm;align-content:start;page-break-after:always;overflow:hidden}
+    .sheet:last-child{page-break-after:auto}
+    .lbl{box-sizing:border-box;width:${S.w}mm;height:${S.h}mm;padding:3.5mm 6mm 2mm;overflow:hidden;line-height:1.35}
+    .lbl.f{outline:.2mm dashed #999;outline-offset:-.2mm}
+    .zip{font-size:9.5pt;min-height:4.4mm} .adr{font-size:9.5pt} .adr.miss{color:#444} .nm{font-size:13pt;font-weight:700;margin-top:1.5mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}`;
+  invOpenHtml(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>宛名ラベル_${esc(invBatchRange().label)}_${targets.length}件</title><style>${css}</style></head><body>${sheets.map(sh=>`<div class="sheet">${sh.map(cell).join('')}</div>`).join('')}<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script></body></html>`);
 }
 function invBatchToggleAll(on){ invBatchGroups.forEach(g=>{g._use=on;}); invBatchRender(); }
 function invBatchPayload(g){
