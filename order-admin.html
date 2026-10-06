@@ -4024,7 +4024,9 @@ async function invBatchSearch(){
         links.forEach(l=>{ if(alive.has(l.document_id)) billed.add(l.order_id); });
       }
     }
-    const unbilled=orders.filter(o=>!billed.has(o.id));
+    // BASE（ネットショップ）の注文はその場で支払い済みのため請求書の対象外
+    const baseCount=orders.filter(o=>/^BASE/.test(o.channel||'')).length;
+    const unbilled=orders.filter(o=>!billed.has(o.id)&&!/^BASE/.test(o.channel||''));
     const invIds=[...new Set(unbilled.flatMap(o=>(o.order_items||[]).map(it=>it.inventory_id).filter(Boolean)))];
     const gradeMap={};
     if(invIds.length) (await invChunkedGet('inventory','id',invIds,'id,grade')).forEach(x=>{gradeMap[x.id]=x.grade;});
@@ -4048,6 +4050,7 @@ async function invBatchSearch(){
     const sum=invBatchGroups.filter(g=>g._use).reduce((s,g)=>s+g.total,0);
     res.innerHTML=`${r.label}：未請求 <strong>${unbilled.length}件</strong> → 請求先 <strong>${invBatchGroups.length}件</strong>（合計 &yen;${sum.toLocaleString()} 税込）`+
       (billed.size?` ／ 請求済み ${billed.size}件は除外`:'')+
+      (baseCount?` ／ BASEの注文 ${baseCount}件は対象外（支払い済み）`:'')+
       (noCust.length?`<div style="color:var(--red);margin-top:4px">⚠ 顧客につながっていない注文が ${noCust.length}件あり、集計に入っていません: ${esc(noCust.map(o=>`${o.order_code}（${o.customer_name||'名前なし'}）`).join('、'))}</div>`:'');
     invBatchRender();
   }catch(e){ res.innerHTML=`<span style="color:var(--red)">集計できませんでした: ${esc(String(e.message||e))}</span>`; }

@@ -46,6 +46,8 @@ const path = require('path');
       order_items: [it('ヒレ', 0.5, 3800)], shipments: [] },
     { id: 'o7', order_code: 'DIR-0928-Z', customer_id: 'c-z', customer_name: 'Z誤送', order_date: '2026-09-28', delivery_date: '2026-09-28', status: '発送済', memo: null,
       order_items: [it('スネ', 0, 1600, { subtotal: 0, amount: 0, weight_kg: 0, weight: 0 })], shipments: [] },
+    { id: 'o8', order_code: 'BASE-XYZ', channel: 'BASEネットショップ', customer_id: null, customer_name: '西中 真一（BASE）', order_date: '2026-09-12', delivery_date: '2026-09-12', status: '発送済', memo: null,
+      order_items: [it('スライス', 0.3, 5000)], shipments: [] },
   ];
   let orderQueries = [];
   const docs = [], docItems = [], docOrders = [];
@@ -91,6 +93,7 @@ const path = require('path');
   ck('仲卸業者のタグがある注文は業者あて（Cビストロではなくノブレスオブリージュ）', G('ノブレスオブリージュ').n === 1 && !groups.some(g => g.name === 'Cビストロ'), JSON.stringify(groups.map(g => g.name)));
   const resTxt = await page.$eval('#invBatchResult', el => el.innerText);
   ck('顧客につながっていない注文は赤字で知らせる', /顧客につながっていない注文が 1件/.test(resTxt) && /DIR-0912-NOCUST/.test(resTxt), resTxt.slice(0, 200));
+  ck('BASEの注文（支払い済み）は対象外で、赤字の一覧にも出さない', !/BASE-XYZ/.test(resTxt) && /BASEの注文 1件は対象外/.test(resTxt), resTxt.slice(0, 200));
   ck('金額0の請求先は最初からチェックを外す', G('Z誤送').use === false && G('A食堂').use === true, JSON.stringify(G('Z誤送')));
   ck('住所未登録は注意を出す', (G('B商店').warn || []).includes('住所未登録'), JSON.stringify(G('B商店')));
 
