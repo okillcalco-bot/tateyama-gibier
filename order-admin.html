@@ -2144,6 +2144,9 @@ function itemGradeForBilling(i){
 function consolidateItemsForBilling(items){
   const groups=new Map();
   (items||[]).forEach(i=>{
+    // 重さも金額も0の行（出荷時に置き換えた「依頼内容」・在庫不足で出さなかった残り）は請求書に載せない。
+    // 載せると「0枚 0円」の意味のない明細になる（2026-10-06）
+    if(!(Number(i.weight_kg||i.weight||0)>0) && !Number(i.subtotal||i.amount||0)) return;
     const part=normalizePartNameForBilling(i.part_name);
     const grade=itemGradeForBilling(i);
     const key=(i.species||'')+'|'+(part||'')+'|'+(grade||'');
