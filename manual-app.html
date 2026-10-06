@@ -21,6 +21,8 @@
     --blue2:  #2171C1;
     --red:    #A5372C;
     --red2:   #7E2B22;
+    --teal:   #0B5E5E;
+    --teal2:  #127F7F;
     --bg:     #F5F5F0;
     --white:  #ffffff;
     --gray:   #F0F0EA;
@@ -59,6 +61,7 @@
   .app-header.blue { background: var(--blue); }
   .app-header.red  { background: var(--red); }
   .app-header.amber{ background: var(--amber); }
+  .app-header.teal { background: var(--teal); }
   .header-inner {
     display: flex; align-items: center; gap: 10px;
     padding-bottom: 14px;
@@ -84,6 +87,7 @@
   .tab-bar::-webkit-scrollbar { display: none; }
   .tab-bar.blue { background: var(--blue2); }
   .tab-bar.red  { background: var(--red2); }
+  .tab-bar.teal { background: var(--teal2); }
   .tab-btn {
     flex: 1; min-width: 80px;
     padding: 10px 6px 8px;
@@ -142,6 +146,7 @@
   }
   .step-num.blue { background: var(--blue); }
   .step-num.red  { background: var(--red); color: white; }
+  .step-num.teal { background: var(--teal); color: white; }
   .step-title {
     font-size: 16px; font-weight: 700;
     color: var(--text); line-height: 1.4;
@@ -205,6 +210,7 @@
   .home-card .card-icon.blue  { background: #EBF3FF; }
   .home-card .card-icon.red   { background: #FBEAE8; }
   .home-card .card-icon.amber { background: #FBF0DC; }
+  .home-card .card-icon.teal  { background: #E3F5F3; }
   .home-card .card-text h2 { font-size: 18px; font-weight: 700; margin-bottom: 3px; color: var(--text); }
   .home-card .card-text p  { font-size: 13px; color: var(--text2); line-height: 1.4; }
   .home-card .card-arrow { margin-left: auto; color: var(--border); font-size: 20px; }
@@ -246,6 +252,70 @@
     background: white; padding: 12px 14px;
     border-radius: 10px; border: 1px solid var(--border);
   }
+
+  /* ── SAFETY: RISK CARD ─────────────────── */
+  .risk-card {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 10px; background: white; border-radius: 12px;
+    padding: 14px; margin-bottom: 10px; border: 1px solid var(--border);
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .risk-card .risk-name { font-size: 15px; font-weight: 700; }
+  .risk-level { font-size: 13px; font-weight: 700; padding: 4px 12px; border-radius: 20px; flex-shrink: 0; white-space: nowrap; }
+  .risk-level.high { background: #FBEAE8; color: var(--red); }
+  .risk-level.mid  { background: #FFF5E0; color: #8A6100; }
+
+  /* ── SAFETY: CHECKLIST ─────────────────── */
+  .chk-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: white; border-radius: 10px; padding: 12px 14px;
+    margin-bottom: 8px; border: 1px solid var(--border);
+  }
+  .chk-item input[type=checkbox] { width: 22px; height: 22px; flex-shrink: 0; margin-top: 1px; }
+  .chk-item label { font-size: 15px; line-height: 1.5; }
+
+  /* ── SAFETY: EMERGENCY ─────────────────── */
+  .em-btn {
+    display: block; width: 100%; text-align: left;
+    background: white; border: 1.5px solid var(--teal);
+    border-radius: 12px; padding: 14px; margin-bottom: 10px;
+    font-family: inherit; font-size: 15px; font-weight: 700; color: var(--teal);
+    cursor: pointer;
+  }
+  .em-btn:active { background: #E3F5F3; }
+  .em-detail { display: none; margin-top: -2px; margin-bottom: 12px; }
+  .em-detail.active { display: block; }
+
+  /* ── SAFETY: QUIZ ──────────────────────── */
+  .quiz-card { background: white; border-radius: 12px; padding: 14px; margin-bottom: 12px; border: 1px solid var(--border); }
+  .quiz-q { font-size: 15px; font-weight: 700; margin-bottom: 10px; line-height: 1.5; }
+  .quiz-opt {
+    display: block; width: 100%; text-align: left;
+    padding: 10px 12px; margin-top: 8px; border-radius: 8px;
+    border: 1.5px solid var(--border); background: var(--gray);
+    font-size: 15px; font-family: inherit; cursor: pointer;
+  }
+  .quiz-opt.ok { border-color: #27AE60; background: #EBF7EE; }
+  .quiz-opt.ng { border-color: #C0392B; background: #FBEAE8; }
+  .quiz-why { margin-top: 10px; font-size: 13.5px; color: var(--text2); line-height: 1.6; }
+
+  .sf-banner {
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 14px;
+    font-size: 14px; line-height: 1.6;
+  }
+  .sf-banner.ok   { background: #EBF7EE; border: 1.5px solid #27AE60; color: #1a5c2e; }
+  .sf-banner.wait { background: #F0F0EA; border: 1.5px solid var(--border); color: var(--text2); }
+  .sf-name-row { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .sf-name-row select {
+    flex: 1; padding: 10px 12px; font-size: 15px; border-radius: 8px;
+    border: 1.5px solid var(--border); font-family: inherit; background: white;
+  }
+  .sf-submit-btn {
+    display: block; width: 100%; padding: 14px; margin-top: 8px;
+    background: var(--teal); color: white; border: none; border-radius: 10px;
+    font-size: 16px; font-weight: 700; font-family: inherit; cursor: pointer;
+  }
+  .sf-submit-btn:disabled { background: var(--border); color: var(--text2); cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -290,6 +360,14 @@
         <div class="card-text">
           <h2>ジビエ弁当づくり</h2>
           <p>学校・団体弁当の仕込みタイムライン・ごはんの計算・メニュー</p>
+        </div>
+        <div class="card-arrow">›</div>
+      </button>
+      <button class="home-card" onclick="showScreen('safety')">
+        <div class="card-icon teal">🕷️</div>
+        <div class="card-text">
+          <h2>安全・衛生（マダニ対策）</h2>
+          <p>捕獲・搬入・解体・里山作業で知っておきたいこと（約5分）</p>
         </div>
         <div class="card-arrow">›</div>
       </button>
@@ -1156,6 +1234,125 @@
   </div><!-- /content -->
 </div><!-- /bento -->
 
+<!-- ══════════════════════════════════════
+     SAFETY SCREEN（安全・衛生：マダニ対策）
+══════════════════════════════════════ -->
+<div id="safety" class="screen">
+  <div class="app-header teal">
+    <div class="header-inner">
+      <button class="back-btn" onclick="showScreen('home')">‹ ホーム</button>
+      <span class="header-title">安全・衛生</span>
+    </div>
+    <div class="header-sub">🕷 マダニ対策　捕獲・搬入・解体・里山作業で知っておきたいこと（約5分）</div>
+  </div>
+  <div class="tab-bar teal" id="safetyTabs">
+    <button class="tab-btn active" onclick="showTab('safety',0)">教材</button>
+    <button class="tab-btn" onclick="showTab('safety',1)">今日のチェック</button>
+    <button class="tab-btn" onclick="showTab('safety',2)">見つけたら</button>
+    <button class="tab-btn" onclick="showTab('safety',3)">理解チェック</button>
+  </div>
+  <div class="content">
+
+    <!-- TAB 0: 教材 -->
+    <div class="tab-panel active" id="safety-0">
+      <div class="page-intro">今回はマダニ対策です。今後、E型肝炎・SFTS・レプトスピラ症など他のテーマも同じ形式で追加していきます。</div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num teal">1</div><div class="step-title">マダニはどこにいる？</div></div>
+        <div class="step-body">
+          <div class="step-line">草地・藪・林縁・けもの道など、屋外のいたるところにいます。</div>
+          <div class="step-line warn"><span class="icon">!</span><span>山の中だけではありません。<strong>搬入されたイノシシ・シカの体表</strong>にもマダニが付いていることがあり、受入・解体作業でも接触することがあります。</span></div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num teal">2</div><div class="step-title">なぜ注意するの？</div></div>
+        <div class="step-body">
+          <div class="step-line"><span>代表的な病気は<strong>SFTS（重症熱性血小板減少症候群）</strong>や<strong>日本紅斑熱</strong>です。</span></div>
+          <div class="step-line sub">「マダニに刺された＝感染した」ではありません。刺されても感染しないことがほとんどです。必要以上に怖がる必要はありませんが、正しい対策と早期発見が大切です。</div>
+        </div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-header"><div class="step-num teal">3</div><div class="step-title">マダニはどうやって吸血する？</div></div>
+        <div class="step-body">
+          <div class="step-line">① 体表に付く → ② 皮膚に固定する → ③ 数日かけてゆっくり吸血する、という流れです。</div>
+          <div class="step-line sub">固定される前なら払い落とせます。専門的な仕組みより「早く気づくこと」が現場でいちばん重要です。</div>
+        </div>
+      </div>
+
+      <div class="sec-head" style="margin-top:18px">仕事別リスク（目安）</div>
+      <div class="page-intro" style="margin-bottom:12px">「高・中」は科学的な定量評価ではなく、作業上の目安です。</div>
+      <div class="risk-card"><div class="risk-name">捕獲・回収</div><div class="risk-level high">高</div></div>
+      <div class="risk-card"><div class="risk-name">個体搬入</div><div class="risk-level mid">中〜高</div></div>
+      <div class="risk-card"><div class="risk-name">解体</div><div class="risk-level mid">中</div></div>
+      <div class="risk-card"><div class="risk-name">里山・草刈り作業</div><div class="risk-level high">高</div></div>
+
+      <div class="info-box tip" style="margin-top:16px">
+        <div class="info-label">📚 参考情報</div>
+        令和8年度 野生獣衛生対策促進事業「マダニとその対策について」（第1回地域衛生技術連絡協議会）を基に、館山ジビエセンター向けに要約・再構成しました。感染症の情報は厚生労働省・国立健康危機管理研究機構（JIHS）・千葉県の公的情報とあわせてご確認ください。
+      </div>
+    </div>
+
+    <!-- TAB 1: 今日のチェック -->
+    <div class="tab-panel" id="safety-1">
+      <div class="page-intro">今日のマダニ対策です。<strong>任意</strong>です（勤怠の入力に必須ではありません）。チェックは端末に保存され、日付が変わるとリセットされます。</div>
+
+      <div class="sec-head">作業前</div>
+      <div id="sfChkBefore"></div>
+      <div class="sec-head" style="margin-top:14px">作業中</div>
+      <div id="sfChkDuring"></div>
+      <div class="sec-head" style="margin-top:14px">作業後</div>
+      <div id="sfChkAfter"></div>
+    </div>
+
+    <!-- TAB 2: 見つけたら -->
+    <div class="tab-panel" id="safety-2">
+      <div class="info-box warn">
+        <div class="info-label">⚠ この画面は診断を行うものではありません</div>
+        症状がある場合や判断に迷う場合は医療機関へ相談してください。
+      </div>
+
+      <button type="button" class="em-btn" onclick="sfToggleEm(0)">🩹 まだ皮膚に付いている（吸着中）</button>
+      <div class="em-detail" id="sfEm0">
+        <div class="info-box warn">
+          無理に引き抜かないでください。マダニの一部が皮膚に残ると化膿することがあります。医療機関（皮膚科・外科など）への相談を検討してください。
+        </div>
+      </div>
+
+      <button type="button" class="em-btn" onclick="sfToggleEm(1)">✅ すでに取れた・取った</button>
+      <div class="em-detail" id="sfEm1">
+        <div class="info-box tip">
+          いつ・どこで付いたか（場所・日時）をメモしておいてください。可能であれば、マダニ本体や刺された場所の写真を残しておくと、あとで受診する際に役立ちます。
+        </div>
+      </div>
+
+      <div class="info-box warn" style="margin-top:4px">
+        <div class="info-label">🌡 その後、発熱など体調の変化があったら</div>
+        早めに医療機関を受診し、「野生動物を扱う仕事をしている」「マダニに刺された可能性がある」ことを必ず伝えてください。
+      </div>
+    </div>
+
+    <!-- TAB 3: 理解チェック -->
+    <div class="tab-panel" id="safety-3">
+      <div id="sfNameGate">
+        <div class="page-intro">受講記録を残すため、まずお名前を選んでください。</div>
+        <div class="sf-name-row">
+          <select id="sfStaffName" onchange="sfOnNameChange()"><option value="">選択してください</option></select>
+        </div>
+        <div id="sfMyStatus"></div>
+      </div>
+
+      <div id="sfQuizWrap" style="display:none">
+        <div id="sfQuizList"></div>
+        <button type="button" class="sf-submit-btn" id="sfSubmitBtn" disabled onclick="sfSubmitCompletion()">内容を確認しました（受講完了を記録）</button>
+        <div id="sfSubmitMsg" style="margin-top:10px;font-size:13.5px;"></div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /safety -->
+
 <script>
 // ── Screen navigation ──────────────────────
 function showScreen(id) {
@@ -1176,6 +1373,172 @@ function showTab(screen, idx) {
   });
   content.scrollTo(0, 0);
 }
+
+// ── 安全・衛生（マダニ対策）────────────────
+const SF_SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
+const SF_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+const SF_MODULE_SLUG = 'tick-safety';
+const SF_MODULE_VERSION = '1.0';
+
+async function sfSb(path, opts = {}) {
+  const res = await fetch(`${SF_SB_URL}/rest/v1/${path}`, {
+    method: opts.method || 'GET',
+    headers: { 'apikey': SF_SB_KEY, 'Authorization': `Bearer ${SF_SB_KEY}`, 'Content-Type': 'application/json' },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const t = await res.text();
+  return t ? JSON.parse(t) : null;
+}
+function sfEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ── 今日のチェック（端末内・任意・日付が変わるとリセット）──
+const SF_CHK = {
+  before: ['長袖・長ズボンを着用した', '首元・袖口・裾のすき間を確認した', '忌避剤を使用した'],
+  during: ['草むら・藪に入ったあと衣服を確認した', '野生動物の体表を確認してから作業した', '素手で不用意にマダニに触らない'],
+  after:  ['作業着を確認した', '身体（脇・足の付け根・膝裏・頭部など見えにくい場所）を確認した', '可能なら入浴時に確認した'],
+};
+function sfTodayKey(group) {
+  const d = new Date();
+  const ymd = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  return `tg_safety_chk_${group}_${ymd}`;
+}
+function sfRenderChecklist() {
+  ['before','during','after'].forEach(group => {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(sfTodayKey(group)) || '{}'); } catch (e) {}
+    const el = document.getElementById('sfChk' + group.charAt(0).toUpperCase() + group.slice(1));
+    el.innerHTML = SF_CHK[group].map((label, i) => `
+      <div class="chk-item">
+        <input type="checkbox" id="sfc-${group}-${i}" ${saved[i] ? 'checked' : ''}
+          onchange="sfChkToggle('${group}',${i},this.checked)">
+        <label for="sfc-${group}-${i}">${sfEsc(label)}</label>
+      </div>`).join('');
+  });
+}
+function sfChkToggle(group, i, checked) {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(sfTodayKey(group)) || '{}'); } catch (e) {}
+  saved[i] = checked;
+  try { localStorage.setItem(sfTodayKey(group), JSON.stringify(saved)); } catch (e) {}
+}
+
+// ── 見つけたら（緊急導線）──────────────────
+function sfToggleEm(i) {
+  const el = document.getElementById('sfEm' + i);
+  el.classList.toggle('active');
+}
+
+// ── 理解チェック（クイズ）──────────────────
+const SF_QUIZ = [
+  { q: 'マダニに刺されたら、必ず感染する？',
+    a: ['刺された＝感染ではない。体調に変化があれば医療機関へ相談する', '刺されたら必ずSFTSになる', '何もしなくてよい'], c: 0,
+    why: '「マダニに刺された＝感染した」ではありません。ほとんどの場合は感染しませんが、原因不明の発熱など体調の変化があれば早めに医療機関へ相談してください。' },
+  { q: 'マダニと接触する可能性があるのは、山の中だけ？',
+    a: ['違う。搬入されたイノシシ・シカの体表からも接触しうる', 'はい、山の中だけ', '解体室では絶対に接触しない'], c: 0,
+    why: '草地・藪・林縁だけでなく、搬入された個体の体表にもマダニが付いていることがあり、受入・解体作業でも接触する可能性があります。' },
+  { q: 'マダニがまだ皮膚に付いている（吸着中）ときは？',
+    a: ['無理に引き抜かず、医療機関への相談を検討する', '自分で強く引っ張って取る', '放っておけばそのうち取れる'], c: 0,
+    why: '無理に引き抜くと一部が皮膚に残り化膿することがあります。医療機関（皮膚科・外科など）への相談を検討してください。' },
+  { q: '作業後にすべきことは？',
+    a: ['作業着と身体（脇・足の付け根・膝裏・頭部など）を確認する', '確認せずすぐ帰ってよい', '衣服だけ確認すればよい'], c: 0,
+    why: '作業着だけでなく、見えにくい場所（脇・足の付け根・膝裏・頭部など）まで身体を確認することが早期発見につながります。' },
+];
+let sfAnswered = {};
+function sfRenderQuiz() {
+  document.getElementById('sfQuizList').innerHTML = SF_QUIZ.map((item, i) => `
+    <div class="quiz-card">
+      <div class="quiz-q">${i+1}. ${sfEsc(item.q)}</div>
+      <div id="sfOpt${i}">
+        ${item.a.map((t, j) => `<button type="button" class="quiz-opt" onclick="sfAnswer(${i},${j})">${sfEsc(t)}</button>`).join('')}
+      </div>
+      <div id="sfWhy${i}"></div>
+    </div>`).join('');
+}
+function sfAnswer(i, j) {
+  if (sfAnswered[i] != null) return;
+  sfAnswered[i] = j;
+  sfPaint(i);
+  sfPaintSubmitState();
+}
+function sfPaint(i) {
+  const item = SF_QUIZ[i], chosen = sfAnswered[i];
+  if (chosen == null) return;
+  [...document.querySelectorAll(`#sfOpt${i} button`)].forEach((b, j) => {
+    if (j === item.c) b.classList.add('ok');
+    else if (j === chosen) b.classList.add('ng');
+    b.disabled = true;
+  });
+  document.getElementById('sfWhy' + i).innerHTML =
+    `<div class="quiz-why">${chosen === item.c ? '◯ ' : '✕ '}${sfEsc(item.why)}</div>`;
+}
+function sfPaintSubmitState() {
+  const done = Object.keys(sfAnswered).length >= SF_QUIZ.length;
+  document.getElementById('sfSubmitBtn').disabled = !done;
+}
+
+// ── 氏名選択・受講記録の送信 ────────────────
+async function sfLoadStaffList() {
+  const sel = document.getElementById('sfStaffName');
+  try {
+    const rows = await sfSb('staff?select=id,name&deleted_at=is.null&is_active=eq.true&order=name.asc');
+    (rows || []).forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.name; opt.textContent = r.name;
+      sel.appendChild(opt);
+    });
+    let savedName = '';
+    try { savedName = localStorage.getItem('tg_safety_staff_name') || ''; } catch (e) {}
+    if (savedName) { sel.value = savedName; sfOnNameChange(); }
+  } catch (e) {
+    document.getElementById('sfMyStatus').innerHTML =
+      `<div class="sf-banner wait">スタッフ一覧を読み込めませんでした（通信状態をご確認ください）。名前は下の一覧から選べます。</div>`;
+  }
+}
+async function sfOnNameChange() {
+  const name = document.getElementById('sfStaffName').value;
+  const statusEl = document.getElementById('sfMyStatus');
+  const quizWrap = document.getElementById('sfQuizWrap');
+  if (!name) { quizWrap.style.display = 'none'; statusEl.innerHTML = ''; return; }
+  try { localStorage.setItem('tg_safety_staff_name', name); } catch (e) {}
+  quizWrap.style.display = 'block';
+  statusEl.innerHTML = `<div class="sf-banner wait">受講状況を確認しています…</div>`;
+  try {
+    const res = await sfSb(`rpc/training_my_completions`, { method: 'POST', body: { p_staff_name: name } });
+    const mine = (res || []).filter(r => r.module_slug === SF_MODULE_SLUG);
+    if (mine.length) {
+      statusEl.innerHTML = `<div class="sf-banner ok">✅ 受講済み：マダニ対策 v${sfEsc(mine[0].module_version)}（${sfEsc(mine[0].completed_at)}）</div>`;
+    } else {
+      statusEl.innerHTML = `<div class="sf-banner wait">まだ受講記録がありません。下のクイズに全問回答すると記録できます。</div>`;
+    }
+  } catch (e) {
+    statusEl.innerHTML = `<div class="sf-banner wait">受講状況を確認できませんでした（通信状態をご確認ください）。回答は可能です。</div>`;
+  }
+}
+async function sfSubmitCompletion() {
+  const name = document.getElementById('sfStaffName').value;
+  const msgEl = document.getElementById('sfSubmitMsg');
+  if (!name) { msgEl.textContent = '名前を選んでください。'; return; }
+  const score = Object.keys(sfAnswered).filter(i => sfAnswered[i] === SF_QUIZ[i].c).length;
+  const btn = document.getElementById('sfSubmitBtn');
+  btn.disabled = true;
+  msgEl.textContent = '送信しています…';
+  try {
+    await sfSb('rpc/training_submit_completion', { method: 'POST', body: {
+      p_module_slug: SF_MODULE_SLUG, p_module_version: SF_MODULE_VERSION,
+      p_staff_name: name, p_score: score, p_total_questions: SF_QUIZ.length,
+    }});
+    msgEl.innerHTML = `<span style="color:#1a5c2e;font-weight:700;">✅ 受講記録を保存しました（${score}/${SF_QUIZ.length}問正解）</span>`;
+    sfOnNameChange();
+  } catch (e) {
+    btn.disabled = false;
+    msgEl.innerHTML = `<span style="color:#A5372C;font-weight:700;">⚠ 保存できませんでした。通信状態を確認してもう一度お試しください。</span>`;
+  }
+}
+
+sfRenderChecklist();
+sfRenderQuiz();
+sfLoadStaffList();
 
 // ── PWA: Service Worker ────────────────────
 if ('serviceWorker' in navigator) {
