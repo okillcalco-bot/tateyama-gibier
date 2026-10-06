@@ -3329,7 +3329,7 @@ async function baseOrderShip(key) {
     // ローカル注文記録
     const created = await sb('POST', 'orders', {
       order_code: 'BASE-' + key, customer_name: buyer + '（BASE）',
-      order_date: new Date((od.ordered || Date.now() / 1000) * 1000).toISOString().slice(0, 10),
+      order_date: ymdLocal(new Date((od.ordered || Date.now() / 1000) * 1000)),
       status: '発送済', channel: 'BASEネットショップ', total_amount: parseInt(od.total) || null,
       notes: trackNo ? '送り状番号: ' + trackNo : null
     });
@@ -3359,7 +3359,7 @@ async function baseOrderShip(key) {
         try { await sb('POST', 'rpc/base_dispatch', { p_order_item_id: String(it.order_item_id), p_tracking: trackNo || null }); } catch (e) {}
       }
     }
-    const baseShipBody = { order_id: orderId, shipment_date: new Date().toISOString().slice(0, 10), status: '出荷済', notes: 'BASE注文 ' + key + (trackNo ? ' / 送り状番号: ' + trackNo : '') };
+    const baseShipBody = { order_id: orderId, shipment_date: ymdLocal(new Date()), status: '出荷済', notes: 'BASE注文 ' + key + (trackNo ? ' / 送り状番号: ' + trackNo : '') };
     // 運送会社・サイズ・クール・送料（請求書・納品書の送料欄の元になる）
     const _bc = document.getElementById('base-carrier-' + key), _bs = document.getElementById('base-size-' + key);
     const _bl = document.getElementById('base-cool-' + key), _bf = document.getElementById('base-freight-' + key);
@@ -4387,7 +4387,7 @@ async function recordDirectShipment(items, custName, opts) {
   try { pmList = await sb('GET', 'price_master', null, '?select=*'); } catch(e) {}
 
   const now = new Date();
-  const orderCode = 'DIR-' + now.toISOString().slice(0,10).replace(/-/g,'') + '-' + now.toTimeString().slice(0,8).replace(/:/g,'');
+  const orderCode = 'DIR-' + ymdLocal(now).replace(/-/g,'') + '-' + now.toTimeString().slice(0,8).replace(/:/g,'');
 
   const priced = items.map(i => {
     const weight = parseFloat(i.weight) || null;
@@ -4402,8 +4402,8 @@ async function recordDirectShipment(items, custName, opts) {
     order_code: orderCode,
     customer_name: custName,
     delivery_name: custName,
-    order_date: now.toISOString().slice(0,10),
-    delivery_date: now.toISOString().slice(0,10),
+    order_date: ymdLocal(now),
+    delivery_date: ymdLocal(now),
     status: '発送済',
     channel: '直販（注文なし）',
     total_amount: totalAmount,
@@ -4430,7 +4430,7 @@ async function recordDirectShipment(items, custName, opts) {
     pick_method: i._via || null
   })));
 
-  const shipBody = { order_id: orderId, shipment_date: now.toISOString().slice(0,10), status: '出荷済',
+  const shipBody = { order_id: orderId, shipment_date: ymdLocal(now), status: '出荷済',
     notes: `直販（注文なし） ${custName}${opts.operator ? ' 担当:'+opts.operator : ''}` };
   if (customerId) shipBody.customer_id = customerId;
   if (opts.delivery) Object.assign(shipBody, opts.delivery);
@@ -5358,7 +5358,7 @@ async function shipOrderConfirmed(orderId, dropdownAssignments) {
       await sb('POST', 'shipments', [{
         order_id: orderId,
         customer_id: order[0].customer_id,
-        shipment_date: new Date().toISOString().slice(0, 10),
+        shipment_date: ymdLocal(new Date()),
         delivery_date: order[0].delivery_date,
         status: '出荷済',
         carrier: dopts.carrier,
@@ -5441,7 +5441,7 @@ async function punchRefresh() {
   const panel = document.getElementById('punch-panel');
   panel.style.display = 'block';
   document.getElementById('punch-who').textContent = `👤 ${punchSelected.name} さん — ${new Date().toLocaleDateString('ja-JP')}`;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = ymdLocal(new Date());
   try {
     const rows = await sb('GET', 'attendance', null, `?staff_id=eq.${punchSelected.id}&work_date=eq.${today}&select=*`);
     punchTodayRec = rows[0] || null;
@@ -5490,7 +5490,7 @@ async function punchIn() {
     const hv = punchHealthValue();
     await sb('POST', 'attendance', {
       staff_id: punchSelected.id, staff_name: punchSelected.name,
-      work_date: new Date().toISOString().slice(0, 10),
+      work_date: ymdLocal(new Date()),
       clock_in: t, break_minutes: 0, health_in: hv,
     });
     if (!punchHealthOK) toast('体調異常が記録されました。責任者に必ず報告してください。', 'error');
@@ -10990,7 +10990,7 @@ async function loadStaffPanel() {
         <td><button class="btn btn-sm" onclick="staffEdit('${s.id}')">編集</button></td>
       </tr>`).join('');
     }
-    if (!document.getElementById('att-date').value) document.getElementById('att-date').value = new Date().toISOString().slice(0, 10);
+    if (!document.getElementById('att-date').value) document.getElementById('att-date').value = ymdLocal(new Date());
     loadAttendance();
     loadAttMissing();
     loadAttEditLog();
@@ -11115,7 +11115,7 @@ async function loadAttMissing() {
   const body = document.getElementById('att-miss-body');
   const cnt = document.getElementById('att-miss-count');
   if (!body) return;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = ymdLocal(new Date());
   const from = new Date(); from.setDate(from.getDate() - 60);
   try {
     const rows = await sb('GET', 'attendance', null,
@@ -11255,7 +11255,7 @@ function pestOpenNew() {
   pestEditId = null;
   document.getElementById('pestModalTitle').textContent = '駆除の記録';
   PEST_FIELDS.forEach(f => document.getElementById('pst-f-' + f).value = '');
-  document.getElementById('pst-f-done_on').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('pst-f-done_on').value = ymdLocal(new Date());
   document.getElementById('pst-f-target').value = 'ねずみ・衛生害虫';
   document.getElementById('pst-f-area').value = '施設全体';
   document.getElementById('pestModal').style.display = 'block';
@@ -11340,7 +11340,7 @@ async function loadCleaning() {
   const grid = document.getElementById('clean-rooms');
   const mEl = document.getElementById('clean-month');
   if (mEl && !mEl.value) mEl.value = new Date().toISOString().slice(0, 7);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = ymdLocal(new Date());
   try {
     cleanTodayLogs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${today}T00:00:00&select=*&order=cleaned_at.desc`);
   } catch (err) {
@@ -11473,7 +11473,7 @@ async function wasteChecklistSave() {
   const staff = document.getElementById('wc-staff').value;
   if (!staff) { toast('搬出担当者を選択してください', 'error'); return; }
   const payload = {
-    checked_on: document.getElementById('wc-date').value || new Date().toISOString().slice(0, 10),
+    checked_on: document.getElementById('wc-date').value || ymdLocal(new Date()),
     departure_time: document.getElementById('wc-time').value || null,
     staff_name: staff,
     // 車両は運搬車（産廃の車両登録）と紐づいているので、ここでは記録しない（2026-09-12 現場判断）
@@ -11714,7 +11714,7 @@ async function equipSave() {
   });
   if (!payload.name) { toast('備品名は必須です', 'error'); return; }
   if (!payload.status) payload.status = '使用中';
-  if ((payload.status === '廃棄' || payload.status === '返却済み') && !payload.disposed_on) payload.disposed_on = new Date().toISOString().slice(0, 10);
+  if ((payload.status === '廃棄' || payload.status === '返却済み') && !payload.disposed_on) payload.disposed_on = ymdLocal(new Date());
   const dupNo = payload.mgmt_no != null && equipmentData.find(e => e.mgmt_no === payload.mgmt_no && String(e.id) !== String(equipmentEditId));
   if (dupNo) { toast(`管理番号 ${payload.mgmt_no} は「${dupNo.name}」で使われています`, 'error'); return; }
   payload.updated_at = new Date().toISOString();
@@ -11777,7 +11777,7 @@ async function exportCSV(table, label) {
     const csv = '﻿' + cols.join(',') + '\n' + rows.map(r => cols.map(c => escCsv(r[c])).join(',')).join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    a.download = `${table}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `${table}_${ymdLocal(new Date())}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
     toast(`${label} ${rows.length}件をCSV出力しました`);
@@ -12853,7 +12853,7 @@ function outletMoveOpen(type) {
     : type === '訂正' ? '増減（商品ごと・＋で在庫を戻す／−でさらに減らす）'
     : '売れた数量（商品ごと）';
   document.getElementById('om-outlet').innerHTML = outletList.map(o => `<option>${esc2(o.name)}</option>`).join('');
-  document.getElementById('om-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('om-date').value = ymdLocal(new Date());
   const staffSel = document.getElementById('om-staff');
   staffSel.innerHTML = '<option value="">選択...</option>';
   sb('GET', 'staff', null, '?is_active=eq.true&deleted_at=is.null&select=name&order=name.asc')
@@ -13754,7 +13754,7 @@ async function cityCapOpen() {
   cityCapSet('species', 'イノシシ');
   cityCapSet('disposal_method', '販売（館山ジビエセンター）');
   cityCapSet('finishing_method', '刺殺（竹槍・ナイフなど）');
-  cityCapSet('capture_date', new Date().toISOString().slice(0, 10));
+  cityCapSet('capture_date', ymdLocal(new Date()));
   document.getElementById('cc-search').value = '';
   document.getElementById('cc-coord-paste').value = '';
   ['cc-photo-before', 'cc-photo-after', 'cc-photo-extra'].forEach(id => { document.getElementById(id).value = ''; });
@@ -14547,7 +14547,7 @@ async function radSave() {
 }
 async function loadRadiation() {
   const dEl = document.getElementById('rad-date');
-  if (dEl && !dEl.value) dEl.value = new Date().toISOString().slice(0, 10);
+  if (dEl && !dEl.value) dEl.value = ymdLocal(new Date());
   const cm = document.getElementById('rad-copy-month');
   if (cm && !cm.value) cm.value = new Date().toISOString().slice(0, 7);
   radSetResult(radResult);
@@ -15370,7 +15370,7 @@ async function loadTodayTodos() {
     }
   } catch (e) {}
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = ymdLocal(new Date());
     const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${today}T00:00:00&select=room`);
     const done = new Set(logs.map(l => l.room));
     add(CLEAN_ROOMS.length - done.size, '未清掃のエリア（本日）', 'cleaning', true);
@@ -15579,7 +15579,7 @@ function waybillOpenWith(v) {
   document.getElementById('wb-name').value = v.name || '';
   document.getElementById('wb-honorific').value = v.honorific || '様';
   document.getElementById('wb-code').value = v.code || '';
-  document.getElementById('wb-ship-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('wb-ship-date').value = ymdLocal(new Date());
   document.getElementById('wb-delivery-date').value = v.deliveryDate || '';
   document.getElementById('wb-time').value = v.time || '';
   document.getElementById('wb-sender').innerHTML = `ご依頼主（自動）: ${esc2(orgInfo.org_name)}　〒${esc2(orgInfo.org_postal)}　${esc2(orgInfo.org_address)}　TEL ${esc2(orgInfo.org_phone)}`;
@@ -15748,7 +15748,7 @@ async function refreshNavBadges() {
   } catch (e) {}
   // 本日の清掃実施部屋数
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = ymdLocal(new Date());
     const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${today}T00:00:00&select=room`);
     const done = new Set(logs.map(l => l.room)).size;
     setBadge('nav-badge-cleaning', CLEAN_ROOMS.length - done, true);
