@@ -4053,12 +4053,20 @@ async function invBatchSearch(){
     const orders=await sb('GET','orders','',`?status=in.(${INV_BILLABLE.join(',')})&order_date=gte.${r.from}&order_date=lte.${r.to}&select=*,order_items(*),shipments(freight,size_code,is_cool)&order=delivery_date.asc,order_date.asc`);
     // 請求済み（取消されていない請求書に紐付いている注文）は除く
     const billed=new Set();
+    let issuedDocs=[];
     if(orders.length){
       const links=await invChunkedGet('document_orders','order_id',orders.map(o=>o.id),'order_id,document_id');
       if(links.length){
-        const docs=await invChunkedGet('documents','id',[...new Set(links.map(l=>l.document_id))],'id,status,doc_type');
-        const alive=new Set(docs.filter(d=>d.status!=='取消'&&(d.doc_type||'請求書')==='請求書').map(d=>d.id));
+        const docs=await invChunkedGet('documents','id',[...new Set(links.map(l=>l.document_id))],'id,status,doc_type,doc_number,customer_id,total_amount,snapshot');
+        const aliveDocs=docs.filter(d=>d.status!=='取消'&&(d.doc_type||'請求書')==='請求書');
+        const alive=new Set(aliveDocs.map(d=>d.id));
         links.forEach(l=>{ if(alive.has(l.document_id)) billed.add(l.order_id); });
+        // この期間の発行済みの請求書は「発行した請求書」に出し、何度でもPDF・印刷できるようにする（2026-10-06）。
+        // 以前は発行した直後しか出ず、集計し直すと選べなくなっていた。番号はそのまま（発行し直さない＝二重請求にしない）
+        issuedDocs=aliveDocs.filter(d=>d.snapshot&&Array.isArray(d.snapshot.lines)).map(d=>{
+          const c=allCustomers.find(x=>x.id===d.customer_id);
+          return {p:d.snapshot,number:d.doc_number,method:(c&&c.billing_method)||'',total:Number(d.total_amount)||invCalcLines(d.snapshot.lines).total};
+        });
       }
     }
     // BASE（ネットショップ）の注文はその場で支払い済みのため請求書の対象外
@@ -4092,6 +4100,7 @@ async function invBatchSearch(){
       (baseCount?` ／ BASEの注文 ${baseCount}件は対象外（支払い済み）`:'')+
       (noCust.length?`<div style="color:var(--red);margin-top:4px">⚠ 顧客につながっていない注文が ${noCust.length}件あり、集計に入っていません（押すと顧客を選べます）: ${noCust.map((o,k)=>`<button type="button" class="inv-fix-btn" onclick="invFixCustomer(${k})">${esc(o.order_code)}（${esc(o.customer_name||'名前なし')}）</button>`).join(' ')}</div>`:'');
     invBatchRender();
+    invBatchIssuedSet(issuedDocs);
   }catch(e){ res.innerHTML=`<span style="color:var(--red)">集計できませんでした: ${esc(String(e.message||e))}</span>`; }
 }
 function invBatchRender(){
@@ -4239,7 +4248,7 @@ function invBatchIssuedRender(){
   box.style.display='';
   box.innerHTML=`<div style="border:1px solid #3d7a34;border-radius:var(--radius);padding:10px;background:rgba(106,158,90,.08)">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px">
-      <strong style="font-size:.85rem">✅ 発行した請求書 ${invBatchIssued.length}件（1社ずつPDFにできます）</strong>
+      <strong style="font-size:.85rem">✅ ${esc(invBatchRange().label)}の発行済み請求書 ${invBatchIssued.length}件（何度でもPDF・印刷できます）</strong>
       <span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-gold btn-sm" id="invIssuedZipBtn" onclick="invBatchIssuedZip()" title="1社1ファイルのPDFをまとめてZIPでダウンロード">📦 全員分を個別PDFで（ZIP）</button><button class="btn btn-outline btn-sm" onclick="invBatchIssuedPrintAll()">🖨 全員分を1つに</button><button class="btn btn-outline btn-sm" onclick="invBatchIssued=[];invBatchIssuedRender()">閉じる</button></span>
     </div>
     ${invBatchIssued.map((x,k)=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 2px;border-top:1px solid var(--border);font-size:.8rem">

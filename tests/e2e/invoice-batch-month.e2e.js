@@ -78,13 +78,14 @@ const invOthers = (h, me) => !['A食堂', 'B商店', 'トレタテ', 'ノブレ�
     }
     if (/\/document_orders\b/.test(url)) {
       if (m === 'POST') { docOrders.push(...body()); return J([], 201); }
-      return J([{ order_id: 'o5', document_id: 'd-old' }]);
+      return J([{ order_id: 'o5', document_id: 'd-old' }, ...docOrders]);
     }
     if (/\/document_items\b/.test(url)) { if (m === 'POST') docItems.push(...body()); return J([], 201); }
     if (/\/documents\b/.test(url)) {
       if (m === 'POST') { const h = body()[0]; const row = { id: 'd' + (docs.length + 1), ...h }; docs.push(row); return J([row], 201); }
       if (/doc_number=like/.test(url)) return J(docs.map(d => ({ doc_number: d.doc_number })));
-      if (/id=in\.\(d-old\)/.test(url)) return J([{ id: 'd-old', status: '発行済', doc_type: '請求書' }]);
+      const ids = (url.match(/id=in\.\(([^)]*)\)/) || [])[1];
+      if (ids) return J([{ id: 'd-old', status: '発行済', doc_type: '請求書', doc_number: 'INV-202609-099', customer_id: 'c-a', total_amount: 4104, snapshot: null }, ...docs].filter(d => ids.split(',').includes(d.id)));
       return J([]);
     }
     return J([]);
@@ -207,7 +208,7 @@ const invOthers = (h, me) => !['A食堂', 'B商店', 'トレタテ', 'ノブレ�
   // 11. 1社ずつPDF
   const issued = await page.$eval('#invBatchIssued', el => el.innerText.replace(/\s+/g, ' '));
   const nBtn = await page.$$eval('#invBatchIssued .inv-issued-pdf', bs => bs.length);
-  ck('発行後に「発行した請求書」の一覧が出て、1社ずつ「📄 PDF」ボタンがある', /発行した請求書 4件/.test(issued) && nBtn === 4 && /INV-202610-001/.test(issued), issued.slice(0, 160));
+  ck('発行後に「発行した請求書」の一覧が出て、1社ずつ「📄 PDF」ボタンがある', /2026年9月分の発行済み請求書 4件/.test(issued) && nBtn === 4 && /INV-202610-001/.test(issued), issued.slice(0, 160));
   await page.evaluate(() => { window.__one = []; window.open = () => { const w = { document: { _h: '', open() {}, write(h) { this._h += h; }, close() {} }, close() {} }; window.__one.push(w); return w; }; });
   const firstName = await page.evaluate(() => invBatchIssued[0].p.name);
   await page.evaluate(() => document.querySelector('#invBatchIssued .inv-issued-pdf').click());
@@ -219,6 +220,14 @@ const invOthers = (h, me) => !['A食堂', 'B商店', 'トレタテ', 'ノブレ�
   const op = await ctx.newPage(); await op.setContent(one, { waitUntil: 'load' });
   const onePdf = (await op.pdf({ format: 'A4', preferCSSPageSize: true })).toString('latin1');
   ck('1社分のPDFはA4 1ページ', (onePdf.match(/\/Type\s*\/Page[^s]/g) || []).length === 1, '');
+  // 13. 集計し直しても、発行済みの請求書は何度でもPDF・印刷できる（発行し直さない）
+  await page.evaluate(() => invBatchSearch()); await page.waitForTimeout(400);
+  const again = await page.$eval('#invBatchIssued', el => el.innerText.replace(/\s+/g, ' '));
+  const regroups = await page.evaluate(() => invBatchGroups.map(g => g.cust.name));
+  ck('集計し直しても「発行済み請求書」の一覧が残り、PDFボタンが押せる', /2026年9月分の発行済み請求書 4件/.test(again) && (await page.$$eval('#invBatchIssued .inv-issued-pdf', b => b.length)) === 4, again.slice(0, 120));
+  ck('発行済みの注文は選ぶ一覧には出ない（二重に発行しない）', !regroups.includes('A食堂') && !regroups.includes('ノブレスオブリージュ'), JSON.stringify(regroups));
+  ck('発行し直さない（書類は4枚のまま）', docs.length === 4, docs.length);
+
   // 12. 全員分を個別PDFで（ZIP）
   const hasLibs = require('fs').existsSync(path.join(LIBDIR, 'jszip/dist/jszip.min.js'));
   if (hasLibs) {
