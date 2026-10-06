@@ -16,6 +16,7 @@
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
 
+const invOthers = (h, me) => !['A食堂', 'B商店', 'トレタテ', 'ノブレスオブリージュ'].filter(n => n !== me).some(n => h.includes('<div class="name">' + n));
 (async () => {
   const browser = await chromium.launch({ executablePath: process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
   const ctx = await browser.newContext({ timezoneId: 'Asia/Tokyo' });
@@ -195,6 +196,21 @@ const path = require('path');
   const pdf = (await pp.pdf({ format: 'A4', preferCSSPageSize: true })).toString('latin1');
   const pdfPages = (pdf.match(/\/Type\s*\/Page[^s]/g) || []).length;
   ck('A4のPDFにすると4ページ（1請求先1ページ）', pdfPages === 4, pdfPages);
+  // 11. 1社ずつPDF
+  const issued = await page.$eval('#invBatchIssued', el => el.innerText.replace(/\s+/g, ' '));
+  const nBtn = await page.$$eval('#invBatchIssued .inv-issued-pdf', bs => bs.length);
+  ck('発行後に「発行した請求書」の一覧が出て、1社ずつ「📄 PDF」ボタンがある', /発行した請求書 4件/.test(issued) && nBtn === 4 && /INV-202610-001/.test(issued), issued.slice(0, 160));
+  await page.evaluate(() => { window.__one = []; window.open = () => { const w = { document: { _h: '', open() {}, write(h) { this._h += h; }, close() {} }, close() {} }; window.__one.push(w); return w; }; });
+  const firstName = await page.evaluate(() => invBatchIssued[0].p.name);
+  await page.evaluate(() => document.querySelector('#invBatchIssued .inv-issued-pdf').click());
+  const one = await page.evaluate(() => window.__one[0] ? window.__one[0].document._h : '');
+  const sheetsInOne = (one.match(/<div class="sheet">/g) || []).length;
+  const title = (one.match(/<title>([^<]*)<\/title>/) || [])[1] || '';
+  ck('「📄 PDF」で、その請求先1社だけの請求書が開く', sheetsInOne === 1 && one.includes(firstName) && invOthers(one, firstName), title);
+  ck('PDFのファイル名は「請求書_発行日_宛名_番号」', new RegExp('^請求書_20261006_' + firstName + '_INV-202610-00[1-4]$').test(title), title);
+  const op = await ctx.newPage(); await op.setContent(one, { waitUntil: 'load' });
+  const onePdf = (await op.pdf({ format: 'A4', preferCSSPageSize: true })).toString('latin1');
+  ck('1社分のPDFはA4 1ページ', (onePdf.match(/\/Type\s*\/Page[^s]/g) || []).length === 1, '');
   ck('ページエラーなし', errors.length === 0, errors.join(' / '));
 
   await browser.close();

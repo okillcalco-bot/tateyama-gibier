@@ -524,6 +524,7 @@ th,td{padding:8px 6px;font-size:.8rem}
               <button class="btn btn-outline" style="width:100%" onclick="invBatchSearch()">🔍 請求先ごとに集計</button>
             </div>
           </div>
+          <div id="invBatchIssued" style="display:none;margin-top:8px"></div>
           <div id="invBatchResult" style="margin-top:8px;font-size:.8rem;color:var(--text2)">期間を選んで「請求先ごとに集計」を押してください。</div>
           <div id="invBatchList" style="max-height:320px;overflow-y:auto;margin-top:6px"></div>
           <div id="invBatchActions" style="display:none;margin-top:8px;gap:8px;flex-wrap:wrap">
@@ -4223,6 +4224,41 @@ function invBatchLabels(){
     .zip{font-size:9.5pt;min-height:4.4mm} .adr{font-size:9.5pt} .adr.miss{color:#444} .nm{font-size:13pt;font-weight:700;margin-top:1.5mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}`;
   invOpenHtml(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>宛名ラベル_${esc(invBatchRange().label)}_${targets.length}件</title><style>${css}</style></head><body>${sheets.map(sh=>`<div class="sheet">${sh.map(cell).join('')}</div>`).join('')}<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script></body></html>`);
 }
+/* 発行した請求書を1社ずつPDFにする（2026-10-06）。
+   まとめた印刷画面とは別に、請求先ごとのボタンで1枚だけを開く。ファイル名は「請求書_発行日_宛名_番号」。
+   送り方が「PDFで送る」の請求先を上に並べる。 */
+let invBatchIssued=[];
+function invBatchIssuedSet(done){
+  const order={pdf:0,'':1,paper:2,cash:3};
+  invBatchIssued=done.slice().sort((a,b)=>(order[a.method]??1)-(order[b.method]??1)||(a.p.name||'').localeCompare(b.p.name||'','ja'));
+  invBatchIssuedRender();
+}
+function invBatchIssuedRender(){
+  const box=document.getElementById('invBatchIssued'); if(!box) return;
+  if(!invBatchIssued.length){ box.style.display='none'; box.innerHTML=''; return; }
+  box.style.display='';
+  box.innerHTML=`<div style="border:1px solid #3d7a34;border-radius:var(--radius);padding:10px;background:rgba(106,158,90,.08)">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px">
+      <strong style="font-size:.85rem">✅ 発行した請求書 ${invBatchIssued.length}件（1社ずつPDFにできます）</strong>
+      <span style="display:flex;gap:6px"><button class="btn btn-outline btn-sm" onclick="invBatchIssuedPrintAll()">🖨 全員分を1つに</button><button class="btn btn-outline btn-sm" onclick="invBatchIssued=[];invBatchIssuedRender()">閉じる</button></span>
+    </div>
+    ${invBatchIssued.map((x,k)=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 2px;border-top:1px solid var(--border);font-size:.8rem">
+      <span style="flex:1;min-width:0"><strong>${esc(x.p.name||'')}</strong> <span style="color:var(--text2)">${esc(x.number||'')}</span>
+        <span class="inv-method-btn m-${x.method||'none'}" style="cursor:default">${INV_BILLING_LABEL[x.method||'']}</span></span>
+      <span style="font-weight:700">&yen;${Number(x.total||0).toLocaleString()}</span>
+      <button class="btn btn-gold btn-sm inv-issued-pdf" onclick="invBatchIssuedPdf(${k})">📄 PDF</button>
+    </div>`).join('')}
+    <div style="font-size:.72rem;color:var(--text2);margin-top:6px">「📄 PDF」で開いた画面の「印刷 / PDF保存」→ 送信先を「PDFに保存」。ファイル名は「請求書_発行日_宛名_番号」になります。</div>
+  </div>`;
+}
+function invBatchIssuedPdf(k){
+  const x=invBatchIssued[k]; if(!x) return;
+  invOpenHtml(invPrintHtml(x.p,x.number,{}));
+}
+function invBatchIssuedPrintAll(){
+  if(!invBatchIssued.length) return;
+  invOpenHtml(invPrintHtmlMulti(invBatchIssued,`請求書_${invBatchRange().label}_${invBatchIssued.length}件`));
+}
 function invBatchToggleAll(on){ invBatchGroups.forEach(g=>{g._use=on;}); invBatchRender(); }
 function invBatchPayload(g){
   const s=invoiceSettings, c=g.cust, r=invBatchRange();
@@ -4307,17 +4343,18 @@ async function invBatchIssue(){
   const done=[], failed=[];
   for(const g of chosen){
     const p=invBatchPayload(g);
-    try{ const r=await invIssuePayloadNow(p); done.push({p,number:r.number}); }
+    try{ const r=await invIssuePayloadNow(p); done.push({p,number:r.number,method:g.method||'',total:r.total}); }
     catch(e){ failed.push(`${g.cust.name}: ${String(e.message||e)}`); }
   }
   if(done.length){
     const html=invPrintHtmlMulti(done,`請求書_${invBatchRange().label}_${done.length}件`);
     if(w){ w.document.open(); w.document.write(html); w.document.close(); } else invOpenHtml(html);
   }else if(w){ w.close(); }
+  invBatchIssuedSet(done);
   loadInvoiceList();
   invBatchSearch();
   if(failed.length) alert(`⚠ ${failed.length}件は発行できませんでした（発行できた ${done.length}件は印刷画面に出ています）。\n\n`+failed.join('\n'));
-  else alert(`${done.length}件の請求書を発行しました。印刷画面で「印刷 / PDF保存」を押すと、1つのPDFにまとまります（1請求先1ページ）。`);
+  else alert(`${done.length}件の請求書を発行しました。\n・印刷用: 開いた印刷画面で「印刷 / PDF保存」→ 全員分が1つのPDF（1請求先1ページ）\n・1社ずつ: 「発行した請求書」の一覧の「📄 PDF」→ その請求先だけのPDF`);
 }
 
 function invUpdateLinkedNote(){
