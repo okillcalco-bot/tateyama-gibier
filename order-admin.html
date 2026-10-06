@@ -516,8 +516,10 @@ th,td{padding:8px 6px;font-size:.8rem}
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
             <div class="form-group" style="margin:0;min-width:130px"><label>期間</label>
               <select id="invBatchPeriod" onchange="invBatchSearch()">
-                <option value="lastMonth" selected>先月</option>
-                <option value="thisMonth">今月</option>
+                <option value="0">今月</option>
+                <option value="1" selected>先月</option>
+                <option value="2">2か月前</option>
+                <option value="3">3か月前</option>
               </select>
             </div>
             <div class="form-group" style="margin:0;flex:1;min-width:140px"><label>&nbsp;</label>
@@ -547,6 +549,8 @@ th,td{padding:8px 6px;font-size:.8rem}
               <select id="invPullPeriod" onchange="invPullSearch()">
                 <option value="thisMonth">今月</option>
                 <option value="lastMonth">先月</option>
+                <option value="2">2か月前</option>
+                <option value="3">3か月前</option>
                 <option value="all">すべて（未請求）</option>
               </select>
             </div>
@@ -3773,6 +3777,8 @@ function endOfNextMonth(base){
   return fmtDate(new Date(d.getFullYear(),d.getMonth()+2,0));
 }
 function openInvoiceTab(){
+  invMonthOptionLabels(document.getElementById('invBatchPeriod'));
+  invMonthOptionLabels(document.getElementById('invPullPeriod'));
   if(!document.getElementById('invDate').value) document.getElementById('invDate').value=today();
   if(!document.getElementById('invDue').value) document.getElementById('invDue').value=endOfNextMonth(document.getElementById('invDate').value);
   populateInvCustomerDatalist();
@@ -3848,6 +3854,7 @@ function invPullRange(){
   const now=new Date();
   if(v==='thisMonth') return {from:fmtDate(new Date(now.getFullYear(),now.getMonth(),1)),to:fmtDate(new Date(now.getFullYear(),now.getMonth()+1,0))};
   if(v==='lastMonth') return {from:fmtDate(new Date(now.getFullYear(),now.getMonth()-1,1)),to:fmtDate(new Date(now.getFullYear(),now.getMonth(),0))};
+  if(v==='2'||v==='3'){ const n=parseInt(v,10); return {from:fmtDate(new Date(now.getFullYear(),now.getMonth()-n,1)),to:fmtDate(new Date(now.getFullYear(),now.getMonth()-n+1,0))}; }
   return null; // all
 }
 
@@ -3939,7 +3946,7 @@ async function invPullApply(){
   if(sub && !sub.value.trim()){
     const d=new Date((document.getElementById('invDate').value||today())+'T00:00:00');
     const pv=document.getElementById('invPullPeriod').value;
-    const m=pv==='lastMonth'?new Date(d.getFullYear(),d.getMonth()-1,1):d;
+    const m=pv==='all'?d:new Date(d.getFullYear(),d.getMonth()-invMonthsAgo(pv),1);
     sub.value=`${m.getFullYear()}年${m.getMonth()+1}月分`;
   }
 
@@ -4030,10 +4037,21 @@ function invBuildLinesFromOrders(orders,gradeMap,rank){
    まとめて発行し、全員分を1つの印刷ウィンドウ（1請求先1ページ）に出す。PDFとして保存すれば1ファイルにまとまる。 */
 let invBatchGroups=[];
 let invBatchNoCust=[];
+// 期間は「何か月前か」（0=今月・1=先月・2・3=3か月前まで。2026-10-06 遡りを3か月前まで広げた）
+function invMonthsAgo(v){ if(v==='thisMonth') return 0; if(v==='lastMonth') return 1; const n=parseInt(v,10); return isFinite(n)?Math.min(Math.max(n,0),3):1; }
+function invMonthOptionLabels(sel){
+  if(!sel) return;
+  const now=new Date(), names=['今月','先月','2か月前','3か月前'];
+  [...sel.options].forEach(o=>{
+    const n=invMonthsAgo(o.value); if(!(n>=0&&n<=3)||o.value==='all') return;
+    const d=new Date(now.getFullYear(),now.getMonth()-n,1);
+    o.textContent=`${d.getFullYear()}年${d.getMonth()+1}月（${names[n]}）`;
+  });
+}
 function invBatchRange(){
-  const v=document.getElementById('invBatchPeriod')?.value||'lastMonth';
+  const v=document.getElementById('invBatchPeriod')?.value||'1';
   const now=new Date();
-  const m=v==='thisMonth'?now.getMonth():now.getMonth()-1;
+  const m=now.getMonth()-invMonthsAgo(v);
   const from=new Date(now.getFullYear(),m,1), to=new Date(now.getFullYear(),m+1,0);
   return {from:fmtDate(from),to:fmtDate(to),label:`${from.getFullYear()}年${from.getMonth()+1}月分`};
 }
