@@ -120,6 +120,13 @@ export default async function BillingCenterPage({
 
         <MisocaImportForm />
 
+        <Link
+          href="/billing/customers"
+          className="block rounded-xl border border-green-700 px-4 py-3 text-center text-base font-bold text-green-700"
+        >
+          👥 顧客ごとの取引履歴を見る
+        </Link>
+
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-1.5">
             <Link
