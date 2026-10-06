@@ -19,7 +19,7 @@ const path = require('path');
 const invOthers = (h, me) => !['A食堂', 'B商店', 'トレタテ', 'ノブレスオブリージュ'].filter(n => n !== me).some(n => h.includes('<div class="name">' + n));
 (async () => {
   const browser = await chromium.launch({ executablePath: process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
-  const ctx = await browser.newContext({ timezoneId: 'Asia/Tokyo' });
+  const ctx = await browser.newContext({ timezoneId: 'Asia/Tokyo', acceptDownloads: true });
   const page = await ctx.newPage();
   await page.clock.setFixedTime(new Date('2026-10-06T03:00:00Z'));
   const errors = []; page.on('pageerror', e => errors.push(e.message));
@@ -88,6 +88,14 @@ const invOthers = (h, me) => !['A食堂', 'B商店', 'トレタテ', 'ノブレ�
       return J([]);
     }
     return J([]);
+  });
+  // 個別PDF（ZIP）用のライブラリ（本番は cdn.jsdelivr.net から読み込む）。テストではローカルの同じ版を返す
+  const LIBDIR = process.env.INV_PDF_LIBDIR || path.join(__dirname, '../../node_modules');
+  const libs = { 'html2canvas@1.4.1': 'html2canvas/dist/html2canvas.min.js', 'jspdf@2.5.1': 'jspdf/dist/jspdf.umd.min.js', 'jszip@3.10.1': 'jszip/dist/jszip.min.js' };
+  await page.route('https://cdn.jsdelivr.net/npm/**', rt => {
+    const k = Object.keys(libs).find(x => rt.request().url().includes(x));
+    try { return rt.fulfill({ contentType: 'application/javascript', body: require('fs').readFileSync(path.join(LIBDIR, libs[k])) }); }
+    catch (e) { return rt.fulfill({ status: 404, body: 'not found' }); }
   });
   await page.route('**/auth/**', rt => rt.fulfill({ contentType: 'application/json', body: '{}' }));
   await page.goto('file://' + path.resolve(__dirname, '../../order-admin.html'));
@@ -211,6 +219,24 @@ const invOthers = (h, me) => !['A食堂', 'B商店', 'トレタテ', 'ノブレ�
   const op = await ctx.newPage(); await op.setContent(one, { waitUntil: 'load' });
   const onePdf = (await op.pdf({ format: 'A4', preferCSSPageSize: true })).toString('latin1');
   ck('1社分のPDFはA4 1ページ', (onePdf.match(/\/Type\s*\/Page[^s]/g) || []).length === 1, '');
+  // 12. 全員分を個別PDFで（ZIP）
+  const hasLibs = require('fs').existsSync(path.join(LIBDIR, 'jszip/dist/jszip.min.js'));
+  if (hasLibs) {
+    await page.evaluate(() => { const c = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () { if (this.download) window.__dlName = this.download; return c.call(this); }; });
+    const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), page.evaluate(() => invBatchIssuedZip())]);
+    const dlName = await page.evaluate(() => window.__dlName || '');
+    const buf = require('fs').readFileSync(await dl.path());
+    const JSZip = require(path.join(LIBDIR, 'jszip'));
+    const z = await JSZip.loadAsync(buf);
+    const names = Object.keys(z.files);
+    const pdfs = await Promise.all(names.map(n => z.files[n].async('nodebuffer')));
+    if (process.env.INV_PDF_DUMP) pdfs.forEach((b, k) => require('fs').writeFileSync(path.join(process.env.INV_PDF_DUMP, `inv${k}.pdf`), b));
+    ck('「全員分を個別PDFで」で、1社1ファイルのPDFがZIPで落ちる（4件）', /^請求書_2026年9月分_個別PDF_4件\.zip$/.test(dlName) && names.length === 4 && names.every(n => /^請求書_20261006_.+_INV-202610-00[1-4]\.pdf$/.test(n)), JSON.stringify([dlName, names]));
+    ck('各PDFは1ページで、中身（請求書の画像）が入っている', pdfs.every(b => b.slice(0, 4).toString() === '%PDF' && (b.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length === 1 && b.length > 30000), JSON.stringify(pdfs.map(b => b.length)));
+    ck('作成後に完了を知らせる', /4件の個別PDFをZIPでダウンロードしました/.test(await page.$eval('#invIssuedZipMsg', el => el.textContent)), '');
+  } else {
+    ck('個別PDF（ZIP）のテスト用ライブラリが無い（INV_PDF_LIBDIR を指定して実行）', false, LIBDIR);
+  }
   ck('ページエラーなし', errors.length === 0, errors.join(' / '));
 
   await browser.close();

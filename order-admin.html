@@ -4240,7 +4240,7 @@ function invBatchIssuedRender(){
   box.innerHTML=`<div style="border:1px solid #3d7a34;border-radius:var(--radius);padding:10px;background:rgba(106,158,90,.08)">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px">
       <strong style="font-size:.85rem">✅ 発行した請求書 ${invBatchIssued.length}件（1社ずつPDFにできます）</strong>
-      <span style="display:flex;gap:6px"><button class="btn btn-outline btn-sm" onclick="invBatchIssuedPrintAll()">🖨 全員分を1つに</button><button class="btn btn-outline btn-sm" onclick="invBatchIssued=[];invBatchIssuedRender()">閉じる</button></span>
+      <span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-gold btn-sm" id="invIssuedZipBtn" onclick="invBatchIssuedZip()" title="1社1ファイルのPDFをまとめてZIPでダウンロード">📦 全員分を個別PDFで（ZIP）</button><button class="btn btn-outline btn-sm" onclick="invBatchIssuedPrintAll()">🖨 全員分を1つに</button><button class="btn btn-outline btn-sm" onclick="invBatchIssued=[];invBatchIssuedRender()">閉じる</button></span>
     </div>
     ${invBatchIssued.map((x,k)=>`<div style="display:flex;gap:8px;align-items:center;padding:5px 2px;border-top:1px solid var(--border);font-size:.8rem">
       <span style="flex:1;min-width:0"><strong>${esc(x.p.name||'')}</strong> <span style="color:var(--text2)">${esc(x.number||'')}</span>
@@ -4248,12 +4248,81 @@ function invBatchIssuedRender(){
       <span style="font-weight:700">&yen;${Number(x.total||0).toLocaleString()}</span>
       <button class="btn btn-gold btn-sm inv-issued-pdf" onclick="invBatchIssuedPdf(${k})">📄 PDF</button>
     </div>`).join('')}
-    <div style="font-size:.72rem;color:var(--text2);margin-top:6px">「📄 PDF」で開いた画面の「印刷 / PDF保存」→ 送信先を「PDFに保存」。ファイル名は「請求書_発行日_宛名_番号」になります。</div>
+    <div id="invIssuedZipMsg" style="font-size:.75rem;margin-top:6px"></div>
+    <div style="font-size:.72rem;color:var(--text2);margin-top:6px">「📦 全員分を個別PDFで」→ 1社1ファイルのPDF（ファイル名「請求書_発行日_宛名_番号.pdf」）をZIPにまとめてダウンロード。<br>「📄 PDF」→ その1社だけを印刷画面で開く（「印刷 / PDF保存」→ 送信先を「PDFに保存」）。</div>
   </div>`;
 }
 function invBatchIssuedPdf(k){
   const x=invBatchIssued[k]; if(!x) return;
   invOpenHtml(invPrintHtml(x.p,x.number,{}));
+}
+/* 全員分を個別のPDFファイルにしてZIPでダウンロード（2026-10-06）
+   ブラウザの印刷機能は1回に1ファイルしか作れないため、請求書の画面を画像として高解像度（3倍）で描き、
+   1社1ファイルのPDFにする。ライブラリは押したときだけ読み込む（html2canvas・jsPDF・JSZip）。 */
+const INV_PDF_LIBS=[
+  ['html2canvas','https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'],
+  ['jspdf','https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js'],
+  ['JSZip','https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js']
+];
+function invLoadScript(src){
+  return new Promise((res,rej)=>{const el=document.createElement('script');el.src=src;el.onload=res;el.onerror=()=>rej(new Error('読み込めませんでした: '+src));document.head.appendChild(el);});
+}
+async function invLoadPdfLibs(){
+  for(const [g,src] of INV_PDF_LIBS){ if(!window[g]) await invLoadScript(src); }
+  if(!window.html2canvas||!window.jspdf||!window.JSZip) throw new Error('PDF作成の部品を読み込めませんでした（通信を確認してください）');
+}
+function invDocFilename(html){ return ((html.match(/<title>([^<]*)<\/title>/)||[])[1]||'請求書').replace(/&amp;/g,'&'); }
+async function invRenderPdfBlob(html){
+  const ifr=document.createElement('iframe');
+  ifr.style.cssText='position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0;background:#fff';
+  document.body.appendChild(ifr);
+  try{
+    const d=ifr.contentDocument; d.open(); d.write(html.replace(/<div class="noprint">[\s\S]*?<\/div>\s*<\/body>/,'</body>')); d.close();
+    await new Promise(r=>setTimeout(r,200));
+    if(d.fonts&&d.fonts.ready) await d.fonts.ready;
+    const sheet=d.querySelector('.sheet')||d.body;
+    const canvas=await window.html2canvas(sheet,{scale:3,backgroundColor:'#ffffff',useCORS:true,logging:false});
+    const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
+    const W=186, M=12, pageH=297-M*2;                      // 印刷画面（.sheet 186mm・余白12mm）と同じ大きさ
+    const pxPerMm=canvas.width/W, sliceH=Math.floor(pageH*pxPerMm);
+    for(let y=0,first=true;y<canvas.height;y+=sliceH,first=false){
+      const h=Math.min(sliceH,canvas.height-y);
+      const c=document.createElement('canvas'); c.width=canvas.width; c.height=h;
+      c.getContext('2d').drawImage(canvas,0,y,canvas.width,h,0,0,canvas.width,h);
+      if(!first) pdf.addPage();
+      pdf.addImage(c.toDataURL('image/jpeg',0.92),'JPEG',M,M,W,h/pxPerMm);
+    }
+    return pdf.output('blob');
+  }finally{ ifr.remove(); }
+}
+async function invBatchIssuedZip(){
+  if(!invBatchIssued.length) return;
+  const msg=document.getElementById('invIssuedZipMsg'), btn=document.getElementById('invIssuedZipBtn');
+  const say=(t,err)=>{ if(msg){ msg.style.color=err?'var(--red)':'var(--text2)'; msg.textContent=t; } };
+  if(btn) btn.disabled=true;
+  try{
+    say('PDF作成の準備中…');
+    await invLoadPdfLibs();
+    const zip=new window.JSZip(), used=new Set(), failed=[];
+    for(let k=0;k<invBatchIssued.length;k++){
+      const x=invBatchIssued[k];
+      say(`PDFを作成中… ${k+1}/${invBatchIssued.length}（${x.p.name||''}）`);
+      try{
+        const html=invPrintHtml(x.p,x.number,{});
+        let name=invDocFilename(html); while(used.has(name)) name+='_2'; used.add(name);
+        zip.file(name+'.pdf',await invRenderPdfBlob(html));
+      }catch(e){ failed.push(`${x.p.name||''}: ${String(e.message||e)}`); }
+    }
+    const done=invBatchIssued.length-failed.length;
+    if(!done) throw new Error(failed.join(' / '));
+    const blob=await zip.generateAsync({type:'blob'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download=`請求書_${invBatchRange().label}_個別PDF_${done}件.zip`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),60000);
+    say(failed.length?`⚠ ${done}件をZIPにしました。${failed.length}件は作れませんでした: ${failed.join(' / ')}`:`✅ ${done}件の個別PDFをZIPでダウンロードしました。`,failed.length>0);
+  }catch(e){ say('個別PDFを作れませんでした: '+String(e.message||e),true); }
+  finally{ if(btn) btn.disabled=false; }
 }
 function invBatchIssuedPrintAll(){
   if(!invBatchIssued.length) return;
