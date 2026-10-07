@@ -11477,7 +11477,7 @@ async function loadCleaning() {
   if (mEl && !mEl.value) mEl.value = new Date().toISOString().slice(0, 7);
   const today = ymdLocal(new Date());
   try {
-    cleanTodayLogs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${today}T00:00:00&select=*&order=cleaned_at.desc`);
+    cleanTodayLogs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${jstTs(today, '00:00:00')}&select=*&order=cleaned_at.desc`);
   } catch (err) {
     grid.innerHTML = `<div class="empty-state" style="color:var(--red);grid-column:1/-1;">${esc2(sbSafeMsg(err))}</div>`;
     return;
@@ -11645,12 +11645,12 @@ async function cleaningReport() {
     const [y, m] = month.split('-').map(Number);
     const daysInMonth = new Date(y, m, 0).getDate();
     // 末日は月ごとに違う（'-31' 固定だと 30日の月は PostgREST が 400 を返す）
-    const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${month}-01T00:00:00&cleaned_at=lte.${month}-${String(daysInMonth).padStart(2, '0')}T23:59:59&select=*&order=cleaned_at.asc`);
+    const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${jstTs(month + '-01', '00:00:00')}&cleaned_at=lte.${jstTs(month + '-' + String(daysInMonth).padStart(2, '0'), '23:59:59')}&select=*&order=cleaned_at.asc`);
     let rows = '';
     for (let d = 1; d <= daysInMonth; d++) {
       const ds = `${month}-${String(d).padStart(2, '0')}`;
       const cells = CLEAN_ROOMS.map(r => {
-        const log = logs.find(l => l.room === r.key && l.cleaned_at.slice(0, 10) === ds);
+        const log = logs.find(l => l.room === r.key && jstParts(l.cleaned_at).ymd === ds);
         return `<td style="text-align:center;">${log ? '○<br><span style="font-size:9px;">' + esc2(log.staff_name) + (log.temperature ? '<br>' + esc2(log.temperature) : '') + '</span>' : ''}</td>`;
       }).join('');
       rows += `<tr><td>${m}/${d}</td>${cells}</tr>`;
@@ -13223,6 +13223,14 @@ function docMonth() {
 }
 /* 月の初日と「その月の実際の末日」。以前は一律 '-31' を返していたため、30日の月（4・6・9・11月）と2月は
    PostgREST が "date/time field value out of range" (400) を返し、HACCP提出セットや各帳票が「取得失敗」になっていた */
+/* 清掃記録(cleaned_at)は timestamptz。PostgREST は UTC（+00:00）で返し、タイムゾーン無しの比較値も UTC として扱う。
+   文字列を slice すると時刻が9時間ずれ（17:57 の記録が 08:57 と出る）、0〜9時の記録は前日に入る。
+   日付・時刻の表示と範囲指定は必ず日本時間で行う（2026-10-07 保健所立入前に発見）。 */
+function jstParts(ts) {
+  const d = new Date(new Date(ts).getTime() + 9 * 3600 * 1000).toISOString();
+  return { ymd: d.slice(0, 10), hm: d.slice(11, 16) };
+}
+function jstTs(ymd, hms) { return `${ymd}T${hms}%2B09:00`; }
 function docMonthRange(m) {
   const [y, mo] = String(m).split('-').map(Number);
   const last = new Date(Date.UTC(y, mo, 0)).getUTCDate();
@@ -13249,9 +13257,9 @@ const DOC_DEFS = [
     ], note: 'HACCPの考え方を取り入れた衛生管理計画（参考様式・専門家確認前提）。日々の実施記録は「日次衛生点検表」「清掃・消毒記録表」に自動転記されます。' }) },
   { key: 'daily_check', cat: 'HACCP・衛生管理', title: '日次衛生点検表', gen: async (m) => {
       const [d1, d2] = docMonthRange(m);
-      const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${d1}T00:00:00&cleaned_at=lte.${d2}T23:59:59&select=*&order=cleaned_at.asc`);
+      const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${jstTs(d1, '00:00:00')}&cleaned_at=lte.${jstTs(d2, '23:59:59')}&select=*&order=cleaned_at.asc`);
       const days = {};
-      logs.forEach(l => { const d = l.cleaned_at.slice(0, 10); (days[d] = days[d] || {})[l.room] = l; });
+      logs.forEach(l => { const d = jstParts(l.cleaned_at).ymd; (days[d] = days[d] || {})[l.room] = l; });
       const rooms = CLEAN_ROOMS.map(r => r.key);
       return { columns: ['日付', ...rooms],
         rows: Object.keys(days).sort().map(d => [d.slice(5), ...rooms.map(r => days[d][r] ? `○ ${days[d][r].staff_name}` : '—')]),
@@ -13259,14 +13267,14 @@ const DOC_DEFS = [
     } },
   { key: 'temp_log', cat: 'HACCP・衛生管理', title: '冷蔵庫・冷凍庫温度記録表', gen: async (m) => {
       const [d1, d2] = docMonthRange(m);
-      const logs = await sb('GET', 'cleaning_logs', null, `?room=eq.冷蔵・冷凍庫&cleaned_at=gte.${d1}T00:00:00&cleaned_at=lte.${d2}T23:59:59&select=*&order=cleaned_at.asc`);
+      const logs = await sb('GET', 'cleaning_logs', null, `?room=eq.冷蔵・冷凍庫&cleaned_at=gte.${jstTs(d1, '00:00:00')}&cleaned_at=lte.${jstTs(d2, '23:59:59')}&select=*&order=cleaned_at.asc`);
       return { columns: ['日付', '時刻', '記録温度', '確認者', '特記事項'],
-        rows: logs.map(l => [l.cleaned_at.slice(5, 10), l.cleaned_at.slice(11, 16), l.temperature || '未記録', l.staff_name, l.note || '']),
+        rows: logs.map(l => { const t = jstParts(l.cleaned_at); return [t.ymd.slice(5), t.hm, l.temperature || '未記録', l.staff_name, l.note || '']; }),
         note: '清掃記録（冷蔵・冷凍庫）の温度入力から自動転記。基準: 冷蔵10℃以下 / 冷凍-15℃以下。' };
     } },
   { key: 'cleaning_record', cat: 'HACCP・衛生管理', title: '清掃・消毒記録表', gen: async (m) => {
       const [d1, d2] = docMonthRange(m);
-      const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${d1}T00:00:00&cleaned_at=lte.${d2}T23:59:59&select=*&order=cleaned_at.asc`);
+      const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${jstTs(d1, '00:00:00')}&cleaned_at=lte.${jstTs(d2, '23:59:59')}&select=*&order=cleaned_at.asc`);
       return { columns: ['日時', '場所', '実施者', '実施内容', '特記事項'],
         rows: logs.map(l => [fmtDt(l.cleaned_at), l.room, l.staff_name, l.items || '', l.note || '']) };
     } },
@@ -13799,8 +13807,8 @@ async function haccpCounts(m) {
   await Promise.all([
     q('individuals', 'individuals', `?capture_date=gte.${d1}&capture_date=lte.${d2}&deleted_at=is.null&select=id&limit=1000`),
     q('attendance', 'attendance', `?work_date=gte.${d1}&work_date=lte.${d2}&select=id&limit=2000`),
-    q('cleaning', 'cleaning_logs', `?cleaned_at=gte.${d1}T00:00:00&cleaned_at=lte.${d2}T23:59:59&select=id&limit=5000`),
-    q('temps', 'cleaning_logs', `?room=eq.冷蔵・冷凍庫&temperature=not.is.null&cleaned_at=gte.${d1}T00:00:00&cleaned_at=lte.${d2}T23:59:59&select=id&limit=2000`),
+    q('cleaning', 'cleaning_logs', `?cleaned_at=gte.${jstTs(d1, '00:00:00')}&cleaned_at=lte.${jstTs(d2, '23:59:59')}&select=id&limit=5000`),
+    q('temps', 'cleaning_logs', `?room=eq.冷蔵・冷凍庫&temperature=not.is.null&cleaned_at=gte.${jstTs(d1, '00:00:00')}&cleaned_at=lte.${jstTs(d2, '23:59:59')}&select=id&limit=2000`),
     q('inventory', 'inventory', `?created_at=gte.${d1}T00:00:00&created_at=lte.${d2}T23:59:59&deleted_at=is.null&select=id&limit=5000`),
     q('waste', 'waste_checklists', `?checked_on=gte.${d1}&checked_on=lte.${d2}&deleted_at=is.null&select=id`),
     q('pest', 'pest_control_logs', `?done_on=gte.${fy}-04-01&done_on=lt.${fy + 1}-04-01&select=id`),
@@ -14238,14 +14246,14 @@ async function cityReportData(month) {
   const [att, inds, cleans] = await Promise.all([
     sb('GET', 'attendance', null, `?work_date=gte.${start}&work_date=lt.${endEx}&select=work_date,staff_id,staff_name,clock_in,clock_out`),
     sb('GET', 'individuals', null, `?capture_date=gte.${start}&capture_date=lt.${endEx}&species=eq.イノシシ&select=capture_date,intake_status,label_id`),
-    sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${start}T00:00:00&cleaned_at=lt.${endEx}T00:00:00&select=room,staff_name,cleaned_at&limit=2000`)
+    sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${jstTs(start, '00:00:00')}&cleaned_at=lt.${jstTs(endEx, '00:00:00')}&select=room,staff_name,cleaned_at&limit=2000`)
   ]);
   const attByDay = {}, indByDay = {}, cleanByDay = {};
   att.forEach(a => { if (!a.clock_in) return; (attByDay[a.work_date] = attByDay[a.work_date] || new Set()).add(a.staff_id); });
   // 市役所報告書の受入頭数はイノシシのみ。搬入待ち・テストデータは除外
   inds.forEach(i => { if (i.intake_status === '搬入待ち' || /^仮-|TEST/.test(i.label_id || '')) return; indByDay[i.capture_date] = (indByDay[i.capture_date] || 0) + 1; });
   // 清掃記録の担当は勤怠から決める（2026-09-18 沖）。清掃アプリの記録は、勤怠が無い日の補いにだけ使う
-  cleans.forEach(c => { const d = String(c.cleaned_at).slice(0, 10); (cleanByDay[d] = cleanByDay[d] || {})[c.room] = cityInitial(c.staff_name); });
+  cleans.forEach(c => { const d = jstParts(c.cleaned_at).ymd; (cleanByDay[d] = cleanByDay[d] || {})[c.room] = cityInitial(c.staff_name); });
   const attRows = {};
   att.forEach(a => { if (!a.clock_in) return; (attRows[a.work_date] = attRows[a.work_date] || []).push(a); });
   Object.keys(attRows).forEach(d => {
@@ -15506,7 +15514,7 @@ async function loadTodayTodos() {
   } catch (e) {}
   try {
     const today = ymdLocal(new Date());
-    const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${today}T00:00:00&select=room`);
+    const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${jstTs(today, '00:00:00')}&select=room`);
     const done = new Set(logs.map(l => l.room));
     add(CLEAN_ROOMS.length - done.size, '未清掃のエリア（本日）', 'cleaning', true);
     const tempDone = logs.some(l => l.room === '冷蔵・冷凍庫');
@@ -15884,7 +15892,7 @@ async function refreshNavBadges() {
   // 本日の清掃実施部屋数
   try {
     const today = ymdLocal(new Date());
-    const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${today}T00:00:00&select=room`);
+    const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${jstTs(today, '00:00:00')}&select=room`);
     const done = new Set(logs.map(l => l.room)).size;
     setBadge('nav-badge-cleaning', CLEAN_ROOMS.length - done, true);
     setCard('dc-clean', `${done}/${CLEAN_ROOMS.length}`);
