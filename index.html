@@ -13246,6 +13246,9 @@ function attHoursOf(a) {
 /* 帳票定義: gen(month) → { columns, rows, note?, extraHtml? } */
 const DOC_DEFS = [
   // ── HACCP・衛生管理 ──
+  // 保健所の立入で「HACCP記録表」と言われるのはこれ（衛生管理計画に沿った月間の実施記録、1日1行）。
+  // 受入確認・庫内温度・区域ごとの清掃消毒・ナイフ83℃消毒・従事者の健康を、日々の入力から1枚に転記する。
+  { key: 'haccp_monthly', cat: 'HACCP・衛生管理', title: 'HACCP実施記録表（月間）', gen: async (m) => haccpMonthlyGen(m) },
   { key: 'sanitation_plan', cat: 'HACCP・衛生管理', title: '衛生管理計画書', template: true,
     gen: async () => ({ columns: ['管理項目', 'いつ', 'どのように', '問題があったとき'], rows: [
       ['施設・設備の衛生管理（清掃・消毒）', '作業終了後 毎日', '各区域のチェックリストに従い清掃・消毒し、本アプリの清掃記録に記録する', '再清掃を行い、記録表に特記事項を残す'],
@@ -13575,6 +13578,61 @@ function renderDocsList() {
     }).join('')).join('') || '<div class="empty-state">該当する帳票がありません</div>';
 }
 
+/* HACCP実施記録表（月間）: 1日1行。記録が無い項目は「未記録」と正直に出す（後から埋めない）。 */
+function haccpTempJudge(t) {
+  if (!t) return '';
+  const r = /冷蔵\s*(-?\d+(?:\.\d+)?)/.exec(t), f = /冷凍\s*(-?\d+(?:\.\d+)?)/.exec(t);
+  const bad = (r && Number(r[1]) > 10) || (f && Number(f[1]) > -15);
+  return bad ? '要確認' : (r || f ? '適' : '');
+}
+async function haccpMonthlyGen(m) {
+  const [d1, d2] = docMonthRange(m);
+  const [logs, atts, inds] = await Promise.all([
+    sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${jstTs(d1, '00:00:00')}&cleaned_at=lte.${jstTs(d2, '23:59:59')}&select=room,staff_name,cleaned_at,items,temperature,note&order=cleaned_at.asc&limit=5000`),
+    sb('GET', 'attendance', null, `?work_date=gte.${d1}&work_date=lte.${d2}&select=work_date,staff_name,clock_in,health_in,health_out&limit=2000`),
+    sb('GET', 'individuals', null, `?capture_date=gte.${d1}&capture_date=lte.${d2}&deleted_at=is.null&select=label_id,capture_date,intake_status,capture_anomalies,organ_anomalies,quality&limit=1000`),
+  ]);
+  const byDay = {};
+  const day = d => (byDay[d] = byDay[d] || { logs: {}, staff: [], inds: [], names: new Set(), notes: [] });
+  logs.forEach(l => { const g = day(jstParts(l.cleaned_at).ymd); g.logs[l.room] = g.logs[l.room] || []; g.logs[l.room].push(l); if (l.staff_name) g.names.add(l.staff_name); if (l.note) g.notes.push(l.note); });
+  atts.forEach(a => { if (a.clock_in) day(a.work_date).staff.push(a); });
+  inds.forEach(i => { if (i.intake_status === '搬入待ち' || /^仮-|TEST/.test(i.label_id || '')) return; day(i.capture_date).inds.push(i); });
+  const today = jstParts(new Date()).ymd;
+  const last = d2 < today ? d2 : today;
+  const anomOf = v => v && v !== 'なし';
+  const rooms = ['解体室', '精肉室', '前室・更衣室', 'トイレ', '施設外周'];
+  const rows = [];
+  let workDays = 0, tempDays = 0, tempBad = 0, healthMiss = 0, healthBad = 0;
+  for (let d = d1; d <= last; d = new Date(Date.parse(d + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10)) {
+    const g = byDay[d];
+    const wd = '日月火水木金土'[new Date(d + 'T00:00:00Z').getUTCDay()];
+    const label = `${Number(d.slice(5, 7))}/${Number(d.slice(8))}(${wd})`;
+    if (!g) { rows.push([label, '—', '—', '—', ...rooms.map(() => '—'), '—', '—', '', '作業なし']); continue; }
+    workDays++;
+    const notes = g.notes.slice();
+    const ni = g.inds.length, na = g.inds.filter(i => anomOf(i.capture_anomalies) || anomOf(i.organ_anomalies) || i.quality === '不良').length;
+    const intake = ni ? `${ni}頭／異常${na ? `あり${na}頭` : 'なし'}` : '受入なし';
+    if (na) notes.push('異常個体は異常個体・廃棄記録を参照');
+    const temps = (g.logs['冷蔵・冷凍庫'] || []).filter(l => l.temperature);
+    const t = temps[temps.length - 1];
+    let tempCell = '未記録', judge = '';
+    if (t) { tempDays++; tempCell = `${t.temperature}（${jstParts(t.cleaned_at).hm}）`; judge = haccpTempJudge(t.temperature); if (judge === '要確認') tempBad++; }
+    const roomCells = rooms.map(r => (g.logs[r] && g.logs[r].length) ? '○' : '未');
+    const knife = ['解体室', '精肉室'].some(r => (g.logs[r] || []).some(l => /ナイフ/.test(l.items || ''))) ? '○' : '未';
+    const ns = g.staff.length, rec = g.staff.filter(a => a.health_in).length, bad = g.staff.filter(a => (a.health_in && a.health_in !== '異常なし') || (a.health_out && a.health_out !== '異常なし'));
+    healthMiss += ns - rec; healthBad += bad.length;
+    const health = !ns ? '出勤記録なし' : bad.length ? `異常あり ${bad.map(a => a.staff_name).join('・')}` : rec === ns ? `${ns}名 異常なし` : `${rec}/${ns}名 異常なし（${ns - rec}名未記録）`;
+    rows.push([label, intake, tempCell, judge, ...roomCells, knife, health, [...g.names].slice(0, 3).join('・'), notes.join(' / ')]);
+  }
+  return {
+    landscape: true,
+    columns: ['日付', '受入個体の確認', '庫内温度（冷蔵/冷凍）', '温度判定', ...rooms, 'ナイフ等83℃消毒', '従事者の健康', '記録者', '特記事項'],
+    rows,
+    note: `衛生管理計画書に基づく日々の実施記録（清掃記録・庫内温度・捕獲票・出退勤の体調チェックから自動転記）。基準: 冷蔵10℃以下 / 冷凍-15℃以下、ナイフ等は83℃以上の温湯で1頭ごとに消毒。` +
+      `対象月の作業日 ${workDays}日：温度記録 ${tempDays}日${tempBad ? `（要確認 ${tempBad}日）` : ''}、体調未記録 ${healthMiss}人日${healthBad ? `、体調異常 ${healthBad}件` : ''}。「未記録」「未」は記録が無いことを示す（後から補記しない）。`,
+  };
+}
+
 async function docGenerate(key) {
   const def = DOC_DEFS.find(d => d.key === key);
   const data = await def.gen(docMonth());
@@ -13596,6 +13654,8 @@ async function docEnsureRecord(def, statusIfNew) {
   return docRecords[k];
 }
 
+// 記録の抜け・基準外は赤で目立たせる（未記録・未・要確認・異常あり）
+function docCellAlert(c) { return typeof c === 'string' && /^(未記録|未|要確認)$|未記録|異常あり/.test(c); }
 function docHtml(def, data, forPrint) {
   const period = docMonth();
   const rec = docRecords[def.key + '|' + period];
@@ -13604,7 +13664,7 @@ function docHtml(def, data, forPrint) {
     ${rec ? `　状態: ${rec.status}${rec.approved_by ? '（承認: ' + rec.approved_by + '）' : ''}` : ''}</p>`;
   const note = data.note ? `<p style="font-size:11px;color:#666;margin:8px 0;">※ ${data.note}</p>` : '';
   const table = `<table style="border-collapse:collapse;width:100%;"><thead><tr>${data.columns.map(c => `<th style="border:1px solid #888;padding:4px 7px;font-size:11px;background:#f0f0f0;text-align:left;">${c}</th>`).join('')}</tr></thead>
-    <tbody>${(data.rows.length ? data.rows : [data.columns.map(() => '—')]).map(r => `<tr>${r.map(c => `<td style="border:1px solid #888;padding:4px 7px;font-size:11px;">${c == null ? '' : c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    <tbody>${(data.rows.length ? data.rows : [data.columns.map(() => '—')]).map(r => `<tr>${r.map(c => `<td style="border:1px solid #888;padding:4px 7px;font-size:11px;${docCellAlert(c) ? 'color:#c00;font-weight:600;' : ''}">${c == null ? '' : c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
   const sign = forPrint ? `<p style="font-size:11px;margin-top:14px;">作成者: ＿＿＿＿＿＿　確認者: ＿＿＿＿＿＿　承認者: ＿＿＿＿＿＿</p>` : '';
   return head + note + table + sign;
 }
@@ -13659,7 +13719,7 @@ async function docOutput(key, mode) {
     if (mode === 'print') {
       const w = window.open('', '_blank');
       if (!w) { toast('ポップアップがブロックされました', 'error'); return; }
-      w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${def.title} ${docMonth()}</title><style>body{font-family:'Noto Sans JP',sans-serif;padding:24px;color:#222;}</style></head><body>${docHtml(def, data, true)}<p style="font-size:10px;color:#999;">PDF保存: 印刷ダイアログで「PDFに保存」を選択</p></body></html>`);
+      w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${def.title} ${docMonth()}</title><style>body{font-family:'Noto Sans JP',sans-serif;padding:24px;color:#222;}${data.landscape ? '@page{size:A4 landscape;margin:10mm;} body{padding:0;}' : ''}</style></head><body>${docHtml(def, data, true)}<p style="font-size:10px;color:#999;">PDF保存: 印刷ダイアログで「PDFに保存」を選択</p></body></html>`);
       w.document.close();
       setTimeout(() => w.print(), 300);
     } else {
@@ -13746,7 +13806,7 @@ let haccpFacility = null;
 /* 対応表: 根拠 → 求められること → 本アプリでの記録 → 添付する帳票 → 対象月の件数の数え方 */
 const HACCP_MAP = [
   { law: 'ガイドライン 第3-2 ／ 別表17 十四', req: '捕獲〜販売の各段階で記録を作成・保存', app: '捕獲票・精肉登録・出荷確定が個体番号で1本に繋がる', docs: ['trace_evidence'], count: 'individuals' },
-  { law: 'ガイドライン 第3-3 ／ 別表17・18', req: 'HACCPに沿った衛生管理計画の作成・周知', app: '衛生管理計画書（本アプリで管理）', docs: ['sanitation_plan'] },
+  { law: 'ガイドライン 第3-3 ／ 別表17・18', req: 'HACCPに沿った衛生管理計画の作成・周知', app: '衛生管理計画書（本アプリで管理）＋ HACCP実施記録表（月間）', docs: ['sanitation_plan', 'haccp_monthly'] },
   { law: 'ガイドライン 第3-4 ／ 別表17 七', req: '従事者の体調管理・手指の傷・ダニ対策', app: '出退勤打刻の体調チェック（出勤時・退勤時）', docs: ['staff_health'], count: 'attendance' },
   { law: 'ガイドライン 第4・第5', req: '捕獲方法・異常の有無・放血・運搬の記録を捕獲者から受け取る', app: '捕獲票入力（capture-form）→ 個体台帳', docs: ['intake_inspection'], count: 'individuals' },
   { law: 'ガイドライン 第6-4', req: '受入時に1頭ごと異常の有無を確認し、不適は受け入れない', app: '捕獲受入・個体タブの受入確認（異常・品質）', docs: ['intake_inspection', 'anomaly_disposal'], count: 'individuals' },
@@ -13853,7 +13913,7 @@ async function haccpPackPrint() {
     const parts = [];
     for (const k of haccpPackKeys()) {
       const def = DOC_DEFS.find(d => d.key === k); if (!def) continue;
-      try { const data = await def.gen(m); parts.push(`<section style="page-break-before:always;">${docHtml(def, data, true)}</section>`); }
+      try { const data = await def.gen(m); parts.push(`<section class="${data.landscape ? 'land' : ''}" style="page-break-before:always;">${docHtml(def, data, true)}</section>`); }
       catch (e) { parts.push(`<section style="page-break-before:always;"><h1 style="font-size:18px;">${esc2(def.title)}</h1><p style="color:#b00;">生成できませんでした: ${esc2(sbSafeMsg(e))}</p></section>`); }
     }
     const f = k => esc2(haccpFacilityValue(k) || '＿＿＿＿＿＿＿＿＿＿');
@@ -13865,7 +13925,7 @@ async function haccpPackPrint() {
       <p style="font-size:10.5px;color:#666;margin-top:8px;">※ 各帳票は業務アプリ（tateyama-gibier.vercel.app）の日々の入力から自動転記。様式は参考様式であり、保健所の指導により随時見直す。個体番号から捕獲票・放射能検査・出荷先までトレーサビリティ検索で遡れる。</p>
       <p style="font-size:11px;margin-top:14px;">作成者: ＿＿＿＿＿＿　確認者（食品衛生責任者）: ＿＿＿＿＿＿　承認者: ＿＿＿＿＿＿</p>`;
     w.document.open();
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>HACCP提出セット ${m}</title><style>body{font-family:'Noto Sans JP',sans-serif;padding:20px;color:#222;} @page{size:A4;margin:12mm;} section{margin-top:24px;}</style></head><body>${cover}${parts.join('')}<p style="font-size:10px;color:#999;">PDF保存: 印刷ダイアログで「PDFに保存」を選択</p></body></html>`);
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>HACCP提出セット ${m}</title><style>body{font-family:'Noto Sans JP',sans-serif;padding:20px;color:#222;} @page{size:A4;margin:12mm;} section{margin-top:24px;} @page land{size:A4 landscape;margin:10mm;} section.land{page:land;}</style></head><body>${cover}${parts.join('')}<p style="font-size:10px;color:#999;">PDF保存: 印刷ダイアログで「PDFに保存」を選択</p></body></html>`);
     w.document.close();
     setTimeout(() => w.print(), 500);
     playFeedbackSound(true);
