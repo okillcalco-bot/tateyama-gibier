@@ -70,6 +70,12 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
   <button class="btn" onclick="copyNetPayList()">📋 差引支給額をLINE用にコピー</button>
   <span id="msg"></span>
 </div>
+<div class="bar" id="periodBar">
+  <b style="font-size:13px;">期間でまとめて</b>
+  <input type="month" id="pFrom" value="2025-10"> 〜 <input type="month" id="pTo" value="2026-09">
+  <button class="btn" onclick="payslipPeriodPrint()">📚 期間の給与明細（全員・賞与含む）を開く</button>
+  <span id="pMsg" style="font-size:12px;"></span>
+</div>
 <div class="card">
   <table>
     <thead><tr>
@@ -77,7 +83,7 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
       <th>止め搬入<br>(回)</th><th>止めさし搬入<br>手当</th>
       <th>往復<br>km</th><th>通勤<br>回数</th><th>通勤費</th>
       <th>他手当</th><th>支給合計</th>
-      <th>健康保険</th><th>厚生年金</th><th>雇用保険</th><th>所得税</th><th>住民税</th><th>他控除</th>
+      <th>健康保険</th><th>介護保険</th><th>厚生年金</th><th>雇用保険</th><th>所得税</th><th>住民税</th><th>他控除</th>
       <th>控除合計</th><th>差引支給</th>
       <th style="text-align:left">メモ</th><th class="op"></th>
     </tr></thead>
@@ -94,7 +100,8 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
   ・「📄 明細をまとめて印刷」は<b>全員分を1人1ページ</b>で一度に開きます。月の支払い確定時にPDF保存しておくと賃金台帳の控えになります<br>
   ・🔗ボタンで<b>本人専用の恒久リンク</b>を発行できます。毎月同じリンクで最新の明細（過去分も月選択で）を見られるので、共有は最初の1回だけで済みます。発行は一度きり表示・共有は必ずLINE個別トークなど本人だけに届く経路で<br>
   ・止めさし搬入手当（+3000円/回）の対象: 白石さん・大和田さん・今泉さん。<b>止めさし・搬入（引き取り）どちらか一方をやった日も1回に数えます。</b>回数はpunch.htmlの退勤報告（各自の入力）から入ります<br>
-  ・社会保険料（健康保険・厚生年金）と税は<b>従業員負担分</b>を円で入力します。空欄は0円扱い
+  ・社会保険料（健康保険・厚生年金）と税は<b>従業員負担分</b>を円で入力します。空欄は0円扱い<br>
+  ・<b>2025年10月〜2026年6月は当時の給与明細（Excel）から転記</b>しています（通勤費の金額・技術手当などの手当・介護保険・年末賞与もそのまま）。「📚 期間の給与明細」で期間・全員分を1つにまとめて開けます（先頭に支給一覧。明細の無い月は赤字で出ます）
 </div>
 
 <!-- 行き先別移動費モーダル -->
@@ -174,20 +181,23 @@ async function staffKeyEnsure(){
   return k;
 }
 
-let lines=[], staffList=[], attMap={}, trips=[], tripRates=[];
+let lines=[], staffList=[], attMap={}, trips=[], tripRates=[], bonuses=[];
 const N=v=>(v===''||v==null||isNaN(+v))?0:+v;
 const yen=v=>'¥'+Math.round(v).toLocaleString();
 const msg=(t,ok)=>{ const m=document.getElementById('msg'); m.textContent=t; m.style.color=ok?'var(--green)':'var(--red)'; if(t) setTimeout(()=>{ if(m.textContent===t) m.textContent=''; },4000); };
 
 /* 行き先別（産廃処理・アワコネなど）の移動費の合計 */
-function tripSum(name){
-  return trips.filter(t=>t.staff_name===name)
+function tripSum(name, T){
+  return (T||trips).filter(t=>t.staff_name===name)
     .reduce((a,t)=>a+Math.round(N(t.round_km)*(N(t.yen_per_km)||20)*N(t.trip_count)),0);
 }
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 /* 勤怠に入れた「追加距離」（自宅⇔センター往復以外の移動）の月合計km。2026-09-16: 出退勤記録の行から入れられるようにした */
-function extraKm(name){ return N((attMap[name]||{}).extra_km); }
-function extraKmYen(l){ return Math.round(extraKm(l.staff_name)*(N(l.commute_yen_per_km)||20)); }
+function extraKm(name, A){ return N(((A||attMap)[name]||{}).extra_km); }
+function extraKmYen(l, A){ return Math.round(extraKm(l.staff_name, A)*(N(l.commute_yen_per_km)||20)); }
+/* 取込した過去明細の手当（技術手当・止めさし対応・立替など）[{label,amount}] */
+const allowList=l=>Array.isArray(l.allowances)?l.allowances.filter(a=>a&&N(a.amount)):[];
+const allowSum=l=>allowList(l).reduce((a,x)=>a+N(x.amount),0);
 function commTitle(l){
   const parts=['センター '+N(l.commute_round_km)+'km×'+(N(l.commute_yen_per_km)||20)+'円×'+N(l.commute_count)+'回'];
   trips.filter(t=>t.staff_name===l.staff_name)
@@ -200,16 +210,19 @@ function tripLabel(name){
 }
 
 /* 行の金額（すべてこの1か所で計算する）。交通費＝センター往復＋行き先別＋勤怠の追加距離 */
-function calc(l){
+function calc(l, ctx){
+  const T=ctx&&ctx.trips, A=ctx&&ctx.attMap;
   // 月給者（時給が無く月給が設定されている人）は時間に関係なく月給を基本給にする
   const base=N(l.monthly_salary)?Math.round(N(l.monthly_salary)):Math.round(N(l.hourly_wage)*N(l.work_hours));
   const stop=N(l.stopkill_count)*(N(l.stopkill_unit)||3000);
+  // commute_fixed: Excelから取り込んだ過去明細の通勤費（金額そのもの。単価17円の時期がある）
   const comm=Math.round(N(l.commute_round_km)*(N(l.commute_yen_per_km)||20)*N(l.commute_count))
-            +tripSum(l.staff_name)+extraKmYen(l);
-  const pay=base+stop+comm+N(l.other_allowance);
-  const ded=N(l.health_insurance)+N(l.pension)+N(l.employment_insurance)
+            +tripSum(l.staff_name, T)+extraKmYen(l, A)+N(l.commute_fixed);
+  const allow=allowSum(l);
+  const pay=base+stop+comm+N(l.other_allowance)+allow;
+  const ded=N(l.health_insurance)+N(l.care_insurance)+N(l.pension)+N(l.employment_insurance)
            +N(l.income_tax)+N(l.resident_tax)+N(l.other_deduction);
-  return {base,stop,comm,pay,ded,net:pay-ded};
+  return {base,stop,comm,allow,pay,ded,net:pay-ded};
 }
 
 async function load(){
@@ -219,13 +232,13 @@ async function load(){
     const r=await sbRpc('admin_payroll_list',{p_staff_key:key,p_month:month});
     lines=(r.lines||[]).map(l=>({...l,_dirty:false}));
     staffList=r.staff||[];
-    trips=r.trips||[]; tripRates=r.trip_rates||[];
+    trips=r.trips||[]; tripRates=r.trip_rates||[]; bonuses=r.bonuses||[];
     attMap={}; (r.attendance||[]).forEach(a=>attMap[a.staff_name]=a);
     const sel=document.getElementById('addSel');
     sel.innerHTML=staffList.filter(s=>!lines.some(l=>l.staff_name===s.name))
       .map(s=>`<option value="${s.id}">${s.name}</option>`).join('')||'<option value="">（全員追加済み）</option>';
     render();
-    msg('読み込みました（'+lines.length+'名）',true);
+    msg('読み込みました（'+lines.length+'名'+(bonuses.length?'・賞与'+bonuses.length+'名':'')+'）',true);
   }catch(e){
     if(String(e.message).includes('スタッフキー')) staffKeyClear();
     msg('読込失敗: '+e.message,false);
@@ -233,7 +246,7 @@ async function load(){
 }
 
 const FIELDS=['hourly_wage','monthly_salary','work_days','work_hours','stopkill_count','commute_round_km','commute_count',
-  'other_allowance','health_insurance','pension','employment_insurance','income_tax','resident_tax','other_deduction','memo'];
+  'other_allowance','health_insurance','care_insurance','pension','employment_insurance','income_tax','resident_tax','other_deduction','memo'];
 
 function render(){
   const body=document.getElementById('body');
@@ -253,10 +266,11 @@ function render(){
       <td class="calc">${yen(c.stop)}</td>
       <td>${inp('commute_round_km')}</td>
       <td>${inp('commute_count')}</td>
-      <td class="calc" title="${esc(commTitle(l))}">${yen(c.comm)}${trips.filter(t=>t.staff_name===l.staff_name).length?'<div class="att">'+esc(tripLabel(l.staff_name))+'</div>':''}</td>
-      <td>${inp('other_allowance')}</td>
+      <td class="calc" title="${esc(commTitle(l))}">${yen(c.comm)}${N(l.commute_fixed)?'<div class="att">取込 '+yen(N(l.commute_fixed))+'</div>':''}${trips.filter(t=>t.staff_name===l.staff_name).length?'<div class="att">'+esc(tripLabel(l.staff_name))+'</div>':''}</td>
+      <td>${inp('other_allowance')}${allowList(l).length?'<div class="att">'+esc(allowList(l).map(a=>a.label+' '+yen(a.amount)).join(' ／ '))+'</div>':''}</td>
       <td class="calc pay">${yen(c.pay)}</td>
       <td>${inp('health_insurance')}</td>
+      <td>${inp('care_insurance')}</td>
       <td>${inp('pension')}</td>
       <td>${inp('employment_insurance')}</td>
       <td>${inp('income_tax')}</td>
@@ -278,7 +292,7 @@ function render(){
   const t=lines.reduce((a,l)=>{const c=calc(l);a.pay+=c.pay;a.ded+=c.ded;a.net+=c.net;return a;},{pay:0,ded:0,net:0});
   document.getElementById('foot').innerHTML=lines.length?`<tr class="total-row">
     <td>合計（${lines.length}名）</td><td colspan="11"></td>
-    <td class="calc pay">${yen(t.pay)}</td><td colspan="6"></td>
+    <td class="calc pay">${yen(t.pay)}</td><td colspan="7"></td>
     <td class="calc ded">${yen(t.ded)}</td><td class="calc pay">${yen(t.net)}</td><td colspan="2"></td>
   </tr>`:'';
 }
@@ -363,6 +377,8 @@ async function saveLine(i){
   FIELDS.forEach(f=>p[f]=l[f]??'');
   p.stopkill_unit=l.stopkill_unit??3000; p.commute_yen_per_km=l.commute_yen_per_km??20;
   p.other_allowance_memo=l.other_allowance_memo??'';
+  // 取込した過去明細の欄はそのまま持ち回る（消さない）
+  p.commute_fixed=l.commute_fixed??''; p.allowances=Array.isArray(l.allowances)?l.allowances:null; p.base_label=l.base_label??'';
   try{
     l.id=await sbRpc('admin_payroll_upsert',{p_staff_key:key,p});
     l._dirty=false; render(); msg(l.staff_name+' を保存しました',true); return true;
@@ -407,37 +423,79 @@ function attHrs(a){
   return Math.max(0,(oh*60+om-ih*60-im-(a.break_minutes||0))/60);
 }
 /* 1人ぶんの明細セクション（単独発行・まとめて印刷の両方で使う） */
-function payslipSection(l, month, rows){
-  const c=calc(l);
+function payslipSection(l, month, rows, ctx){
+  const c=calc(l, ctx);
+  const T=(ctx&&ctx.trips)||trips;
   const commParts=[];
   if(N(l.commute_count)) commParts.push(`センター ${N(l.commute_round_km)}km×${N(l.commute_yen_per_km)||20}円×${N(l.commute_count)}回`);
-  trips.filter(t=>t.staff_name===l.staff_name)
+  T.filter(t=>t.staff_name===l.staff_name)
     .forEach(t=>commParts.push(`${t.destination} ${N(t.round_km)}km×${N(t.yen_per_km)||20}円×${N(t.trip_count)}回`));
   // 勤怠の追加距離は明細の下段（日別）にも出す。合計は勤怠集計（attMap）が無いときは行から足し上げる
   const rowsXkm=(rows||[]).reduce((a,r)=>a+N(r.extra_km),0);
-  const xkm=extraKm(l.staff_name)||Math.round(rowsXkm*10)/10;
+  const xkm=extraKm(l.staff_name, ctx&&ctx.attMap)||Math.round(rowsXkm*10)/10;
   if(xkm) commParts.push(`勤怠の追加距離 ${xkm}km×${N(l.commute_yen_per_km)||20}円`);
+  // 取込した過去明細: 通勤費は元の金額。内訳（km×回数）は other_allowance_memo に入れてある
+  if(N(l.commute_fixed)) commParts.push(l.other_allowance_memo||'元の給与明細の通勤費');
   // メモ列は載せない（勤怠のメモは社内の記録用。訂正履歴などは渡す明細に不要）
   const detail=(rows||[]).map(r=>`<tr><td>${r.work_date}</td><td>${r.clock_in||'-'}〜${r.clock_out||'-'}</td><td style="text-align:right;">${attHrs(r).toFixed(1)}h${(r.break_minutes||0)?`<span style="color:#888;font-size:11px;">（休憩${r.break_minutes}分）</span>`:''}${N(r.extra_km)?`<div style="font-size:11px;color:#555;">追加距離 ${N(r.extra_km)}km${r.extra_km_note?`（${esc(r.extra_km_note)}）`:''}</div>`:''}</td></tr>`).join('');
-  const shakai=N(l.health_insurance)+N(l.pension);
+  const shakai=N(l.health_insurance)+N(l.care_insurance)+N(l.pension);
+  const shakaiParts=[`健保 ¥${N(l.health_insurance).toLocaleString()}`];
+  if(N(l.care_insurance)) shakaiParts.push(`介護 ¥${N(l.care_insurance).toLocaleString()}`);
+  shakaiParts.push(`厚年 ¥${N(l.pension).toLocaleString()}`);
   const other_ded=N(l.resident_tax)+N(l.other_deduction);
+  const baseLabel=l.base_label||'基本給';
+  const extraRows=[];
+  if(c.stop) extraRows.push(['止めさし搬入手当',`¥${c.stop.toLocaleString()}（${N(l.stopkill_count)}回×¥${(N(l.stopkill_unit)||3000).toLocaleString()}）`]);
+  if(N(l.other_allowance)) extraRows.push(['その他手当',`¥${N(l.other_allowance).toLocaleString()}`]);
+  allowList(l).forEach(a=>extraRows.push([esc(a.label),`¥${N(a.amount).toLocaleString()}`]));
+  const extraHtml=[];
+  for(let i=0;i<extraRows.length;i+=2){
+    const x=extraRows[i], y=extraRows[i+1];
+    extraHtml.push(y?`<tr><th>${x[0]}</th><td>${x[1]}</td><th>${y[0]}</th><td>${y[1]}</td></tr>`:`<tr><th>${x[0]}</th><td colspan="3">${x[1]}</td></tr>`);
+  }
+  const imported=!!l.source;
   return `<section class="slip">
   <h1>給与明細書　${month.replace('-','年')}月分</h1>
   <p>氏名: <strong>${esc(l.staff_name)}</strong><br>館山ジビエセンター（合同会社アルコ）</p>
   <table>
-  <tr><th>出勤日数</th><td>${N(l.work_days)}日</td><th>実働時間</th><td>${N(l.work_hours)}時間</td></tr>
-  <tr><th>${N(l.monthly_salary)?'月給':'時給'}</th><td>¥${(N(l.monthly_salary)||N(l.hourly_wage)).toLocaleString()}</td><th>基本給</th><td>¥${c.base.toLocaleString()}</td></tr>
-  ${c.stop?`<tr><th>止めさし搬入手当</th><td>¥${c.stop.toLocaleString()}（${N(l.stopkill_count)}回×¥${(N(l.stopkill_unit)||3000).toLocaleString()}）</td><th>その他手当</th><td>¥${N(l.other_allowance).toLocaleString()}</td></tr>`
-        :(N(l.other_allowance)?`<tr><th>その他手当</th><td colspan="3">¥${N(l.other_allowance).toLocaleString()}</td></tr>`:'')}
+  ${N(l.monthly_salary)&&!N(l.work_hours)?'':`<tr><th>出勤日数</th><td>${N(l.work_days)?N(l.work_days)+'日':'—'}</td><th>実働時間</th><td>${N(l.work_hours)}時間</td></tr>`}
+  <tr><th>${N(l.monthly_salary)?(l.base_label?esc(l.base_label)+'（月額）':'月給'):'時給'}</th><td>¥${(N(l.monthly_salary)||N(l.hourly_wage)).toLocaleString()}</td><th>${esc(baseLabel)}</th><td>¥${c.base.toLocaleString()}</td></tr>
+  ${extraHtml.join('')}
   ${c.comm?`<tr><th>通勤費</th><td colspan="3">¥${c.comm.toLocaleString()}　<span style="font-size:11px;color:#555;">${esc(commParts.join(' ＋ '))}</span></td></tr>`:''}
   <tr><th>支給額（総額）</th><td colspan="3" class="big">¥${c.pay.toLocaleString()}</td></tr>
-  <tr><th>社会保険料</th><td>¥${shakai.toLocaleString()}${shakai?`（健保 ¥${N(l.health_insurance).toLocaleString()}／厚年 ¥${N(l.pension).toLocaleString()}）`:''}</td>
+  <tr><th>社会保険料</th><td>¥${shakai.toLocaleString()}${shakai?`（${shakaiParts.join('／')}）`:''}</td>
       <th>雇用保険料</th><td>¥${N(l.employment_insurance).toLocaleString()}</td></tr>
   <tr><th>所得税</th><td>¥${N(l.income_tax).toLocaleString()}</td><th>住民税・他控除</th><td>¥${other_ded.toLocaleString()}</td></tr>
   <tr><th>差引支給額</th><td colspan="3" class="big">¥${c.net.toLocaleString()}</td></tr></table>
-  <h2 style="font-size:15px;">勤怠明細</h2>
-  <table class="att-table"><thead><tr><th>日付</th><th>時刻</th><th>実働</th></tr></thead><tbody>${detail||'<tr><td colspan="3">打刻記録なし（報告書ベース）</td></tr>'}</tbody></table>
-  <p style="font-size:11px;color:#666;">発行日: ${new Date().toLocaleDateString('ja-JP')}</p>
+  ${N(l.monthly_salary)&&!detail?'':`<h2 style="font-size:15px;">勤怠明細</h2>
+  <table class="att-table"><thead><tr><th>日付</th><th>時刻</th><th>実働</th></tr></thead><tbody>${detail||`<tr><td colspan="3">${imported?'打刻記録なし（当時の給与明細から転記）':'打刻記録なし（報告書ベース）'}</td></tr>`}</tbody></table>`}
+  <p style="font-size:11px;color:#666;">発行日: ${new Date().toLocaleDateString('ja-JP')}${imported?'　／　当時の給与明細（Excel）の内容をアプリに転記して再発行':''}</p>
+  </section>`;
+}
+
+/* 賞与明細書（年末賞与など。payroll_bonus_lines） */
+function bonusCalc(b){
+  const ded=N(b.health_insurance)+N(b.care_insurance)+N(b.pension)+N(b.employment_insurance)
+           +N(b.income_tax)+N(b.resident_tax)+N(b.other_deduction);
+  return {pay:N(b.amount),ded,net:N(b.amount)-ded};
+}
+function bonusSection(b, month){
+  const c=bonusCalc(b);
+  const shakai=N(b.health_insurance)+N(b.care_insurance)+N(b.pension);
+  const parts=[`健保 ¥${N(b.health_insurance).toLocaleString()}`];
+  if(N(b.care_insurance)) parts.push(`介護 ¥${N(b.care_insurance).toLocaleString()}`);
+  parts.push(`厚年 ¥${N(b.pension).toLocaleString()}`);
+  return `<section class="slip">
+  <h1>賞与明細書　${month.replace('-','年')}月　${esc(b.title||'賞与')}</h1>
+  <p>氏名: <strong>${esc(b.staff_name)}</strong><br>館山ジビエセンター（合同会社アルコ）</p>
+  <table>
+  <tr><th>${esc(b.title||'賞与')}</th><td colspan="3">¥${c.pay.toLocaleString()}</td></tr>
+  <tr><th>支給額（総額）</th><td colspan="3" class="big">¥${c.pay.toLocaleString()}</td></tr>
+  <tr><th>社会保険料</th><td>¥${shakai.toLocaleString()}${shakai?`（${parts.join('／')}）`:''}</td>
+      <th>雇用保険料</th><td>¥${N(b.employment_insurance).toLocaleString()}</td></tr>
+  <tr><th>所得税</th><td>¥${N(b.income_tax).toLocaleString()}</td><th>住民税・他控除</th><td>¥${(N(b.resident_tax)+N(b.other_deduction)).toLocaleString()}</td></tr>
+  <tr><th>差引支給額</th><td colspan="3" class="big">¥${c.net.toLocaleString()}</td></tr></table>
+  <p style="font-size:11px;color:#666;">発行日: ${new Date().toLocaleDateString('ja-JP')}${b.source?'　／　当時の給与明細（Excel）の内容をアプリに転記して再発行':''}</p>
   </section>`;
 }
 
@@ -446,6 +504,8 @@ function payslipDocOpen(title, sectionsHtml){
   <style>body{font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;padding:32px;color:#222;} h1{font-size:20px;border-bottom:2px solid #222;padding-bottom:8px;} table{border-collapse:collapse;width:100%;margin:12px 0;} th,td{border:1px solid #999;padding:6px 10px;font-size:13px;text-align:left;} th{background:#f0f0f0;width:18%;} .big{font-size:18px;font-weight:700;}
   .slip{page-break-after:always;} .slip:last-of-type{page-break-after:auto;}
   .att-table th,.att-table td{padding:3px 10px;font-size:12px;}
+  .sum-table th,.sum-table td{padding:3px 5px;font-size:10.5px;text-align:right;width:auto;white-space:nowrap;} .sum-table td:first-child,.sum-table th:first-child{text-align:left;}
+  @page{size:A4;margin:12mm;} .summary{page:wide;} @page wide{size:A4 landscape;}
   .toolbar{position:sticky;top:0;background:#fffbe8;border:1px solid #d8c98a;border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
   .toolbar button{padding:10px 16px;min-height:44px;font-size:14px;border-radius:6px;border:1px solid #999;background:#fff;cursor:pointer;}
   @media print{
@@ -558,8 +618,78 @@ async function payslipPrintAll(){
   attRows.forEach(r=>{ (byStaff[r.staff_name]=byStaff[r.staff_name]||[]).push(r); });
   const sections=lines.map(l=>payslipSection(l, month,
     byStaff[l.staff_name]||attRows.filter(r=>l.staff_id&&r.staff_id===l.staff_id))).join('\n');
-  payslipDocOpen(`給与明細まとめ ${month}（${lines.length}名）`, sections);
+  const bonusHtml=bonuses.map(b=>bonusSection(b, month)).join('\n');
+  payslipDocOpen(`給与明細まとめ ${month}（${lines.length}名${bonuses.length?'・賞与'+bonuses.length+'名':''}）`, sections+bonusHtml);
   msg(`${lines.length}名分の明細を開きました`, true);
+}
+
+/* ── 期間でまとめて（市役所への提出・賃金台帳の控え） ──
+   2026-10-08: 市役所から R7.10〜R8.9 の給与明細（全従業員分）の提出依頼。
+   月ごとに admin_payroll_list を読み、1人ずつ月順に並べる（先頭に支給一覧）。
+   読めなかった月・明細の無い月は画面と一覧の両方に出す（黙って抜かさない）。 */
+function monthsBetween(from, to){
+  const out=[]; let [y,m]=from.split('-').map(Number); const [ty,tm]=to.split('-').map(Number);
+  while(y<ty||(y===ty&&m<=tm)){ out.push(`${y}-${String(m).padStart(2,'0')}`); if(++m>12){m=1;y++;} if(out.length>36) break; }
+  return out;
+}
+async function fetchMonthAttendance(month){
+  const res=await fetch(`${SB_URL}/rest/v1/attendance?work_date=gte.${month}-01&work_date=lte.${month}-${new Date(month.slice(0, 4), month.slice(5, 7), 0).getDate()}&select=staff_id,staff_name,work_date,clock_in,clock_out,break_minutes,extra_km,extra_km_note&order=work_date.asc`,
+    { headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` } });
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  return res.json();
+}
+async function payslipPeriodPrint(){
+  const pm=document.getElementById('pMsg');
+  const from=document.getElementById('pFrom').value, to=document.getElementById('pTo').value;
+  if(!/^\d{4}-\d{2}$/.test(from)||!/^\d{4}-\d{2}$/.test(to)||from>to){ pm.style.color='var(--red)'; pm.textContent='期間を正しく選んでください'; return; }
+  const months=monthsBetween(from,to);
+  if(months.length>24){ pm.style.color='var(--red)'; pm.textContent='一度に出せるのは24か月までです'; return; }
+  const key=await staffKeyEnsure(); if(!key) return;
+  pm.style.color='var(--text2)'; pm.textContent='読み込み中…';
+  const byStaff={}, empty=[], attFail=[];
+  for(const m of months){
+    let r;
+    try{ r=await sbRpc('admin_payroll_list',{p_staff_key:key,p_month:m}); }
+    catch(e){
+      if(String(e.message).includes('スタッフキー')) staffKeyClear();
+      pm.style.color='var(--red)'; pm.textContent=`${m} の読み込みに失敗: ${e.message}（何も開いていません）`; return;
+    }
+    const ls=r.lines||[], bs=r.bonuses||[];
+    if(!ls.length&&!bs.length){ empty.push(m); continue; }
+    const ctx={trips:r.trips||[], attMap:{}}; (r.attendance||[]).forEach(a=>ctx.attMap[a.staff_name]=a);
+    let att=[];
+    if(ls.some(l=>!l.source)){ try{ att=await fetchMonthAttendance(m); }catch(e){ attFail.push(m); } }
+    ls.forEach(l=>(byStaff[l.staff_name]=byStaff[l.staff_name]||[]).push({kind:'line',month:m,l,ctx,
+      rows:att.filter(a=>a.staff_name===l.staff_name||(l.staff_id&&a.staff_id===l.staff_id))}));
+    bs.forEach(b=>(byStaff[b.staff_name]=byStaff[b.staff_name]||[]).push({kind:'bonus',month:m,b}));
+  }
+  const names=Object.keys(byStaff).sort((a,b)=>a.localeCompare(b,'ja'));
+  if(!names.length){ pm.style.color='var(--red)'; pm.textContent='この期間の明細がありません'; return; }
+  const netOf=it=>it.kind==='line'?calc(it.l,it.ctx).net:bonusCalc(it.b).net;
+  const payOf=it=>it.kind==='line'?calc(it.l,it.ctx).pay:bonusCalc(it.b).pay;
+  // 先頭: 支給一覧（人×月の支給総額。賞与は別行）
+  const head=months.map(m=>`<th>${m.slice(2).replace('-','/')}</th>`).join('');
+  let gPay=0, gNet=0;
+  const rowsHtml=names.map(n=>{
+    const its=byStaff[n];
+    const cell=(kind,m)=>{ const it=its.find(x=>x.kind===kind&&x.month===m); return it?payOf(it).toLocaleString():''; };
+    const tp=its.reduce((a,x)=>a+payOf(x),0), tn=its.reduce((a,x)=>a+netOf(x),0); gPay+=tp; gNet+=tn;
+    const hasBonus=its.some(x=>x.kind==='bonus');
+    return `<tr><td>${esc(n)}</td>${months.map(m=>`<td>${cell('line',m)}</td>`).join('')}<td>${tp.toLocaleString()}</td><td>${tn.toLocaleString()}</td></tr>`
+      +(hasBonus?`<tr><td style="padding-left:14px;color:#555;">└ 賞与</td>${months.map(m=>`<td>${cell('bonus',m)}</td>`).join('')}<td colspan="2"></td></tr>`:'');
+  }).join('');
+  const summary=`<section class="slip summary">
+  <h1>給与支給一覧　${from.replace('-','年')}月〜${to.replace('-','年')}月</h1>
+  <p>館山ジビエセンター（合同会社アルコ）　${names.length}名・明細${names.reduce((a,n)=>a+byStaff[n].length,0)}枚（支給総額、円）</p>
+  ${empty.length?`<p style="color:#b0432f;font-weight:700;">明細の無い月: ${empty.join('、')}（給与計算が未作成）</p>`:''}
+  <table class="sum-table"><thead><tr><th>氏名</th>${head}<th>支給計</th><th>差引計</th></tr></thead>
+  <tbody>${rowsHtml}<tr><td><b>合計</b></td>${months.map(()=>'<td></td>').join('')}<td><b>${gPay.toLocaleString()}</b></td><td><b>${gNet.toLocaleString()}</b></td></tr></tbody></table>
+  <p style="font-size:11px;color:#666;">2026年6月以前は当時の給与明細（Excel）から転記。発行日: ${new Date().toLocaleDateString('ja-JP')}</p>
+  </section>`;
+  const sections=names.map(n=>byStaff[n].map(it=>it.kind==='line'?payslipSection(it.l,it.month,it.rows,it.ctx):bonusSection(it.b,it.month)).join('\n')).join('\n');
+  payslipDocOpen(`給与明細 ${from}〜${to}（${names.length}名）`, summary+sections);
+  pm.style.color=empty.length||attFail.length?'var(--red)':'var(--green)';
+  pm.textContent=`${names.length}名分を開きました`+(empty.length?`／明細の無い月: ${empty.join('、')}`:'')+(attFail.length?`／勤怠を読めなかった月: ${attFail.join('、')}`:'');
 }
 
 /* ── 行き先別移動費（産廃処理など）の編集 ── */
