@@ -71,8 +71,8 @@ const path = require('path');
 
   // 全手順をまとめて印刷 に含まれる
   await page.evaluate(() => manualOpen('all'));
-  const all = await page.evaluate(() => ({ n: document.querySelectorAll('#manualView .mv-sheet').length, has: [...document.querySelectorAll('#manualView .mv-sheet h1')].some(h => /解体室の清掃手順/.test(h.textContent)) }));
-  ck('「全手順をまとめて印刷」に解体室の清掃手順が含まれる（⑥が2つあるので全14枚）', all.n === 14 && all.has, JSON.stringify(all));
+  const all = await page.evaluate(() => ({ n: document.querySelectorAll('#manualView .mv-sheet').length, total: MANUALS.length, has: [...document.querySelectorAll('#manualView .mv-sheet h1')].some(h => /解体室の清掃手順/.test(h.textContent)) }));
+  ck('「全手順をまとめて印刷」に解体室の清掃手順が含まれる（全手順が1枚ずつ）', all.n === all.total && all.n >= 14 && all.has, JSON.stringify(all));
   await page.evaluate(() => manualClose());
 
   // 清掃記録ダイアログ: 解体室のときだけ手順へのボタン
