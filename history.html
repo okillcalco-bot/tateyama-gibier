@@ -87,6 +87,12 @@ tr:last-child td { border-bottom:none; }
 <div class="main">
   <div id="statusBar" class="status-bar"></div>
 
+  <div class="chart-card chart-full" style="margin-bottom:20px" id="speciesCard">
+    <div class="chart-header"><div><div class="chart-title">🐗 獣種別の捕獲数（年度合計）</div>
+      <div class="chart-subtitle">上の「獣種」の選択に関係なく、全獣種を並べます（市・半期の絞り込みは効きます）。進行中の年度は今日までの数。</div></div></div>
+    <div id="speciesBox" class="muted" style="overflow-x:auto">読み込み中…</div>
+  </div>
+
   <div class="chart-card chart-full" style="margin-bottom:20px">
     <div class="chart-header"><div><div class="chart-title">📅 年度ごとの実績</div>
       <div class="chart-subtitle">令和3〜7年度は台帳スプレッドシート（生データ・イノシシ以外データ）から取り込んだもの、令和8年度以降は業務アプリの個体。矢印は前年度比。</div></div></div>
@@ -206,6 +212,23 @@ function stats(rows){
     pickupPct: n ? rows.filter(r=>r.pickup).length/n*100 : null, hunters: new Set(rows.map(r=>r.hunter_name).filter(Boolean)).size, areas: new Set(rows.map(r=>r.area).filter(Boolean)).size,
     ranks, yr, species: rows.reduce((m,r)=>{ m[r.species]=(m[r.species]||0)+1; return m; }, {}) };
 }
+// 獣種別の捕獲数（年度合計）: 「イノシシとかの捕獲数を年度で出したい」（2026-10-08）。
+// 獣種フィルターを無視して全獣種を数える。イノシシ→頭数の多い順。
+const SPECIES_ORDER = ['イノシシ','シカ','キョン','アライグマ','ハクビシン','タヌキ','ノウサギ'];
+function renderSpeciesTotals(years){
+  const box = document.getElementById('speciesBox');
+  if (!years.length) { box.innerHTML = '<span class="muted">年度を選んでください</span>'; return; }
+  const city = document.getElementById('fCity').value, half = document.getElementById('fHalf').value;
+  const rows = D.all.filter(r => D.sel.has(r.fiscal_year) && (!city || r.city === city) && (!half || r.half === half));
+  const cnt = {}; rows.forEach(r => { const s = r.species || '不明'; (cnt[s] = cnt[s] || {})[r.fiscal_year] = (cnt[s][r.fiscal_year] || 0) + 1; });
+  const tot = s => years.reduce((a, y) => a + ((cnt[s] || {})[y] || 0), 0);
+  const sp = Object.keys(cnt).sort((a, b) => { const ia = SPECIES_ORDER.indexOf(a), ib = SPECIES_ORDER.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || tot(b) - tot(a); });
+  const yTot = y => sp.reduce((a, s) => a + ((cnt[s] || {})[y] || 0), 0);
+  const last = Math.max(...D.years);
+  box.innerHTML = `<table id="speciesTable"><thead><tr><th>獣種</th>${years.map(y => `<th class="td-num">${fy(y)}年度${y === last ? '<br><span class="muted">（進行中）</span>' : ''}</th>`).join('')}</tr></thead><tbody>
+    ${sp.map(s => `<tr><td>${esc(s)}</td>${years.map((y, i) => `<td class="td-num">${(cnt[s] || {})[y] || 0}${i ? delta((cnt[s] || {})[y] || 0, (cnt[s] || {})[years[i - 1]] || 0) : ''}</td>`).join('')}</tr>`).join('')}
+    <tr class="species-total"><td><b>合計</b></td>${years.map((y, i) => `<td class="td-num"><b>${yTot(y)}</b>${i ? delta(yTot(y), yTot(years[i - 1])) : ''}</td>`).join('')}</tr></tbody></table>`;
+}
 function render(){
   const rows = filtered(); const years = D.years.filter(y => D.sel.has(y));
   const st = {}; years.forEach(y => { st[y] = stats(rows.filter(r => r.fiscal_year === y)); });
@@ -227,6 +250,7 @@ function render(){
   ];
   document.getElementById('yearBox').innerHTML = years.length ? `<table><thead><tr><th></th>${years.map(y=>`<th class="td-num">${fy(y)}年度${y===Math.max(...D.years)?'<br><span class="muted">（進行中）</span>':''}</th>`).join('')}</tr></thead><tbody>
     ${cols.map(([label, get, dl]) => `<tr><td>${label}</td>${years.map((y,i) => `<td class="td-num">${get(y)}${dl ? dl(y, i ? years[i-1] : null) : ''}</td>`).join('')}</tr>`).join('')}</tbody></table>` : '<span class="muted">年度を選んでください</span>';
+  renderSpeciesTotals(years);
   // グラフ
   Object.values(charts).forEach(c => { try { c.destroy(); } catch(e) {} }); charts = {};
   const grid = document.getElementById('chartsGrid'); grid.innerHTML = '';
