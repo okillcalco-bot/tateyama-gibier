@@ -2216,7 +2216,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="section">
       <div class="section-title">🏛 市役所提出（指定管理 業務報告書）</div>
       <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;line-height:1.7;">
-        毎月の「TGC業務報告書」を提出様式そのままのExcelで生成します。<b>業務日誌（出勤人数・受入頭数）と清掃記録はアプリのデータから自動転記</b>。清掃の担当は勤怠から決めます（解体側＝大和田・相川・大橋・名取・今泉、カット側＝白石・吉田・渡邊・黒川のうち、その日いちばん遅くまでいた人。担当が誰も出ていない日は沖）。点検保守は「○（異常なし）」、冷蔵・冷凍庫の温度は施設チェックの記録があればその値・無ければ範囲内の既定値、苦情は「なし」で埋めます（異常があった月だけExcel上で直してください）。<b>打合せ記録簿</b>（農水産課の議事録メール）と<b>収支状況</b>（千葉トラスト会計の月次損益）は下の入力欄に入れておくと Excel に転記されます。収支は翌月に届くため、対象月の分が無いときは直近の月の数字を使います。年度業務報告書は4月〜3月の月次報告書の綴りです（下の年度まとめで数字を確認できます）。
+        毎月の「TGC業務報告書」を提出様式そのままのExcelで生成します。<b>業務日誌（出勤人数・受入頭数）と清掃記録はアプリのデータから自動転記</b>。清掃の担当は勤怠から決めます（解体側＝大和田・相川・大橋・名取・今泉、カット側＝白石・吉田・渡邊・黒川のうち、その日いちばん遅くまでいた人。担当が誰も出ていない日は沖）。点検保守は「○（異常なし）」、冷蔵・冷凍庫の温度は施設チェックの記録があればその値・無ければ範囲内の既定値、苦情は「なし」で埋めます（異常があった月だけExcel上で直してください）。<b>打合せ記録簿</b>（農水産課の議事録メール）と<b>収支状況</b>（千葉トラスト会計の月次損益）は下の入力欄に入れておくと Excel に転記されます。収支は翌月に届くため、<b>対象月の1か月前の月次損益</b>を載せます（例: 9月の報告書には8月の収支）。年度業務報告書は4月〜3月の月次報告書の綴りです（下の年度まとめで数字を確認できます）。
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
         <div class="form-group" style="margin:0;"><label>対象月</label><input class="form-input" id="city-report-month" type="month" style="max-width:170px;" onchange="cityInputsLoad()"></div>
@@ -14608,12 +14608,15 @@ async function cityInputsFetch(month) {
   const out = {}; rows.forEach(r => { out[r.kind] = r; }); return out;
 }
 /* 収支は会計事務所から翌月に届く。報告月の分が無ければ、同じ年度内で直近の月を使う */
+/* 報告書に載せる収支は「対象月の1か月前」の月次損益（2026-10-08 沖: 売上は対象月の1か月前までのもの。
+   月次損益は翌月に届くため）。収支は損益の月で保存し（kind=pl, month=損益の月）、別の月で代用しない */
+function cityPlMonthFor(month) {
+  const [y, m] = month.split('-').map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+}
 async function cityPlForReport(month) {
-  const rows = await sb('GET', 'city_report_inputs', null, `?kind=eq.pl&month=lte.${month}&select=month,data,source&order=month.desc&limit=1`);
-  if (!rows.length) return null;
-  const [y, m] = month.split('-').map(Number), fy = m >= 4 ? y : y - 1;
-  const [py, pm] = rows[0].month.split('-').map(Number), pfy = pm >= 4 ? py : py - 1;
-  return pfy === fy ? rows[0] : null;   // 年度をまたいだ古い数字は使わない
+  const rows = await sb('GET', 'city_report_inputs', null, `?kind=eq.pl&month=eq.${cityPlMonthFor(month)}&select=month,data,source&limit=1`);
+  return rows.length ? rows[0] : null;
 }
 function cityInputsRenderPl(data) {
   const grid = document.getElementById('ci-pl-grid'); if (!grid) return;
@@ -14643,15 +14646,15 @@ async function cityInputsLoad() {
     set('ci-m-client', m.client_attendees); set('ci-m-contractor', m.contractor_attendees); set('ci-m-items', m.items); set('ci-m-next', m.next);
     document.getElementById('ci-m-msg').textContent = cur.meeting ? `保存済み（${String(cur.meeting.updated_at).slice(0, 10)}${cur.meeting.source ? '・' + cur.meeting.source : ''}）` : 'この月の打合せ記録はまだありません';
     const note = document.getElementById('ci-pl-note');
-    if (cur.pl) { cityInputsRenderPl(cur.pl.data); note.textContent = `${month.replace('-', '/')} の収支（${cur.pl.source || '出どころ未記入'}）`; }
-    else if (pl) { cityInputsRenderPl(pl.data); note.innerHTML = `対象月の収支はまだありません。Excel には直近の <b>${esc2(pl.month.replace('-', '/'))}</b> 分（${esc2(pl.source || '')}）を転記します。ここで保存すると <b>${esc2(month.replace('-', '/'))}</b> 分として保存されます`; }
-    else { cityInputsRenderPl({}); note.textContent = 'この年度の収支はまだありません。損益計算書「ジビエセンター」の当月列を入れてください'; }
+    const plm = cityPlMonthFor(month), plLabel = Number(plm.slice(5)) + '月';
+    if (pl) { cityInputsRenderPl(pl.data); note.innerHTML = `この報告書に載せるのは <b>${esc2(plm.replace('-', '/'))}</b>（対象月の1か月前）の収支です（${esc2(pl.source || '出どころ未記入')}）`; }
+    else { cityInputsRenderPl({}); note.innerHTML = `<b style="color:var(--red);">${esc2(plm.replace('-', '/'))} の収支がまだありません。</b>損益計算書「ジビエセンター」の${plLabel}の列を入れて保存してください（${plm.replace('-', '/')} 分として保存されます）`; }
     document.getElementById('ci-pl-msg').textContent = '';
-    st.textContent = `${month.replace('-', '/')}: 打合せ ${cur.meeting ? '✓' : '未'} / 収支 ${cur.pl ? '✓' : (pl ? '直近' + pl.month.slice(5).replace(/^0/, '') + '月分' : '未')}`;
+    st.textContent = `${month.replace('-', '/')}: 打合せ ${cur.meeting ? '✓' : '未'} / 収支（${plLabel}分） ${pl ? '✓' : '未'}`;
   } catch (e) { st.textContent = '読込に失敗: ' + e.message; }
 }
 async function cityInputsSave(kind) {
-  const month = cityReportMonthVal();
+  const month = kind === 'pl' ? cityPlMonthFor(cityReportMonthVal()) : cityReportMonthVal();
   const msg = document.getElementById(kind === 'pl' ? 'ci-pl-msg' : 'ci-m-msg');
   const g = id => (document.getElementById(id).value || '').trim();
   let data, source;
@@ -14777,8 +14780,8 @@ async function cityReportExcel() {
     }
     const era = `令和${d.y - 2018}年${d.m}月`;
     patch('表紙', 'B13', { str: `（${era}）` });
-    // 収支は報告月の分が無ければ直近の月（同じ年度内）。目次と収支の見出しはその月にする
-    const plMonth = plRow ? plRow.month : month;
+    // 収支は対象月の1か月前の分。目次と収支の見出しはその月にする（無ければ見出しだけで数字は空欄）
+    const plMonth = cityPlMonthFor(month);
     const [plY, plM] = plMonth.split('-').map(Number);
     const plEra = `令和${plY - 2018}年${plM}月`;
     patch('目次', 'C15', { str: `収支（${plEra}分）` });
@@ -14861,7 +14864,7 @@ async function cityReportExcel() {
         }
       }
     }
-    // 6収支状況（入力欄の収支を転記。報告月の分が無ければ直近の月。無ければ見出しだけ）
+    // 6収支状況（入力欄の収支＝対象月の1か月前を転記。無ければ見出しだけ）
     const fy = plM >= 4 ? plY : plY - 1;
     patch('6収支状況', 'A1', { str: `令和${fy - 2018}年度` });
     patch('6収支状況', 'B1', { str: `${plM}月` });
@@ -14881,7 +14884,7 @@ async function cityReportExcel() {
     a.download = `TGC業務報告書_令和${d.y - 2018}年${d.m}月.xlsx`;
     a.click(); URL.revokeObjectURL(a.href);
     playFeedbackSound(true);
-    toast(`業務報告書（${era}）を生成しました。打合せ記録 ${mc ? '転記済み' : '未入力'}・収支 ${plRow ? plEra + '分を転記' : '未入力'}。温度記録・点検の△✕はExcel上で仕上げてください`);
+    toast(`業務報告書（${era}）を生成しました。打合せ記録 ${mc ? '転記済み' : '未入力'}・収支 ${plRow ? plEra + '分を転記' : plEra + '分が未入力（空欄）'}。温度記録・点検の△✕はExcel上で仕上げてください`, plRow ? undefined : 'error');
   } catch (e) {
     playFeedbackSound(false);
     toast('生成に失敗しました: ' + e.message, 'error');
