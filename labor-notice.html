@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>労働条件通知書 | 館山ジビエセンター</title>
+<style>
+:root{
+  --bg:#f6f4ef; --card:#fff; --border:#ddd6c8; --text:#2b2a26; --text2:#6f6a5d; --text3:#a09a8a;
+  --gold:#a8873c; --green:#4a7a3d; --red:#b0432f; --orange:#b7791f; --blue:#3d5a7a;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:14px;}
+header{background:#2f2b23;color:#f0ead8;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+header h1{font-size:16px;font-weight:700;}
+header .sub{font-size:11px;color:#b6ad97;}
+main{padding:14px;max-width:1100px;margin:0 auto;}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
+.bar input,.bar select{padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;font-size:14px;}
+.btn{padding:7px 12px;border:1px solid var(--border);border-radius:7px;background:#fff;cursor:pointer;font-size:13px;color:var(--text);text-decoration:none;display:inline-block;}
+.btn:hover{background:#f2eee2;}
+.btn-gold{background:var(--gold);border-color:var(--gold);color:#fff;}
+.btn-sm{padding:4px 8px;font-size:12px;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;overflow-x:auto;}
+table.list{border-collapse:collapse;width:100%;}
+table.list th,table.list td{border-bottom:1px solid #eee8da;padding:7px 6px;text-align:left;font-size:13px;vertical-align:top;}
+table.list th{background:#faf7ef;color:var(--text2);font-size:11px;}
+.st-ok{color:var(--green);font-weight:700;} .st-warn{color:var(--orange);font-weight:700;} .st-ng{color:var(--red);font-weight:700;}
+.hint{font-size:11.5px;color:var(--text2);margin:10px 2px;line-height:1.8;}
+#msg{font-size:13px;}
+#editModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;align-items:flex-start;justify-content:center;overflow:auto;padding:20px 8px;}
+#editModal .box{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;width:760px;max-width:100%;}
+#editModal h3{font-size:15px;margin-bottom:10px;}
+.f{display:grid;grid-template-columns:150px 1fr;gap:6px 10px;align-items:center;}
+.f label{font-size:12px;color:var(--text2);}
+.f input,.f select,.f textarea{width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:#fffdf6;font-size:13px;font-family:inherit;}
+.f textarea{min-height:44px;}
+@media (max-width:600px){ .f{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<header>
+  <h1>📝 労働条件通知書</h1>
+  <span class="sub">スタッフ台帳の賃金・保険から下書き → 確認して発行（記録は追記のみ）→ 印刷・PDF</span>
+  <span style="flex:1"></span>
+  <a class="btn btn-sm" href="payroll.html">💴 給与計算</a>
+  <a class="btn btn-sm" href="index.html">← 業務アプリ</a>
+</header>
+<main>
+<div class="bar">
+  <button class="btn" onclick="load()">↻ 再読込</button>
+  <button class="btn btn-gold" onclick="printLatestAll()">📚 全員分（アプリで発行した最新）を印刷</button>
+  <span id="msg"></span>
+</div>
+<div class="card">
+  <table class="list">
+    <thead><tr><th>氏名</th><th>現在の条件（スタッフ台帳）</th><th>通知書</th><th>状態</th><th></th></tr></thead>
+    <tbody id="rows"><tr><td colspan="5">読み込み中…</td></tr></tbody>
+  </table>
+</div>
+<div class="hint">
+  ・<b>📝 作成</b>でスタッフ台帳の時給／月給・通勤手当（km単価）・止めさし手当・社会保険／雇用保険から下書きを作ります。会社共通の欄（就業場所・休日・締日など）は、これまでのWordの通知書と同じ内容です。<br>
+  ・内容を確認して<b>「発行して印刷」</b>すると交付日つきで記録され、印刷画面が開きます（記録は消さず、条件が変わったら新しく発行し直します）。<br>
+  ・状態が<span class="st-warn">要更新</span>の人は、最後の通知書の賃金が今の賃金と違います。<span class="st-ng">未作成</span>の人は通知書がまだありません。<br>
+  ・Wordで作った過去の通知書（2021〜2024年）は「Word原本」のリンクから開けます。
+</div>
+
+<div id="editModal" onclick="if(event.target===this)editClose()">
+  <div class="box">
+    <h3 id="emTitle"></h3>
+    <div class="f" id="emForm"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap;">
+      <span id="emMsg" style="font-size:12px;color:var(--red);align-self:center;"></span>
+      <button class="btn" onclick="editClose()">閉じる</button>
+      <button class="btn" onclick="editPreview()">👁 下書きを見る（発行しない）</button>
+      <button class="btn btn-gold" onclick="editIssue()">✅ 発行して印刷</button>
+    </div>
+  </div>
+</div>
+</main>
+<script>
+const SB_URL='https://clpdyrehdgzgiidbfucj.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+async function sbRpc(fn,args){
+  const res=await fetch(`${SB_URL}/rest/v1/rpc/${fn}`,{
+    method:'POST',
+    headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Content-Type':'application/json'},
+    body:JSON.stringify(args||{})
+  });
+  if(!res.ok){ let m=''; try{m=JSON.parse(await res.text()).message||'';}catch(e){} throw new Error(m||('HTTP '+res.status)); }
+  const t=await res.text();
+  return t?JSON.parse(t):null;
+}
+/* スタッフキー（賃金を含むため必須。payroll.html と共通の保存場所） */
+function staffKeyGet(){ try{ return localStorage.getItem('tg_staff_key')||sessionStorage.getItem('tg_staff_key')||''; }catch(e){ return ''; } }
+function staffKeyClear(){ try{ localStorage.removeItem('tg_staff_key'); sessionStorage.removeItem('tg_staff_key'); }catch(e){} }
+async function staffKeyEnsure(){
+  let k=staffKeyGet();
+  if(k) return k;
+  k=prompt('スタッフキーを入力してください\n（労働条件通知書を開くのに必要です）');
+  if(!k) return '';
+  k=k.trim();
+  try{ if(!await sbRpc('staff_key_ok',{p_staff_key:k})){ alert('スタッフキーが違います'); return ''; } }
+  catch(e){ alert('確認できませんでした：'+e.message); return ''; }
+  try{ localStorage.setItem('tg_staff_key',k); }catch(e){ try{ sessionStorage.setItem('tg_staff_key',k); }catch(_e){} }
+  return k;
+}
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const N=v=>(v===''||v==null||isNaN(+v))?0:+v;
+const yen=v=>Math.round(N(v)).toLocaleString()+'円';
+const msg=(t,ok)=>{ const m=document.getElementById('msg'); m.textContent=t; m.style.color=ok?'var(--green)':'var(--red)'; };
+const todayYmd=()=>{ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+
+let staff=[], notices=[], defaults={};
+
+/* 和暦（令和）表記 */
+function wareki(ymd){
+  const [y,m,d]=String(ymd||'').split('-').map(Number); if(!y) return '';
+  const r=y-2018; return `令和${r===1?'元':r}年${m}月${d}日`;
+}
+function curWage(s){ return s.employment_type==='月給'||(!N(s.hourly_wage)&&N(s.monthly_salary)) ? {type:'月給',wage:N(s.monthly_salary)} : {type:'時給',wage:N(s.hourly_wage)}; }
+/* その人の通知書（新しい順）。アプリ発行（source なし）を優先して「最新」とする */
+function noticesOf(name){ return notices.filter(n=>n.staff_name===name); }
+function latestIssued(name){ return noticesOf(name).find(n=>!n.source); }
+function statusOf(s){
+  const cur=curWage(s), li=latestIssued(s.name), any=noticesOf(s.name)[0];
+  const ref=li||any;
+  if(!ref) return {cls:'st-ng',text:'未作成'};
+  const c=ref.conditions||{};
+  if(c.wage_type!==cur.type||N(c.wage)!==cur.wage) return {cls:'st-warn',text:`要更新（通知書 ${c.wage_type||''}${yen(c.wage)} → 現在 ${cur.type}${yen(cur.wage)}）`};
+  if(!li) return {cls:'st-warn',text:'Word原本のみ'};
+  return {cls:'st-ok',text:'最新'};
+}
+
+async function load(){
+  const key=await staffKeyEnsure(); if(!key){ msg('スタッフキーが必要です',false); return; }
+  try{
+    const r=await sbRpc('admin_labor_notice_list',{p_staff_key:key});
+    staff=r.staff||[]; notices=r.notices||[]; defaults=r.defaults||{};
+    render();
+    const ng=staff.filter(s=>statusOf(s).cls!=='st-ok').length;
+    msg(`在籍 ${staff.length}名`+(ng?`／作成・更新が必要 ${ng}名`:'／全員最新'), !ng);
+  }catch(e){
+    if(String(e.message).includes('スタッフキー')) staffKeyClear();
+    msg('読込失敗: '+e.message,false);
+  }
+}
+function render(){
+  document.getElementById('rows').innerHTML=staff.map((s,i)=>{
+    const cur=curWage(s), st=statusOf(s);
+    const ns=noticesOf(s.name).map(n=>n.source
+      ? `<div><a href="${esc(n.source_url)}" target="_blank" rel="noopener">Word原本</a> ${esc(n.issued_on)}（${esc((n.conditions||{}).wage_type||'')}${yen((n.conditions||{}).wage)}）</div>`
+      : `<div><a href="#" onclick="openNotice('${n.id}');return false;">📄 ${esc(n.issued_on)} 発行</a>（${esc(n.conditions.wage_type)}${yen(n.conditions.wage)}）</div>`).join('')||'—';
+    return `<tr>
+      <td><b>${esc(s.name)}</b><div style="font-size:11px;color:var(--text3)">${esc(s.role||'')}</div></td>
+      <td>${cur.type} ${yen(cur.wage)}<div style="font-size:11px;color:var(--text2)">通勤 ${N(s.commute_yen_per_km)||20}円/km${s.stopkill_eligible?'・止めさし手当':''}／社保 ${esc(s.social_insurance||'未設定')}・雇保 ${esc(s.employment_insurance||'未設定')}</div></td>
+      <td style="font-size:12px;">${ns}</td>
+      <td class="${st.cls}">${esc(st.text)}</td>
+      <td><button class="btn btn-sm" onclick="editOpen(${i})">📝 作成</button></td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="5">在籍スタッフがいません</td></tr>';
+}
+
+/* ── 下書き（スタッフ台帳＋会社共通の既定値） ── */
+function draftFor(s){
+  const d=defaults, cur=curWage(s);
+  const allow=[{name:'通勤手当',amount:`${N(s.commute_yen_per_km)||20}円`,method:`通勤キロ数1キロあたり${N(s.commute_yen_per_km)||20}円`}];
+  if(s.stopkill_eligible) allow.push({name:'止めさし・搬入手当',amount:'3,000円',method:'止めさし・搬入（引き取り）1回あたり3,000円'});
+  const ins=v=>/^加入|^有/.test(String(v||''));
+  return {
+    issued_on: todayYmd(),
+    employer_name:d.employer_name||'', employer_addr:d.employer_addr||'', employer_rep:d.employer_rep||'',
+    contract:'なし', contract_from:'', contract_to:'', renewal:'',
+    place:d.place||'', duties:d.duties||'', hours_text:d.hours_text||'', break_min:d.break_min??60, overtime:d.overtime||'無',
+    holidays:d.holidays||'', leave_text:d.leave_text||'',
+    wage_type:cur.type, wage:cur.wage, allowances:allow,
+    cutoff:d.cutoff||'', payday:d.payday||'', pay_method:d.pay_method||'',
+    retire_age:d.retire_age||'無', rehire:d.rehire||'無', resign_notice:d.resign_notice||'', dismissal:d.dismissal||'',
+    social_insurance: ins(s.social_insurance)?'厚生年金・健康保険':'',
+    employment_insurance: ins(s.employment_insurance)?'有':'無',
+    contact_dept:d.contact_dept||'', contact_name:d.contact_name||'', contact_tel:d.contact_tel||'',
+  };
+}
+const FORM=[
+  ['issued_on','交付日','date'],
+  ['contract','契約期間','select:なし|あり'], ['contract_from','（ありの場合）開始','date'], ['contract_to','（ありの場合）終了','date'],
+  ['renewal','（ありの場合）更新','select:|自動的に更新する|更新する場合があり得る|契約の更新はしない'],
+  ['place','就業の場所','text'], ['duties','従事すべき業務の内容','text'],
+  ['hours_text','始業・終業の時刻等','textarea'], ['break_min','休憩時間（分）','number'], ['overtime','所定時間外労働','select:無|有'],
+  ['holidays','休日','textarea'], ['leave_text','休暇','textarea'],
+  ['wage_type','基本賃金','select:時給|月給|日給'], ['wage','金額（円）','number'],
+  ['allowances_text','諸手当（1行に「名称｜金額｜計算方法」）','textarea'],
+  ['cutoff','賃金締切日','text'], ['payday','賃金支払日','text'], ['pay_method','賃金の支払方法','text'],
+  ['retire_age','定年制（無 または 歳）','text'], ['rehire','継続雇用制度（無 または 歳まで）','text'],
+  ['resign_notice','自己都合退職の手続','text'], ['dismissal','解雇の事由及び手続','textarea'],
+  ['social_insurance','社会保険（加入なしは空欄）','select:|厚生年金・健康保険|健康保険のみ|その他'],
+  ['employment_insurance','雇用保険の適用','select:有|無'],
+  ['contact_dept','相談窓口 部署','text'], ['contact_name','相談窓口 担当者','text'], ['contact_tel','相談窓口 連絡先','text'],
+];
+let editing=null;
+function editOpen(i){
+  const s=staff[i]; const d=draftFor(s);
+  editing={s, d};
+  document.getElementById('emTitle').textContent=`${s.name} さんの労働条件通知書（下書き）`;
+  document.getElementById('emMsg').textContent='';
+  document.getElementById('emForm').innerHTML=FORM.map(([k,label,type])=>{
+    const v=k==='allowances_text'?d.allowances.map(a=>`${a.name}｜${a.amount}｜${a.method}`).join('\n'):(d[k]??'');
+    let input;
+    if(type.startsWith('select:')) input=`<select id="ef_${k}">${type.slice(7).split('|').map(o=>`<option ${String(o)===String(v)?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
+    else if(type==='textarea') input=`<textarea id="ef_${k}">${esc(v)}</textarea>`;
+    else input=`<input id="ef_${k}" type="${type}" value="${esc(v)}">`;
+    return `<label for="ef_${k}">${esc(label)}</label>${input}`;
+  }).join('');
+  document.getElementById('editModal').style.display='flex';
+}
+function editClose(){ document.getElementById('editModal').style.display='none'; editing=null; }
+function editRead(){
+  const c={...editing.d};
+  FORM.forEach(([k,,type])=>{ const el=document.getElementById('ef_'+k); if(!el) return; c[k]=type==='number'?(el.value===''?'':N(el.value)):el.value.trim(); });
+  c.allowances=String(c.allowances_text||'').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{ const [name,amount,method]=l.split(/[｜|]/).map(x=>(x||'').trim()); return {name,amount,method}; });
+  delete c.allowances_text;
+  const issued_on=c.issued_on; delete c.issued_on;
+  const errs=[];
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(issued_on||'')) errs.push('交付日');
+  if(!N(c.wage)) errs.push('賃金の金額');
+  if(c.contract==='あり'&&(!c.contract_from||!c.contract_to)) errs.push('契約期間の開始・終了');
+  return {issued_on, c, errs};
+}
+function editPreview(){
+  const {issued_on,c}=editRead();
+  docOpen(`労働条件通知書（下書き）${editing.s.name}`, noticeHtml(editing.s.name, issued_on, c, true));
+}
+async function editIssue(){
+  const {issued_on,c,errs}=editRead();
+  const em=document.getElementById('emMsg');
+  if(errs.length){ em.textContent='入力が足りません: '+errs.join('・'); return; }
+  const key=await staffKeyEnsure(); if(!key) return;
+  try{
+    const id=await sbRpc('admin_labor_notice_issue',{p_staff_key:key,p:{staff_id:editing.s.id,staff_name:editing.s.name,issued_on,conditions:c}});
+    const name=editing.s.name;
+    notices.unshift({id,staff_id:editing.s.id,staff_name:name,issued_on,conditions:c,source:null});
+    editClose(); render();
+    docOpen(`労働条件通知書 ${name} ${issued_on}`, noticeHtml(name, issued_on, c));
+    msg(`${name} さんの通知書を発行しました（${issued_on}）`,true);
+  }catch(e){
+    if(String(e.message).includes('スタッフキー')) staffKeyClear();
+    em.textContent='発行できませんでした: '+e.message;   // 失敗は画面に出す（記録されていない）
+  }
+}
+function openNotice(id){
+  const n=notices.find(x=>x.id===id); if(!n) return;
+  docOpen(`労働条件通知書 ${n.staff_name} ${n.issued_on}`, noticeHtml(n.staff_name, n.issued_on, n.conditions||{}));
+}
+function printLatestAll(){
+  const have=[], missing=[];
+  staff.forEach(s=>{ const n=latestIssued(s.name); if(n) have.push(n); else missing.push(s.name); });
+  if(!have.length){ msg('アプリで発行した通知書がまだありません（📝 作成 から発行してください）',false); return; }
+  docOpen(`労働条件通知書（${have.length}名）`, have.map(n=>noticeHtml(n.staff_name,n.issued_on,n.conditions||{})).join('\n'),
+    missing.length?`未発行: ${missing.join('、')}`:'');
+  msg(`${have.length}名分を開きました`+(missing.length?`／未発行 ${missing.length}名: ${missing.join('、')}`:''), !missing.length);
+}
+
+/* ── 通知書本体（厚生労働省モデル様式「一般労働者用；常用、有期雇用型」の欄構成） ── */
+const maru=(opts,chosen)=>opts.map(o=>o===chosen?`<span class="maru">${esc(o)}</span>`:esc(o)).join('・');
+function noticeHtml(name, issued_on, c, draft){
+  const allow=(c.allowances||[]).filter(a=>a&&a.name);
+  const kana=['イ','ロ','ハ','ニ'];
+  const wageLine=['月給','日給','時給'].map(t=>{
+    const label={月給:'イ 月給',日給:'ロ 日給',時給:'ハ 時間給'}[t];
+    return t===c.wage_type?`<span class="maru">${label}</span>（${N(c.wage).toLocaleString()}円）`:`${label}（　　　円）`;
+  }).join('、');
+  const ret=String(c.retire_age||'無'), reh=String(c.rehire||'無');
+  return `<section class="notice">
+  ${draft?'<div class="draft">下書き（未発行）</div>':''}
+  <div class="kind">（一般労働者用；常用、有期雇用型）</div>
+  <h1>労 働 条 件 通 知 書</h1>
+  <table class="hd"><tr><td style="width:55%">　</td><td>${esc(wareki(issued_on))}</td></tr>
+  <tr><td><b style="font-size:15px;">${esc(name)}</b>　殿</td><td>事業場名称・所在地　<span class="nw">${esc(c.employer_name)}・${esc(c.employer_addr)}</span><br>使用者職氏名　${esc(c.employer_rep)}</td></tr></table>
+  <table class="nt">
+  <tr><th>契約期間</th><td>${c.contract==='あり'
+      ?`期間の定めなし・<span class="maru">期間の定めあり</span>（${esc(wareki(c.contract_from))}～${esc(wareki(c.contract_to))}）<br>契約の更新の有無：${esc(c.renewal||'')}`
+      :'<span class="maru">期間の定めなし</span>・期間の定めあり（　　年　月　日～　　年　月　日）'}</td></tr>
+  <tr><th>就業の場所</th><td>${esc(c.place)}</td></tr>
+  <tr><th>従事すべき業務の内容</th><td>${esc(c.duties)}</td></tr>
+  <tr><th>始業、終業の時刻、休憩時間、所定時間外労働の有無</th><td>１ 始業・終業の時刻等　${esc(c.hours_text)}<br>２ 休憩時間　${N(c.break_min)}分<br>３ 所定時間外労働の有無　${maru(['有','無'],c.overtime)}</td></tr>
+  <tr><th>休日</th><td>${esc(c.holidays)}</td></tr>
+  <tr><th>休暇</th><td>${esc(c.leave_text).replace(/\n/g,'<br>')}</td></tr>
+  <tr><th>賃金</th><td>１ 基本賃金　${wageLine}<br>
+    ２ 諸手当の額又は計算方法<br>${allow.length?allow.map((a,i)=>`　${kana[i]||'・'}（${esc(a.name)}　${esc(a.amount)}／計算方法：${esc(a.method)}）`).join('<br>'):'　なし'}<br>
+    ３ 所定時間外、休日又は深夜労働に対して支払われる割増賃金率　法定どおり（時間外25％、休日35％、深夜25％）<br>
+    ４ 賃金締切日　${esc(c.cutoff)}　　５ 賃金支払日　${esc(c.payday)}<br>
+    ６ 賃金の支払方法　${esc(c.pay_method)}</td></tr>
+  <tr><th>退職に関する事項</th><td>１ 定年制（${/^無/.test(ret)?'有（　歳）， <span class="maru">無</span>':`<span class="maru">有（${esc(ret.replace(/歳$/,''))}歳）</span>， 無`}）<br>
+    ２ 継続雇用制度（${/^無/.test(reh)?'有（　歳まで）， <span class="maru">無</span>':`<span class="maru">有（${esc(reh.replace(/歳まで$/,''))}歳まで）</span>， 無`}）<br>
+    ３ 自己都合退職の手続（${esc(c.resign_notice)}）<br>４ 解雇の事由及び手続　${esc(c.dismissal||'')}</td></tr>
+  <tr><th>そ の 他</th><td>・社会保険の加入状況（${c.social_insurance?`<span class="maru">${esc(c.social_insurance)}</span>`:'なし'}）<br>
+    ・雇用保険の適用（${maru(['有','無'],c.employment_insurance)}）<br>
+    ・雇用管理の改善等に関する事項に係る相談窓口　部署名 ${esc(c.contact_dept)}　担当者職氏名 ${esc(c.contact_name)}（連絡先 ${esc(c.contact_tel)}）</td></tr>
+  </table>
+  </section>`;
+}
+function docOpen(title, body, warn){
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(title)}</title>
+  <style>body{font-family:'Hiragino Mincho ProN','Yu Mincho','Hiragino Kaku Gothic ProN',serif;padding:24px;color:#111;}
+  .notice{page-break-after:always;max-width:760px;margin:0 auto 30px;position:relative;} .notice:last-of-type{page-break-after:auto;}
+  .kind{font-size:11px;} h1{text-align:center;font-size:20px;letter-spacing:4px;margin:6px 0 10px;}
+  table{border-collapse:collapse;width:100%;} .hd td{padding:3px 4px;font-size:12.5px;vertical-align:bottom;}
+  .nt th,.nt td{border:1px solid #333;padding:5px 7px;font-size:11.5px;line-height:1.65;text-align:left;vertical-align:top;}
+  .nt th{width:19%;font-weight:600;background:#f6f6f6;}
+  .nw{white-space:nowrap;} .maru{border:1.3px solid #111;border-radius:999px;padding:0 4px;}
+  .foot{font-size:10.5px;margin-top:6px;} .draft{position:absolute;top:0;right:0;color:#b0432f;border:2px solid #b0432f;padding:2px 8px;font-weight:700;}
+  .toolbar{position:sticky;top:0;background:#fffbe8;border:1px solid #d8c98a;border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-family:sans-serif;}
+  .toolbar button{padding:10px 16px;min-height:44px;font-size:14px;border-radius:6px;border:1px solid #999;background:#fff;cursor:pointer;}
+  @media print{ .toolbar{display:none;} body{padding:0;} @page{size:A4;margin:12mm;} tr{page-break-inside:avoid;} }</style></head><body>
+  <div class="toolbar"><button onclick="window.print()">🖨 印刷 / PDF保存</button><button onclick="window.close()">← 閉じる</button>
+  <span style="font-size:12px;color:#666;">1人1ページ。2部印刷して1部を本人へ交付</span>${warn?`<b style="color:#b0432f;font-size:13px;">${esc(warn)}</b>`:''}</div>
+  ${body}</body></html>`;
+  const w=window.open('','_blank');
+  if(!w){ alert('ポップアップがブロックされました。ブラウザの設定を確認してください。'); return; }
+  w.document.write(html); w.document.close();
+}
+load();
+</script>
+</body>
+</html>
