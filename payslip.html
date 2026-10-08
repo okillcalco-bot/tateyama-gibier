@@ -99,7 +99,8 @@ function calc(l, trips, attendance){
 function attHrs(a){
   if(!a.clock_in||!a.clock_out) return 0;
   const [ih,im]=a.clock_in.split(':').map(Number), [oh,om]=a.clock_out.split(':').map(Number);
-  return Math.max(0,(oh*60+om-ih*60-im-(a.break_minutes||0))/60);
+  // 1日の実働を15分単位で切捨て（給与計算と同じ）
+  return Math.floor(Math.max(0,oh*60+om-ih*60-im-(a.break_minutes||0))/15)*15/60;
 }
 
 function renderSlip(staffName, month, l, trips, attendance){

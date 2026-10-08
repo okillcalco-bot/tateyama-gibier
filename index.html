@@ -2382,6 +2382,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div class="form-group"><label>月給（円）</label><input class="form-input" id="stf-f-monthly_salary" type="number" /></div>
         <div class="form-group"><label>社会保険</label><select class="form-input" id="stf-f-social_insurance"><option value="">選択...</option><option>加入</option><option>未加入</option></select></div>
         <div class="form-group"><label>雇用保険</label><select class="form-input" id="stf-f-employment_insurance"><option value="">選択...</option><option>加入</option><option>未加入</option></select></div>
+        <div class="form-group"><label>標準報酬月額（円・社保加入者）</label><input class="form-input" id="stf-f-std_monthly_remuneration" type="number" placeholder="例: 200000" /></div>
+        <div class="form-group"><label>介護保険（40〜64歳）</label><select class="form-input" id="stf-f-care_insurance"><option value="">選択...</option><option>対象</option><option>対象外</option></select></div>
+        <div class="form-group"><label>厚生年金（70歳以上は対象外）</label><select class="form-input" id="stf-f-pension_insurance"><option value="">選択...</option><option>対象</option><option>対象外</option></select></div>
         <div class="form-group"><label>自宅⇔センター 往復km</label><input class="form-input" id="stf-f-commute_round_km" type="number" step="0.1" placeholder="例: 20" /></div>
         <div class="form-group"><label>通勤費 単価（円/km）</label><input class="form-input" id="stf-f-commute_yen_per_km" type="number" placeholder="既定20" /></div>
         <div class="form-group" style="grid-column:1/-1"><label>メモ</label><textarea class="form-input" id="stf-f-memo" rows="2" style="resize:vertical;"></textarea></div>
@@ -11223,7 +11226,7 @@ async function agingFinish(labelId) {
 /* ───────── スタッフ管理 ───────── */
 let staffData = [];
 let staffEditId = null;
-const STAFF_FIELDS = ['name', 'role', 'phone', 'hire_date', 'employment_type', 'hourly_wage', 'monthly_salary', 'social_insurance', 'employment_insurance', 'commute_round_km', 'commute_yen_per_km', 'memo'];
+const STAFF_FIELDS = ['name', 'role', 'phone', 'hire_date', 'employment_type', 'hourly_wage', 'monthly_salary', 'social_insurance', 'employment_insurance', 'std_monthly_remuneration', 'care_insurance', 'pension_insurance', 'commute_round_km', 'commute_yen_per_km', 'memo'];
 
 async function loadStaffPanel() {
   const body = document.getElementById('staff-body');
@@ -11275,7 +11278,7 @@ async function staffSave() {
   const payload = {};
   STAFF_FIELDS.forEach(f => {
     let v = document.getElementById('stf-f-' + f).value.trim();
-    if (f === 'hourly_wage' || f === 'monthly_salary' || f === 'commute_round_km' || f === 'commute_yen_per_km') v = v ? parseFloat(v) : null;
+    if (f === 'hourly_wage' || f === 'monthly_salary' || f === 'commute_round_km' || f === 'commute_yen_per_km' || f === 'std_monthly_remuneration') v = v ? parseFloat(v) : null;
     payload[f] = v === '' ? null : v;
   });
   if (!payload.name) { toast('氏名は必須です', 'error'); return; }
