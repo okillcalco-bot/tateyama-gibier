@@ -13395,10 +13395,13 @@ const DOC_DEFS = [
   { key: 'metal_detector', cat: 'HACCP・衛生管理', title: '金属検出機 点検記録表', gen: async (m) => {
       const [d1, d2] = docMonthRange(m);
       const logs = await sb('GET', 'facility_check_logs', null, `?item=eq.金属検出機&check_date=gte.${d1}&check_date=lte.${d2}&select=check_date,result,value,note,staff_name&order=check_date.asc&limit=100`);
+      // 設置場所は備品台帳の管理場所に合わせる（2026-10-08 事務室へ）
+      const eq = await sb('GET', 'equipment', null, '?name=like.*金属検出*&deleted_at=is.null&select=location&limit=1').catch(() => []);
+      const place = (eq[0] && eq[0].location) || '事務室';
       const wd = d => '日月火水木金土'[new Date(d + 'T00:00:00Z').getUTCDay()];
       const ng = logs.filter(l => l.result && l.result !== '可');
       return { columns: ['日付', '設置場所', '点検内容', '結果', '確認者', '異常時の対応・備考'],
-        rows: logs.map(l => [`${Number(l.check_date.slice(5, 7))}/${Number(l.check_date.slice(8))}(${wd(l.check_date)})`, 'カット室', '正しく作動するか（作動確認）', l.result || '未記録', l.staff_name || '', [l.value, l.note].filter(Boolean).join(' / ')]),
+        rows: logs.map(l => [`${Number(l.check_date.slice(5, 7))}/${Number(l.check_date.slice(8))}(${wd(l.check_date)})`, place, '正しく作動するか（作動確認）', l.result || '未記録', l.staff_name || '', [l.value, l.note].filter(Boolean).join(' / ')]),
         note: `退勤時の施設チェック（毎日）から自動転記。点検 ${logs.length}日${ng.length ? `・異常 ${ng.length}日（備考に対応を記入）` : '・異常なし'}。結果「可」＝正しく作動することを確認。` };
     } },
   { key: 'sanitation_plan', cat: 'HACCP・衛生管理', title: '衛生管理計画書', template: true,
