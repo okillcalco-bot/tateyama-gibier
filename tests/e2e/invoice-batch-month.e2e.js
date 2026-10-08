@@ -136,6 +136,15 @@ const invOthers = (h, me) => !['A食堂', 'B商店', 'トレタテ', 'ノブレ�
   ck('明細は注文の金額（顧客別単価1,500円/kg）から作り、価格マスタ（3,000円）で引き直さない', eda && eda.qty === 10 && eda.price === Math.round(Math.round(15000 / 1.08) / 10), JSON.stringify(eda));
   ck('0円・0kgの依頼内容の行は載せない', !aLines.some(l => /キョン/.test(l.name)), JSON.stringify(aLines.map(l => l.name)));
   ck('送料は別行（10%・税抜そのまま）', aLines.some(l => /9\/3納品　送料（クール100）/.test(l.name) && l.price === 1300 && l.tax === 10), JSON.stringify(aLines));
+  // 5b. 並び: 納品日ごとに「その日の部位 → その日の送料」（2026-10-09 沖）。以前は送料が最後にまとまっていた
+  const order = await page.evaluate(() => invBuildLinesFromOrders([
+    { delivery_date: '2026-09-29', order_items: [{ species: 'イノシシ', part_name: '肩ロース', weight_kg: 8.48, subtotal: 26285 }], shipments: [{ freight: 1300, size_code: 100, is_cool: true }] },
+    { delivery_date: '2026-09-11', order_items: [{ species: 'イノシシ', part_name: '肩ロース', weight_kg: 11.69, subtotal: 36234 }], shipments: [{ freight: 1300, size_code: 100, is_cool: true }] },
+    { delivery_date: '2026-09-15', order_items: [{ species: 'イノシシ', part_name: 'カタ', weight_kg: 5.68, subtotal: 12496 }, { species: 'イノシシ', part_name: '猪切り落とし', weight_kg: 10.75, subtotal: 17195 }], shipments: [{ freight: 1740, size_code: 120, is_cool: true }] },
+  ], {}, 'standard').map(l => l.name));
+  ck('明細は納品日ごとに 部位→送料 の順（9/11 肩ロース・送料 → 9/15 カタ・切り落とし・送料 → 9/29 肩ロース・送料）',
+    JSON.stringify(order) === JSON.stringify(['9/11納品　イノシシ 肩ロース', '9/11納品　送料（クール100）', '9/15納品　イノシシ カタ', '9/15納品　イノシシ 猪切り落とし', '9/15納品　送料（クール120）', '9/29納品　イノシシ 肩ロース', '9/29納品　送料（クール100）']), JSON.stringify(order));
+  ck('明細の行に内部用の日付キー（_d）が残らない', await page.evaluate(() => invBuildLinesFromOrders([{ delivery_date: '2026-09-11', order_items: [{ species: 'イノシシ', part_name: 'ロース', weight_kg: 1, subtotal: 3800 }], shipments: [{ freight: 800, size_code: 60, is_cool: true }] }], {}, 'standard').every(l => !('_d' in l))), '');
 
   // 10. 請求書の送り方
   ck('請求なし（現金）の請求先は最初からチェックを外す', G('K現金').use === false && G('K現金').total > 0, JSON.stringify(G('K現金')));

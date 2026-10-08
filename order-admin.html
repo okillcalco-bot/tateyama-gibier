@@ -3986,7 +3986,9 @@ async function invPullApply(){
      顧客別単価（那珂川の枝肉1,500円/kg、齋藤様のペットフード649円/kg など）が請求書で標準単価に戻るおそれがあった
    - 重さも金額も0の行（出荷時に置き換えた依頼内容・出さなかった残り）は載せない
    - 重さの無い有料行（毛皮など）は「枚」で数える（以前は数量0で金額0円になっていた）
-   - 送料は注文（＝出荷）ごとに別行・10%（shipments.freight は税抜） */
+   - 送料は注文（＝出荷）ごとに別行・10%（shipments.freight は税抜）
+   - 並びは納品日ごとに「その日の部位 → その日の送料」（2026-10-09 沖: 日付ごとに部位と送料を並べる。
+     以前は部位を全部並べた後に送料をまとめていた） */
 function invBuildLinesFromOrders(orders,gradeMap,rank){
   gradeMap=gradeMap||{};
   const groups=new Map(), freightLines=[];
@@ -4008,7 +4010,7 @@ function invBuildLinesFromOrders(orders,gradeMap,rank){
     if(ship && Number(ship.freight)>0){
       const d=(o.delivery_date||o.order_date)?new Date((o.delivery_date||o.order_date)+'T00:00:00'):null;
       const dLabel=d?`${d.getMonth()+1}/${d.getDate()}納品　`:'';
-      freightLines.push({name:dLabel+'送料'+(ship.size_code?`（${ship.is_cool?'クール':''}${ship.size_code}）`:''),qty:1,unit:'個',price:Number(ship.freight),tax:10});
+      freightLines.push({_d:o.delivery_date||o.order_date||'',name:dLabel+'送料'+(ship.size_code?`（${ship.is_cool?'クール':''}${ship.size_code}）`:''),qty:1,unit:'個',price:Number(ship.freight),tax:10});
     }
   });
   const lines=[];
@@ -4027,9 +4029,12 @@ function invBuildLinesFromOrders(orders,gradeMap,rank){
     const exclusiveAmount=Math.round(g.amt/1.08);
     const qty=g.isCount?g.n:Math.round(g.qty*100)/100;
     const price=qty?Math.round(exclusiveAmount/qty):exclusiveAmount;
-    lines.push({name,qty:qty||1,unit:g.isCount?'枚':'kg',price,tax:8});
+    lines.push({_d:g.delivery_date||'',name,qty:qty||1,unit:g.isCount?'枚':'kg',price,tax:8});
   });
-  return lines.concat(freightLines);
+  // 納品日ごとに部位→送料（同じ日の中は部位が先、元の順を保つ）
+  return lines.map((l,i)=>({l,k:0,i})).concat(freightLines.map((l,i)=>({l,k:1,i})))
+    .sort((a,b)=>(a.l._d||'').localeCompare(b.l._d||'')||a.k-b.k||a.i-b.i)
+    .map(({l})=>{ const {_d,...rest}=l; return rest; });
 }
 
 /* ── 月まとめ発行（2026-10-06）──
