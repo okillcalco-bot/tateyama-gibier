@@ -967,6 +967,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           <button class="btn" onclick="halfFinderOpen()">🔍 タグなし半身を探す</button>
           <button class="btn" onclick="indShowTrash()" id="indTrashBtn">🗑 削除履歴</button>
+          <span style="display:inline-flex;gap:4px;align-items:center;"><input class="form-input" type="month" id="ind-photo-month" title="写真をダウンロードする捕獲月（チェックした個体があればそちらを優先）" style="max-width:150px;padding:6px 8px;"><button class="btn" id="indPhotoZipBtn" onclick="indPhotosZip()">📷 写真をダウンロード</button></span>
           <button class="btn btn-danger" id="indBulkDelBtn" style="display:none;" onclick="indBulkDelete()">選択削除</button>
           <button class="btn btn-primary" onclick="indOpenNew()">＋ 新規登録</button>
         </div>
@@ -9955,7 +9956,7 @@ function indRender() {
     return `<tr${issues.length ? ' style="background:rgba(198,74,60,.05);"' : ''}>
     <td><input type="checkbox" class="ind-chk" data-id="${i.label_id}" onchange="indUpdateBulkBtn()"></td>
     <td style="text-align:center;">${indSerialDisplay(i)}</td>
-    <td style="color:var(--gold);font-weight:700;">${i.label_id}</td>
+    <td style="color:var(--gold);font-weight:700;white-space:nowrap;">${i.label_id}${indPhotoList(i).length ? ` <span class="ind-photo-mark" title="写真あり（🌿 一生で見られます）" style="cursor:pointer;" onclick="indLifeOpen('${i.label_id}')">📷</span>` : ''}</td>
     <td>${i.species || '-'}${i.capture_category === '駆除外' ? ' <span style="font-size:10.5px;color:var(--text2);border:1px solid var(--border);border-radius:4px;padding:0 4px;">駆除外</span>' : ''}</td>
     <td>${i.sex || '-'}</td>
     <td>${i.weight_total != null ? i.weight_total + ' kg' : '-'}</td>
@@ -9974,6 +9975,89 @@ function indRender() {
 
 /* ── 個体の一生：捕獲(いのち) → 精肉 → 加工 → とどけた先 を1枚でたどる ── */
 let indLifeData = null;
+
+/* 個体の写真（2026-10-08「サーバーに入ってる個体写真はどうやって見る？」）
+   capture-photos バケットに入っているのに、個体の画面に出す場所が無かった。
+   image_url（立ち会いボード写真）・尻尾の前後・その他 を、パスでもURLでも表示できる形にそろえる。 */
+function indPhotoList(i) {
+  if (!i) return [];
+  const url = v => /^https?:/.test(v) ? v : `${SB_URL}/storage/v1/object/public/capture-photos/${String(v).replace(/^\/+/, '')}`;
+  const out = [];
+  const add = (v, label) => {
+    if (v == null || v === '') return;
+    let vals = v;
+    if (typeof v === 'string' && /^\s*\[/.test(v)) { try { vals = JSON.parse(v); } catch (e) { vals = [v]; } }
+    (Array.isArray(vals) ? vals : [vals]).forEach(x => {
+      const src = typeof x === 'object' && x ? (x.url || x.path) : x;
+      if (src && !out.some(o => o.src === url(src))) out.push({ src: url(src), label });
+    });
+  };
+  add(i.image_url, '立ち会い写真');
+  add(i.photo_tail_before, '尻尾（切る前）');
+  add(i.photo_tail_after, '尻尾（切った後）');
+  add(i.photo_extra, 'その他');
+  return out;
+}
+// ダウンロード用のファイル名: 個体番号_種類(_連番).拡張子（市役所提出用に個体番号で並ぶように）
+function indPhotoFiles(i) {
+  const ps = indPhotoList(i);
+  const base = p => `${i.label_id}_${p.label.replace(/[（）()\s]/g, '')}`;
+  const total = {}; ps.forEach(p => { total[base(p)] = (total[base(p)] || 0) + 1; });
+  const seen = {};
+  return ps.map(p => {
+    const b = base(p); seen[b] = (seen[b] || 0) + 1;
+    const ext = ((/\.(jpe?g|png|webp|heic|gif)(?:\?|$)/i.exec(p.src) || [])[1] || 'jpg').toLowerCase();
+    return { src: p.src, label: p.label, name: b + (total[b] > 1 ? '_' + seen[b] : '') + '.' + ext };
+  });
+}
+function indSaveBlob(blob, name) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+async function indPhotoDownload(labelId, idx) {
+  const i = indCache.get(labelId) || (indLifeData && indLifeData.ind);
+  const f = indPhotoFiles(i)[idx];
+  if (!f) return;
+  try {
+    const r = await fetch(f.src); if (!r.ok) throw new Error('HTTP ' + r.status);
+    indSaveBlob(await r.blob(), f.name);
+  } catch (e) { toast(`写真を取得できませんでした（${f.name}）: ${e.message}`, 'error'); }
+}
+// 写真をZIPでまとめる: チェックした個体 → 無ければ捕獲月 → 無ければ一覧に出ている個体
+async function indPhotosZip(onlyLabel) {
+  let inds;
+  if (onlyLabel) inds = [indCache.get(onlyLabel) || (indLifeData && indLifeData.ind)].filter(Boolean);
+  else {
+    const checked = [...document.querySelectorAll('.ind-chk:checked')].map(c => c.dataset.id);
+    const month = (document.getElementById('ind-photo-month') || {}).value;
+    if (checked.length) inds = checked.map(id => indCache.get(id)).filter(Boolean);
+    else if (month) inds = indAllData.filter(i => String(i.capture_date || '').startsWith(month));
+    else inds = indAllData.slice();
+  }
+  const files = inds.flatMap(i => indPhotoFiles(i));
+  if (!files.length) { toast('対象の個体に写真がありません', 'error'); return; }
+  if (!onlyLabel && !confirm(`${inds.filter(i => indPhotoList(i).length).length}頭・${files.length}枚の写真をZIPにまとめてダウンロードします。`)) return;
+  const btn = document.getElementById('indPhotoZipBtn'); if (btn) btn.disabled = true;
+  const out = [], failed = [];
+  for (const f of files) {
+    try { const r = await fetch(f.src); if (!r.ok) throw new Error('HTTP ' + r.status); out.push({ name: f.name, data: new Uint8Array(await r.arrayBuffer()) }); }
+    catch (e) { failed.push(f.name); }
+  }
+  if (btn) btn.disabled = false;
+  if (!out.length) { toast(`写真を1枚も取得できませんでした（${failed.length}枚）`, 'error'); return; }
+  const month = (document.getElementById('ind-photo-month') || {}).value;
+  const zipName = onlyLabel ? `個体写真_${onlyLabel}.zip` : `個体写真_${month || new Date().toISOString().slice(0, 10)}_${out.length}枚.zip`;
+  indSaveBlob(makeZip(out), zipName);
+  if (failed.length) toast(`${out.length}枚をZIPにしました。取得できなかった写真が${failed.length}枚あります: ${failed.join(', ')}`, 'error');
+  else toast(`${out.length}枚の写真をZIPにしました`);
+}
+function indPhotoStrip(i) {
+  const ps = indPhotoList(i);
+  if (!ps.length) return '<div style="font-size:12px;color:var(--text3);margin-top:8px;">📷 写真はありません</div>';
+  return `<div class="ind-photos" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">${ps.map(p => `<a href="${esc2(p.src)}" target="_blank" rel="noopener" style="display:block;text-decoration:none;color:var(--text2);font-size:11px;text-align:center;">
+      <img src="${esc2(p.src)}" alt="${esc2(p.label)}" loading="lazy" style="width:150px;height:112px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block;background:var(--surface2);">${esc2(p.label)}</a>`).join('')}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${ps.map((p, k) => `<button type="button" class="btn btn-sm ind-photo-dl" onclick="indPhotoDownload('${esc2(i.label_id)}',${k})">⬇ ${esc2(p.label)}</button>`).join('')}${ps.length > 1 ? `<button type="button" class="btn btn-sm" onclick="indPhotosZip('${esc2(i.label_id)}')">⬇ まとめてZIP</button>` : ''}</div>`;
+}
 
 async function indLifeOpen(labelId) {
   const modal = document.getElementById('indLifeModal');
@@ -10107,7 +10191,7 @@ function indLifeRender() {
       ${indLifeField('内臓異常', i.organ_anomalies)}
       ${indLifeField('胃の内容物', indStomachText(i))}
     </div>
-  </div>`;
+  </div>${indPhotoStrip(i)}`;
 
   // ② 検査
   const insp = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:0 22px;">
