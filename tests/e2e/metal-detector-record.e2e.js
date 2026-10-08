@@ -1,6 +1,6 @@
 // 金属検出機 点検記録表（2026-10-08 保健所から求められた）
 //
-//   退勤時の施設チェック（punch.html「カット室・金属検出機：正しく作動するか」）が facility_check_logs に
+//   退勤時の施設チェック（punch.html「事務室（10/8まではカット室）・金属検出機：正しく作動するか」）が facility_check_logs に
 //   毎日残っている。それを書類・帳票（HACCP・衛生管理）で月ごとの点検記録表として出す。
 //
 //   ここで測ること
@@ -28,6 +28,7 @@ const path = require('path');
       { check_date: '2026-09-02', result: '否', value: null, note: '反応せず→電源入れ直しで復旧', staff_name: '川島幸子' },
       { check_date: '2026-09-03', result: '可', value: null, note: null, staff_name: '今泉貴雄' },
     ]); }
+    if (/\/rest\/v1\/equipment/.test(u)) return J([{ location: '事務室' }]);
     if (/\/rest\/v1\/report_docs/.test(u)) return J(r.request().method() === 'POST' ? [{ id: 'rd1', status: '作成済み', output_count: 0 }] : []);
     return J([]);
   });
@@ -40,7 +41,7 @@ const path = require('path');
   const d = await page.evaluate(async () => DOC_DEFS.find(x => x.key === 'metal_detector').gen('2026-09'));
   const q = reqs[0] || '';
   T('問い合わせは item=金属検出機・9/1〜9/30', /item=eq\.金属検出機/.test(q) && /check_date=gte\.2026-09-01/.test(q) && /check_date=lte\.2026-09-30/.test(q), q);
-  T('1日1行: 9/1(火)・カット室・作動確認・可・吉田友美', JSON.stringify(d.rows[0]) === JSON.stringify(['9/1(火)', 'カット室', '正しく作動するか（作動確認）', '可', '吉田友美', '']), JSON.stringify(d.rows[0]));
+  T('1日1行: 9/1(火)・事務室（備品台帳の管理場所）・作動確認・可・吉田友美', JSON.stringify(d.rows[0]) === JSON.stringify(['9/1(火)', '事務室', '正しく作動するか（作動確認）', '可', '吉田友美', '']), JSON.stringify(d.rows[0]));
   T('異常日の対応が備考に出る', d.rows[1][3] === '否' && /電源入れ直し/.test(d.rows[1][5]), JSON.stringify(d.rows[1]));
   T('注記: 点検3日・異常1日', /点検 3日・異常 1日/.test(d.note), d.note);
 
