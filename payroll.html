@@ -64,6 +64,7 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
   <label>対象月 <input type="month" id="month" value="2026-07" onchange="load()"></label>
   <button class="btn" onclick="load()">↻ 再読込</button>
   <button class="btn" onclick="importAllAttendance()">📥 勤怠から日数・時間を取込</button>
+  <button class="btn" onclick="insuranceAll()">🧮 保険料を計算</button>
   <select id="addSel"></select>
   <button class="btn" onclick="addLine()">＋ 行を追加</button>
   <button class="btn btn-gold" onclick="saveAll()">💾 まとめて保存</button>
@@ -102,6 +103,8 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
   ・🔗ボタンで<b>本人専用の恒久リンク</b>を発行できます。毎月同じリンクで最新の明細（過去分も月選択で）を見られるので、共有は最初の1回だけで済みます。発行は一度きり表示・共有は必ずLINE個別トークなど本人だけに届く経路で<br>
   ・止めさし搬入手当（+3000円/回）の対象: 白石さん・大和田さん・今泉さん。<b>止めさし・搬入（引き取り）どちらか一方をやった日も1回に数えます。</b>回数はpunch.htmlの退勤報告（各自の入力）から入ります<br>
   ・社会保険料（健康保険・厚生年金）と税は<b>従業員負担分</b>を円で入力します。空欄は0円扱い<br>
+  ・<b>保険料は自動計算</b>（「勤怠から取込」でも計算）: 健康保険＝標準報酬月額×（健保9.73%＋子ども子育て支援金0.23%）÷2、介護＝標準報酬×1.62%÷2（介護「対象」の人）、厚生年金＝標準報酬×18.3%÷2、雇用保険＝総支給×0.5%。端数は50銭以下切捨て。標準報酬月額・介護/厚年の対象はスタッフ台帳で設定します。所得税・住民税は手入力のまま<br>
+  ・勤務時間は<b>1日の実働を15分単位で切捨て</b>て合計します<br>
   ・<b>2025年10月〜2026年6月は当時の給与明細（Excel）から転記</b>しています（通勤費の金額・技術手当などの手当・介護保険・年末賞与もそのまま）。「📚 期間の給与明細」で期間・全員分を1つにまとめて開けます（先頭に支給一覧。明細の無い月は赤字で出ます）
 </div>
 
@@ -182,7 +185,7 @@ async function staffKeyEnsure(){
   return k;
 }
 
-let lines=[], staffList=[], attMap={}, trips=[], tripRates=[], bonuses=[];
+let lines=[], staffList=[], attMap={}, trips=[], tripRates=[], bonuses=[], rates={};
 const N=v=>(v===''||v==null||isNaN(+v))?0:+v;
 const yen=v=>'¥'+Math.round(v).toLocaleString();
 const msg=(t,ok)=>{ const m=document.getElementById('msg'); m.textContent=t; m.style.color=ok?'var(--green)':'var(--red)'; if(t) setTimeout(()=>{ if(m.textContent===t) m.textContent=''; },4000); };
@@ -233,7 +236,7 @@ async function load(){
     const r=await sbRpc('admin_payroll_list',{p_staff_key:key,p_month:month});
     lines=(r.lines||[]).map(l=>({...l,_dirty:false}));
     staffList=r.staff||[];
-    trips=r.trips||[]; tripRates=r.trip_rates||[]; bonuses=r.bonuses||[];
+    trips=r.trips||[]; tripRates=r.trip_rates||[]; bonuses=r.bonuses||[]; rates=r.rates||{};
     attMap={}; (r.attendance||[]).forEach(a=>attMap[a.staff_name]=a);
     const sel=document.getElementById('addSel');
     sel.innerHTML=staffList.filter(s=>!lines.some(l=>l.staff_name===s.name))
@@ -331,6 +334,40 @@ function importAtt(i){
   lines[i]._dirty=true;
   render();
 }
+/* ── 保険料の自動計算（2026-10-08）──
+   健康保険＝標準報酬月額×（健保＋子ども子育て支援金）÷2、介護＝標準報酬×介護÷2（40〜64歳）、
+   厚生年金＝標準報酬×厚年÷2（70歳以上は対象外）、雇用保険＝総支給×本人負担率。
+   料率は app_settings.payroll_rates、標準報酬・介護/厚年の対象はスタッフ台帳。
+   本人負担の端数は 50銭以下切捨て・50銭超切上げ。計算後も欄は手で直せる */
+const yen50=x=>{ const f=Math.floor(x); return (x-f)>0.5+1e-9?f+1:f; };
+function insuranceFor(l){
+  const s=staffOf(l.staff_name); if(!s) return {err:'スタッフ台帳に無い'};
+  const R={health:N(rates.health_pct)||9.73, child:N(rates.child_support_pct), care:N(rates.care_pct)||1.62, pension:N(rates.pension_pct)||18.3, emp:N(rates.employment_pct)||0.5};
+  const out={};
+  if(s.social_insurance==='加入'){
+    const std=N(s.std_monthly_remuneration);
+    if(!std) return {err:'社会保険は加入なのに標準報酬月額が未設定'};
+    out.health_insurance=yen50(std*(R.health+R.child)/100/2);
+    out.care_insurance=s.care_insurance==='対象'?yen50(std*R.care/100/2):'';
+    out.pension=s.pension_insurance==='対象外'?0:yen50(std*R.pension/100/2);
+  } else { out.health_insurance=''; out.care_insurance=''; out.pension=''; }
+  if(s.employment_insurance==='加入'){
+    const base={...l, ...out};
+    out.employment_insurance=yen50(calc(base).pay*R.emp/100);
+  } else out.employment_insurance='';
+  return out;
+}
+function applyInsurance(i){
+  const r=insuranceFor(lines[i]);
+  if(r.err) return r.err;
+  Object.assign(lines[i], r); lines[i]._dirty=true; return null;
+}
+function insuranceAll(){
+  const errs=[]; let n=0;
+  lines.forEach((l,i)=>{ const e=applyInsurance(i); if(e) errs.push(l.staff_name+': '+e); else n++; });
+  render();
+  msg(`${n}名の保険料を計算しました（保存はまだ）`+(errs.length?'／計算できない人: '+errs.join('、'):''), !errs.length);
+}
 function importAllAttendance(){
   // 打刻はあるのに、まだこの月の明細行が無い人を先に追加する
   // （行が無いと取込先が無く、その人だけ取り込まれない状態になっていた）
@@ -350,7 +387,10 @@ function importAllAttendance(){
   }
   let n=0;
   lines.forEach((l,i)=>{ if(attMap[l.staff_name]){ importAtt(i); n++; } });
-  msg(n?n+'名分を勤怠から取り込みました'+(added?`（新規追加 ${added}名を含む）`:'')+'（保存はまだ）':'この月の打刻記録がありません',n>0);
+  // 時間が決まったら保険料も計算し直す（雇用保険は総支給にかかるため）
+  const errs=[]; lines.forEach((l,i)=>{ const e=applyInsurance(i); if(e) errs.push(l.staff_name+': '+e); });
+  render();
+  msg((n?n+'名分を勤怠から取り込み、保険料も計算しました'+(added?`（新規追加 ${added}名を含む）`:'')+'（保存はまだ）':'この月の打刻記録がありません')+(errs.length?'／保険料を計算できない人: '+errs.join('、'):''),n>0&&!errs.length);
 }
 
 // 振込作業でLINEに貼って確認しながら振り込めるよう、氏名と差引支給額をテキストでコピーする
@@ -421,7 +461,8 @@ async function fetchAttendanceRows(l, month){
 function attHrs(a){
   if(!a.clock_in||!a.clock_out) return 0;
   const [ih,im]=a.clock_in.split(':').map(Number), [oh,om]=a.clock_out.split(':').map(Number);
-  return Math.max(0,(oh*60+om-ih*60-im-(a.break_minutes||0))/60);
+  // 時給の人は1日の実働を15分単位で切捨て（2026-10-08 沖）。勤怠取込の合計と同じ
+  return Math.floor(Math.max(0,oh*60+om-ih*60-im-(a.break_minutes||0))/15)*15/60;
 }
 /* 1人ぶんの明細セクション（単独発行・まとめて印刷の両方で使う） */
 function payslipSection(l, month, rows, ctx){
