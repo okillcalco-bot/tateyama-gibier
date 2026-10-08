@@ -1949,6 +1949,31 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         </table>
       </div>
     </div>
+    <!-- 庫内温度の過去分入力（管理者）: 温度記録表の空白日を1か月分まとめて埋める -->
+    <div class="section" id="temp-backfill" style="display:none;">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>🌡 庫内温度の過去分入力（管理者）</span>
+        <input class="form-input" id="tb-month" type="month" style="max-width:170px;" onchange="tempBackfillLoad()" />
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;">温度記録表で「未記録」になっている日を、手元の記録（紙・温度計の記録など）から入力します。入力した行には「後日記入（管理者）」と残ります。<strong>作業日</strong>は出勤・清掃の記録がある日です。</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;align-items:end;margin-bottom:10px;">
+        <div class="form-group" style="margin:0;"><label>冷蔵（℃）</label><input class="form-input" id="tb-r" inputmode="decimal" placeholder="例: 2"></div>
+        <div class="form-group" style="margin:0;"><label>冷凍（℃）</label><input class="form-input" id="tb-f" inputmode="decimal" placeholder="例: -20"></div>
+        <div class="form-group" style="margin:0;"><label>確認時刻</label><input class="form-input" id="tb-time" type="time" value="17:00"></div>
+        <div class="form-group" style="margin:0;"><label>確認者</label><select class="form-input" id="tb-staff"></select></div>
+        <button class="btn" onclick="tempBackfillFill()">↓ 未記録の作業日に入れる</button>
+      </div>
+      <div id="tb-summary" style="font-size:13px;margin-bottom:8px;"></div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>日付</th><th>作業日</th><th>現在の記録</th><th>冷蔵（℃）</th><th>冷凍（℃）</th><th>時刻</th><th>確認者</th></tr></thead>
+          <tbody id="tb-rows"></tbody>
+        </table>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end;">
+        <button class="btn btn-primary" id="tb-save" onclick="tempBackfillSave()">💾 入力した日を保存</button>
+      </div>
+    </div>
     <!-- 産廃搬出 最終チェック表（出発前・スマホ入力）。紙の最終チェック表と同じ10項目 -->
     <div class="section" id="waste-checklist">
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
@@ -11492,6 +11517,7 @@ async function loadCleaning() {
     </button>`;
   }).join('');
   loadCleaningRecent();
+  tempBackfillInit();
 }
 
 async function loadCleaningRecent() {
@@ -11543,6 +11569,112 @@ async function cleaningSave() {
     document.getElementById('cleanModal').style.display = 'none';
     loadCleaning(); refreshNavBadges();
   } catch (err) { toast('清掃記録に失敗しました: ' + sbSafeMsg(err), 'error'); }
+}
+
+/* ───────── 庫内温度の過去分入力（管理者・2026-10-08） ─────────
+   温度入力を必須にした 9/16 より前は、冷蔵・冷凍庫の記録が温度空欄か、記録自体が無い。
+   手元の記録から1か月分をまとめて入れられるようにする。
+   - その日に温度空欄の記録があればそれに温度を入れる（PATCH）、無ければ新しく作る（POST）
+   - どちらも note に「後日記入（管理者 M/D）」を残す（その場の記録と区別できるように）
+   - 既に温度がある日は触らない。失敗は件数と日付を画面に出す */
+let tbDays = [];
+function tempBackfillInit() {
+  const sec = document.getElementById('temp-backfill');
+  if (!sec) return;
+  sec.style.display = isAdminRole() ? '' : 'none';
+  if (!isAdminRole()) return;
+  const sel = document.getElementById('tb-staff');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">確認者を選択...</option>' + PM_OPERATORS.map(n => `<option>${esc2(n)}</option>`).join('');
+  if (cur) sel.value = cur;
+  const m = document.getElementById('tb-month');
+  if (!m.value) { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); m.value = ymdLocal(d).slice(0, 7); }
+  tempBackfillLoad();
+}
+function tbNum(v) { const t = String(v == null ? '' : v).trim().replace(/[−ー－]/g, '-').replace(/℃/g, ''); return t !== '' && isFinite(Number(t)) ? Number(t) : null; }
+async function tempBackfillLoad() {
+  const m = document.getElementById('tb-month').value;
+  const body = document.getElementById('tb-rows');
+  if (!m) return;
+  body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);">読み込み中…</td></tr>';
+  const [d1, d2] = docMonthRange(m);
+  try {
+    const [logs, atts] = await Promise.all([
+      sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${jstTs(d1, '00:00:00')}&cleaned_at=lte.${jstTs(d2, '23:59:59')}&select=id,room,staff_name,cleaned_at,temperature,note&order=cleaned_at.asc&limit=5000`),
+      sb('GET', 'attendance', null, `?work_date=gte.${d1}&work_date=lte.${d2}&select=work_date,clock_in&limit=2000`),
+    ]);
+    const work = new Set(atts.filter(a => a.clock_in).map(a => a.work_date));
+    logs.forEach(l => work.add(jstParts(l.cleaned_at).ymd));
+    const today = jstParts(new Date()).ymd;
+    tbDays = [];
+    for (let d = d1; d <= d2 && d <= today; d = new Date(Date.parse(d + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10)) {
+      const fr = logs.filter(l => l.room === '冷蔵・冷凍庫' && jstParts(l.cleaned_at).ymd === d);
+      const withTemp = fr.filter(l => l.temperature);
+      tbDays.push({ date: d, work: work.has(d), temp: withTemp.length ? withTemp[withTemp.length - 1] : null, blank: fr.find(l => !l.temperature) || null });
+    }
+    tempBackfillRender();
+  } catch (e) { body.innerHTML = `<tr><td colspan="7" style="color:var(--red);">${esc2(sbSafeMsg(e))}</td></tr>`; }
+}
+function tempBackfillRender() {
+  const body = document.getElementById('tb-rows');
+  const opts = '<option value=""></option>' + PM_OPERATORS.map(n => `<option>${esc2(n)}</option>`).join('');
+  body.innerHTML = tbDays.map((d, i) => {
+    const wd = '日月火水木金土'[new Date(d.date + 'T00:00:00Z').getUTCDay()];
+    const label = `${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8))}(${wd})`;
+    if (d.temp) return `<tr class="tb-row" data-i="${i}"><td>${label}</td><td>${d.work ? '○' : ''}</td><td style="color:var(--green);">${esc2(d.temp.temperature)}（${jstParts(d.temp.cleaned_at).hm} ${esc2(d.temp.staff_name)}）</td><td colspan="4" style="color:var(--text3);font-size:12px;">記録済み</td></tr>`;
+    return `<tr class="tb-row" data-i="${i}"><td>${label}</td><td>${d.work ? '○' : ''}</td><td style="color:var(--red);">未記録${d.blank ? '（温度空欄の記録あり）' : ''}</td>
+      <td><input class="form-input tb-r" inputmode="decimal" style="width:80px;"></td>
+      <td><input class="form-input tb-f" inputmode="decimal" style="width:80px;"></td>
+      <td><input class="form-input tb-t" type="time" style="width:110px;"></td>
+      <td><select class="form-input tb-s" style="min-width:120px;">${opts}</select></td></tr>`;
+  }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text3);">対象の日がありません</td></tr>';
+  const miss = tbDays.filter(d => !d.temp), missWork = miss.filter(d => d.work);
+  document.getElementById('tb-summary').innerHTML = `記録済み <strong>${tbDays.length - miss.length}</strong>日 ／ 未記録 <strong style="color:var(--red);">${miss.length}</strong>日（うち作業日 ${missWork.length}日）`;
+}
+function tempBackfillFill() {
+  const r = document.getElementById('tb-r').value, f = document.getElementById('tb-f').value;
+  const t = document.getElementById('tb-time').value, st = document.getElementById('tb-staff').value;
+  if (tbNum(r) == null || tbNum(f) == null) { toast('冷蔵・冷凍の温度を数字で入れてください', 'error'); return; }
+  let n = 0;
+  document.querySelectorAll('#tb-rows tr.tb-row').forEach(tr => {
+    const d = tbDays[Number(tr.dataset.i)];
+    if (!d || d.temp || !d.work) return;
+    const ri = tr.querySelector('.tb-r'); if (!ri || ri.value) return;
+    ri.value = r; tr.querySelector('.tb-f').value = f; tr.querySelector('.tb-t').value = t; if (st) tr.querySelector('.tb-s').value = st; n++;
+  });
+  toast(n ? `${n}日分に入れました。確認して「保存」を押してください` : '入れる日がありません（未記録の作業日のみ対象）');
+}
+async function tempBackfillSave() {
+  const rows = [];
+  const bad = [];
+  document.querySelectorAll('#tb-rows tr.tb-row').forEach(tr => {
+    const d = tbDays[Number(tr.dataset.i)];
+    if (!d || d.temp) return;
+    const rv = tr.querySelector('.tb-r').value, fv = tr.querySelector('.tb-f').value, tv = tr.querySelector('.tb-t').value, sv = tr.querySelector('.tb-s').value;
+    if (!rv && !fv) return;
+    const r = tbNum(rv), f = tbNum(fv);
+    if (r == null || f == null || !tv || !sv) { bad.push(d.date.slice(5)); return; }
+    rows.push({ d, temperature: `冷蔵${r} / 冷凍${f}`, time: tv, staff: sv });
+  });
+  if (bad.length) { toast(`入力が足りない日があります（冷蔵・冷凍・時刻・確認者）: ${bad.join(', ')}`, 'error'); return; }
+  if (!rows.length) { toast('保存する日がありません', 'error'); return; }
+  const today = jstParts(new Date()).ymd;
+  const mark = `後日記入（管理者 ${Number(today.slice(5, 7))}/${Number(today.slice(8))}）`;
+  const btn = document.getElementById('tb-save'); btn.disabled = true;
+  const failed = [];
+  for (const x of rows) {
+    try {
+      if (x.d.blank) {
+        await sb('PATCH', 'cleaning_logs', { temperature: x.temperature, note: [x.d.blank.note, mark].filter(Boolean).join(' / ') }, `?id=eq.${x.d.blank.id}`);
+      } else {
+        await sb('POST', 'cleaning_logs', { room: '冷蔵・冷凍庫', staff_name: x.staff, cleaned_at: `${x.d.date}T${x.time}:00+09:00`, items: '庫内温度の確認・記録', temperature: x.temperature, note: mark });
+      }
+    } catch (e) { failed.push(x.d.date.slice(5) + ': ' + sbSafeMsg(e)); }
+  }
+  btn.disabled = false;
+  if (failed.length) toast(`${rows.length - failed.length}日分を保存、${failed.length}日分が失敗しました: ${failed.join(' / ')}`, 'error');
+  else toast(`${rows.length}日分の庫内温度を保存しました`);
+  tempBackfillLoad();
 }
 
 /* ───────── 産廃搬出 最終チェック表（出発前・スマホ入力） ─────────
