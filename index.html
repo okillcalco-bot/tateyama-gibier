@@ -13390,6 +13390,17 @@ const DOC_DEFS = [
   // 保健所の立入で「HACCP記録表」と言われるのはこれ（衛生管理計画に沿った月間の実施記録、1日1行）。
   // 受入確認・庫内温度・区域ごとの清掃消毒・ナイフ83℃消毒・従事者の健康を、日々の入力から1枚に転記する。
   { key: 'haccp_monthly', cat: 'HACCP・衛生管理', title: 'HACCP実施記録表（月間）', gen: async (m) => haccpMonthlyGen(m) },
+  // 金属検出機の点検記録（2026-10-08 保健所から求められた）。退勤時の施設チェック（punch.html の
+  // 「カット室・金属検出機：正しく作動するか」）が facility_check_logs に毎日残っているので、それを月ごとに並べる。
+  { key: 'metal_detector', cat: 'HACCP・衛生管理', title: '金属検出機 点検記録表', gen: async (m) => {
+      const [d1, d2] = docMonthRange(m);
+      const logs = await sb('GET', 'facility_check_logs', null, `?item=eq.金属検出機&check_date=gte.${d1}&check_date=lte.${d2}&select=check_date,result,value,note,staff_name&order=check_date.asc&limit=100`);
+      const wd = d => '日月火水木金土'[new Date(d + 'T00:00:00Z').getUTCDay()];
+      const ng = logs.filter(l => l.result && l.result !== '可');
+      return { columns: ['日付', '設置場所', '点検内容', '結果', '確認者', '異常時の対応・備考'],
+        rows: logs.map(l => [`${Number(l.check_date.slice(5, 7))}/${Number(l.check_date.slice(8))}(${wd(l.check_date)})`, 'カット室', '正しく作動するか（作動確認）', l.result || '未記録', l.staff_name || '', [l.value, l.note].filter(Boolean).join(' / ')]),
+        note: `退勤時の施設チェック（毎日）から自動転記。点検 ${logs.length}日${ng.length ? `・異常 ${ng.length}日（備考に対応を記入）` : '・異常なし'}。結果「可」＝正しく作動することを確認。` };
+    } },
   { key: 'sanitation_plan', cat: 'HACCP・衛生管理', title: '衛生管理計画書', template: true,
     gen: async () => ({ columns: ['管理項目', 'いつ', 'どのように', '問題があったとき'], rows: [
       ['施設・設備の衛生管理（清掃・消毒）', '作業終了後 毎日', '各区域のチェックリストに従い清掃・消毒し、本アプリの清掃記録に記録する', '再清掃を行い、記録表に特記事項を残す'],
@@ -13796,7 +13807,7 @@ async function docEnsureRecord(def, statusIfNew) {
 }
 
 // 記録の抜け・基準外は赤で目立たせる（未記録・未・要確認・異常あり）
-function docCellAlert(c) { return typeof c === 'string' && /^(未記録|未|要確認)$|未記録|異常あり/.test(c); }
+function docCellAlert(c) { return typeof c === 'string' && /^(未記録|未|要確認|否)$|未記録|異常あり/.test(c); }
 function docHtml(def, data, forPrint) {
   const period = docMonth();
   const rec = docRecords[def.key + '|' + period];
@@ -13958,7 +13969,7 @@ const HACCP_MAP = [
   { law: 'ガイドライン 第6-6(14) ／ 別表17 六', req: '廃棄物を区分し速やかに搬出、汚液・汚臭が漏れないよう管理', app: '産廃搬出ルール（9/11改訂）と出発前の最終チェック表', docs: ['waste_checklist_record'], count: 'waste' },
   { law: '別表17 五', req: 'ねずみ・昆虫の駆除を年2回以上実施し記録を1年保存', app: '清掃記録タブ「ねずみ・昆虫の駆除」', docs: ['pest_control_record'], count: 'pest' },
   { law: '別表17 四', req: '使用水は水道水または飲用適の水', app: '施設情報「使用水」（水道水のため水質検査は不要）', docs: [] },
-  { law: '別表17 三 ／ 条例 別表第1 四', req: '機械器具の整備・温度計等の計器の点検', app: '備品台帳（冷蔵冷凍庫・金属検出機・スライサー等）', docs: ['equipment_ledger'], count: 'equipment' },
+  { law: '別表17 三 ／ 条例 別表第1 四', req: '機械器具の整備・温度計等の計器の点検', app: '備品台帳（冷蔵冷凍庫・金属検出機・スライサー等）＋ 金属検出機 点検記録表（毎日の施設チェック）', docs: ['equipment_ledger', 'metal_detector'], count: 'equipment' },
   { law: 'ガイドライン 第7 ／ 参考様式2', req: '出荷・販売の記録（個体番号・部位・販売先・販売日）', app: '受発注管理の注文明細と出荷確定', docs: ['sales_ledger', 'shipping_judgment'], count: 'shipments' },
   { law: '出荷制限（千葉県・全頭検査）', req: '館山市・南房総市産イノシシは放射性物質の全頭検査', app: '放射能検査タブ（検査日・結果判明日・結果）', docs: ['radiation_record'], count: 'radiation' },
   { law: '別表17 九・十', req: '健康被害情報の提供、回収の手順', app: 'クレーム・回収対応記録／気になる点フラグ（是正処置）', docs: ['complaint_record', 'corrective_action'], count: 'flags' },
