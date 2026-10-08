@@ -50,6 +50,13 @@ ROWS.push(mk(7,90,{ m:6, species:'キョン', weight:8, buyback:1000, label_id:'
   const area = await page.evaluate(() => document.getElementById('areaBox').textContent.replace(/\s+/g,' '));
   T('地区表: 館山市 神余・稲、南房総市 宮下 と推移', /館山市 神余/.test(area) && /南房総市 宮下/.test(area) && /推移/.test(area), area.slice(0, 120));
 
+  // 獣種別の捕獲数（年度合計）: 獣種フィルター（既定イノシシ）に関係なく全獣種
+  const spRows = await page.$$eval('#speciesTable tbody tr', trs => trs.map(t => [...t.children].map(c => c.textContent.replace(/[▲▼].*$/, '').trim())));
+  T('獣種別表: イノシシ 4/6/3・キョン 0/1/0・合計 4/7/3（獣種フィルターがイノシシでもキョンが出る）',
+    JSON.stringify(spRows) === JSON.stringify([['イノシシ','4','6','3'],['キョン','0','1','0'],['合計','4','7','3']]), JSON.stringify(spRows));
+  const spHead = await page.$eval('#speciesTable thead', e => e.textContent);
+  T('獣種別表: 進行中の年度に印', /令和8年度（進行中）/.test(spHead), spHead);
+
   // 絞り込み
   await page.evaluate(() => toggleYear(8));
   const y2 = await page.evaluate(() => document.getElementById('lastUpdated').textContent);
