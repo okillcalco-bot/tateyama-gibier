@@ -201,10 +201,12 @@ async function loadSalesSummary() {
   }
 }
 
-function pick(name) {
+async function pick(name) {
   current = name; document.getElementById('form-area').style.display = 'none';
   document.getElementById('history-card').style.display = 'none';
-  load(); document.getElementById('outlet-area').style.display = 'block';
+  // 先に表示すると、店舗リンクでは使えないボタンが読み込み中だけ見えてしまう。描画してから出す
+  try { await load(); } catch (e) { toast('読み込みエラー'); return; }
+  document.getElementById('outlet-area').style.display = 'block';
 }
 
 function renderOutlet() {
@@ -216,11 +218,11 @@ function renderOutlet() {
   document.getElementById('o-name3').textContent = isCenter ? 'センター（加工場）' : o.name;
   document.getElementById('notes-card').style.display = (isCenter || storeMode) ? 'none' : 'block';
   if (!isCenter && o) document.getElementById('o-notes').textContent = o.delivery_notes || '（まだ登録されていません。「✎ 編集」から納品手順を書けます）';
-  // ボタン構成: センター=完成記録+在庫修正案内 / 通常=納品+販売報告+期限切れ+訂正 / 店舗モード=販売報告のみ
+  // ボタン構成: センター=完成記録+在庫修正案内 / 通常=納品+販売報告+期限切れ+訂正 / 店舗モード=販売報告+期限切れ+訂正+履歴（納品はセンターだけ）
   document.getElementById('btn-nohin').style.display = (isCenter || storeMode) ? 'none' : 'block';
   document.getElementById('btn-kansei').style.display = isCenter ? 'block' : 'none';
   document.getElementById('btn-hanbai').style.display = isCenter ? 'none' : 'block';
-  document.getElementById('btnrow2').style.display = (isCenter || storeMode) ? 'none' : 'flex';
+  document.getElementById('btnrow2').style.display = isCenter ? 'none' : 'flex';
   // 在庫表
   document.getElementById('center-col').style.display = storeMode ? 'none' : '';
   document.getElementById('stock-col-label').textContent = isCenter ? 'センター在庫' : '店頭';
@@ -284,10 +286,11 @@ async function openForm(type) {
     : type === '期限切れ' ? '廃棄した数量'
     : type === '訂正' ? '増減（＋で在庫を戻す／−でさらに減らす）'
     : '売れた数量';
-  document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
+  // 端末の日付（日本時間）。toISOString() はUTCなので朝9時前だと前日になっていた
+  { const d = new Date(); document.getElementById('f-date').value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
   const qtyMin = type === '訂正' ? '' : 'min="0"';
   document.getElementById('f-products').innerHTML = products.map(p =>
-    `<div class="qtyrow"><span>${esc(p.name)}<br><small>センター在庫 ${p.stock_qty || 0}</small></span>
+    `<div class="qtyrow"><span>${esc(p.name)}<br><small>${storeMode ? '店頭在庫 ' + (stockMap[p.id + '|' + current] || 0) : 'センター在庫 ' + (p.stock_qty || 0)}</small></span>
      <input type="number" ${qtyMin} inputmode="numeric" placeholder="0" data-pid="${p.id}" class="f-qty"></div>`).join('');
   document.getElementById('f-note-label').textContent = type === '訂正' ? '理由（必須）' : 'メモ（任意）';
   document.getElementById('f-note').placeholder = type === '訂正' ? '例: うま辛120g×2 → 250g×2 の入力ミス' : '例: 週末分';
@@ -382,11 +385,10 @@ async function toggleHistory() {
     document.querySelector('h1').textContent = '🏪 ' + storeMode.name + ' 様 販売報告';
     document.querySelector('.sub').textContent = '館山ジビエセンター';
     document.querySelector('.card .memo').innerHTML =
-      '① 閉店後に「<strong>🧾 販売報告</strong>」を押す<br>② 今日売れた商品の数を入れて「記録する」<br>③ 在庫が少なくなったら自動でこちらから補充のご連絡をします。いつもありがとうございます！';
+      '① 閉店後に「<strong>🧾 販売報告</strong>」を押す<br>② 今日売れた商品の数を入れて「記録する」<br>③ 報告を間違えたら「<strong>✏️ 訂正</strong>」、期限切れで捨てた分は「<strong>🗑 期限切れ・廃棄</strong>」。これまでの記録は「📜 履歴」で見られます<br>④ 在庫が少なくなったら自動でこちらから補充のご連絡をします。いつもありがとうございます！';
     // 担当者は店舗名固定
     window.__storeStaff = storeMode.name + '(店舗入力)';
-    await load();
-    pick(storeMode.name);
+    await pick(storeMode.name);
   } catch(e) { toast('読み込みエラー'); }
 })();
 if (!new URLSearchParams(location.search).get('store')) load();
