@@ -67,6 +67,7 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
   <button class="btn" onclick="insuranceAll()">🧮 保険料を計算</button>
   <select id="addSel"></select>
   <button class="btn" onclick="addLine()">＋ 行を追加</button>
+  <button class="btn" onclick="addDayWorker()" title="スタッフ台帳に無い日雇い・イベント手伝いの人">＋ 日雇い（作業ごと）</button>
   <button class="btn btn-gold" onclick="saveAll()">💾 まとめて保存</button>
   <button class="btn" onclick="payslipPrintAll()">📄 明細をまとめて印刷</button>
   <button class="btn" onclick="copyNetPayList()">📋 差引支給額をLINE用にコピー</button>
@@ -105,7 +106,23 @@ td input.dirty{border-color:var(--gold);background:#fdf6e4;}
   ・社会保険料（健康保険・厚生年金）と税は<b>従業員負担分</b>を円で入力します。空欄は0円扱い<br>
   ・<b>保険料は自動計算</b>（「勤怠から取込」でも計算）: 健康保険＝標準報酬月額×（健保9.73%＋子ども子育て支援金0.23%）÷2、介護＝標準報酬×1.62%÷2（介護「対象」の人）、厚生年金＝標準報酬×18.3%÷2、雇用保険＝総支給×0.5%。端数は50銭以下切捨て。標準報酬月額・介護/厚年の対象はスタッフ台帳で設定します。所得税・住民税は手入力のまま<br>
   ・勤務時間は<b>1日の実働を15分単位で切捨て</b>て合計します<br>
+  ・<b>日雇い（作業ごと）</b>: 「＋ 日雇い（作業ごと）」で名前を入れて行を作り、🧾ボタンで作業を1行ずつ入れます（例 <code>9/19 05:00-18:30 2000 やわたんまち出店（八幡神社）</code>＝日付・時間・時給・内容）。時間帯で時給が違うときは行を分けます。金額＝時間×時給で、明細には作業ごとの内訳が出ます。交通費は通勤費の欄、高速代などの実費は 🧾 の「実費」に入れます<br>
   ・<b>2025年10月〜2026年6月は当時の給与明細（Excel）から転記</b>しています（通勤費の金額・技術手当などの手当・介護保険・年末賞与もそのまま）。「📚 期間の給与明細」で期間・全員分を1つにまとめて開けます（先頭に支給一覧。明細の無い月は赤字で出ます）
+</div>
+
+<!-- 日雇い（作業ごと）モーダル -->
+<div id="workModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;align-items:center;justify-content:center;" onclick="if(event.target===this)workClose()">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;min-width:360px;width:640px;max-width:94vw;max-height:88vh;overflow:auto;">
+    <h3 id="wmTitle" style="margin-bottom:8px;font-size:15px;"></h3>
+    <div class="hint" style="margin:0 0 6px;">作業: 1行に「日付 開始-終了 時給 内容」（休憩があれば「休憩60」を足す）。実費: 1行に「実費 金額 内容」</div>
+    <textarea id="wmText" rows="9" style="width:100%;font-family:monospace;font-size:13px;" oninput="workPreview()"></textarea>
+    <div style="margin:6px 0;font-size:12px;">交通費（円）<input id="wmComm" style="width:90px;" oninput="workPreview()"> 内訳 <input id="wmCommMemo" style="width:300px;" oninput="workPreview()"></div>
+    <div id="wmPrev" style="font-size:12px;margin:6px 0;"></div>
+    <div style="display:flex;gap:6px;justify-content:flex-end;">
+      <button class="btn btn-sm" onclick="workClose()">閉じる</button>
+      <button class="btn btn-gold btn-sm" onclick="workApply()">反映（保存は💾）</button>
+    </div>
+  </div>
 </div>
 
 <!-- 行き先別移動費モーダル -->
@@ -202,6 +219,8 @@ function extraKmYen(l, A){ return Math.round(extraKm(l.staff_name, A)*(N(l.commu
 /* 取込した過去明細の手当（技術手当・止めさし対応・立替など）[{label,amount}] */
 const allowList=l=>Array.isArray(l.allowances)?l.allowances.filter(a=>a&&N(a.amount)):[];
 const allowSum=l=>allowList(l).reduce((a,x)=>a+N(x.amount),0);
+/* 日雇い（作業ごと）: allowances のうち kind:'work' が作業1件（日付・時間・時給・内容）、kind:'expense' が実費 */
+const workList=l=>allowList(l).filter(a=>a.kind==='work');
 function commTitle(l){
   const parts=['センター '+N(l.commute_round_km)+'km×'+(N(l.commute_yen_per_km)||20)+'円×'+N(l.commute_count)+'回'];
   trips.filter(t=>t.staff_name===l.staff_name)
@@ -217,7 +236,7 @@ function tripLabel(name){
 function calc(l, ctx){
   const T=ctx&&ctx.trips, A=ctx&&ctx.attMap;
   // 月給者（時給が無く月給が設定されている人）は時間に関係なく月給を基本給にする
-  const base=N(l.monthly_salary)?Math.round(N(l.monthly_salary)):Math.round(N(l.hourly_wage)*N(l.work_hours));
+  const base=workList(l).length?0:N(l.monthly_salary)?Math.round(N(l.monthly_salary)):Math.round(N(l.hourly_wage)*N(l.work_hours));
   const stop=N(l.stopkill_count)*(N(l.stopkill_unit)||3000);
   // commute_fixed: Excelから取り込んだ過去明細の通勤費（金額そのもの。単価17円の時期がある）
   const comm=Math.round(N(l.commute_round_km)*(N(l.commute_yen_per_km)||20)*N(l.commute_count))
@@ -271,7 +290,7 @@ function render(){
       <td>${inp('commute_round_km')}</td>
       <td>${inp('commute_count')}</td>
       <td class="calc" title="${esc(commTitle(l))}">${yen(c.comm)}${N(l.commute_fixed)?'<div class="att">取込 '+yen(N(l.commute_fixed))+'</div>':''}${trips.filter(t=>t.staff_name===l.staff_name).length?'<div class="att">'+esc(tripLabel(l.staff_name))+'</div>':''}</td>
-      <td>${inp('other_allowance')}${allowList(l).length?'<div class="att">'+esc(allowList(l).map(a=>a.label+' '+yen(a.amount)).join(' ／ '))+'</div>':''}</td>
+      <td>${inp('other_allowance')}${workList(l).length?'<div class="att">作業 '+workList(l).length+'件 '+yen(workList(l).reduce((a,x)=>a+N(x.amount),0))+'</div>':''}${allowList(l).filter(a=>a.kind!=='work').length?'<div class="att">'+esc(allowList(l).filter(a=>a.kind!=='work').map(a=>a.label+' '+yen(a.amount)).join(' ／ '))+'</div>':''}</td>
       <td class="calc pay">${yen(c.pay)}</td>
       <td>${inp('health_insurance')}</td>
       <td>${inp('care_insurance')}</td>
@@ -286,6 +305,7 @@ function render(){
       <td class="op">
         ${att?`<button class="btn btn-sm" title="勤怠から日数・時間・通勤回数を入れる" onclick="importAtt(${i})">📥</button>`:''}
         <button class="btn btn-sm" title="行き先別の移動費（産廃処理など）" onclick="tripOpen(${i})">🚚${trips.filter(t=>t.staff_name===l.staff_name).length?'<span style="color:var(--gold)">●</span>':''}</button>
+        ${!staffOf(l.staff_name)||workList(l).length?`<button class="btn btn-sm" title="日雇い（作業ごと）の作業と実費" onclick="workOpen(${i})">🧾</button>`:''}
         <button class="btn btn-sm" title="給与明細書を開く（印刷・PDF保存）" onclick="payslipOpen(${i})">📄</button>
         <button class="btn btn-sm" title="${staffHasLink(l.staff_name)?'本人ページのリンク（発行済み）':'本人ページのリンクを発行'}" onclick="payslipLinkAction(${i})">🔗${staffHasLink(l.staff_name)?'<span style="color:var(--gold)">●</span>':''}</button>
         <button class="btn btn-sm" onclick="saveLine(${i})">💾</button>
@@ -341,7 +361,9 @@ function importAtt(i){
    本人負担の端数は 50銭以下切捨て・50銭超切上げ。計算後も欄は手で直せる */
 const yen50=x=>{ const f=Math.floor(x); return (x-f)>0.5+1e-9?f+1:f; };
 function insuranceFor(l){
-  const s=staffOf(l.staff_name); if(!s) return {err:'スタッフ台帳に無い'};
+  const s=staffOf(l.staff_name);
+  if(!s && workList(l).length) return {};   // 日雇い（作業ごと）: 社会保険・雇用保険の対象外
+  if(!s) return {err:'スタッフ台帳に無い'};
   const R={health:N(rates.health_pct)||9.73, child:N(rates.child_support_pct), care:N(rates.care_pct)||1.62, pension:N(rates.pension_pct)||18.3, emp:N(rates.employment_pct)||0.5};
   const out={};
   if(s.social_insurance==='加入'){
@@ -439,6 +461,68 @@ async function saveAll(){
   }
   msg(ng ? '⚠ 保存 '+ok+'名／失敗 '+ng+'名' : '✅ '+ok+'名分を保存しました', !ng);
 }
+/* ── 日雇い（作業ごと）── スタッフ台帳に無い人を名前だけで行にする */
+function addDayWorker(){
+  const name=(prompt('日雇い（作業ごと）の人の氏名')||'').trim(); if(!name) return;
+  if(lines.some(l=>l.staff_name===name)){ msg(name+' はもうこの月にいます',false); return; }
+  lines.push({staff_id:'',staff_name:name,stopkill_unit:3000,commute_yen_per_km:20,allowances:[],_dirty:true});
+  lines.sort((a,b)=>a.staff_name.localeCompare(b.staff_name,'ja'));
+  render(); workOpen(lines.findIndex(l=>l.staff_name===name));
+}
+/* 作業1行「9/19 05:00-18:30 2000 内容」（休憩60 を足せる）／実費1行「実費 3310 高速料金」を読む。読めない行は理由を返す */
+function parseWorkText(text, month){
+  const y=(month||'').slice(0,4), items=[], errs=[];
+  String(text||'').split(/\n/).map(t=>t.trim()).filter(Boolean).forEach((t,k)=>{
+    let m=t.match(/^実費\s+([\d,]+)\s*(.*)$/);
+    if(m){ items.push({kind:'expense',label:m[2]||'実費',amount:+m[1].replace(/,/g,'')}); return; }
+    m=t.match(/^(\d{1,2})[\/月](\d{1,2})日?\s+(\d{1,2}):(\d{2})\s*[-〜~]\s*(\d{1,2}):(\d{2})\s+([\d,]+)円?\s*(?:休憩\s*(\d+)分?\s*)?(.*)$/);
+    if(!m){ errs.push((k+1)+'行目「'+t+'」'); return; }
+    const st=+m[3]*60+ +m[4]; let en=+m[5]*60+ +m[6]; if(en<=st) en+=1440;   // 日付をまたぐ
+    const br=+(m[8]||0), min=en-st-br, rate=+m[7].replace(/,/g,'');
+    if(min<=0){ errs.push((k+1)+'行目（時間が0以下）'); return; }
+    const hours=Math.round(min/60*100)/100;
+    items.push({kind:'work',date:`${y}-${String(m[1]).padStart(2,'0')}-${String(m[2]).padStart(2,'0')}`,
+      start:`${String(m[3]).padStart(2,'0')}:${m[4]}`,end:`${String(m[5]).padStart(2,'0')}:${m[6]}`,break_min:br||undefined,
+      hours,rate,amount:Math.round(min*rate/60),label:(m[9]||'').trim()});
+  });
+  return {items, errs};
+}
+function workToText(l){
+  return allowList(l).map(a=>a.kind==='work'
+    ? `${+a.date.slice(5,7)}/${+a.date.slice(8,10)} ${a.start}-${a.end} ${a.rate}${N(a.break_min)?' 休憩'+N(a.break_min):''} ${a.label||''}`.trim()
+    : a.kind==='expense'?`実費 ${N(a.amount)} ${a.label||''}`.trim():null).filter(Boolean).join('\n');
+}
+let workIdx=-1;
+function workOpen(i){
+  workIdx=i; const l=lines[i];
+  document.getElementById('wmTitle').textContent=l.staff_name+' の作業（'+document.getElementById('month').value+'）';
+  document.getElementById('wmText').value=workToText(l);
+  document.getElementById('wmComm').value=l.commute_fixed??'';
+  document.getElementById('wmCommMemo').value=l.other_allowance_memo??'';
+  document.getElementById('workModal').style.display='flex'; workPreview();
+}
+function workClose(){ document.getElementById('workModal').style.display='none'; workIdx=-1; }
+function workPreview(){
+  const r=parseWorkText(document.getElementById('wmText').value, document.getElementById('month').value);
+  const w=r.items.filter(x=>x.kind==='work'), ex=r.items.filter(x=>x.kind==='expense');
+  const tot=w.reduce((a,x)=>a+x.amount,0)+ex.reduce((a,x)=>a+x.amount,0)+N(document.getElementById('wmComm').value);
+  document.getElementById('wmPrev').innerHTML=(r.errs.length?`<div style="color:var(--red)">読めない行: ${esc(r.errs.join('、'))}</div>`:'')
+    +w.map(x=>`${esc(x.date)} ${x.start}〜${x.end} ${x.hours}h×¥${x.rate.toLocaleString()}＝<b>¥${x.amount.toLocaleString()}</b> ${esc(x.label)}`).join('<br>')
+    +(ex.length?'<br>'+ex.map(x=>`実費 ${esc(x.label)} ¥${x.amount.toLocaleString()}`).join('<br>'):'')
+    +`<div style="margin-top:4px;">支給合計 <b>¥${tot.toLocaleString()}</b></div>`;
+  return r;
+}
+function workApply(){
+  const r=workPreview();
+  if(r.errs.length){ msg('読めない行があります（反映していません）: '+r.errs.join('、'),false); return; }
+  const l=lines[workIdx];
+  l.allowances=[...allowList(l).filter(a=>a.kind!=='work'&&a.kind!=='expense'),...r.items];
+  const w=r.items.filter(x=>x.kind==='work');
+  l.work_days=new Set(w.map(x=>x.date)).size||''; l.work_hours=Math.round(w.reduce((a,x)=>a+x.hours,0)*100)/100||'';
+  l.hourly_wage=''; l.monthly_salary='';
+  l.commute_fixed=document.getElementById('wmComm').value.trim(); l.other_allowance_memo=document.getElementById('wmCommMemo').value.trim();
+  l._dirty=true; workClose(); render(); msg(l.staff_name+' の作業を反映しました（保存はまだ）',true);
+}
 function addLine(){
   const id=document.getElementById('addSel').value; if(!id) return;
   const s=staffList.find(x=>x.id===id); if(!s) return;
@@ -496,6 +580,31 @@ function payslipSection(l, month, rows, ctx){
     extraHtml.push(y?`<tr><th>${x[0]}</th><td>${x[1]}</td><th>${y[0]}</th><td>${y[1]}</td></tr>`:`<tr><th>${x[0]}</th><td colspan="3">${x[1]}</td></tr>`);
   }
   const imported=!!l.source;
+  const W=workList(l);
+  if(W.length){
+    const wTot=W.reduce((a,x)=>a+N(x.amount),0), wHrs=W.reduce((a,x)=>a+N(x.hours),0), wDays=new Set(W.map(x=>x.date)).size;
+    const wRows=W.map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(x.start)}〜${esc(x.end)}${N(x.break_min)?`<span style="color:#888;font-size:11px;">（休憩${N(x.break_min)}分）</span>`:''}</td><td style="text-align:right;">${N(x.hours)}h</td><td style="text-align:right;">¥${N(x.rate).toLocaleString()}</td><td style="text-align:right;">¥${N(x.amount).toLocaleString()}</td><td>${esc(x.label||'')}</td></tr>`).join('');
+    const ex=allowList(l).filter(a=>a.kind!=='work');
+    return `<section class="slip">
+  <h1>給与明細書　${month.replace('-','年')}月分</h1>
+  <p>氏名: <strong>${esc(l.staff_name)}</strong><br>館山ジビエセンター（合同会社アルコ）</p>
+  <table>
+  <tr><th>作業日数</th><td>${wDays}日</td><th>作業時間</th><td>${wHrs}時間</td></tr>
+  <tr><th>作業給</th><td colspan="3">¥${wTot.toLocaleString()}　<span style="font-size:11px;color:#555;">内訳は下の作業明細</span></td></tr>
+  ${ex.map(a=>`<tr><th>${esc(a.label)}</th><td colspan="3">¥${N(a.amount).toLocaleString()}</td></tr>`).join('')}
+  ${c.stop?`<tr><th>止めさし搬入手当</th><td colspan="3">¥${c.stop.toLocaleString()}</td></tr>`:''}
+  ${N(l.other_allowance)?`<tr><th>その他手当</th><td colspan="3">¥${N(l.other_allowance).toLocaleString()}</td></tr>`:''}
+  ${c.comm?`<tr><th>交通費</th><td colspan="3">¥${c.comm.toLocaleString()}　<span style="font-size:11px;color:#555;">${esc(l.other_allowance_memo||commParts.join(' ＋ '))}</span></td></tr>`:''}
+  <tr><th>支給額（総額）</th><td colspan="3" class="big">¥${c.pay.toLocaleString()}</td></tr>
+  <tr><th>社会保険料</th><td>¥${shakai.toLocaleString()}</td><th>雇用保険料</th><td>¥${N(l.employment_insurance).toLocaleString()}</td></tr>
+  <tr><th>所得税</th><td>¥${N(l.income_tax).toLocaleString()}</td><th>住民税・他控除</th><td>¥${other_ded.toLocaleString()}</td></tr>
+  <tr><th>差引支給額</th><td colspan="3" class="big">¥${c.net.toLocaleString()}</td></tr></table>
+  <h2 style="font-size:15px;">作業明細</h2>
+  <table class="att-table work-table"><thead><tr><th>日付</th><th>時間</th><th>時間数</th><th>時給</th><th>金額</th><th>作業内容・場所</th></tr></thead><tbody>${wRows}
+  <tr><td colspan="2">合計</td><td style="text-align:right;">${wHrs}h</td><td></td><td style="text-align:right;">¥${wTot.toLocaleString()}</td><td></td></tr></tbody></table>
+  <p style="font-size:11px;color:#666;">発行日: ${new Date().toLocaleDateString('ja-JP')}</p>
+  </section>`;
+  }
   return `<section class="slip">
   <h1>給与明細書　${month.replace('-','年')}月分</h1>
   <p>氏名: <strong>${esc(l.staff_name)}</strong><br>館山ジビエセンター（合同会社アルコ）</p>
@@ -543,7 +652,7 @@ function bonusSection(b, month){
 
 function payslipDocOpen(title, sectionsHtml){
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(title)}</title>
-  <style>body{font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;padding:32px;color:#222;} h1{font-size:20px;border-bottom:2px solid #222;padding-bottom:8px;} table{border-collapse:collapse;width:100%;margin:12px 0;} th,td{border:1px solid #999;padding:6px 10px;font-size:13px;text-align:left;} th{background:#f0f0f0;width:18%;} .big{font-size:18px;font-weight:700;}
+  <style>body{font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;padding:32px;color:#222;} h1{font-size:20px;border-bottom:2px solid #222;padding-bottom:8px;} table{border-collapse:collapse;width:100%;margin:12px 0;} th,td{border:1px solid #999;padding:6px 10px;font-size:13px;text-align:left;} th{background:#f0f0f0;width:18%;white-space:nowrap;} .work-table th{width:auto;} .big{font-size:18px;font-weight:700;}
   .slip{page-break-after:always;} .slip:last-of-type{page-break-after:auto;}
   .att-table th,.att-table td{padding:3px 10px;font-size:12px;}
   .sum-table th,.sum-table td{padding:3px 5px;font-size:10.5px;text-align:right;width:auto;white-space:nowrap;} .sum-table td:first-child,.sum-table th:first-child{text-align:left;}
