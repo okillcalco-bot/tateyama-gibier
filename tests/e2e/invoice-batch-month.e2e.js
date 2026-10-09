@@ -144,6 +144,15 @@ const invOthers = (h, me) => !['A食堂', 'B商店', 'トレタテ', 'ノブレ�
   ], {}, 'standard').map(l => l.name));
   ck('明細は納品日ごとに 部位→送料 の順（9/11 肩ロース・送料 → 9/15 カタ・切り落とし・送料 → 9/29 肩ロース・送料）',
     JSON.stringify(order) === JSON.stringify(['9/11納品　イノシシ 肩ロース', '9/11納品　送料（クール100）', '9/15納品　イノシシ カタ', '9/15納品　イノシシ 猪切り落とし', '9/15納品　送料（クール120）', '9/29納品　イノシシ 肩ロース', '9/29納品　送料（クール100）']), JSON.stringify(order));
+  // 5c. 送料の数量＝個口数（2026-10-09 沖: 4個送った日も1個になっていた）
+  const fl = await page.evaluate(() => invBuildLinesFromOrders([
+    { delivery_date: '2026-09-28', order_items: [{ species: 'イノシシ', part_name: '枝肉（全体）', weight_kg: 42.48, subtotal: 63720 }], shipments: [{ freight: 6960, size_code: 120, is_cool: true, package_count: 4 }] },
+    { delivery_date: '2026-08-03', order_items: [{ species: 'イノシシ', part_name: 'ミンチ用', weight_kg: 40, subtotal: 60000 }], shipments: [{ freight: 2430, package_count: 2, notes: '佐川 100×1、140×1' }] },
+    { delivery_date: '2026-09-29', order_items: [{ species: 'イノシシ', part_name: '枝肉（全体）', weight_kg: 19.29, subtotal: 28935 }], shipments: [{ freight: 1450, size_code: 140, is_cool: true }] },
+  ], {}, 'standard').filter(l => /送料/.test(l.name)));
+  ck('送料: 4個口・6,960円 → 4個×1,740円', fl.some(l => /9\/28納品　送料（クール120）$/.test(l.name) && l.qty === 4 && l.unit === '個' && l.price === 1740), JSON.stringify(fl));
+  ck('送料: 箱のサイズ違いで割り切れない（2個口・2,430円）→ 1式・品名に「2個口」', fl.some(l => /送料（2個口）$/.test(l.name) && l.qty === 1 && l.unit === '式' && l.price === 2430), JSON.stringify(fl));
+  ck('送料: 個口数が無い出荷は従来どおり 1個', fl.some(l => /9\/29納品　送料（クール140）$/.test(l.name) && l.qty === 1 && l.price === 1450), JSON.stringify(fl));
   ck('明細の行に内部用の日付キー（_d）が残らない', await page.evaluate(() => invBuildLinesFromOrders([{ delivery_date: '2026-09-11', order_items: [{ species: 'イノシシ', part_name: 'ロース', weight_kg: 1, subtotal: 3800 }], shipments: [{ freight: 800, size_code: 60, is_cool: true }] }], {}, 'standard').every(l => !('_d' in l))), '');
 
   // 10. 請求書の送り方
