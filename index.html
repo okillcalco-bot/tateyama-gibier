@@ -2620,7 +2620,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <label style="display:flex;align-items:center;gap:6px;padding-bottom:11px;font-size:14px;white-space:nowrap;">
             <input type="checkbox" id="ship-direct-cool" checked onchange="shipDirectFreightAuto(true)"> クール便
           </label>
-          <div class="form-group" style="margin:0;min-width:120px;"><label>送料（税抜）</label>
+          <div class="form-group" style="margin:0;min-width:80px;"><label>個口数</label>
+            <input class="form-input" id="ship-direct-pkgs" type="number" min="1" step="1" inputmode="numeric" value="1" onchange="shipDirectFreightAuto(true)" />
+          </div>
+          <div class="form-group" style="margin:0;min-width:120px;"><label>送料（税抜・合計）</label>
             <input class="form-input" id="ship-direct-freight" type="number" min="0" step="1" inputmode="numeric" placeholder="自動計算" />
           </div>
           <button class="btn" onclick="shipDirectFreightAuto(true)" style="padding:11px 16px;margin-bottom:1px;">↻ 再計算</button>
@@ -3499,15 +3502,18 @@ async function shipDirectFreightAuto(force) {
   };
   const seq = ++shipFreightSeq;
   if (note) note.textContent = '計算中…';
-  const v = await shipComputeFreight(addr, opts);
+  const one = await shipComputeFreight(addr, opts);
   // 計算中に手入力・条件変更があったら、古い結果で上書きしない
   if (seq !== shipFreightSeq) return;
-  if (v == null) {
+  if (one == null) {
     if (note) note.innerHTML = '<span style="color:var(--gold)">この地域・サイズは料金表にありません。送料を直接入力してください。</span>';
     return;
   }
+  // 個口数（箱の数）ぶん掛ける。請求書の送料行は「数量＝個口数・単価＝1個の送料」になる（2026-10-09）
+  const pk = Math.max(1, parseInt(document.getElementById('ship-direct-pkgs')?.value, 10) || 1);
+  const v = one * pk;
   fEl.value = v;
-  if (note) note.innerHTML = `${esc2(name)} の住所から算出: <b style="color:var(--gold)">¥${v.toLocaleString()}</b>（税抜・${esc2(opts.carrier)} ${opts.size}サイズ${opts.cool ? '・クール' : ''}）`;
+  if (note) note.innerHTML = `${esc2(name)} の住所から算出: <b style="color:var(--gold)">¥${v.toLocaleString()}</b>（税抜・${esc2(opts.carrier)} ${opts.size}サイズ${opts.cool ? '・クール' : ''}${pk > 1 ? `・¥${one.toLocaleString()}×${pk}個口` : ''}）`;
 }
 
 function shipDirectUpdateConfirm() {
@@ -3906,6 +3912,7 @@ async function shipDirectConfirm() {
       delivery.is_cool = document.getElementById('ship-direct-cool').checked;
       const fv = parseInt(document.getElementById('ship-direct-freight').value, 10);
       if (isFinite(fv) && fv >= 0) delivery.freight = fv;
+      delivery.package_count = Math.max(1, parseInt(document.getElementById('ship-direct-pkgs')?.value, 10) || 1);
     }
     const { orderCode, createdCustomer } = await recordDirectShipment(shipDirectItems, custName, { memo, operator, delivery, newCustomer, fulfillOrders });
 

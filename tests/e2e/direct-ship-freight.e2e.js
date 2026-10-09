@@ -89,6 +89,12 @@ const CUSTOMERS = [
   await page.evaluate(async () => { document.getElementById('ship-direct-cool').checked = false; await shipDirectFreightAuto(true); });
   await page.waitForTimeout(250);
   results.push(['クール解除で再計算', await page.$eval('#ship-direct-freight', el => el.value) === '1100', '']);
+  // 4b) 個口数を3にすると 1個の送料×3（2026-10-09）
+  await page.evaluate(async () => { document.getElementById('ship-direct-pkgs').value = '3'; await shipDirectFreightAuto(true); });
+  await page.waitForTimeout(250);
+  const pk = await page.evaluate(() => ({ v: document.getElementById('ship-direct-freight').value, note: document.getElementById('ship-direct-freight-note').innerText }));
+  results.push(['個口数3で送料は1個×3（1,100×3=3,300）・根拠に「×3個口」', pk.v === '3300' && /×3個口/.test(pk.note), JSON.stringify(pk)]);
+  await page.evaluate(() => { document.getElementById('ship-direct-pkgs').value = '1'; });
 
   // 5) 住所が無い相手は手入力を促す
   await page.evaluate(async () => {
@@ -122,6 +128,7 @@ const CUSTOMERS = [
     document.getElementById('ship-direct-carrier').value = '佐川';
     document.getElementById('ship-direct-size').value = '140';
     document.getElementById('ship-direct-cool').checked = true;
+    document.getElementById('ship-direct-pkgs').value = '2';
     document.getElementById('ship-direct-freight').value = '2200';
     document.getElementById('ship-direct-freight').dispatchEvent(new Event('input'));
     await shipDirectConfirm();
@@ -132,6 +139,7 @@ const CUSTOMERS = [
   results.push(['出荷にサイズを保存(数値)', sp.size_code === 140, String(sp.size_code)]);
   results.push(['出荷にクール便を保存', sp.is_cool === true, String(sp.is_cool)]);
   results.push(['出荷に送料を保存', sp.freight === 2200, String(sp.freight)]);
+  results.push(['出荷に個口数を保存', sp.package_count === 2, String(sp.package_count)]);
 
   // 7) 手渡しなら送料は保存されない
   shipPosts = [];
