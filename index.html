@@ -1201,6 +1201,25 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
     </div>
     <div id="vc-list"></div>
+    <!-- お弁当・イベントの感想QR（2026-10-10） -->
+    <div class="section" id="mv-section">
+      <div class="section-title">🍱 お弁当・イベントの感想QR</div>
+      <div style="font-size:13px;color:var(--text3);line-height:1.7;">
+        ラベルの無い料理（お弁当・試食など）の感想を集めるQRです。ジビエ料理を並べると、食べた人が料理ごとに星・スタンプを押して送れます。
+        届いた感想は上の一覧に「🍱 タイトル」で出ます。
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-top:10px;">
+        <input class="form-input" id="mv-title" placeholder="タイトル（例: ジビエ弁当）">
+        <input class="form-input" id="mv-date" type="date">
+        <input class="form-input" id="mv-venue" placeholder="会場（任意）">
+      </div>
+      <textarea class="form-input" id="mv-dishes" rows="3" style="margin-top:8px;width:100%;" placeholder="ジビエ料理を1行に1つ（例: からあげ／ジビエのからあげ）。使ったお肉の個体番号が分かれば「からあげ／ジビエのからあげ／TGC-08-T340」"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+        <button class="btn btn-primary btn-sm" onclick="mvSave()">＋ 作る</button>
+        <span id="mv-msg" style="font-size:13px;"></span>
+      </div>
+      <div id="mv-list" style="margin-top:10px;"></div>
+    </div>
   </div>
 
   <!-- Punch (出退勤打刻) -->
@@ -12706,6 +12725,78 @@ async function kkSubmit() {
   } catch (e) { playFeedbackSound(false); toast('記録に失敗しました: ' + sbSafeMsg(e), 'error'); }
 }
 
+/* ── お弁当・イベントの感想QR（2026-10-10）──
+   ラベルの無い料理の感想を s.html?m=<code> で集める。料理ごとに星・スタンプ（選択式）。
+   使ったお肉の個体番号が分かれば料理に付けておくと、感想がその一頭の記録にも付く */
+let mvRows = [];
+function menuVoiceUrl(code) { return 'https://tateyama-gibier.vercel.app/s.html?m=' + code; }
+function mvParseDishes(text) {
+  return String(text || '').split(/\n/).map(t => t.trim()).filter(Boolean).map(t => {
+    const [name, note, labels] = t.split(/[／\/]/).map(x => (x || '').trim());
+    return { name, note: note || '', labels: (labels || '').split(/[,、\s]+/).filter(Boolean), scan_codes: [] };
+  }).filter(d => d.name);
+}
+async function mvLoad() {
+  const box = document.getElementById('mv-list'); if (!box) return;
+  const key = staffKeyGet();
+  if (!key) { box.innerHTML = '<div style="font-size:13px;color:var(--text3);">一覧を見るにはスタッフキーが必要です。「＋ 作る」を押すと入力を求めます。</div>'; return; }
+  try { mvRows = await sb('POST', 'rpc/staff_menu_list', { p_staff_key: key }) || []; }
+  catch (e) { box.innerHTML = `<div style="color:var(--red);font-size:13px;">読み込めませんでした: ${esc2(sbSafeMsg(e))}</div>`; return; }
+  box.innerHTML = mvRows.length ? mvRows.map((m, i) => `<div style="border-top:1px solid var(--border);padding:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;"><b>${esc2(m.title)}</b> <span style="font-size:12px;color:var(--text3);">${esc2(m.event_date || '')} ${esc2(m.venue || '')}</span><br>
+        <span style="font-size:12.5px;">${(m.dishes || []).map(d => esc2(d.name)).join('・')}</span>
+        <span style="font-size:12px;color:var(--text3);">／感想 ${m.voice_count}件／<a href="${menuVoiceUrl(m.code)}" target="_blank">${esc2(m.code)}</a></span></div>
+      <button class="btn btn-sm" onclick="mvPrint(${i},'poster')">🖨 A4ポスター</button>
+      <button class="btn btn-sm" onclick="mvPrint(${i},'cards')">🖨 カード10枚（お弁当に添える）</button>
+    </div>`).join('') : '<div style="font-size:13px;color:var(--text3);">まだありません。</div>';
+}
+async function mvSave() {
+  const msgEl = document.getElementById('mv-msg');
+  const title = document.getElementById('mv-title').value.trim();
+  const dishes = mvParseDishes(document.getElementById('mv-dishes').value);
+  if (!title || !dishes.length) { msgEl.style.color = 'var(--red)'; msgEl.textContent = 'タイトルとジビエ料理（1つ以上）を入れてください'; return; }
+  const key = await staffKeyEnsure(); if (!key) return;
+  try {
+    await sb('POST', 'rpc/staff_menu_save', { p_staff_key: key, p: { title, event_date: document.getElementById('mv-date').value || '', venue: document.getElementById('mv-venue').value.trim(), dishes } });
+    msgEl.style.color = 'var(--green)'; msgEl.textContent = '作りました。下の一覧から印刷できます';
+    ['mv-title', 'mv-date', 'mv-venue', 'mv-dishes'].forEach(id => document.getElementById(id).value = '');
+    mvLoad();
+  } catch (e) { msgEl.style.color = 'var(--red)'; msgEl.textContent = '保存できませんでした: ' + sbSafeMsg(e); }
+}
+function mvPrintHtml(m, kind) {
+  const url = menuVoiceUrl(m.code), names = (m.dishes || []).map(d => esc2(d.name)).join('・');
+  if (kind === 'poster') {
+    return { css: evPosterCss(), body: `<div class="po">
+      <div class="eb">館山ジビエセンター</div>
+      <h1>ジビエ料理の<br>感想を教えてください</h1>
+      <div class="vn">${esc2(m.title)}</div>
+      <div class="dt">${names}</div>
+      <div class="qr">${makeQRSVG(url, 96)}</div>
+      <div class="cta">スマホのカメラを向けて<br>料理ごとに★とスタンプを押すだけ</div>
+      <div class="sub">館山・南房総の山で獲れた野生の命を、館山ジビエセンターでお肉にしました。<br>いただいた声は、獲った猟師とさばいた私たちが読みます。</div>
+      <div class="ct">館山ジビエセンター（合同会社アルコ）<br>千葉県館山市西長田1163-5</div>
+    </div>` };
+  }
+  const card = `<div class="cd"><div class="qr">${makeQRSVG(url, 30)}</div><div class="tx">
+      <div class="h">ジビエ料理の感想を<br>お聞かせください</div>
+      <div class="d">${names}</div>
+      <div class="s">★とスタンプを押すだけ（30秒）</div>
+      <div class="f">館山ジビエセンター</div></div></div>`;
+  return { css: `@page { size: A4 portrait; margin: 11mm 14mm; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Meiryo','Yu Gothic',sans-serif; color:#111; }
+    .grid { display:grid; grid-template-columns:91mm 91mm; grid-auto-rows:55mm; }
+    .cd { border:.2mm dashed #aaa; padding:5mm; display:flex; gap:4mm; align-items:center; overflow:hidden; }
+    .cd .qr svg { display:block; width:30mm !important; height:30mm !important; }
+    .cd .tx { flex:1; min-width:0; }
+    .cd .h { font-size:11.5pt; font-weight:bold; line-height:1.35; }
+    .cd .d { font-size:9.5pt; margin-top:2mm; color:#333; }
+    .cd .s { font-size:8.5pt; margin-top:1.5mm; color:#555; }
+    .cd .f { font-size:8pt; margin-top:2mm; color:#8a7648; letter-spacing:.1em; }`,
+    body: `<div class="grid">${card.repeat(10)}</div>` };
+}
+function mvPrint(i, kind) { const m = mvRows[i]; if (!m) return; const d = mvPrintHtml(m, kind); evPrintDoc(d.css, d.body); }
+
 /* ── 食べた人の声（承認してから公開する） ──
    ラベルのQRから届いた感想は、公開ボタンを押すまでお客様には見えない。
    お客様は自分が書いたものが載るのを待っているので、承認待ちはバッジで気づけるようにしてある。 */
@@ -12734,6 +12825,7 @@ async function loadVoices() {
   if (opEl && !opEl.value) { try { opEl.value = localStorage.getItem('tg_vc_operator') || ''; } catch (e) {} }
   try {
     vcRows = await sb('POST', 'rpc/staff_voices_list', { p_status: vcStatus, p_limit: 500 }) || [];
+    mvLoad();
   } catch (e) {
     box.innerHTML = `<div class="section" style="color:var(--red);">感想を読み込めませんでした: ${esc2(sbSafeMsg(e))}</div>`;
     return;

@@ -82,6 +82,10 @@
   .lot-h{font-size:16px;font-weight:700;display:flex;align-items:baseline;gap:8px}
   .lot-q{margin-left:auto;font-size:13px;color:var(--ink2);font-weight:400}
   .lot-n{font-size:12.5px;color:var(--ink3);margin:4px 0 2px}
+  .mdish.picked{border-color:var(--moss)}
+  .mdish .chips .chip{border:1px solid var(--line);background:var(--bg);color:var(--ink2);cursor:pointer;font-size:14px;padding:8px 12px;font-family:inherit}
+  .mdish .chips .chip.on{background:var(--moss);color:#fff;border-color:var(--moss)}
+  .mdish .chips .chip-a{background:var(--moss-soft);color:var(--moss);font-size:12px;padding:3px 10px}
 </style>
 </head>
 <body>
@@ -123,11 +127,14 @@ let story=null, rating=0;
 const code=param('c').replace(/[^0-9]/g,'');
 const label=param('i').replace(/[^0-9A-Za-z\-぀-ヿ一-鿿]/g,'').slice(0,40);
 const eventId=param('e').replace(/[^0-9a-fA-F-]/g,'').slice(0,36);
+// ?m=メニュー … お弁当・イベントの料理から感想を集める（どのパックか分からない料理でも送れる）
+const menuCode=param('m').toLowerCase().replace(/[^0-9a-z]/g,'').slice(0,16);
 // ?i=個体番号&e=出店ID … 出店の個体シートのQR（会場までの距離と、その出店の「今日の商品」「ひとこと」も出す）
-const mode = (eventId && !label) ? 'event' : (code ? 'pack' : (label ? 'individual' : 'none'));
+const mode = menuCode ? 'menu' : (eventId && !label) ? 'event' : (code ? 'pack' : (label ? 'individual' : 'none'));
 const byIndividual = mode==='individual';
 
 function fetchStory(){
+  if(mode==='menu')       return rpc('story_get_menu',{p_code:menuCode});
   if(mode==='event')      return rpc('story_get_event',{p_event_id:eventId});
   if(mode==='individual') return rpc('story_get_individual',{p_label:label, p_event_id: eventId||null});
   return rpc('story_get',{p_code:code});
@@ -243,6 +250,10 @@ async function load(){
   const sub=document.querySelector('header .sub');
   if(mode==='none'){ box.innerHTML='<div class="center">お肉のラベルのQRコードから開いてください。</div>'; return; }
   if(mode==='individual') sub.textContent='この一頭が、どこで生まれてどう届いたか';
+  if(mode==='menu'){
+    document.querySelector('header h1').textContent='ジビエ料理の感想';
+    sub.textContent='召し上がったジビエ料理を選んで、ひとこと教えてください';
+  }
   if(mode==='event'){
     document.querySelector('header h1').textContent='本日のジビエ';
     sub.textContent='いま並んでいるお肉が、どこで獲れた一頭か';
@@ -253,14 +264,86 @@ async function load(){
     box.innerHTML='<div class="center">うまく読み込めませんでした。時間をおいてお試しください。</div>'; return;
   }
   if(!story){
-    box.innerHTML= mode==='event'
+    box.innerHTML= mode==='menu'
+      ? '<div class="center">このメニューが見つかりませんでした。</div>'
+      : mode==='event'
       ? '<div class="center">この出店の一覧が見つかりませんでした。</div>'
       : mode==='individual'
       ? '<div class="center">この個体番号が見つかりませんでした。<br>番号をご確認ください。</div>'
       : '<div class="center">この番号のお肉が見つかりませんでした。<br>ラベルの数字をご確認ください。</div>';
     return;
   }
-  if(mode==='event') renderEvent(); else render();
+  if(mode==='menu') renderMenu(); else if(mode==='event') renderEvent(); else render();
+}
+
+/* ── お弁当・イベントのメニュー（?m=）──
+   料理ごとに星とスタンプを選ぶだけで送れる（選択式）。ひとことは任意で1つ。
+   入れた料理の数だけ感想が残る。ページには件数・星・スタンプの集計だけを出し、文章は出さない。
+   使ったお肉の一頭が分かっている料理は、その一頭の記録へのリンクも出す（線を通す） */
+let menuIn={};   // 料理名 → {rating, stamps:Set}
+function menuDish(n){ return menuIn[n]||(menuIn[n]={rating:0,stamps:new Set()}); }
+function menuSetRating(i,n){ const d=story.dishes[i], m=menuDish(d.name); m.rating=(m.rating===n?0:n); menuPaint(); }
+function menuToggleStamp(i,s){ const m=menuDish(story.dishes[i].name); if(m.stamps.has(s)) m.stamps.delete(s); else m.stamps.add(s); menuPaint(); }
+function menuPaint(){
+  (story.dishes||[]).forEach((d,i)=>{
+    const m=menuDish(d.name);
+    document.querySelectorAll(`#mstars-${i} button`).forEach(b=>b.classList.toggle('on', Number(b.dataset.n)<=m.rating));
+    document.querySelectorAll(`#mstamps-${i} button`).forEach(b=>b.classList.toggle('on', m.stamps.has(b.dataset.s)));
+    const card=document.getElementById('mdish-'+i); if(card) card.classList.toggle('picked', !!(m.rating||m.stamps.size));
+  });
+}
+function renderMenu(thanks){
+  const mn=story.menu||{}, dishes=story.dishes||[];
+  let h=`<div class="card prod">
+    <div class="nm">${esc(mn.title||'')}</div>
+    ${(mn.date||mn.venue)?`<div class="kg">${esc(mn.date||'')}${mn.venue?' '+esc(mn.venue):''}</div>`:''}
+    <div style="font-size:13.5px;color:var(--ink2);margin-top:8px;line-height:1.8;">館山・南房総の山で獲れた野生の命を、館山ジビエセンターでお肉にしました。<br>召し上がった料理を選んで、星かスタンプを押してください。</div>
+  </div>`;
+  dishes.forEach((d,i)=>{
+    const mem=d.members||[];
+    h+=`<div class="card mdish" id="mdish-${i}">
+      <h2><span class="ic">🍽</span>${esc(d.name)}${d.note?`<span style="font-size:12.5px;font-weight:400;color:var(--ink2);">${esc(d.note)}</span>`:''}</h2>
+      <div class="stars" id="mstars-${i}">${[1,2,3,4,5].map(n=>`<button type="button" data-n="${n}" onclick="menuSetRating(${i},${n})">★</button>`).join('')}</div>
+      <div class="chips" id="mstamps-${i}" style="margin-top:10px;">${STAMPS.map(s=>`<button type="button" class="chip" data-s="${esc(s)}" onclick="menuToggleStamp(${i},'${esc(s)}')">${esc(s)}</button>`).join('')}</div>
+      ${mem.length?`<div class="lot-n" style="margin-top:10px;">この料理のお肉になった一頭</div><div class="chips">${mem.map(m=>`<a class="chip chip-a" href="?i=${encodeURIComponent(m.label)}">${esc(m.place||m.label)}${m.capture_date?' '+esc(m.capture_date):''}</a>`).join('')}</div>`:''}
+      ${d.count?`<div class="lot-n" style="margin-top:10px;">みんなの声 ${d.count}人${d.avg?`・<span style="color:var(--gold)">★${esc(d.avg)}</span>`:''}${Object.keys(d.stamps||{}).length?'　'+Object.entries(d.stamps).sort((a,b)=>b[1]-a[1]).map(([s,n])=>`${esc(s)}×${n}`).join('　'):''}</div>`:''}
+    </div>`;
+  });
+  h+=`<div class="card">
+    <label for="comment" style="margin-top:0;">ひとこと（任意）</label>
+    <textarea id="comment" maxlength="1000" placeholder="味わい、初めて食べた感想、どなたと召し上がったか など"></textarea>
+    <label for="nickname">ニックネーム（任意）</label>
+    <input id="nickname" maxlength="60" placeholder="例: 館山の田中、はじめてジビエ">
+    <button class="send" id="send" onclick="sendMenu()">感想を送る</button>
+    <div class="msg" id="msg"></div>
+    <div style="font-size:12px;color:var(--ink3);margin-top:8px;">獲った猟師と、さばいた私たちが読みます。このページに出るのは人数・星・スタンプの集計だけです。</div>
+  </div>`;
+  document.getElementById('main').innerHTML=h;
+  menuPaint();
+  if(thanks){ const m=document.getElementById('msg'); m.style.color='var(--moss)'; m.textContent=thanks; m.scrollIntoView({behavior:'smooth',block:'center'}); }
+}
+async function sendMenu(){
+  const btn=document.getElementById('send'), msg=document.getElementById('msg');
+  const comment=document.getElementById('comment').value.trim(), nickname=document.getElementById('nickname').value;
+  const picks=(story.dishes||[]).filter(d=>{ const m=menuIn[d.name]; return m&&(m.rating||m.stamps.size); });
+  if(!picks.length){ msg.style.color='var(--gold)'; msg.textContent='召し上がった料理の星かスタンプを1つ押してください。'; return; }
+  btn.disabled=true; msg.style.color='var(--ink2)'; msg.textContent='送信しています…';
+  try{
+    let ok=0, err='';
+    for(let k=0;k<picks.length;k++){
+      const d=picks[k], m=menuIn[d.name];
+      // ひとことは最初の料理に1回だけ付ける（同じ文を料理の数だけ重ねない）
+      const r=await rpc('story_add_voice_menu',{p_code:menuCode,p_dish:d.name,p_nickname:nickname,p_rating:m.rating||null,
+        p_comment:k===0?comment:'',p_stamps:[...m.stamps]});
+      if(r&&r.ok) ok++; else err=(r&&r.error)||'送信できませんでした。';
+    }
+    if(!ok){ msg.style.color='var(--gold)'; msg.textContent=err; btn.disabled=false; return; }
+    story=await fetchStory(); menuIn={};
+    renderMenu('ありがとうございます！'+picks.map(d=>d.name).join('・')+' の感想を受け取りました。'+(err?'（一部送れませんでした: '+err+'）':''));
+  }catch(e){
+    msg.style.color='var(--gold)'; msg.textContent='送信できませんでした。通信をご確認ください。';
+    btn.disabled=false;
+  }
 }
 
 /* 出店の一覧。
