@@ -1208,10 +1208,12 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         ラベルの無い料理（お弁当・試食など）の感想を集めるQRです。ジビエ料理を並べると、食べた人が料理ごとに星・スタンプを押して送れます。
         届いた感想は上の一覧に「🍱 タイトル」で出ます。
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-top:10px;">
-        <input class="form-input" id="mv-title" placeholder="タイトル（例: ジビエ弁当）">
-        <input class="form-input" id="mv-date" type="date">
-        <input class="form-input" id="mv-venue" placeholder="会場（任意）">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr));gap:8px;margin-top:10px;">
+        <input class="form-input" id="mv-title" placeholder="タイトル（例: ジビエ弁当）" style="min-width:0;width:100%;box-sizing:border-box;">
+        <!-- iPhoneの日付欄は幅を無視して横にはみ出し、空だと何の欄か分からなかった。見出しを付けて幅を抑える -->
+        <label style="display:flex;align-items:center;gap:6px;min-width:0;font-size:13px;color:var(--text3);">開催日
+          <input class="form-input" id="mv-date" type="date" style="flex:1;min-width:0;max-width:100%;box-sizing:border-box;-webkit-appearance:none;appearance:none;"></label>
+        <input class="form-input" id="mv-venue" placeholder="会場（任意）" style="min-width:0;width:100%;box-sizing:border-box;">
       </div>
       <textarea class="form-input" id="mv-dishes" rows="3" style="margin-top:8px;width:100%;" placeholder="ジビエ料理を1行に1つ（例: からあげ／ジビエのからあげ）。使ったお肉の個体番号が分かれば「からあげ／ジビエのからあげ／TGC-08-T340」"></textarea>
       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">

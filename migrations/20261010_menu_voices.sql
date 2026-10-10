@@ -104,7 +104,7 @@ grant execute on function story_add_voice_menu(text, text, text, integer, text, 
 
 -- 職員: 一覧
 create or replace function staff_menu_list(p_staff_key text)
-returns jsonb language plpgsql stable security definer set search_path to 'public'
+returns jsonb language plpgsql volatile security definer set search_path to 'public'
 as $$
 begin
   if not staff_key_ok(p_staff_key) then raise exception 'スタッフキーが違います'; end if;
