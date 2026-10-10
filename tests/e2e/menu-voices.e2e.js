@@ -119,6 +119,32 @@ print('\\n'.join(x.text for x in r))`;
     await ctx.close();
   }
 
+  // ── 職員画面（iPhone幅）: 一覧が出る・入力欄がはみ出さない（10/10 一覧が出ず、日付欄が横にはみ出していた）──
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await ctx.addInitScript(() => { try { localStorage.setItem('tg_staff_key', 'k'); } catch (e) {} });
+    const page = await ctx.newPage();
+    const errors = []; page.on('pageerror', e => errors.push(e.message));
+    await page.route('**/*', rt => {
+      const u = rt.request().url();
+      if (/^file:/.test(u)) return rt.continue();
+      if (/rpc\/staff_menu_list/.test(u)) return rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'x', code: 'm1011bt', title: 'ジビエ弁当', event_date: '2026-10-11', venue: null, dishes: [{ name: 'からあげ' }, { name: 'シュウマイ' }], voice_count: 0 }]) });
+      return rt.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    });
+    await page.goto('file://' + path.resolve(__dirname, '../../index.html'));
+    await page.waitForTimeout(800);
+    await page.evaluate(() => { document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active')); const p = document.getElementById('panel-voices'); p.classList.add('active'); p.style.display = 'block'; });
+    await page.evaluate(() => mvLoad()); await page.waitForTimeout(300);
+    const lt = await page.$eval('#mv-list', e => e.textContent);
+    T('職員（iPhone幅）: 一覧にメニューと印刷ボタンが出る', /ジビエ弁当/.test(lt) && /A4ポスター/.test(lt) && /カード10枚/.test(lt), lt.slice(0, 120));
+    const ov = await page.evaluate(() => { const sec = document.getElementById('mv-section').getBoundingClientRect();
+      return ['mv-title', 'mv-date', 'mv-venue', 'mv-dishes'].map(id => { const r = document.getElementById(id).getBoundingClientRect(); return [id, Math.round(r.right - sec.right)]; }).filter(x => x[1] > 0); });
+    T('職員（iPhone幅）: 入力欄（日付を含む）が枠からはみ出さない', ov.length === 0, JSON.stringify(ov));
+    T('職員（iPhone幅）: 日付欄に「開催日」の見出し', /開催日/.test(await page.$eval('#mv-section', e => e.textContent)), '');
+    T('pageerrorなし（iPhone幅）', errors.length === 0, errors.join(' / '));
+    await ctx.close();
+  }
+
   let pass = 0;
   for (const [n, ok, got] of results) { console.log((ok ? 'PASS' : 'FAIL') + ' : ' + n + (got ? '  [' + got + ']' : '')); if (ok) pass++; }
   console.log(`\n${pass}/${results.length} passed`);
