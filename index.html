@@ -1181,20 +1181,22 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div id="trace-result"></div>
   </div>
 
-  <!-- 事務作業（2026-10-11）: バイトの事務作業の確認リスト。読み取りと「要確認」の記録だけで、
-       台帳の直接の書き換えはしない（直すのは既存の画面・既存の権限で） -->
+  <!-- 事務作業（2026-10-11）: バイトの事務作業の確認リスト。読み取り・「要確認」の記録・マスタの変更申請だけで、
+       台帳の直接の書き換えはしない（台帳に入るのは責任者が承認したときだけ） -->
   <div class="tab-panel" id="panel-clerk">
     <div class="section">
       <div class="section-title">📋 事務作業（確認リスト・日報）</div>
       <div style="font-size:13px;color:var(--text2);line-height:1.8;">
-        どの作業も <b>①対象を探す → ②元の資料と照らす → ③既存の画面で直す（直せないものは「要確認」）→ ④日報で報告</b> の順です。<br>
+        どの作業も <b>①対象を探す → ②元の資料と照らす → ③「変更を申請」（直せないものは「要確認」）→ ④日報で報告</b> の順です。台帳に入るのは<b>責任者が承認したときだけ</b>です。<br>
         この画面は<b>候補を出すだけ</b>で、記録を自動で直したり、足りないと断定したりはしません。読み方・住所・口座は推測で入れないでください。
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
         <button class="btn btn-sm active" id="clk-tab-meat" onclick="clerkShow('meat')">① 精肉の記録</button>
         <button class="btn btn-sm" id="clk-tab-cust" onclick="clerkShow('cust')">② 顧客名簿</button>
         <button class="btn btn-sm" id="clk-tab-hunt" onclick="clerkShow('hunt')">③ 捕獲者名簿</button>
+        <button class="btn btn-sm" id="clk-tab-req" onclick="clerkShow('req')">④ マスタの変更申請</button>
         <button class="btn btn-sm" id="clk-tab-report" onclick="clerkShow('report')">日報</button>
+        <button class="btn btn-sm" id="clk-tab-review" onclick="clerkShow('review')" title="責任者キーが必要">✅ 責任者の確認</button>
         <a class="btn btn-sm" href="order-admin.html" title="受発注管理 → 書類発行 → 書類一覧の下の「入金明細と照合する」">⑤ 入金の確認 ↗</a>
       </div>
       <div style="margin-top:8px;font-size:12.5px;color:var(--text3);">作業者 <input class="form-input" id="clk-by" style="max-width:160px;display:inline-block;" placeholder="名前" oninput="try{localStorage.setItem('tg_clk_by',this.value)}catch(e){}"></div>
@@ -12758,6 +12760,8 @@ async function kkSubmit() {
    ③ 捕獲者: ふりがな・振込先の空欄と書式の候補。口座番号は画面に出さない。直すのは責任者（捕獲者台帳）
    要確認は既存の「気になる点フラグ」（data_flags）に記録する。口座番号らしい数字は書かせない */
 let clkView = 'meat', clkData = {}, clkStats = { checked: {}, updated: 0, flags: [] };
+/* 読み込みの遅い前の画面が、切り替えた後の画面を上書きしないように、今の画面のときだけ箱を返す */
+function clkBox(v) { return clkView === v ? document.getElementById('clk-body') : { set innerHTML(x) {} }; }
 function clkBy() { const el = document.getElementById('clk-by'); return el ? el.value.trim() : ''; }
 async function clerkLoad() {
   const el = document.getElementById('clk-by');
@@ -12766,10 +12770,11 @@ async function clerkLoad() {
 }
 function clerkShow(v) {
   clkView = v;
-  ['meat', 'cust', 'hunt', 'report'].forEach(k => { const b = document.getElementById('clk-tab-' + k); if (b) b.classList.toggle('active', k === v); });
+  ['meat', 'cust', 'hunt', 'req', 'report', 'review'].forEach(k => { const b = document.getElementById('clk-tab-' + k); if (b) b.classList.toggle('active', k === v); });
   const box = document.getElementById('clk-body');
   box.innerHTML = '<div class="section" style="color:var(--text3);">読み込んでいます…</div>';
-  ({ meat: clerkMeat, cust: clerkCust, hunt: clerkHunt, report: clerkReport })[v]().catch(e => {
+  ({ meat: clerkMeat, cust: clerkCust, hunt: clerkHunt, req: clerkReq, report: clerkReport, review: clerkReview })[v]().catch(e => {
+    if (clkView !== v) return;   // もう別の画面に切り替えた
     box.innerHTML = `<div class="section" style="color:var(--red);">読み込めませんでした（何も変更していません）: ${esc2(sbSafeMsg(e))}</div>`;
   });
 }
@@ -12822,7 +12827,7 @@ async function clerkMeat() {
       <td style="white-space:nowrap;"><button class="btn btn-sm" onclick="document.getElementById('trace-search').value='${esc2(i.label_id)}';document.querySelector('[data-tab=trace]').click();traceSearch();">記録を見る</button>
         ${flags.has(i.label_id) ? '<span class="badge badge-gold">要確認あり</span>' : `<button class="btn btn-sm" data-clkflag="${esc2(i.label_id)}" onclick="clkFlag('${esc2(i.label_id)}','${reason}')">要確認</button>`}</td>`)).join('')}
     </tbody></table></div>` : '<div style="color:var(--text3);font-size:13px;">ありません</div>'}</div>`;
-  document.getElementById('clk-body').innerHTML = `<div class="section">
+  clkBox('meat').innerHTML = `<div class="section">
       <div style="font-size:13px;line-height:1.8;">捕獲日 <input type="date" id="clk-meat-from" class="form-input" style="max-width:160px;display:inline-block;" value="${esc2(from)}" onchange="clerkShow('meat')"> 以降
         <span id="clk-count" style="margin-left:10px;color:var(--text3);"></span></div>
       <div style="font-size:12.5px;color:var(--text2);margin-top:6px;line-height:1.8;">
@@ -12839,7 +12844,7 @@ async function clerkMeat() {
 function clkDigits(s) { return String(s || '').replace(/\D/g, ''); }
 function clkNameKey(s) { return String(s || '').normalize('NFKC').replace(/(株式会社|有限会社|合同会社|\(株\)|\(有\)|\(同\))/g, '').replace(/[\s・.()]/g, ''); }
 async function clerkCust() {
-  if (!await staffKeyEnsure()) { document.getElementById('clk-body').innerHTML = '<div class="section" style="color:var(--red);">顧客名簿を見るにはスタッフキーが必要です（責任者に確認してください）。</div>'; return; }
+  if (!await staffKeyEnsure()) { clkBox('cust').innerHTML = '<div class="section" style="color:var(--red);">顧客名簿を見るにはスタッフキーが必要です（責任者に確認してください）。</div>'; return; }
   const [cs, ords, flags] = await Promise.all([
     sb('GET', 'customers', null, '?select=id,code,name,kana,phone,address,building,is_active&order=code.asc&limit=5000'),
     sb('GET', 'orders', null, '?customer_id=not.is.null&delivery_address=not.is.null&select=customer_id,delivery_postal,delivery_address,order_date&order=order_date.desc&limit=5000'),
@@ -12863,9 +12868,9 @@ async function clerkCust() {
   const f = (document.getElementById('clk-cust-f') || {}).value || '';
   const shown = rows.filter(r => !f || (f === 'dup' ? r.dup.length : f === 'diff' ? r.diff : r.miss.includes(f)));
   const cnt = k => rows.filter(r => r.miss.includes(k)).length;
-  document.getElementById('clk-body').innerHTML = `<div class="section">
+  clkBox('cust').innerHTML = `<div class="section">
     <div style="font-size:12.5px;color:var(--text2);line-height:1.8;">
-      手順: 一覧から1件選ぶ → <b>確認済みの注文・本人からの資料</b>と照らす → 「編集」で既存の顧客台帳の画面を開いて直す（保存は管理者コード）→ 直せない・食い違いは「要確認」。<br>
+      手順: 一覧から1件選ぶ → <b>確認済みの注文・本人からの資料</b>と照らす → 「変更を申請」（責任者が承認すると台帳に入る）→ 直せない・食い違いは「要確認」。<br>
       <b>ふりがなは名前から推測して入れない</b>（資料で読みが分かったものだけ）。住所が注文と違う・重複の候補は、上書き・統合せず「要確認」。</div>
     <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
       <select id="clk-cust-f" class="form-input" style="max-width:240px;" onchange="clerkShow('cust')">
@@ -12878,7 +12883,7 @@ async function clerkCust() {
     ${shown.slice(0, 300).map(r => clkRow('cust:' + r.c.code, `<td>${esc2(r.c.code || '')}</td><td>${esc2(r.c.name || '')}${r.c.kana ? `<br><span style="font-size:11px;color:var(--text3);">${esc2(r.c.kana)}</span>` : ''}</td>
       <td style="color:var(--red);">${esc2(r.miss.join('・'))}</td><td style="font-size:12px;">${esc2(r.dup.join(' ／ '))}</td>
       <td style="font-size:12px;">${r.o ? esc2([r.o.delivery_postal, r.o.delivery_address].filter(Boolean).join(' ')) + `<br><span style="color:var(--text3);">${esc2(r.o.order_date || '')}${r.diff ? ' ・<b style="color:var(--red);">名簿の住所と違う</b>' : ''}</span>` : '—'}</td>
-      <td style="white-space:nowrap;"><button class="btn btn-sm" onclick="clkCustEdit('${r.c.id}')">編集</button>
+      <td style="white-space:nowrap;"><button class="btn btn-sm" data-id="${esc2(r.c.id)}" onclick="clkReqOpen('customers', this.dataset.id)">変更を申請</button>
         ${flags.has(r.c.code) ? '<span class="badge badge-gold">要確認あり</span>' : `<button class="btn btn-sm" data-clkflag="${esc2(r.c.code)}" onclick="clkFlag('${esc2(r.c.code)}','${esc2([...r.miss.map(m => m + '空欄'), ...(r.dup.length ? ['重複の候補'] : []), ...(r.diff ? ['注文の届け先と住所が違う'] : [])].join('・'))}')">要確認</button>`}</td>`)).join('')}
     </tbody></table></div>${shown.length > 300 ? `<div style="font-size:12px;color:var(--text3);">先頭300件を表示（絞り込みで減らせます）</div>` : ''}</div>`;
   clkCountUpdate();
@@ -12911,15 +12916,16 @@ async function clerkHunt() {
     return { h, miss, fmt };
   }).filter(r => r.miss.length || r.fmt.length);
   clkData.hunt = rows;
-  document.getElementById('clk-body').innerHTML = `<div class="section">
+  clkBox('hunt').innerHTML = `<div class="section">
     <div style="font-size:12.5px;color:var(--text2);line-height:1.8;">
-      手順: 一覧から1人選ぶ → <b>元の資料（通帳の写し・口座の届出書など）</b>と照らす → 「要確認」で<b>どの資料で何が分かったか</b>を書く（口座番号は書かない）→ 責任者が捕獲者台帳で確認して入力。<br>
-      <b>振込先はこの画面からは変更できません。</b>責任者の確認が済むまで、買取の振込には今の台帳の値が使われます。口座番号はこの画面に出しません（桁の確認だけ）。</div>
+      手順: 一覧から1人選ぶ → <b>元の資料（通帳の写し・口座の届出書など）</b>と照らす → 「変更を申請」で資料どおりに入れる（照らした資料の名前を書く）→ 責任者が確認して承認。<br>
+      <b>責任者が承認するまで、買取の振込には今の台帳の値が使われます。</b>口座番号はこの画面に出しません（下2桁と桁数の確認だけ）。日報・メモに口座番号を書かないでください。</div>
     <span id="clk-count" style="color:var(--text3);font-size:12.5px;"></span></div>
     <div class="section"><div class="table-wrap"><table><thead><tr><th></th><th>名前</th><th>足りない項目</th><th>書式の確認</th><th></th></tr></thead><tbody>
     ${rows.map(r => clkRow('hunt:' + r.h.id, `<td>${esc2(r.h.name || '')}${r.h.furigana ? `<br><span style="font-size:11px;color:var(--text3);">${esc2(r.h.furigana)}</span>` : ''}</td>
       <td style="color:var(--red);">${esc2(r.miss.join('・'))}</td><td style="font-size:12px;">${esc2(r.fmt.join('・'))}</td>
-      <td>${flags.has('捕獲者:' + r.h.name) ? '<span class="badge badge-gold">要確認あり</span>' : `<button class="btn btn-sm" data-clkflag="捕獲者:${esc2(r.h.name)}" onclick="clkFlag('捕獲者:${esc2(r.h.name)}','${esc2([...r.miss.map(m => m + '空欄'), ...r.fmt].join('・'))}')">要確認</button>`}</td>`)).join('')}
+      <td style="white-space:nowrap;"><button class="btn btn-sm" data-id="${esc2(r.h.id)}" onclick="clkReqOpen('hunters', this.dataset.id)">変更を申請</button>
+        ${flags.has('捕獲者:' + r.h.name) ? '<span class="badge badge-gold">要確認あり</span>' : `<button class="btn btn-sm" data-clkflag="捕獲者:${esc2(r.h.name)}" onclick="clkFlag('捕獲者:${esc2(r.h.name)}','${esc2([...r.miss.map(m => m + '空欄'), ...r.fmt].join('・'))}')">要確認</button>`}</td>`)).join('')}
     </tbody></table></div></div>`;
   clkCountUpdate();
 }
@@ -12929,12 +12935,13 @@ async function clerkReport() {
   const ck = Object.keys(clkStats.checked);
   const by = k => ck.filter(x => x.startsWith(k + ':')).length;
   const work = [['meat', '精肉の記録の確認'], ['cust', '顧客名簿の確認'], ['hunt', '捕獲者名簿の確認']].filter(([k]) => by(k)).map(([k, l]) => `${l}（${by(k)}件）`);
-  document.getElementById('clk-body').innerHTML = `<div class="section">
+  if (clkStats.requested) work.push(`マスタの変更申請（${clkStats.requested}件）`);
+  clkBox('report').innerHTML = `<div class="section">
     <div style="font-size:12.5px;color:var(--text2);margin-bottom:8px;">この端末で今日チェックした件数と、「要確認」に記録したものから作ります。直してからコピーしてください。</div>
     <textarea id="clk-report" class="form-input" rows="12" style="width:100%;font-size:13px;">${esc2([
       '【作業内容】' + (work.join('、') || ''),
       '【確認件数】' + ck.length + '件',
-      '【更新件数】' + clkStats.updated + '件（顧客台帳の編集で保存したもの）',
+      '【更新件数】' + (clkStats.requested || 0) + '件（変更を申請したもの。責任者の承認待ち）' + ((clkStats.reqs || []).length ? '\n' + clkStats.reqs.map(x => '・' + x).join('\n') : ''),
       '【要確認】' + (clkStats.flags.length ? '\n' + clkStats.flags.map(f => `・${f.target}: ${f.reason}`).join('\n') : 'なし'),
       '【次回の続き】'].join('\n'))}</textarea>
     <button class="btn btn-primary btn-sm" style="margin-top:6px;" onclick="clkReportCopy()">📋 コピー</button></div>`;
@@ -12943,6 +12950,266 @@ function clkReportCopy() {
   const t = document.getElementById('clk-report').value;
   if (/\d{6,}/.test(t.replace(/[-\s]/g, '').replace(/20\d{6}/g, ''))) { alert('6桁以上の数字（口座番号など）が含まれています。消してからコピーしてください。'); return; }
   navigator.clipboard.writeText(t).then(() => toast('日報をコピーしました'), () => prompt('コピーしてください', t));
+}
+
+/* ── マスタの変更申請（2026-10-11）──
+   「マスタ関係はバイトさんが作業し、責任者はチェックするだけ」。バイトは台帳を直接書き換えず、
+   変更を「申請」する（migrations/20261011_master_change_requests.sql）。責任者が「責任者キー」で承認すると台帳に反映される。
+   ・申請に入るのは変えた項目だけ。変更前の値も一緒に残り、承認・差戻しの記録がそのまま変更履歴になる
+   ・同じ行に確認待ちの申請は1件まで。申請の後に台帳が変わっていたら、承認しても反映しない（申請し直し）
+   ・口座番号はバイトの画面では下2桁しか出さない。空欄のままなら「変えない」
+   ・責任者キーはこの端末に保存しない（画面を閉じたら入れ直し） */
+const MR_TABLES = {
+  customers: { label: '顧客', staffKey: true, search: ['name', 'kana', 'code', 'phone'], show: c => `${c.code || ''} ${c.name || ''}`, order: 'code.asc',
+    fields: [['name', '名前'], ['kana', 'ふりがな'], ['honorific', '敬称'], ['contact_name', '担当者'], ['company1', '会社名1'], ['company2', '会社名2'], ['phone', '電話'], ['email', 'メール'],
+      ['address', '住所（〒込み）'], ['building', '建物'], ['price_rank', '価格ランク'], ['billing_method', '請求方法'], ['notes', 'メモ', 'area'], ['is_active', '取引中', 'bool']] },
+  hunters: { label: '捕獲者', search: ['name', 'furigana'], show: h => h.name || '', order: 'name.asc', where: '&deleted_at=is.null',
+    fields: [['name', '名前'], ['furigana', 'ふりがな'], ['city', '市'], ['postal_code', '郵便番号'], ['address', '住所'], ['phone', '電話'], ['trap_area', 'わなの地区'],
+      ['registry_number', '登録番号'], ['registered_on', '登録日', 'date'], ['document_type', '書類の種類'], ['has_gun', '銃あり', 'bool'],
+      ['bank_name', '金融機関'], ['bank_branch', '支店'], ['account_type', '口座種別', 'select', ['普通', '当座', '貯蓄']], ['account_number', '口座番号', 'secret'],
+      ['account_holder', '口座名義（カナ）'], ['account_furigana', '口座名義のふりがな'], ['memo', 'メモ', 'area']] },
+  supplies: { label: '資材', search: ['name', 'category', 'supplier'], show: s => s.name || '', order: 'name.asc', where: '&deleted_at=is.null',
+    fields: [['name', '品名'], ['category', '分類'], ['unit', '単位'], ['min_qty', '最低在庫', 'num'], ['supplier', '仕入先'], ['memo', 'メモ', 'area']] },
+  equipment: { label: '備品', search: ['name', 'location'], show: e => `${e.mgmt_no ? 'No.' + e.mgmt_no + ' ' : ''}${e.name || ''}`, order: 'mgmt_no.asc', where: '&deleted_at=is.null',
+    fields: [['name', '品名'], ['qty', '数量', 'num'], ['location', '置き場所'], ['purchased_on', '購入時期'], ['price', '金額', 'num'], ['funding', '財源'], ['note', 'メモ', 'area'], ['status', '状態'], ['disposed_on', '廃棄日', 'date']] },
+  products: { label: '商品', search: ['name', 'category'], show: p => p.name || '', order: 'name.asc', where: '&deleted_at=is.null',
+    fields: [['name', '商品名'], ['category', '分類'], ['unit', '単位'], ['price', '価格', 'num'], ['base_url', 'BASEのURL'], ['memo', 'メモ', 'area']] },
+  price_master: { label: '価格表', search: ['species', 'part_name'], show: p => [p.species, p.part_name, p.grade].filter(Boolean).join(' '), order: 'species.asc,part_name.asc',
+    fields: [['species', '鳥獣種'], ['part_name', '部位'], ['grade', '等級'], ['price_standard', '標準価格（円/kg）', 'num'], ['price_local', '地元価格', 'num'], ['price_startmember', 'スタートメンバー価格', 'num']] },
+  event_venues: { label: 'イベント会場', search: ['name', 'address'], show: v => v.name || '', order: 'sort_order.asc,name.asc', where: '&deleted_at=is.null',
+    fields: [['name', '会場名'], ['kind', '種類'], ['address', '住所'], ['organizer', '主催'], ['consignment', '委託販売', 'bool'], ['commission_pct', '手数料（%）', 'num'],
+      ['bill_to', '請求先'], ['bill_to_address', '請求先の住所'], ['memo', 'メモ', 'area'], ['is_active', '使用中', 'bool']] },
+  retail_outlets: { label: '販売店', search: ['name'], show: o => o.name || '', order: 'sort_order.asc,name.asc', where: '&deleted_at=is.null',
+    fields: [['name', '店名'], ['email', 'メール'], ['commission_pct', '手数料（%）', 'num'], ['delivery_notes', '納品メモ', 'area'], ['memo', 'メモ', 'area'], ['is_active', '取引中', 'bool']] },
+  area_master: { label: '地区', search: ['address_label', 'district', 'oaza', 'yomi'], show: a => a.address_label || [a.city, a.district].filter(Boolean).join(' '), order: 'city.asc,sort_order.asc',
+    fields: [['city', '市'], ['district', '地区'], ['oaza', '大字'], ['address_label', '表示名'], ['yomi', 'よみ'], ['district_note', '備考'], ['road_km_roundtrip', '往復km', 'num']] }
+};
+let mrState = { table: 'customers', q: '', rows: [], cur: null, status: '確認待ち' }, mrApproverKey = '';
+function mrErr(e) { const m = String(e && e.message || e); try { const j = JSON.parse(m); return j.message || m; } catch (x) { return sbSafeMsg(e); } }
+function mrMask(v) { v = String(v || ''); return v ? '*'.repeat(Math.max(v.length - 2, 0)) + v.slice(-2) : ''; }
+function mrFieldLabel(t, k) { const f = (MR_TABLES[t] || { fields: [] }).fields.find(x => x[0] === k); return f ? f[1] : k; }
+function mrVal(v) { return v === null || v === undefined || v === '' ? '（空欄）' : v === true ? 'はい' : v === false ? 'いいえ' : String(v); }
+
+/* ④ マスタの変更申請（バイト） */
+async function clerkReq() {
+  if (!await staffKeyEnsure()) { clkBox('req').innerHTML = '<div class="section" style="color:var(--red);">申請にはスタッフキーが必要です（責任者に確認してください）。</div>'; return; }
+  const t = mrState.table, T = MR_TABLES[t];
+  clkBox('req').innerHTML = `<div class="section">
+    <div style="font-size:12.5px;color:var(--text2);line-height:1.8;">
+      手順: 台帳を選ぶ → 名前で探す → 「変更を申請」で<b>元の資料と照らして</b>直す → 照らした資料を書いて申請 → <b>責任者が確認して承認すると台帳に反映</b>されます（それまでは今の値のまま）。<br>
+      新しく登録するときは「＋ 新規を申請」。似た登録があると候補が出ます（同じものなら新規にしない）。<b>削除・統合・コードの変更は申請できません</b>（「要確認」で責任者へ）。</div>
+    <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+      <select id="mr-table" class="form-input" style="max-width:160px;" onchange="mrState.table=this.value;mrState.q='';mrState.cur=null;clerkShow('req')">
+        ${Object.entries(MR_TABLES).map(([k, v]) => `<option value="${k}" ${k === t ? 'selected' : ''}>${v.label}</option>`).join('')}</select>
+      <input id="mr-q" class="form-input" style="max-width:220px;" placeholder="名前で探す" value="${esc2(mrState.q)}" onkeydown="if(event.key==='Enter'){mrState.q=this.value;mrSearch()}">
+      <button class="btn btn-sm" onclick="mrState.q=document.getElementById('mr-q').value;mrSearch()">探す</button>
+      <button class="btn btn-sm" onclick="mrOpen(null)">＋ 新規を申請</button></div>
+    <div id="mr-found" style="margin-top:8px;"></div></div>
+    <div id="mr-form"></div>
+    <div class="section"><div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+      <span>申請の一覧</span>
+      <select id="mr-status" class="form-input" style="max-width:150px;" onchange="mrState.status=this.value;mrList()">
+        ${['確認待ち', '差戻し', '承認', '取下げ', ''].map(s => `<option value="${s}" ${s === mrState.status ? 'selected' : ''}>${s || 'すべて'}</option>`).join('')}</select></div>
+      <div id="mr-list" style="font-size:13px;color:var(--text3);">読み込んでいます…</div></div>`;
+  if (mrState.q) mrSearch();
+  if (mrState.cur) mrForm();
+  mrList();
+}
+async function mrSearch() {
+  const t = mrState.table, T = MR_TABLES[t], box = document.getElementById('mr-found');
+  if (!box) return;
+  const q = mrState.q.trim();
+  if (!q) { box.innerHTML = '<div style="font-size:12.5px;color:var(--text3);">名前の一部を入れて「探す」</div>'; return; }
+  box.innerHTML = '<div style="font-size:12.5px;color:var(--text3);">探しています…</div>';
+  try {
+    const cols = ['id', ...T.fields.map(f => f[0]), ...(t === 'customers' ? ['code'] : []), ...(t === 'equipment' ? ['mgmt_no'] : [])];
+    const like = encodeURIComponent('*' + q.replace(/[*,()]/g, ' ') + '*');
+    mrState.rows = await sb('GET', t, null, `?select=${cols.join(',')}${T.where || ''}&or=(${T.search.map(c => `${c}.ilike.${like}`).join(',')})&order=${T.order}&limit=50`);
+    box.innerHTML = mrState.rows.length ? `<div class="table-wrap"><table><tbody>${mrState.rows.map(r =>
+      `<tr><td>${esc2(T.show(r))}</td><td style="text-align:right;"><button class="btn btn-sm" data-mrid="${esc2(r.id)}" onclick="mrOpen(this.dataset.mrid)">変更を申請</button></td></tr>`).join('')}</tbody></table></div>`
+      + (mrState.rows.length >= 50 ? '<div style="font-size:12px;color:var(--text3);">先頭50件（もう少し詳しく入れて絞ってください）</div>' : '')
+      : '<div style="font-size:12.5px;color:var(--text3);">見つかりません（新しく登録するなら「＋ 新規を申請」）</div>';
+  } catch (e) { box.innerHTML = `<div style="color:var(--red);font-size:13px;">探せませんでした: ${esc2(mrErr(e))}</div>`; }
+}
+/* 顧客・捕獲者の一覧（②③）からも開く */
+async function clkReqOpen(table, id) {
+  try {
+    const T = MR_TABLES[table], cols = ['id', ...T.fields.map(f => f[0]), ...(table === 'customers' ? ['code'] : [])];
+    const r = await sb('GET', table, null, `?select=${cols.join(',')}&id=eq.${encodeURIComponent(id)}`);
+    if (!r.length) { toast('見つかりませんでした（削除された可能性）', 'error'); return; }
+    mrState.table = table; mrState.q = ''; mrState.rows = r; mrState.cur = r[0];
+    clerkShow('req');   // 開いた行のフォームは clerkReq が出す
+  } catch (e) { toast('開けませんでした: ' + mrErr(e), 'error'); }
+}
+function mrOpen(id) {
+  mrState.cur = id ? (mrState.rows.find(r => String(r.id) === String(id)) || null) : {};
+  if (id && !mrState.cur) { toast('もう一度探してください', 'error'); return; }
+  mrForm();
+  const f = document.getElementById('mr-form'); if (f && f.scrollIntoView) f.scrollIntoView({ block: 'start' });
+}
+function mrForm() {
+  const t = mrState.table, T = MR_TABLES[t], c = mrState.cur || {}, isNew = !c.id;
+  const inp = ([k, l, type, opts]) => {
+    const v = c[k], id = 'mrf-' + k;
+    let el;
+    if (type === 'bool') el = `<select id="${id}" class="form-input"><option value="" ${v == null ? 'selected' : ''}>（空欄）</option><option value="true" ${v === true ? 'selected' : ''}>はい</option><option value="false" ${v === false ? 'selected' : ''}>いいえ</option></select>`;
+    else if (type === 'select') el = `<select id="${id}" class="form-input"><option value="">（空欄）</option>${opts.map(o => `<option ${v === o ? 'selected' : ''}>${o}</option>`).join('')}${v && !opts.includes(v) ? `<option selected>${esc2(v)}</option>` : ''}</select>`;
+    else if (type === 'area') el = `<textarea id="${id}" class="form-input" rows="2">${esc2(v || '')}</textarea>`;
+    else if (type === 'secret') el = `<input id="${id}" class="form-input" inputmode="numeric" autocomplete="off" placeholder="${isNew ? '数字だけ（先頭の0もそのまま）' : v ? '今: ' + esc2(mrMask(v)) + '（変えないなら空欄のまま）' : '今: 空欄'}">`;
+    else el = `<input id="${id}" class="form-input" type="${type === 'date' ? 'date' : 'text'}" ${type === 'num' ? 'inputmode="decimal"' : ''} value="${esc2(v == null ? '' : v)}">`;
+    return `<label style="display:block;margin-bottom:8px;"><span style="font-size:12px;color:var(--text3);">${l}</span>${el}</label>`;
+  };
+  const formBox = document.getElementById('mr-form'); if (!formBox) return;
+  formBox.innerHTML = `<div class="section" style="border:2px solid var(--gold,#c90);">
+    <div class="section-title">${isNew ? `＋ ${T.label}の新規を申請` : `${T.label}「${esc2(T.show(c))}」の変更を申請`}</div>
+    <div style="font-size:12.5px;color:var(--text2);margin-bottom:8px;">変えた項目だけが申請されます。<b>推測で入れない</b>（資料で確かめた値だけ）。${t === 'hunters' ? '口座番号は<b>空欄なら変えません</b>。' : ''}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:0 12px;">${T.fields.map(inp).join('')}</div>
+    <label style="display:block;margin-bottom:8px;"><span style="font-size:12px;color:var(--text3);">照らした資料（必須・例: 注文書 DIR-20261011-155644／口座の届出書）</span><input id="mrf-_src" class="form-input"></label>
+    <label style="display:block;margin-bottom:8px;"><span style="font-size:12px;color:var(--text3);">理由・メモ（口座番号などは書かない）</span><input id="mrf-_reason" class="form-input"></label>
+    <div style="display:flex;gap:6px;"><button class="btn btn-primary btn-sm" id="mr-send" onclick="mrSend()">申請する</button>
+      <button class="btn btn-sm" onclick="mrState.cur=null;document.getElementById('mr-form').innerHTML=''">やめる</button></div>
+    <div id="mr-msg" style="margin-top:6px;font-size:13px;"></div></div>`;
+}
+/* フォームから「変えた項目」だけを集める */
+function mrCollect() {
+  const T = MR_TABLES[mrState.table], c = mrState.cur || {}, isNew = !c.id, after = {};
+  for (const [k, l, type] of T.fields) {
+    const el = document.getElementById('mrf-' + k); if (!el) continue;
+    let v = String(el.value == null ? '' : el.value).trim();
+    if (type === 'secret') { if (v === '') continue; v = v.replace(/[\s-]/g, ''); if (!/^\d{1,8}$/.test(v)) throw new Error(`${l}は数字だけで入れてください`); after[k] = v; continue; }
+    let nv = v === '' ? null : v;
+    if (type === 'bool') nv = v === '' ? null : v === 'true';
+    if (type === 'num' && nv !== null) { nv = Number(v.replace(/[,，円%]/g, '')); if (!isFinite(nv)) throw new Error(`${l}は数字で入れてください`); }
+    const old = c[k] === undefined || c[k] === '' ? null : c[k];
+    if (isNew ? nv !== null : String(nv) !== String(old)) after[k] = nv;
+  }
+  return after;
+}
+async function mrSend(confirmDup) {
+  const msg = document.getElementById('mr-msg'), btn = document.getElementById('mr-send');
+  const by = clkBy(); if (!by) { msg.innerHTML = '<span style="color:var(--red);">上の「作業者」に名前を入れてください</span>'; return; }
+  let after; try { after = mrCollect(); } catch (e) { msg.innerHTML = `<span style="color:var(--red);">${esc2(e.message)}</span>`; return; }
+  if (!Object.keys(after).length) { msg.innerHTML = '<span style="color:var(--red);">変えた項目がありません</span>'; return; }
+  const src = document.getElementById('mrf-_src').value.trim(), reason = document.getElementById('mrf-_reason').value.trim();
+  if (!src) { msg.innerHTML = '<span style="color:var(--red);">照らした資料を書いてください</span>'; return; }
+  // 注文番号（DIR-20261011-155644 など）・日付は口座番号ではないので除いて数える
+  const noIds = x => x.replace(/[A-Z]{2,}-?\d{8}-\d{4,6}/gi, '').replace(/20\d{2}[-\/.]?\d{2}[-\/.]?\d{2}/g, '').replace(/[\s]/g, '');
+  if (/\d{6,}/.test(noIds(reason).replace(/-/g, '')) || /\d{6,}/.test(noIds(src).replace(/-/g, ''))) { msg.innerHTML = '<span style="color:var(--red);">理由・資料の欄に6桁以上の数字（口座番号など）は書かないでください</span>'; return; }
+  btn.disabled = true; msg.textContent = '申請しています…';
+  try {
+    const r = await sb('POST', 'rpc/staff_master_request', { p_staff_key: staffKeyGet(), p: { table: mrState.table, record_id: (mrState.cur || {}).id || null, after, reason, source_doc: src, requested_by: by, confirm_dup: !!confirmDup } });
+    if (r && r.need_confirm) {
+      btn.disabled = false;
+      msg.innerHTML = `<div style="color:var(--red);">${esc2(r.error)}</div><ul style="margin:4px 0 6px 18px;">${(r.dup || []).map(d => `<li>${esc2(d.label)}</li>`).join('')}</ul>
+        <button class="btn btn-sm" onclick="mrSend(true)">別のものなので新規で申請する</button>`;
+      return;
+    }
+    if (!r || !r.ok) throw new Error((r && r.error) || '申請できませんでした');
+    clkStats.requested = (clkStats.requested || 0) + 1;
+    clkStats.reqs = clkStats.reqs || []; clkStats.reqs.push(`${MR_TABLES[mrState.table].label}「${MR_TABLES[mrState.table].show(Object.assign({}, mrState.cur, after))}」${Object.keys(after).map(k => mrFieldLabel(mrState.table, k)).join('・')}`);
+    toast('申請しました（責任者が承認すると台帳に反映されます）');
+    mrState.cur = null; document.getElementById('mr-form').innerHTML = '';
+    mrState.status = '確認待ち'; const s = document.getElementById('mr-status'); if (s) s.value = '確認待ち';
+    mrList();
+  } catch (e) { btn.disabled = false; msg.innerHTML = `<span style="color:var(--red);">申請できませんでした（台帳は変わっていません）: ${esc2(mrErr(e))}</span>`; }
+}
+function mrDiffHtml(r) {
+  const keys = Object.keys(r.after || {});
+  return `<table style="font-size:12.5px;margin-top:4px;"><tbody>${keys.map(k => `<tr><td style="color:var(--text3);white-space:nowrap;">${esc2(mrFieldLabel(r.table, k))}</td>
+    <td>${r.action === 'update' ? `<s style="color:var(--text3);">${esc2(mrVal((r.before || {})[k]))}</s> → ` : ''}<b>${esc2(mrVal(r.after[k]))}</b></td></tr>`).join('')}</tbody></table>`;
+}
+function mrCard(r, buttons) {
+  const T = MR_TABLES[r.table] || { label: r.table };
+  const st = { '確認待ち': 'badge-gold', '承認': 'badge-green', '差戻し': 'badge-red', '取下げ': '' }[r.status] || '';
+  return `<div style="border:1px solid var(--border,#ddd);border-radius:8px;padding:8px 10px;margin-bottom:8px;color:var(--text);">
+    <div style="display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap;"><b>${esc2(T.label)}${r.action === 'insert' ? '（新規）' : ''}「${esc2(r.label || '')}」</b>
+      <span class="badge ${st}">${esc2(r.status)}</span></div>
+    ${mrDiffHtml(r)}
+    <div style="font-size:12px;color:var(--text3);margin-top:4px;">申請 ${esc2(r.requested_by || '')} ${esc2(r.requested_at || '')}・資料: ${esc2(r.source_doc || '—')}${r.reason ? '・理由: ' + esc2(r.reason) : ''}
+      ${r.reviewed_by ? `<br>${esc2(r.status)} ${esc2(r.reviewed_by)} ${esc2(r.reviewed_at || '')}${r.review_note ? '・' + esc2(r.review_note) : ''}` : ''}</div>
+    ${buttons || ''}</div>`;
+}
+async function mrList() {
+  const box = document.getElementById('mr-list'); if (!box) return;
+  try {
+    const rows = await sb('POST', 'rpc/staff_master_requests', { p_staff_key: staffKeyGet(), p_status: mrState.status });
+    box.innerHTML = rows.length ? rows.map(r => mrCard(r, r.status === '確認待ち' ? `<button class="btn btn-sm" style="margin-top:4px;" data-id="${esc2(r.id)}" onclick="mrWithdraw(this.dataset.id)">取り下げる</button>` : '')).join('')
+      : '<div style="color:var(--text3);">ありません</div>';
+  } catch (e) { box.innerHTML = `<div style="color:var(--red);">読み込めませんでした: ${esc2(mrErr(e))}</div>`; }
+}
+async function mrWithdraw(id) {
+  if (!confirm('この申請を取り下げますか？（台帳は変わりません）')) return;
+  try {
+    const r = await sb('POST', 'rpc/staff_master_withdraw', { p_staff_key: staffKeyGet(), p_id: id, p_by: clkBy() });
+    if (!r || !r.ok) throw new Error((r && r.error) || '取り下げられませんでした');
+    toast('取り下げました'); mrList();
+  } catch (e) { toast('取り下げられませんでした: ' + mrErr(e), 'error'); }
+}
+
+/* 責任者の確認（責任者キー）。ここで承認したものだけが台帳に入る */
+async function clerkReview() {
+  const box = clkBox('review');
+  if (!mrApproverKey) {
+    box.innerHTML = `<div class="section"><div class="section-title">✅ 責任者の確認</div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:8px;">バイトさんの申請を見て、承認（台帳に反映）か差戻しをします。<b>責任者キー</b>はスタッフキーとは別のものです（この端末には保存しません）。</div>
+      <input id="mr-akey" type="password" class="form-input" style="max-width:240px;" placeholder="責任者キー" autocomplete="off" onkeydown="if(event.key==='Enter')mrApproverLogin()">
+      <button class="btn btn-primary btn-sm" onclick="mrApproverLogin()">開く</button>
+      <div id="mr-amsg" style="margin-top:6px;font-size:13px;"></div>
+      <details style="margin-top:12px;"><summary style="cursor:pointer;font-size:13px;">責任者キーを設定・変更する</summary>
+        <div style="font-size:12.5px;color:var(--text2);margin:6px 0;">はじめての設定は、スタッフキーが入った端末で「今のキー」を空欄のまま。8文字以上・スタッフキーと別のもの。</div>
+        <input id="mr-kcur" type="password" class="form-input" style="max-width:240px;margin-bottom:4px;" placeholder="今の責任者キー（初回は空欄）" autocomplete="off"><br>
+        <input id="mr-knew" type="password" class="form-input" style="max-width:240px;margin-bottom:4px;" placeholder="新しい責任者キー（8文字以上）" autocomplete="new-password"><br>
+        <input id="mr-knew2" type="password" class="form-input" style="max-width:240px;margin-bottom:4px;" placeholder="もう一度" autocomplete="new-password"><br>
+        <button class="btn btn-sm" onclick="mrSetApproverKey()">設定する</button><div id="mr-kmsg" style="margin-top:6px;font-size:13px;"></div></details></div>`;
+    return;
+  }
+  box.innerHTML = `<div class="section"><div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+      <span>✅ 責任者の確認</span><span style="display:flex;gap:6px;align-items:center;">
+      <select id="mr-rstatus" class="form-input" style="max-width:140px;" onchange="mrState.rstatus=this.value;clerkReview()">
+        ${['確認待ち', '承認', '差戻し', '取下げ', ''].map(s => `<option value="${s}" ${s === (mrState.rstatus || '確認待ち') ? 'selected' : ''}>${s || 'すべて'}</option>`).join('')}</select>
+      <button class="btn btn-sm" style="white-space:nowrap;" onclick="mrApproverKey='';clerkReview()">閉じる</button></span></div>
+    <div style="font-size:12.5px;color:var(--text2);margin-bottom:8px;">「承認」で台帳に反映します。申請の後に台帳が変わっていたら反映せずに止めます（差戻して申請し直し）。</div>
+    <div id="mr-rlist" style="font-size:13px;color:var(--text3);">読み込んでいます…</div></div>`;
+  try {
+    const rows = await sb('POST', 'rpc/admin_master_requests', { p_approver_key: mrApproverKey, p_status: mrState.rstatus || '確認待ち' });
+    document.getElementById('mr-rlist').innerHTML = rows.length ? rows.map(r => mrCard(r, r.status === '確認待ち' ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+        <button class="btn btn-primary btn-sm" style="white-space:nowrap;" data-id="${esc2(r.id)}" onclick="mrReview(this.dataset.id,'承認')">承認（台帳に反映）</button>
+        <button class="btn btn-sm" style="white-space:nowrap;" data-id="${esc2(r.id)}" onclick="mrReview(this.dataset.id,'差戻し')">差戻し</button></div>` : '')).join('')
+      : '<div style="color:var(--text3);">ありません</div>';
+  } catch (e) {
+    const m = mrErr(e);
+    if (/責任者キーが違います/.test(m)) { mrApproverKey = ''; clerkReview(); toast('責任者キーが違います', 'error'); return; }
+    document.getElementById('mr-rlist').innerHTML = `<div style="color:var(--red);">読み込めませんでした: ${esc2(m)}</div>`;
+  }
+}
+async function mrApproverLogin() {
+  const k = document.getElementById('mr-akey').value, msg = document.getElementById('mr-amsg');
+  if (!k) return;
+  try { await sb('POST', 'rpc/admin_master_requests', { p_approver_key: k, p_status: '確認待ち' }); mrApproverKey = k; clerkReview(); }
+  catch (e) { msg.innerHTML = `<span style="color:var(--red);">${esc2(mrErr(e))}</span>`; }
+}
+async function mrReview(id, decision) {
+  let note = null;
+  if (decision === '差戻し') { note = prompt('差戻しの理由（バイトさんに見えます）', ''); if (note === null) return; if (!note.trim()) { alert('理由を書いてください'); return; } }
+  const by = clkBy() || prompt('確認した人の名前', '') || '';
+  if (!by.trim()) return;
+  try {
+    const r = await sb('POST', 'rpc/admin_master_review', { p_approver_key: mrApproverKey, p_id: id, p_decision: decision, p_by: by.trim(), p_note: note });
+    if (!r || !r.ok) throw new Error((r && r.error) || '保存できませんでした');
+    toast(decision === '承認' ? '承認して台帳に反映しました' : '差し戻しました');
+  } catch (e) { toast(`${decision}できませんでした（台帳は変わっていません）: ${mrErr(e)}`, 'error'); }
+  clerkReview();
+}
+async function mrSetApproverKey() {
+  const cur = document.getElementById('mr-kcur').value, n1 = document.getElementById('mr-knew').value, n2 = document.getElementById('mr-knew2').value, msg = document.getElementById('mr-kmsg');
+  if (n1 !== n2) { msg.innerHTML = '<span style="color:var(--red);">2回の入力が違います</span>'; return; }
+  if (n1.length < 8) { msg.innerHTML = '<span style="color:var(--red);">8文字以上にしてください</span>'; return; }
+  if (!await staffKeyEnsure()) { msg.innerHTML = '<span style="color:var(--red);">スタッフキーが必要です</span>'; return; }
+  try {
+    const r = await sb('POST', 'rpc/admin_set_approver_key', { p_staff_key: staffKeyGet(), p_current: cur || null, p_new: n1 });
+    msg.innerHTML = `<span style="color:var(--green,#080);">${r && r.first ? '責任者キーを設定しました' : '責任者キーを変更しました'}。このキーはメモ帳などに残さず、責任者だけで管理してください。</span>`;
+    ['mr-kcur', 'mr-knew', 'mr-knew2'].forEach(i => document.getElementById(i).value = '');
+  } catch (e) { msg.innerHTML = `<span style="color:var(--red);">設定できませんでした: ${esc2(mrErr(e))}</span>`; }
 }
 
 /* ── お弁当・イベントの感想QR（2026-10-10）──

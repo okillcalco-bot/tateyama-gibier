@@ -10,7 +10,7 @@
 //     ② 顧客: ふりがな・住所・郵便番号・電話の空欄、同じ電話・同じ名前の重複候補、注文の届け先と住所の違い
 //        スタッフキーが無ければ読まない（権限外）
 //        編集→保存: 開いた後に別の人が変えていたら上書きしない（同時編集）。通常は1回だけ保存
-//     ③ 捕獲者: ふりがな・振込先の空欄、口座番号の桁（先頭0の7桁は正常）。口座番号を画面に出さない。編集ボタンが無い
+//     ③ 捕獲者: ふりがな・振込先の空欄、口座番号の桁（先頭0の7桁は正常）。口座番号を画面に出さない。直接の編集ボタンが無い（変更は申請→責任者の承認）
 //     日報: 作業内容／確認件数／更新件数／要確認の対象と理由／次回の続き。口座番号らしい数字はコピーさせない
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
@@ -156,7 +156,7 @@ const txt = (page, sel) => page.$eval(sel, e => e.textContent.replace(/\s+/g, ' 
     ck('③ 口座種別が普通・当座以外／名義がカナ以外（猟師四郎）', /口座種別/.test(R('猟師四郎').fmt.join()) && /口座名義がカナ以外/.test(R('猟師四郎').fmt.join()), JSON.stringify(R('猟師四郎')));
     const body = await txt(page, '#clk-body');
     ck('③ 口座番号を画面に出さない', !/0123456|123456|7654321/.test(body), '');
-    ck('③ 振込先を変える入力欄・編集ボタンが無い（責任者が捕獲者台帳で入力）', !(await page.$('#clk-body input:not([type=checkbox])')) && !/>編集</.test(await page.$eval('#clk-body', e => e.innerHTML)) && /この画面からは変更できません/.test(body), '');
+    ck('③ 一覧に振込先を直接変える入力欄・編集ボタンが無い（「変更を申請」→責任者の承認でだけ入る）', !(await page.$('#clk-body input:not([type=checkbox])')) && !/>編集</.test(await page.$eval('#clk-body', e => e.innerHTML)) && /変更を申請/.test(body) && /責任者が承認するまで/.test(body), '');
     ck('③ 何も書き込まない', st.writes.length === 0, JSON.stringify(st.writes));
     ck('pageerrorなし（③）', errors.length === 0, errors.join(' / '));
     await ctx.close();
