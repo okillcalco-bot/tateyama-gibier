@@ -543,6 +543,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <a class="tab-btn" href="order.html" target="_blank">&#x1F6D2; 注文ポータル（お客様用）</a>
   <div class="nav-group">解析</div>
   <button class="tab-btn" data-tab="analysis">&#x1F4C8; 解析（月・天気／フードマイレージ／公的データ）</button>
+  <div class="nav-group">事務作業</div>
+  <button class="tab-btn" data-tab="clerk">&#x1F4CB; 事務作業（確認リスト・日報）</button>
   <div class="nav-group">台帳（管理者のみ）</div>
   <button class="tab-btn" data-tab="hunters">&#x1F3F9; 捕獲者台帳</button>
   <button class="tab-btn" data-tab="customers">&#x1F3E2; 顧客台帳</button>
@@ -1177,6 +1179,27 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
     </div>
     <div id="trace-result"></div>
+  </div>
+
+  <!-- 事務作業（2026-10-11）: バイトの事務作業の確認リスト。読み取りと「要確認」の記録だけで、
+       台帳の直接の書き換えはしない（直すのは既存の画面・既存の権限で） -->
+  <div class="tab-panel" id="panel-clerk">
+    <div class="section">
+      <div class="section-title">📋 事務作業（確認リスト・日報）</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.8;">
+        どの作業も <b>①対象を探す → ②元の資料と照らす → ③既存の画面で直す（直せないものは「要確認」）→ ④日報で報告</b> の順です。<br>
+        この画面は<b>候補を出すだけ</b>で、記録を自動で直したり、足りないと断定したりはしません。読み方・住所・口座は推測で入れないでください。
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
+        <button class="btn btn-sm active" id="clk-tab-meat" onclick="clerkShow('meat')">① 精肉の記録</button>
+        <button class="btn btn-sm" id="clk-tab-cust" onclick="clerkShow('cust')">② 顧客名簿</button>
+        <button class="btn btn-sm" id="clk-tab-hunt" onclick="clerkShow('hunt')">③ 捕獲者名簿</button>
+        <button class="btn btn-sm" id="clk-tab-report" onclick="clerkShow('report')">日報</button>
+        <a class="btn btn-sm" href="order-admin.html" title="受発注管理 → 書類発行 → 書類一覧の下の「入金明細と照合する」">⑤ 入金の確認 ↗</a>
+      </div>
+      <div style="margin-top:8px;font-size:12.5px;color:var(--text3);">作業者 <input class="form-input" id="clk-by" style="max-width:160px;display:inline-block;" placeholder="名前" oninput="try{localStorage.setItem('tg_clk_by',this.value)}catch(e){}"></div>
+    </div>
+    <div id="clk-body"></div>
   </div>
 
   <!-- 食べた人の声（承認してから公開する） -->
@@ -3235,6 +3258,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'shifts') loadShiftBoard();
     if (btn.dataset.tab === 'board') loadBoard();
     if (btn.dataset.tab === 'voices') loadVoices();
+    if (btn.dataset.tab === 'clerk') clerkLoad();
     if (btn.dataset.tab === 'event') loadEventSheet();
     if (btn.dataset.tab === 'waste') loadWaste();
     if (btn.dataset.tab === 'analysis') loadAnalysisHub();
@@ -12727,6 +12751,200 @@ async function kkSubmit() {
   } catch (e) { playFeedbackSound(false); toast('記録に失敗しました: ' + sbSafeMsg(e), 'error'); }
 }
 
+/* ── 事務作業（2026-10-11）──
+   バイトに任せる確認作業の入口。どれも「候補を出す」だけで、記録を自動で直さない。
+   ① 精肉: 部位の記録の有無と完了印から3つに分ける（未精肉と未入力は記録だけでは区別できない）
+   ② 顧客: ふりがな・住所・郵便番号・電話の空欄と、重複の候補（同じ電話・同じ名前）。直すのは既存の顧客台帳の編集（管理者コード）
+   ③ 捕獲者: ふりがな・振込先の空欄と書式の候補。口座番号は画面に出さない。直すのは責任者（捕獲者台帳）
+   要確認は既存の「気になる点フラグ」（data_flags）に記録する。口座番号らしい数字は書かせない */
+let clkView = 'meat', clkData = {}, clkStats = { checked: {}, updated: 0, flags: [] };
+function clkBy() { const el = document.getElementById('clk-by'); return el ? el.value.trim() : ''; }
+async function clerkLoad() {
+  const el = document.getElementById('clk-by');
+  if (el && !el.value) { try { el.value = localStorage.getItem('tg_clk_by') || ''; } catch (e) {} }
+  clerkShow(clkView);
+}
+function clerkShow(v) {
+  clkView = v;
+  ['meat', 'cust', 'hunt', 'report'].forEach(k => { const b = document.getElementById('clk-tab-' + k); if (b) b.classList.toggle('active', k === v); });
+  const box = document.getElementById('clk-body');
+  box.innerHTML = '<div class="section" style="color:var(--text3);">読み込んでいます…</div>';
+  ({ meat: clerkMeat, cust: clerkCust, hunt: clerkHunt, report: clerkReport })[v]().catch(e => {
+    box.innerHTML = `<div class="section" style="color:var(--red);">読み込めませんでした（何も変更していません）: ${esc2(sbSafeMsg(e))}</div>`;
+  });
+}
+function clkCheck(key, on) { if (on) clkStats.checked[key] = 1; else delete clkStats.checked[key]; clkCountUpdate(); }
+function clkCountUpdate() { const el = document.getElementById('clk-count'); if (el) el.textContent = `確認した ${Object.keys(clkStats.checked).filter(k => k.startsWith(clkView + ':')).length}件`; }
+function clkRow(key, html) {
+  return `<tr><td style="width:28px;"><input type="checkbox" title="資料と照らした" ${clkStats.checked[key] ? 'checked' : ''} onchange="clkCheck('${esc2(key)}', this.checked)"></td>${html}</tr>`;
+}
+/* 要確認の記録（既存の気になる点フラグ）。口座番号などの長い数字は書かせない */
+async function clkFlag(target, reason) {
+  const note = prompt(`「${target}」を要確認として記録します。\n理由: ${reason}\n\n照らした資料と気づいたことを書いてください（口座番号・暗証番号などは書かない）`, '');
+  if (note === null) return;
+  if (/\d{6,}/.test(note.replace(/[-\s]/g, ''))) { alert('6桁以上の数字（口座番号など）は書かないでください。記録していません。'); return; }
+  try {
+    await sb('POST', 'data_flags', { target, comment: '【事務作業】' + reason + (note.trim() ? '／' + note.trim() : ''), flagged_by: clkBy() || null, status: '未対応' });
+    clkStats.flags.push({ target, reason });
+    toast('要確認として記録しました（データ管理 → 気になる点フラグ）');
+    const b = document.querySelector(`[data-clkflag="${CSS.escape(target)}"]`); if (b) { b.disabled = true; b.textContent = '記録済み'; }
+  } catch (e) { toast('記録できませんでした（保存されていません）: ' + sbSafeMsg(e), 'error'); }
+}
+async function clkOpenFlags() {
+  try { return new Set((await sb('GET', 'data_flags', null, '?status=eq.未対応&select=target&limit=2000')).map(f => f.target)); }
+  catch (e) { return new Set(); }
+}
+
+/* ① 精肉の記録 */
+async function clerkMeat() {
+  const from = (document.getElementById('clk-meat-from') || {}).value || '2026-04-01';
+  const [inds, inv, flags] = await Promise.all([
+    sb('GET', 'individuals', null, `?deleted_at=is.null&capture_date=gte.${from}&select=label_id,species,capture_date,weight_total,processing_done_at,aging_method&order=capture_date.desc&limit=5000`),
+    sb('GET', 'inventory', null, `?deleted_at=is.null&individual_id=not.is.null&select=individual_id,tier&limit=20000`),
+    clkOpenFlags()
+  ]);
+  const n = {}; inv.forEach(r => { if ((r.tier || 2) === 2) n[r.individual_id] = (n[r.individual_id] || 0) + 1; });
+  const day = d => Math.floor((Date.now() - new Date(d + 'T00:00:00+09:00').getTime()) / 86400000);
+  const groups = { done0: [], none: [], noflag: [] };
+  inds.forEach(i => {
+    const c = n[i.label_id] || 0;
+    if (c === 0 && i.processing_done_at) groups.done0.push(i);
+    else if (c === 0) groups.none.push(i);
+    else if (!i.processing_done_at) groups.noflag.push(i);
+  });
+  clkData.meat = groups;
+  const sec = (title, help, rows, reason) => `<div class="section"><div class="section-title">${title}（${rows.length}頭）</div>
+    <div style="font-size:12.5px;color:var(--text2);margin-bottom:6px;">${help}</div>
+    ${rows.length ? `<div class="table-wrap"><table><thead><tr><th></th><th>個体番号</th><th>種</th><th>捕獲日</th><th>経過</th><th>体重</th><th>精肉の部位</th><th></th></tr></thead><tbody>
+    ${rows.map(i => clkRow('meat:' + i.label_id, `<td><b>${esc2(i.label_id)}</b></td><td>${esc2(i.species || '')}</td><td>${esc2(i.capture_date || '')}</td>
+      <td>${day(i.capture_date)}日${day(i.capture_date) <= 14 ? ' <span style="color:var(--text3);">（熟成中かも）</span>' : ''}</td><td>${i.weight_total ? esc2(i.weight_total) + 'kg' : '—'}</td>
+      <td>${n[i.label_id] || 0}件</td>
+      <td style="white-space:nowrap;"><button class="btn btn-sm" onclick="document.getElementById('trace-search').value='${esc2(i.label_id)}';document.querySelector('[data-tab=trace]').click();traceSearch();">記録を見る</button>
+        ${flags.has(i.label_id) ? '<span class="badge badge-gold">要確認あり</span>' : `<button class="btn btn-sm" data-clkflag="${esc2(i.label_id)}" onclick="clkFlag('${esc2(i.label_id)}','${reason}')">要確認</button>`}</td>`)).join('')}
+    </tbody></table></div>` : '<div style="color:var(--text3);font-size:13px;">ありません</div>'}</div>`;
+  document.getElementById('clk-body').innerHTML = `<div class="section">
+      <div style="font-size:13px;line-height:1.8;">捕獲日 <input type="date" id="clk-meat-from" class="form-input" style="max-width:160px;display:inline-block;" value="${esc2(from)}" onchange="clerkShow('meat')"> 以降
+        <span id="clk-count" style="margin-left:10px;color:var(--text3);"></span></div>
+      <div style="font-size:12.5px;color:var(--text2);margin-top:6px;line-height:1.8;">
+        <b>部位の数や歩留まりで「足りない」とは判断しません。</b>記録が無いことだけを出します。<br>
+        手順: 「記録を見る」で個体の記録を開く → 精肉の作業メモ・ラベルの控え・冷凍庫の実物と照らす →
+        精肉の登録が漏れていたら<b>精肉入力タブの既存の手順で登録</b>（推測の重さは入れない・同じ部位を二重に登録しない）→ 判断できなければ「要確認」</div></div>`
+    + sec('完了印あり・部位の記録0件', '「精肉完了」の印だけ付いて、部位（在庫）の記録が1件もない。<b>精肉済みだが未入力</b>の候補', groups.done0, '完了印あり・部位の記録0件')
+    + sec('完了印なし・部位の記録0件', '<b>記録だけでは判定できません</b>（まだ精肉していない／精肉したが未入力 のどちらか）。捕獲から日が浅いものは熟成中の可能性', groups.none, '部位の記録0件（未精肉か未入力か判定不能）')
+    + sec('部位の記録あり・完了印なし', '部位は登録されているが「精肉完了」の印がない。完了の付け忘れの候補（部位が足りないとは限らない）', groups.noflag, '部位あり・完了印なし');
+  clkCountUpdate();
+}
+
+/* ② 顧客名簿 */
+function clkDigits(s) { return String(s || '').replace(/\D/g, ''); }
+function clkNameKey(s) { return String(s || '').normalize('NFKC').replace(/(株式会社|有限会社|合同会社|\(株\)|\(有\)|\(同\))/g, '').replace(/[\s・.()]/g, ''); }
+async function clerkCust() {
+  if (!await staffKeyEnsure()) { document.getElementById('clk-body').innerHTML = '<div class="section" style="color:var(--red);">顧客名簿を見るにはスタッフキーが必要です（責任者に確認してください）。</div>'; return; }
+  const [cs, ords, flags] = await Promise.all([
+    sb('GET', 'customers', null, '?select=id,code,name,kana,phone,address,building,is_active&order=code.asc&limit=5000'),
+    sb('GET', 'orders', null, '?customer_id=not.is.null&delivery_address=not.is.null&select=customer_id,delivery_postal,delivery_address,order_date&order=order_date.desc&limit=5000'),
+    clkOpenFlags()
+  ]);
+  const lastOrd = {}; ords.forEach(o => { if (!lastOrd[o.customer_id]) lastOrd[o.customer_id] = o; });
+  const act = cs.filter(c => c.is_active !== false);
+  const byPhone = {}, byName = {};
+  act.forEach(c => { const p = clkDigits(c.phone); if (p.length >= 9) (byPhone[p] = byPhone[p] || []).push(c); const k = clkNameKey(c.name); if (k) (byName[k] = byName[k] || []).push(c); });
+  const dupOf = c => { const d = []; const p = clkDigits(c.phone); if (p.length >= 9 && byPhone[p].length > 1) d.push('同じ電話: ' + byPhone[p].filter(x => x.id !== c.id).map(x => x.code).join('・'));
+    const k = clkNameKey(c.name); if (k && byName[k].length > 1) d.push('同じ名前: ' + byName[k].filter(x => x.id !== c.id).map(x => x.code).join('・')); return d; };
+  const postalIn = a => /〒?\s*\d{3}-?\d{4}/.test(String(a || ''));
+  const rows = act.map(c => {
+    const miss = [];
+    if (!c.kana) miss.push('ふりがな'); if (!c.address) miss.push('住所'); else if (!postalIn(c.address)) miss.push('郵便番号'); if (!c.phone) miss.push('電話');
+    const o = lastOrd[c.id], dup = dupOf(c);
+    const diff = o && c.address && o.delivery_address && clkNameKey(o.delivery_address) && !clkNameKey(c.address).includes(clkNameKey(o.delivery_address).slice(0, 6));
+    return { c, miss, dup, o, diff };
+  }).filter(r => r.miss.length || r.dup.length || r.diff);
+  clkData.cust = rows;
+  const f = (document.getElementById('clk-cust-f') || {}).value || '';
+  const shown = rows.filter(r => !f || (f === 'dup' ? r.dup.length : f === 'diff' ? r.diff : r.miss.includes(f)));
+  const cnt = k => rows.filter(r => r.miss.includes(k)).length;
+  document.getElementById('clk-body').innerHTML = `<div class="section">
+    <div style="font-size:12.5px;color:var(--text2);line-height:1.8;">
+      手順: 一覧から1件選ぶ → <b>確認済みの注文・本人からの資料</b>と照らす → 「編集」で既存の顧客台帳の画面を開いて直す（保存は管理者コード）→ 直せない・食い違いは「要確認」。<br>
+      <b>ふりがなは名前から推測して入れない</b>（資料で読みが分かったものだけ）。住所が注文と違う・重複の候補は、上書き・統合せず「要確認」。</div>
+    <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+      <select id="clk-cust-f" class="form-input" style="max-width:240px;" onchange="clerkShow('cust')">
+        <option value="">すべて（${rows.length}件）</option><option value="ふりがな" ${f === 'ふりがな' ? 'selected' : ''}>ふりがな空欄（${cnt('ふりがな')}）</option>
+        <option value="住所" ${f === '住所' ? 'selected' : ''}>住所空欄（${cnt('住所')}）</option><option value="郵便番号" ${f === '郵便番号' ? 'selected' : ''}>住所に郵便番号なし（${cnt('郵便番号')}）</option>
+        <option value="電話" ${f === '電話' ? 'selected' : ''}>電話空欄（${cnt('電話')}）</option><option value="dup" ${f === 'dup' ? 'selected' : ''}>重複の候補（${rows.filter(r => r.dup.length).length}）</option>
+        <option value="diff" ${f === 'diff' ? 'selected' : ''}>注文の届け先と住所が違う（${rows.filter(r => r.diff).length}）</option></select>
+      <span id="clk-count" style="color:var(--text3);font-size:12.5px;"></span></div></div>
+    <div class="section"><div class="table-wrap"><table><thead><tr><th></th><th>コード</th><th>名前</th><th>足りない項目</th><th>重複の候補</th><th>最近の注文の届け先（参考）</th><th></th></tr></thead><tbody>
+    ${shown.slice(0, 300).map(r => clkRow('cust:' + r.c.code, `<td>${esc2(r.c.code || '')}</td><td>${esc2(r.c.name || '')}${r.c.kana ? `<br><span style="font-size:11px;color:var(--text3);">${esc2(r.c.kana)}</span>` : ''}</td>
+      <td style="color:var(--red);">${esc2(r.miss.join('・'))}</td><td style="font-size:12px;">${esc2(r.dup.join(' ／ '))}</td>
+      <td style="font-size:12px;">${r.o ? esc2([r.o.delivery_postal, r.o.delivery_address].filter(Boolean).join(' ')) + `<br><span style="color:var(--text3);">${esc2(r.o.order_date || '')}${r.diff ? ' ・<b style="color:var(--red);">名簿の住所と違う</b>' : ''}</span>` : '—'}</td>
+      <td style="white-space:nowrap;"><button class="btn btn-sm" onclick="clkCustEdit('${r.c.id}')">編集</button>
+        ${flags.has(r.c.code) ? '<span class="badge badge-gold">要確認あり</span>' : `<button class="btn btn-sm" data-clkflag="${esc2(r.c.code)}" onclick="clkFlag('${esc2(r.c.code)}','${esc2([...r.miss.map(m => m + '空欄'), ...(r.dup.length ? ['重複の候補'] : []), ...(r.diff ? ['注文の届け先と住所が違う'] : [])].join('・'))}')">要確認</button>`}</td>`)).join('')}
+    </tbody></table></div>${shown.length > 300 ? `<div style="font-size:12px;color:var(--text3);">先頭300件を表示（絞り込みで減らせます）</div>` : ''}</div>`;
+  clkCountUpdate();
+}
+async function clkCustEdit(id) {
+  if (!customersRegData.length || !customersRegData.some(c => String(c.id) === String(id))) await loadCustomersReg();
+  custRegFromClerk = true;
+  custRegEdit(id);
+}
+let custRegFromClerk = false;
+
+/* ③ 捕獲者名簿（口座番号は画面に出さない） */
+async function clerkHunt() {
+  const [hs, flags] = await Promise.all([
+    sb('GET', 'hunters', null, '?deleted_at=is.null&select=id,name,furigana,bank_name,bank_branch,account_type,account_number,account_holder&order=name.asc&limit=2000'),
+    clkOpenFlags()
+  ]);
+  const rows = hs.map(h => {
+    const miss = [], fmt = [];
+    if (!h.furigana) miss.push('ふりがな');
+    const bankAny = h.bank_name || h.bank_branch || h.account_type || h.account_number || h.account_holder;
+    if (!bankAny) miss.push('振込先（全部）');
+    else {
+      [['bank_name', '金融機関'], ['bank_branch', '支店'], ['account_type', '口座種別'], ['account_number', '口座番号'], ['account_holder', '口座名義']].forEach(([k, l]) => { if (!h[k]) miss.push(l); });
+      const an = String(h.account_number || '');
+      if (an && !/^\d{7}$/.test(an)) fmt.push(/^\d+$/.test(an) ? `口座番号が${an.length}桁（通常7桁）` : '口座番号に数字以外');
+      if (h.account_type && !/^(普通|当座|貯蓄)$/.test(h.account_type)) fmt.push('口座種別が普通・当座以外');
+      if (h.account_holder && !/^[\u30A0-\u30FF\uFF65-\uFF9F\s　()（）.・ー－\-]+$/.test(h.account_holder)) fmt.push('口座名義がカナ以外を含む');
+    }
+    return { h, miss, fmt };
+  }).filter(r => r.miss.length || r.fmt.length);
+  clkData.hunt = rows;
+  document.getElementById('clk-body').innerHTML = `<div class="section">
+    <div style="font-size:12.5px;color:var(--text2);line-height:1.8;">
+      手順: 一覧から1人選ぶ → <b>元の資料（通帳の写し・口座の届出書など）</b>と照らす → 「要確認」で<b>どの資料で何が分かったか</b>を書く（口座番号は書かない）→ 責任者が捕獲者台帳で確認して入力。<br>
+      <b>振込先はこの画面からは変更できません。</b>責任者の確認が済むまで、買取の振込には今の台帳の値が使われます。口座番号はこの画面に出しません（桁の確認だけ）。</div>
+    <span id="clk-count" style="color:var(--text3);font-size:12.5px;"></span></div>
+    <div class="section"><div class="table-wrap"><table><thead><tr><th></th><th>名前</th><th>足りない項目</th><th>書式の確認</th><th></th></tr></thead><tbody>
+    ${rows.map(r => clkRow('hunt:' + r.h.id, `<td>${esc2(r.h.name || '')}${r.h.furigana ? `<br><span style="font-size:11px;color:var(--text3);">${esc2(r.h.furigana)}</span>` : ''}</td>
+      <td style="color:var(--red);">${esc2(r.miss.join('・'))}</td><td style="font-size:12px;">${esc2(r.fmt.join('・'))}</td>
+      <td>${flags.has('捕獲者:' + r.h.name) ? '<span class="badge badge-gold">要確認あり</span>' : `<button class="btn btn-sm" data-clkflag="捕獲者:${esc2(r.h.name)}" onclick="clkFlag('捕獲者:${esc2(r.h.name)}','${esc2([...r.miss.map(m => m + '空欄'), ...r.fmt].join('・'))}')">要確認</button>`}</td>`)).join('')}
+    </tbody></table></div></div>`;
+  clkCountUpdate();
+}
+
+/* 日報（作業内容／確認件数／更新件数／要確認の対象IDと理由／次回の続き）。口座番号は入れない */
+async function clerkReport() {
+  const ck = Object.keys(clkStats.checked);
+  const by = k => ck.filter(x => x.startsWith(k + ':')).length;
+  const work = [['meat', '精肉の記録の確認'], ['cust', '顧客名簿の確認'], ['hunt', '捕獲者名簿の確認']].filter(([k]) => by(k)).map(([k, l]) => `${l}（${by(k)}件）`);
+  document.getElementById('clk-body').innerHTML = `<div class="section">
+    <div style="font-size:12.5px;color:var(--text2);margin-bottom:8px;">この端末で今日チェックした件数と、「要確認」に記録したものから作ります。直してからコピーしてください。</div>
+    <textarea id="clk-report" class="form-input" rows="12" style="width:100%;font-size:13px;">${esc2([
+      '【作業内容】' + (work.join('、') || ''),
+      '【確認件数】' + ck.length + '件',
+      '【更新件数】' + clkStats.updated + '件（顧客台帳の編集で保存したもの）',
+      '【要確認】' + (clkStats.flags.length ? '\n' + clkStats.flags.map(f => `・${f.target}: ${f.reason}`).join('\n') : 'なし'),
+      '【次回の続き】'].join('\n'))}</textarea>
+    <button class="btn btn-primary btn-sm" style="margin-top:6px;" onclick="clkReportCopy()">📋 コピー</button></div>`;
+}
+function clkReportCopy() {
+  const t = document.getElementById('clk-report').value;
+  if (/\d{6,}/.test(t.replace(/[-\s]/g, '').replace(/20\d{6}/g, ''))) { alert('6桁以上の数字（口座番号など）が含まれています。消してからコピーしてください。'); return; }
+  navigator.clipboard.writeText(t).then(() => toast('日報をコピーしました'), () => prompt('コピーしてください', t));
+}
+
 /* ── お弁当・イベントの感想QR（2026-10-10）──
    ラベルの無い料理の感想を s.html?m=<code> で集める。料理ごとに星・スタンプ（選択式）。
    使ったお肉の個体番号が分かれば料理に付けておくと、感想がその一頭の記録にも付く */
@@ -15973,6 +16191,7 @@ async function loadTodayTodos() {
 
 /* ───────── 顧客台帳（管理者のみ） ───────── */
 let customersRegData = [];
+let custEditSnap = null;   // 編集を開いた時の値（同時編集の確認用）
 let custEditId = null;
 const CUST_FIELDS = ['name', 'kana', 'honorific', 'phone', 'address', 'building', 'email', 'price_rank', 'is_active', 'notes'];
 /* 価格パターンは受発注管理（order-admin）と同じ値を使う。
@@ -16095,6 +16314,7 @@ function custRegEdit(id) {
   const c = customersRegData.find(x => String(x.id) === String(id));
   if (!c) return;
   custEditId = id;
+  custEditSnap = Object.fromEntries(CUST_FIELDS.map(f => [f, c[f] == null ? null : c[f]]));
   document.getElementById('custModalTitle').textContent = '顧客情報編集';
   CUST_FIELDS.forEach(f => {
     const el = document.getElementById('cst-f-' + f);
@@ -16128,7 +16348,15 @@ async function custRegSave() {
   });
   if (!payload.name) { toast('顧客名は必須です', 'error'); return; }
   try {
-    if (custEditId) { await sb('PATCH', 'customers', payload, '?id=eq.' + custEditId); toast(`顧客「${payload.name}」を更新しました`); }
+    if (custEditId) {
+      // 同時編集: 開いた後に別の人が保存していたら上書きしない（2026-10-11）
+      const cur = await sb('GET', 'customers', null, '?id=eq.' + custEditId + '&select=' + CUST_FIELDS.join(','));
+      if (!cur.length) { toast('この顧客が見つかりません（削除された可能性）。保存していません', 'error'); return; }
+      const changed = CUST_FIELDS.filter(f => custEditSnap && String(cur[0][f] ?? '') !== String(custEditSnap[f] ?? ''));
+      if (changed.length) { toast('開いた後に別の人が「' + changed.join('・') + '」を変更しています。保存していません。画面を開き直して確認してください', 'error'); return; }
+      await sb('PATCH', 'customers', payload, '?id=eq.' + custEditId); toast(`顧客「${payload.name}」を更新しました`);
+      if (custRegFromClerk) { clkStats.updated++; custRegFromClerk = false; }
+    }
     else {
       // コードは受発注管理と同じ連番方式（C0001…）で採番する。
       // 形式がずれると受発注管理側の採番（最大値+1）が壊れるため、必ずDBの最新から採る

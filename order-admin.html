@@ -627,6 +627,23 @@ th,td{padding:8px 6px;font-size:.8rem}
           <tbody id="invListBody"><tr><td colspan="8" class="empty">読み込み中…</td></tr></tbody>
         </table>
       </div>
+      <!-- 入金明細との照合（2026-10-11）: 責任者から受け取った入金明細を貼って、請求書と照らす。
+           同額というだけでは入金済みにしない。名義と金額が1件に決まったものだけ、確認のうえ既存の入金記録で記録する -->
+      <details id="payMatchBox" style="margin-top:14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px">
+        <summary style="cursor:pointer;font-weight:700;color:var(--gold)">💰 入金明細と照合する（顧客からの入金の確認）</summary>
+        <div style="font-size:.78rem;color:var(--text2);line-height:1.8;margin:8px 0">
+          ① 責任者から受け取った入金明細を、1行に「日付 振込名義 金額」で貼る（例 <code>2026/10/05 ｶ)ﾀﾃﾔﾏｼｮｸﾄﾞｳ 12,000</code>）<br>
+          ② 「照合する」→ 名義と金額が1件の請求書に決まったものだけ「記録」できます。<b>同額でも名義が違うもの、合算・分割・手数料差・不足・過入金は「確認待ち」</b>（責任者へ報告）<br>
+          ③ 記録した明細はもう一度貼っても二重には記録されません。銀行の画面のログイン情報や口座番号はここに貼らないでください
+        </div>
+        <textarea id="payMatchText" rows="5" style="width:100%;font-family:monospace;font-size:.82rem" placeholder="2026/10/05 ｶ)ﾀﾃﾔﾏｼｮｸﾄﾞｳ 12,000"></textarea>
+        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+          <button class="btn btn-gold btn-sm" onclick="payMatchRun()">照合する</button>
+          <button class="btn btn-outline btn-sm" onclick="payMatchCopyReport()">📋 日報用にコピー</button>
+          <span id="payMatchMsg" style="font-size:.8rem"></span>
+        </div>
+        <div id="payMatchOut" style="margin-top:8px"></div>
+      </details>
     </div>
   </div>
 
@@ -4908,13 +4925,135 @@ async function invRecordPayment(id){
   if(input===null) return;
   const amount=parseInt(String(input).replace(/[,¥\s]/g,''),10);
   if(isNaN(amount)||amount<=0){alert('1以上の金額を入力してください');return}
+  // 入金日は明細の日付で入れる（これまで当日固定だった）。2026-10-11
+  const dIn=prompt('入金日（明細の日付）を入力してください（例 2026-10-05）',today());
+  if(dIn===null) return;
+  const paidDate=payNormDate(dIn);
+  if(!paidDate){alert('日付が読めません（例 2026-10-05）');return}
+  await invSavePayment(r,{amount,paidDate,note:null});
+}
+/* 入金の保存（一覧の「💰 入金」と明細照合の両方から使う）。
+   保存の直前にDBの入金を読み直す: 他の人が先に記録していたら残額が変わるので、その値で判定する（同時編集）。
+   ・残額を超える入金（過入金・合算の取り違え）は記録しない → 責任者へ
+   ・同じ明細（note の照合キー）・同じ日付と金額の入金がすでにあれば二重登録として止める */
+async function invSavePayment(r,{amount,paidDate,note}){
+  let fresh=[];
+  try{ fresh=await sb('GET','payments','',`?document_id=eq.${r.id}&select=amount,paid_date,note`); }
+  catch(e){ alert('入金記録エラー（最新の入金を確認できませんでした。記録していません）: '+e.message); return false; }
+  const paidNow=fresh.reduce((a,x)=>a+(x.amount||0),0), total=Number(r.total_amount||0), remain=total-paidNow;
+  if(note&&fresh.some(x=>(x.note||'').includes(note))){ alert('この明細はすでにこの請求書に記録されています（二重登録を止めました）'); return false; }
+  if(fresh.some(x=>x.paid_date===paidDate&&Number(x.amount)===amount)&&!confirm(`${paidDate} に ¥${amount.toLocaleString()} の入金がすでに記録されています。\n別の入金で間違いありませんか？（同じ入金なら「キャンセル」）`)) return false;
+  if(amount>remain){ alert(`残額 ¥${Math.max(0,remain).toLocaleString()} を超える入金は記録できません（過入金・合算の可能性）。\n責任者に確認してください。${paidNow!==(invPayMap[r.id]||0)?'\n※ 画面を開いた後に、別の人が入金を記録しています。':''}`); return false; }
   try{
-    await sb('POST','payments',[{document_id:id,paid_date:today(),amount:amount,method:'振込'}]);
-    const newPaid=paid+amount, total=Number(r.total_amount||0);
-    const bs=total>0&&newPaid>=total?'入金済':'一部入金';
-    await sb('PATCH','documents',{billing_status:bs},`?id=eq.${id}`);
-    loadInvoiceList();
-  }catch(e){alert('入金記録エラー: '+e.message)}
+    await sb('POST','payments',[{document_id:r.id,paid_date:paidDate,amount:amount,method:'振込',note:note||null}]);
+    const bs=total>0&&paidNow+amount>=total?'入金済':'一部入金';
+    await sb('PATCH','documents',{billing_status:bs},`?id=eq.${r.id}`);
+    await loadInvoiceList();
+    return true;
+  }catch(e){alert('入金記録エラー: '+e.message);return false}
+}
+function payNormDate(t){
+  const m=String(t||'').trim().replace(/[年月]/g,'/').replace(/日/,'').match(/^(?:(\d{4})[\/\-.])?(\d{1,2})[\/\-.](\d{1,2})$/);
+  if(!m) return null;
+  const y=m[1]?+m[1]:new Date().getFullYear(), mo=+m[2], d=+m[3];
+  if(mo<1||mo>12||d<1||d>31) return null;
+  return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+/* ── 入金明細との照合（2026-10-11）──
+   明細1行＝1回の入金。請求書（未入金・一部入金・期限超過）と、名義（顧客のふりがな・宛名）と金額で照らす。
+   決まるのは「名義も金額（残額）も一致して、候補が1件」のときだけ。それ以外は理由つきで確認待ちにする */
+let payMatchRows=[], payMatchUsed={};
+function payKana(s){
+  // 振込名義（半角カナ）とふりがなを同じ形にそろえる。法人略号（ｶ) ﾕ) など）と記号・空白を除く
+  let t=String(s||'').normalize('NFKC').replace(/[\u3041-\u3096]/g,c=>String.fromCharCode(c.charCodeAt(0)+0x60));
+  t=t.replace(/[(（]?(カ|ユ|ド|シャ|ザイ|イ|ガ|ゴ)[)）]/g,'').replace(/(カブシキガイシャ|ユウゲンガイシャ|ゴウドウガイシャ)/g,'');
+  return t.replace(/[\s・.,，、。\-ー－()（）「」]/g,'').toUpperCase();
+}
+function payParseLines(text){
+  return String(text||'').split(/\n/).map(x=>x.trim()).filter(Boolean).map((raw,i)=>{
+    // 金額の桁区切り（12,000）を先に外してから、タブ・カンマ（CSV）・空白で区切る
+    const parts=raw.replace(/(\d)[,，](?=\d{3}(?:\D|$))/g,'$1').split(/[\t,，]|\s+/).filter(Boolean);
+    let date=null, amount=null; const rest=[];
+    // 金額は最後の数字（カンマ・円・¥つき可）、日付は最初の日付らしいもの
+    for(let k=parts.length-1;k>=0;k--){ const n=parts[k].replace(/[¥￥円]/g,''); if(amount===null&&/^\d{1,3}(,\d{3})+$|^\d+$/.test(n)&&!payNormDate(parts[k])){ amount=parseInt(n.replace(/,/g,''),10); parts.splice(k,1); break; } }
+    for(let k=0;k<parts.length;k++){ const d=payNormDate(parts[k]); if(d&&!date){ date=d; continue; } rest.push(parts[k]); }
+    const name=rest.join(' ');
+    const errs=[]; if(!date) errs.push('日付'); if(!(amount>0)) errs.push('金額'); if(!name) errs.push('振込名義');
+    return {no:i+1,raw,date,amount,name,errs};
+  });
+}
+async function payMatchRun(){
+  const msg=document.getElementById('payMatchMsg'), out=document.getElementById('payMatchOut');
+  if(invListType!=='請求書'){ msg.textContent='請求書の一覧に切り替えてから照合してください'; return; }
+  const lines=payParseLines(document.getElementById('payMatchText').value);
+  if(!lines.length){ msg.textContent='明細を貼ってください'; return; }
+  msg.textContent='照合中…';
+  const open=invListRows.filter(r=>r.status!=='取消'&&r.status!=='下書き'&&invStatusOf(r)!=='入金済');
+  // 顧客のふりがな（名義との照合用）と、記録済みの入金（二重登録の判定用）
+  const cids=[...new Set(open.map(r=>r.customer_id).filter(Boolean))];
+  let kana={}, pays=[];
+  try{
+    if(cids.length) (await sb('GET','customers','',`?id=in.(${cids.join(',')})&select=id,kana,name`)).forEach(c=>kana[c.id]=c);
+    const ids=invListRows.map(r=>r.id);
+    if(ids.length) pays=await sb('GET','payments','',`?document_id=in.(${ids.join(',')})&select=document_id,amount,paid_date,note`);
+  }catch(e){ msg.textContent='照合に必要なデータを読めませんでした: '+e.message; return; }
+  const nameOk=(r,nm)=>{ const k=payKana(nm); if(k.length<2) return false;
+    const c=kana[r.customer_id]; const cands=[c&&c.kana, r.partner_name].map(payKana).filter(x=>x.length>=2);
+    return cands.some(x=>x.includes(k)||k.includes(x)); };
+  const remainOf=r=>Number(r.total_amount||0)-(invPayMap[r.id]||0);
+  payMatchRows=lines.map(L=>{
+    const sig=L.date&&L.amount?`明細:${L.date}|${L.amount}|${payKana(L.name)}`:null;
+    if(L.errs.length) return {...L,sig,kind:'wait',reason:'資料不足（'+L.errs.join('・')+'が読めない）',cands:[]};
+    const dupPay=pays.find(p=>(p.note||'').includes(sig));
+    if(dupPay){ const d=invListRows.find(r=>r.id===dupPay.document_id); return {...L,sig,kind:'done',reason:'記録済み（'+(d?d.doc_number:'')+'）',cands:[]}; }
+    const byName=open.filter(r=>nameOk(r,L.name)), byAmt=open.filter(r=>remainOf(r)===L.amount);
+    const both=byName.filter(r=>remainOf(r)===L.amount);
+    if(both.length===1) return {...L,sig,kind:'match',reason:'名義と残額が一致',cands:both};
+    if(both.length>1) return {...L,sig,kind:'wait',reason:'名義と金額が同じ請求書が'+both.length+'件（どれか特定できない）',cands:both};
+    if(byName.length){
+      const sumAll=byName.reduce((a,r)=>a+remainOf(r),0);
+      if(byName.length>1&&sumAll===L.amount) return {...L,sig,kind:'wait',reason:'合算入金の可能性（'+byName.length+'件の残額の合計と一致）',cands:byName};
+      const best=byName.slice().sort((a,b)=>Math.abs(remainOf(a)-L.amount)-Math.abs(remainOf(b)-L.amount))[0], diff=remainOf(best)-L.amount;
+      if(diff>0&&diff<=880) return {...L,sig,kind:'wait',reason:`手数料差の可能性（残額より ¥${diff.toLocaleString()} 少ない）`,cands:[best]};
+      if(diff>0) return {...L,sig,kind:'wait',reason:`分割・不足の可能性（残額より ¥${diff.toLocaleString()} 少ない）`,cands:byName};
+      return {...L,sig,kind:'wait',reason:`過入金・合算の可能性（残額より ¥${(-diff).toLocaleString()} 多い）`,cands:byName};
+    }
+    if(byAmt.length) return {...L,sig,kind:'wait',reason:'金額だけ一致（名義が違う・別名義の可能性）',cands:byAmt};
+    return {...L,sig,kind:'wait',reason:'該当する請求書なし（一覧に出ない請求書の可能性も）',cands:[]};
+  });
+  payMatchRender();
+  const n=k=>payMatchRows.filter(x=>x.kind===k).length;
+  msg.textContent=`明細${payMatchRows.length}件：記録できる ${n('match')}件／確認待ち ${n('wait')}件／記録済み ${n('done')}件`;
+}
+function payMatchRender(){
+  const out=document.getElementById('payMatchOut');
+  const color={match:'var(--green)',wait:'#b07d12',done:'var(--text3)',used:'var(--text3)'};
+  out.innerHTML=`<table style="font-size:.78rem"><thead><tr><th>#</th><th>日付</th><th>振込名義</th><th>金額</th><th>判定</th><th>請求書の候補</th><th></th></tr></thead><tbody>${payMatchRows.map((L,i)=>{
+    const used=payMatchUsed[L.sig];
+    const kind=used?'used':L.kind;
+    return `<tr><td>${L.no}</td><td>${esc(L.date||'?')}</td><td>${esc(L.name||'?')}</td><td style="white-space:nowrap">${L.amount?'¥'+L.amount.toLocaleString():'?'}</td>
+      <td style="color:${color[kind]};font-weight:700">${used?'記録しました（'+esc(used)+'）':kind==='match'?'記録できる':kind==='done'?esc(L.reason):'確認待ち'}${kind==='wait'?'<br><span style="font-weight:400">'+esc(L.reason)+'</span>':''}</td>
+      <td>${L.cands.map(r=>`${esc(r.doc_number||'')} ${esc(r.partner_name||'')} 残¥${(Number(r.total_amount||0)-(invPayMap[r.id]||0)).toLocaleString()}${r.due_date&&r.due_date<today()?' <span style="color:var(--red)">期限超過</span>':''}`).join('<br>')||'--'}</td>
+      <td>${kind==='match'?`<button class="btn btn-green btn-sm" onclick="payMatchRecord(${i})">記録</button>`:''}</td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+async function payMatchRecord(i){
+  const L=payMatchRows[i]; if(!L||L.kind!=='match'||payMatchUsed[L.sig]) return;
+  const r=L.cands[0];
+  if(!confirm(`この入金を記録しますか？\n\n明細: ${L.date} ${L.name} ¥${L.amount.toLocaleString()}\n請求書: ${r.doc_number} ${r.partner_name||''}（残 ¥${(Number(r.total_amount||0)-(invPayMap[r.id]||0)).toLocaleString()}）\n\n名義と金額を、明細と請求書の両方で目で確かめてから「OK」`)) return;
+  const ok=await invSavePayment(r,{amount:L.amount,paidDate:L.date,note:L.sig});
+  if(ok){ payMatchUsed[L.sig]=r.doc_number; payMatchRender(); }
+}
+function payMatchCopyReport(){
+  if(!payMatchRows.length){ alert('先に「照合する」を押してください'); return; }
+  const used=Object.keys(payMatchUsed).length;
+  const waits=payMatchRows.filter(L=>L.kind==='wait'&&!payMatchUsed[L.sig]);
+  // 日報には名義・口座は書かない（明細の行番号・請求番号・理由だけ）
+  const txt=['【作業内容】入金明細と請求書の照合',`【確認件数】明細 ${payMatchRows.length}件`,`【更新件数】入金を記録 ${used}件`,
+    '【要確認】'+(waits.length?'\n'+waits.map(L=>`・明細${L.no}行目（${L.date||'日付不明'} ¥${(L.amount||0).toLocaleString()}）${L.cands.map(r=>r.doc_number).join('・')||''}: ${L.reason}`).join('\n'):'なし'),
+    '【次回の続き】'].join('\n');
+  navigator.clipboard.writeText(txt).then(()=>alert('日報用の文面をコピーしました'),()=>prompt('コピーしてください',txt));
 }
 
 function invExportCSV(){
