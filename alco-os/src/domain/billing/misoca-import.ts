@@ -21,6 +21,8 @@ export interface MisocaDocRow {
   tax: number | null;
   total: number;
   dueDate: string | null;
+  /** 入金済 / 未入金（Misocaの一覧CSVにある場合のみ） */
+  paymentStatus: string | null;
 }
 
 /** RFC4180風の最小CSVパーサ（引用符・改行・カンマ対応） */
@@ -66,12 +68,13 @@ export function parseCsv(text: string): string[][] {
 const COLUMN_CANDIDATES: Record<keyof MisocaDocRow, string[]> = {
   docNumber: ["請求書番号", "見積書番号", "納品書番号", "領収書番号", "書類番号", "伝票番号", "番号", "No", "No."],
   issueDate: ["発行日", "請求日", "見積日", "納品日", "日付", "作成日"],
-  customerName: ["取引先名", "取引先", "宛名", "顧客名", "会社名"],
+  customerName: ["請求先", "取引先名", "取引先", "宛名", "顧客名", "会社名"],
   subject: ["件名", "タイトル", "摘要"],
   subtotal: ["小計", "税抜金額", "税抜合計"],
   tax: ["消費税", "消費税額", "税額"],
   total: ["合計金額", "合計", "総額", "金額", "税込金額", "税込合計"],
   dueDate: ["支払期限", "お支払期限", "振込期限", "有効期限"],
+  paymentStatus: ["入金済", "入金状況", "入金"],
 };
 
 function normalizeDate(value: string): string | null {
@@ -106,6 +109,7 @@ export function mapMisocaRows(rows: string[][]): { docs: MisocaDocRow[]; skipped
     tax: colIndex("tax"),
     total: colIndex("total"),
     dueDate: colIndex("dueDate"),
+    paymentStatus: colIndex("paymentStatus"),
   };
   if (idx.total === -1 || idx.issueDate === -1) {
     throw new Error(
@@ -130,6 +134,8 @@ export function mapMisocaRows(rows: string[][]): { docs: MisocaDocRow[]; skipped
       subtotal: idx.subtotal >= 0 ? parseAmount(row[idx.subtotal]) : null,
       tax: idx.tax >= 0 ? parseAmount(row[idx.tax]) : null,
       dueDate: idx.dueDate >= 0 ? normalizeDate(row[idx.dueDate] ?? "") : null,
+      paymentStatus:
+        idx.paymentStatus >= 0 ? (row[idx.paymentStatus] ?? "").trim() || null : null,
       total,
     });
   }
@@ -201,7 +207,9 @@ export async function importMisocaDocuments(
       tax_rate: [0, 8, 10].includes(taxRate) ? taxRate : 10,
       tax_amount: tax,
       total: doc.total,
-      note: "Misocaからインポート（金額はMisocaの値をそのまま保持）",
+      note:
+        "Misocaからインポート（金額はMisocaの値をそのまま保持）" +
+        (doc.paymentStatus ? ` / ${doc.paymentStatus}` : ""),
       issuer: null,
       created_by: ctx.actorId,
     });
