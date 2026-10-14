@@ -27,7 +27,8 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
     const url = decodeURIComponent(route.request().url()); const m = route.request().method();
     const j = x => route.fulfill({ contentType: 'application/json', body: JSON.stringify(x) });
     if (url.includes('/individuals') && m === 'GET') {
-      if (url.includes('capture_date=eq.')) return j([REC]);   // loadList
+      // #186 から一覧は「捕獲日が今日 OR 今日登録」（or=(capture_date.eq.…,created_at.gte.…)）で読む
+      if (url.includes('capture_date=eq.') || url.includes('capture_date.eq.')) return j([REC]);   // loadList
       return j([]);
     }
     if (url.includes('/area_master')) return j([{ city: '館山市', district: '豊房', oaza: '神余' }]);

@@ -32,7 +32,8 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
     if (url.includes('/app_settings')) return j([{ value: { serial_start: 458, label_start_T: 272, label_start_M: 170 } }]);
     if (url.includes('/individuals') && m === 'GET') {
       if (url.includes('hunter_name=eq.')) return j(HIST);          // loadUsual
-      if (url.includes('capture_date=eq.')) return j(LIST);         // loadList
+      // #186 から一覧は「捕獲日が今日 OR 今日登録」（or=(capture_date.eq.…,created_at.gte.…)）で読む
+      if (url.includes('capture_date=eq.') || url.includes('capture_date.eq.')) return j(LIST);         // loadList
       return j([]);                                                 // 採番系
     }
     return j([]);
@@ -115,7 +116,7 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
     return cards.map(c => ({ no: c.querySelector('.day-no').textContent, label: c.querySelector('.card-label').textContent }));
   });
   // created_at: b(00:02)=1, a(00:05)=2, c(00:09)=3
-  const byLabel = {}; nums.forEach(n => { byLabel[n.label.replace(/^#\d+\s*/, '')] = n.no; });
+  const byLabel = {}; nums.forEach(n => { const m = n.label.match(/TGC-[^\s　]+/); if (m) byLabel[m[0]] = n.no; }); // ラベルの後ろに「📷 撮影」等の札が付く
   ck('当日番号: シ012=1(最先着)', byLabel['TGC-08-シ012'] === '1', JSON.stringify(nums));
   ck('当日番号: T272=2', byLabel['TGC-08-T272'] === '2', JSON.stringify(nums));
   ck('当日番号: M170=3', byLabel['TGC-08-M170'] === '3', JSON.stringify(nums));

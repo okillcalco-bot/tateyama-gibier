@@ -16,6 +16,8 @@ const path = require('path');
 (async () => {
   const browser = await chromium.launch({ executablePath: process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
   const page = await browser.newContext().then(c => c.newPage());
+  // テストの日付は 2026年9月（固定データの「今月」）。実行日に左右されないよう、ブラウザの時計を固定する
+  await page.clock.setFixedTime(new Date('2026-09-15T10:00:00+09:00'));
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   page.on('dialog', async d => { await d.dismiss(); });
 

@@ -50,6 +50,8 @@ const PAST_ITEMS = [
   const ctx = await browser.newContext();
   await ctx.addInitScript(() => { try { sessionStorage.setItem('tg_access_v1', 'ok'); } catch (e) {} });
   const page = await ctx.newPage();
+  // テストの日付は 2026年9月（固定データの「今月」）。実行日に左右されないよう、ブラウザの時計を固定する
+  await page.clock.setFixedTime(new Date('2026-09-15T10:00:00+09:00'));
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   const asked = []; let dialogAnswer = true;
   page.on('dialog', async d => { asked.push(d.message()); dialogAnswer ? await d.accept() : await d.dismiss(); });

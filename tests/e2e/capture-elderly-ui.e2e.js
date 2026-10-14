@@ -55,7 +55,8 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
 
   // 4) 削除された項目
   ck('処理区分（分割/背割り）が無い', await p.evaluate(() => !document.querySelector('[data-field="processing_type"]')));
-  ck('市役所票用「体長」入力が無い', await p.evaluate(() => !document.getElementById('bodyLength')));
+  // 体長の入力欄は #223（2026-08-27）で捕獲票に戻した（写真から4タップで測れる）。いまは「ある」が正しい
+  ck('市役所票用「体長」入力がある（#223）', await p.evaluate(() => !!document.getElementById('bodyLength')));
   ck('市役所票用「処理方法」入力が無い', await p.evaluate(() => !document.getElementById('disposalMethod')));
   ck('市役所票用「わな設置日」が無い', await p.evaluate(() => !document.getElementById('trapSetDate')));
   ck('「市役所の調査票も作る」欄が無い', await p.evaluate(() => !document.getElementById('surveyOn')));
@@ -189,7 +190,8 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   ck('?staff= → 搬入方法は引取・担当者欄表示', staff.method === '引取' && staff.rowShown);
   ck('?staff= → 職員モードの案内を表示', staff.banner);
   ck('?staff= → 捕獲者名は空（本人=記録者と別）', staff.hunterEmpty);
-  ck('?staff= → フル画面（記録者欄も表示）', staff.fullForm);
+  // #178（2026-08-19）から ?staff= は「引き取り者モード」: 記録者などセンター側の項目は隠し、搬入待ちで登録する
+  ck('?staff= → 記録者欄はセンター側の項目として隠す（#178）', !staff.fullForm);
   ck('職員リンクJSエラーなし', errs3.length === 0, errs3.join(' / '));
 
   console.log(out.join('\n'));
