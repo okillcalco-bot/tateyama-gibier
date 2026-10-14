@@ -96,7 +96,8 @@ const INV = [ { individual_id:'TGC-08-T001', part_name:'ヒレ', grade:'極上',
   T('振込一覧: 井上（ＪＡ安房 館野支店 4111589 ¥12,840）と山田（未登録・赤）', ui.bank.some(r => /井上定男/.test(r) && /館野支店/.test(r) && /4111589/.test(r) && /¥12,840/.test(r)) && ui.bank.some(r => /山田千代子/.test(r) && /未登録/.test(r)), ui.bank.join(' | '));
 
   // 明細を開く
-  await page.click('#payeeBody tr.payee-row td:first-child');
+  // #361 で同じセルに「👁 表で見る」ボタン（クリックを止める）が入ったため、セルの中央ではなく名前を押す
+  await page.click('#payeeBody tr.payee-row td:first-child b');
   const det = await page.evaluate(() => document.getElementById('det-0').style.display !== 'none' && document.getElementById('det-0').textContent);
   T('行をクリックすると個体の明細（極上・A・−¥3,000 など）が開く', det && /極上/.test(det) && /A（30%）/.test(det) && /−¥3,000/.test(det), String(det).slice(0, 200));
 

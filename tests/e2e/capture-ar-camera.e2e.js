@@ -87,7 +87,8 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   ck('arCapture 実行でエラーなし', true);
   ck('撮影画像をサーバー(capture-photos)へ保存', uploads.length > 0, JSON.stringify(uploads));
   ck('看板写真を個体のimage_urlに紐づけ', typeof patchedImageUrl === 'string' && patchedImageUrl.includes('capture-photos'), String(patchedImageUrl));
-  ck('サーバー保存成功時は端末ダウンロードしない', dl === null, String(dl));
+  // 046061c（2026-08-17）から、看板写真はまず端末（カメラロール）に即保存し、そのあとサーバーにも保存する
+  ck('端末にも保存する（個体番号_日付.jpg）', /^TGC-08-T272_\d{4}-\d{2}-\d{2}\.jpg$/.test(String(dl)), String(dl));
 
   // 閉じる → ストリーム停止・非表示
   await p.evaluate(() => arClose());
