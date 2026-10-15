@@ -325,13 +325,16 @@ async function init(){
   document.getElementById('fHalf').value = (m >= 4 && m <= 9) || m === 10 || m === 11 || m === 12 ? (m >= 10 ? 'H1' : 'H1') : 'H2';
   fillPeriod();
   sel.addEventListener('change', fillPeriod); document.getElementById('fHalf').addEventListener('change', fillPeriod);
+  // 捕獲者台帳（口座・住所）はスタッフキー必須（P0-2）。キーの無い端末では読めないので、理由を画面に出す
+  const hasKey = !!staffKeyGet();
   try {
     const [rules, hs] = await Promise.all([
       sb('app_settings','?key=eq.buyback_rules&select=value'),
-      sb('hunters','?select=id,name,furigana,bank_name,bank_branch,account_type,account_number,account_holder,account_furigana,payee_no,city,address,postal_code&deleted_at=is.null&limit=1000'),
+      hasKey ? sb('hunters','?select=id,name,furigana,bank_name,bank_branch,account_type,account_number,account_holder,account_furigana,payee_no,city,address,postal_code&deleted_at=is.null&limit=1000') : Promise.resolve([]),
     ]);
     if (rules[0] && rules[0].value && rules[0].value.boar) { RULES = rules[0].value; rulesFromDb = true; }
     D.hunters = {}; hs.forEach(h => { D.hunters[normName(h.name)] = h; });
+    if (!hasKey) showStatus('error', 'この端末にはスタッフキーが設定されていないため、捕獲者台帳（振込先・住所）を読み込めません。基幹アプリでスタッフキーを設定してから開き直してください。');
   } catch(e) { showStatus('error', '設定/捕獲者台帳を読み込めませんでした: ' + (e.message||e) + '（既定のルールで計算します）'); }
   rulesRender();
   document.getElementById('nDate').value = `令和${zen(now.getFullYear() - 2018)}年${zen(m)}月吉日`;

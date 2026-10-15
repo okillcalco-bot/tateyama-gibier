@@ -46,7 +46,8 @@ const PUBLISHED = [
     if (m === 'POST' || m === 'PATCH') return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
     return J([]);
   });
-  await page.addInitScript(() => { try { sessionStorage.setItem('tg_access_v1', 'ok'); } catch (e) {} });
+  // 声の一覧・バッジは staff-key 必須（P0-1）。キーの設定済みの端末として開く
+  await page.addInitScript(() => { try { sessionStorage.setItem('tg_access_v1', 'ok'); localStorage.setItem('tg_staff_key', 'k'); } catch (e) {} });
   page.on('dialog', d => d.accept());
 
   const results = [];
