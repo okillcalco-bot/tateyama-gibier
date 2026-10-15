@@ -25,6 +25,8 @@ const path = require('path');
   await page.route('**/rest/v1/**', rt => {
     const req = rt.request(); const url = req.url(); const m = req.method();
     const J = x => rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(x) });
+    // 作業者はスタッフマスタ（公開VIEW staff_public）から読む。ソース直書きの名簿はP0-5で除去したので、ここで渡す
+    if (/\/staff_public/.test(url)) return J([{ id: 's1', name: 'テスト作業者' }]);
     if (m === 'POST' && /\/cleaning_logs/.test(url)) { posted.push(JSON.parse(req.postData() || '{}')); return J({}, 201); }
     return J([]);
   });

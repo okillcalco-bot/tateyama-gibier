@@ -33,7 +33,7 @@ const path = require('path');
     const J = x => rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(x) });
     if (m === 'GET' && /\/retail_outlets\b/.test(url)) return J([OUTLET]);
     if (m === 'GET' && /\/products\b/.test(url)) return J([PROD_120, PROD_250]);
-    if (m === 'GET' && /\/staff\b/.test(url)) return J([{ name: 'テスト職員' }]);
+    if (m === 'GET' && /\/staff(_public)?\b/.test(url)) return J([{ name: 'テスト職員' }]);  // P0-2 で staff_public を読む
     if (m === 'GET' && /\/product_movements\b/.test(url)) {
       if (/movement_type=eq\.店頭販売/.test(url)) return J([]); // 売れゆきサマリー用
       return J(movements.map(x => ({ ...x })));
