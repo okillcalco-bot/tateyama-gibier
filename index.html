@@ -970,6 +970,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           <button class="btn" onclick="halfFinderOpen()">🔍 タグなし半身を探す</button>
           <button class="btn" onclick="indShowTrash()" id="indTrashBtn">🗑 削除履歴</button>
           <span style="display:inline-flex;gap:4px;align-items:center;"><input class="form-input" type="month" id="ind-photo-month" title="写真をダウンロードする捕獲月（チェックした個体があればそちらを優先）" style="max-width:150px;padding:6px 8px;"><button class="btn" id="indPhotoZipBtn" onclick="indPhotosZip()">📷 写真をダウンロード</button></span>
+          <button class="btn" onclick="indPrintRadMemos()" title="チェックした個体（無ければ捕獲日を指定）の検体メモをA4・24枚で印刷">🧪 検体メモ印刷</button>
           <button class="btn btn-danger" id="indBulkDelBtn" style="display:none;" onclick="indBulkDelete()">選択削除</button>
           <button class="btn btn-primary" onclick="indOpenNew()">＋ 新規登録</button>
         </div>
@@ -10108,6 +10109,48 @@ async function indPhotosZip(onlyLabel) {
   indSaveBlob(makeZip(out), zipName);
   if (failed.length) toast(`${out.length}枚をZIPにしました。取得できなかった写真が${failed.length}枚あります: ${failed.join(', ')}`, 'error');
   else toast(`${out.length}枚の写真をZIPにしました`);
+}
+/* 放射能検査の検体メモ（2026-10-17 沖「日にち・通し番号・個体番号・捕獲者を表示した紙をA4で24個体分」）
+   手書きしていた検体メモ（10/13・604・T383・鈴木政孝）を一覧から印刷する。普通紙A4を3列×8段に区切り、切り取り線で切って使う。
+   対象: チェックした個体 → 無ければ捕獲日（1日 or 「開始〜終了」）を聞く。並びは通し番号順。 */
+const RAD_MEMO_SHEET = { cols:3, rows:8, w:70, h:37.125 };
+function radMemoCell(i) {
+  const d = String(i.capture_date || '').match(/^\d{4}-(\d{2})-(\d{2})/);
+  const date = d ? `${+d[1]}/${+d[2]}` : '日付なし';
+  const serial = i.serial_number != null ? String(i.serial_number) : '';
+  const short = String(i.label_id || '').replace(/^TGC-\d{2}-/, '');
+  const hunter = String(i.hunter_name || '').trim();
+  const hsz = hunter.length > 7 ? 12 : hunter.length > 5 ? 15 : 18;
+  return `<div class="memo"><div class="dt">${esc2(date)}</div><div class="sn">${esc2(serial) || '&nbsp;'}</div><div class="id">${esc2(short)}</div><div class="hn" style="font-size:${hsz}pt">${esc2(hunter) || '捕獲者未記入'}</div></div>`;
+}
+function indPrintRadMemos() {
+  const checked = [...document.querySelectorAll('.ind-chk:checked')].map(c => c.dataset.id);
+  let inds;
+  if (checked.length) inds = checked.map(id => indCache.get(id)).filter(Boolean);
+  else {
+    const latest = indAllData.map(i => i.capture_date).filter(Boolean).sort().pop() || new Date().toISOString().slice(0, 10);
+    const ans = prompt('検体メモを印刷する捕獲日を入れてください。\n期間なら「2026-10-13〜2026-10-16」のように。\n（一覧でチェックした個体があれば、そちらを印刷します）', latest);
+    if (ans == null) return;
+    const ds = String(ans).match(/\d{4}-\d{1,2}-\d{1,2}/g) || [];
+    if (!ds.length) { toast('日付が読めませんでした（例: 2026-10-13）', 'error'); return; }
+    const norm = s => s.replace(/-(\d)(?=-|$)/g, '-0$1');
+    const from = norm(ds[0]), to = norm(ds[1] || ds[0]);
+    inds = indAllData.filter(i => i.capture_date && i.capture_date >= from && i.capture_date <= to);
+  }
+  if (!inds.length) { toast('印刷する個体がありません', 'error'); return; }
+  inds = inds.slice().sort((a, b) => (a.serial_number ?? 1e9) - (b.serial_number ?? 1e9) || String(a.label_id).localeCompare(String(b.label_id)));
+  const S = RAD_MEMO_SHEET, per = S.cols * S.rows;
+  const sheets = []; for (let k = 0; k < inds.length; k += per) sheets.push(inds.slice(k, k + per));
+  const css = `@page{size:A4;margin:0} html,body{margin:0;padding:0} body{font-family:"Noto Sans JP","Yu Gothic","Hiragino Sans",sans-serif;color:#000}
+    .sheet{width:210mm;height:297mm;box-sizing:border-box;display:grid;grid-template-columns:repeat(${S.cols},${S.w}mm);grid-auto-rows:${S.h}mm;align-content:start;page-break-after:always;overflow:hidden}
+    .sheet:last-child{page-break-after:auto}
+    .memo{box-sizing:border-box;width:${S.w}mm;height:${S.h}mm;border-right:.2mm dashed #999;border-bottom:.2mm dashed #999;display:flex;flex-direction:column;justify-content:center;align-items:center;line-height:1.15;overflow:hidden;text-align:center}
+    .memo:nth-child(3n){border-right:none}
+    .dt,.sn,.id{font-size:18pt;font-weight:700} .id{letter-spacing:.06em} .hn{font-weight:700;white-space:nowrap}`;
+  const w = window.open('', '_blank'); if (!w) { toast('ポップアップがブロックされました。許可してもう一度押してください', 'error'); return; }
+  w.document.write(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>放射能検査 検体メモ</title><style>${css}</style></head><body>${sheets.map(sh => `<div class="sheet">${sh.map(radMemoCell).join('')}</div>`).join('')}<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script></body></html>`);
+  w.document.close();
+  toast(`検体メモ ${inds.length}頭分（A4 ${sheets.length}枚）を印刷します`);
 }
 function indPhotoStrip(i) {
   const ps = indPhotoList(i);
