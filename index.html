@@ -10031,10 +10031,12 @@ function indPhotoList(i) {
   add(i.photo_extra, 'その他');
   return out;
 }
-// ダウンロード用のファイル名: 個体番号_種類(_連番).拡張子（市役所提出用に個体番号で並ぶように）
+// ダウンロード用のファイル名: 通し番号_個体番号_種類(_連番).拡張子
+// 通し番号を頭に付ける（2026-10-18 沖）。T/M が混ざっても搬入順に並ぶよう3桁ゼロ埋め。通し番号が無い個体は個体番号から。
 function indPhotoFiles(i) {
   const ps = indPhotoList(i);
-  const base = p => `${i.label_id}_${p.label.replace(/[（）()\s]/g, '')}`;
+  const sn = i.serial_number != null && i.serial_number !== '' ? String(i.serial_number).padStart(3, '0') + '_' : '';
+  const base = p => `${sn}${i.label_id}_${p.label.replace(/[（）()\s]/g, '')}`;
   const total = {}; ps.forEach(p => { total[base(p)] = (total[base(p)] || 0) + 1; });
   const seen = {};
   return ps.map(p => {
