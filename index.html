@@ -10113,14 +10113,16 @@ async function indPhotosZip(onlyLabel) {
 /* 放射能検査の検体メモ（2026-10-17 沖「日にち・通し番号・個体番号・捕獲者を表示した紙をA4で24個体分」）
    手書きしていた検体メモ（10/13・604・T383・鈴木政孝）を一覧から印刷する。普通紙A4を3列×8段に区切り、切り取り線で切って使う。
    対象: チェックした個体 → 無ければ捕獲日（1日 or 「開始〜終了」）を聞く。並びは通し番号順。 */
-const RAD_MEMO_SHEET = { cols:3, rows:8, w:70, h:37.125 };
+// 家庭用プリンタは用紙の端3〜5mmを刷れないため、周囲5mmを空けて 200×287mm を3×8に割る
+const RAD_MEMO_SHEET = { cols:3, rows:8, m:5, w:200/3, h:287/8 };
 function radMemoCell(i) {
   const d = String(i.capture_date || '').match(/^\d{4}-(\d{2})-(\d{2})/);
   const date = d ? `${+d[1]}/${+d[2]}` : '日付なし';
   const serial = i.serial_number != null ? String(i.serial_number) : '';
   const short = String(i.label_id || '').replace(/^TGC-\d{2}-/, '');
   const hunter = String(i.hunter_name || '').trim();
-  const hsz = hunter.length > 7 ? 12 : hunter.length > 5 ? 15 : 18;
+  // 文字はできるだけ大きく（2026-10-18 沖）: 4行で高さ35.9mmを使い切る23pt。捕獲者名は幅62mmに収まる大きさまで縮める（全角1字≒1em）
+  const hsz = Math.min(23, Math.floor(62 * 2.835 / Math.max(1, hunter.length) * 10) / 10);
   return `<div class="memo"><div class="dt">${esc2(date)}</div><div class="sn">${esc2(serial) || '&nbsp;'}</div><div class="id">${esc2(short)}</div><div class="hn" style="font-size:${hsz}pt">${esc2(hunter) || '捕獲者未記入'}</div></div>`;
 }
 function indPrintRadMemos() {
@@ -10142,11 +10144,10 @@ function indPrintRadMemos() {
   const S = RAD_MEMO_SHEET, per = S.cols * S.rows;
   const sheets = []; for (let k = 0; k < inds.length; k += per) sheets.push(inds.slice(k, k + per));
   const css = `@page{size:A4;margin:0} html,body{margin:0;padding:0} body{font-family:"Noto Sans JP","Yu Gothic","Hiragino Sans",sans-serif;color:#000}
-    .sheet{width:210mm;height:297mm;box-sizing:border-box;display:grid;grid-template-columns:repeat(${S.cols},${S.w}mm);grid-auto-rows:${S.h}mm;align-content:start;page-break-after:always;overflow:hidden}
+    .sheet{width:210mm;height:297mm;box-sizing:border-box;padding:${S.m}mm;display:grid;grid-template-columns:repeat(${S.cols},${S.w}mm);grid-auto-rows:${S.h}mm;align-content:start;page-break-after:always;overflow:hidden}
     .sheet:last-child{page-break-after:auto}
-    .memo{box-sizing:border-box;width:${S.w}mm;height:${S.h}mm;border-right:.2mm dashed #999;border-bottom:.2mm dashed #999;display:flex;flex-direction:column;justify-content:center;align-items:center;line-height:1.15;overflow:hidden;text-align:center}
-    .memo:nth-child(3n){border-right:none}
-    .dt,.sn,.id{font-size:18pt;font-weight:700} .id{letter-spacing:.06em} .hn{font-weight:700;white-space:nowrap}`;
+    .memo{box-sizing:border-box;width:${S.w}mm;height:${S.h}mm;outline:.2mm dashed #999;outline-offset:-.1mm;display:flex;flex-direction:column;justify-content:center;align-items:center;line-height:1.05;overflow:hidden;text-align:center}
+    .dt,.sn,.id{font-size:23pt;font-weight:700} .id{letter-spacing:.04em} .hn{font-weight:700;white-space:nowrap}`;
   const w = window.open('', '_blank'); if (!w) { toast('ポップアップがブロックされました。許可してもう一度押してください', 'error'); return; }
   w.document.write(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>放射能検査 検体メモ</title><style>${css}</style></head><body>${sheets.map(sh => `<div class="sheet">${sh.map(radMemoCell).join('')}</div>`).join('')}<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script></body></html>`);
   w.document.close();
