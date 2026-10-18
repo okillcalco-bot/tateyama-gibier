@@ -18,7 +18,7 @@ const path = require('path');
   const IMG = 'https://clpdyrehdgzgiidbfucj.supabase.co/storage/v1/object/public/capture-photos/TGC-08-_067/ar-board-1.jpg';
   const INDS = [
     { label_id: 'TGC-08-キ067', species: 'キョン', capture_date: '2026-10-01', image_url: IMG, deleted_at: null },
-    { label_id: 'TGC-08-T370', species: 'イノシシ', capture_date: '2026-10-07', image_url: null, photo_tail_before: 'TGC-08-T370/tail-before.jpg', photo_extra: '["TGC-08-T370/a.jpg","TGC-08-T370/b.jpg"]', deleted_at: null },
+    { label_id: 'TGC-08-T370', serial_number: 94, species: 'イノシシ', capture_date: '2026-10-07', image_url: null, photo_tail_before: 'TGC-08-T370/tail-before.jpg', photo_extra: '["TGC-08-T370/a.jpg","TGC-08-T370/b.jpg"]', deleted_at: null },
     { label_id: 'TGC-08-T369', species: 'イノシシ', capture_date: '2026-10-07', image_url: null, deleted_at: null },
   ];
   await page.route('**/*', r => {
@@ -63,7 +63,7 @@ const path = require('path');
   // file:// では Playwright の suggestedFilename が 'download' になるので、a.download の値を記録して測る
   await page.evaluate(() => { window.__dl = []; const c = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () { if (this.download) window.__dl.push(this.download); return c.call(this); }; });
   const names = await page.evaluate(() => indPhotoFiles(indCache.get('TGC-08-T370')).map(f => f.name));
-  T('ファイル名: 個体番号_種類（同じ種類は連番）', JSON.stringify(names) === JSON.stringify(['TGC-08-T370_尻尾切る前.jpg', 'TGC-08-T370_その他_1.jpg', 'TGC-08-T370_その他_2.jpg']), JSON.stringify(names));
+  T('ファイル名: 通し番号(3桁)_個体番号_種類（同じ種類は連番）', JSON.stringify(names) === JSON.stringify(['094_TGC-08-T370_尻尾切る前.jpg', '094_TGC-08-T370_その他_1.jpg', '094_TGC-08-T370_その他_2.jpg']), JSON.stringify(names));
   const dlBtns = await page.evaluate(() => { indLifeOpen('TGC-08-T370'); return new Promise(r => setTimeout(() => r([...document.querySelectorAll('#ind-life-body button')].map(b => b.textContent.trim()).filter(t => /⬇/.test(t))), 400)); });
   T('一生に1枚ずつの ⬇ と「まとめてZIP」', dlBtns.length === 4 && dlBtns.includes('⬇ まとめてZIP'), JSON.stringify(dlBtns));
   const [d1] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => indPhotoDownload('TGC-08-キ067', 0))]);
@@ -75,7 +75,7 @@ const path = require('path');
   const zp = await dz.path(); const buf = require('fs').readFileSync(zp);
   const zipNames = []; for (let o = 0; o + 4 < buf.length; o++) { if (buf.readUInt32LE(o) === 0x02014b50) { const nl = buf.readUInt16LE(o + 28); zipNames.push(buf.slice(o + 46, o + 46 + nl).toString('utf8')); } }
   const nz = await page.evaluate(() => window.__dl.slice(-1)[0]);
-  T('月（2026-10）でZIP: 2頭4枚・名前は個体番号から', nz === '個体写真_2026-10_4枚.zip' && zipNames.length === 4 && zipNames.includes('TGC-08-キ067_立ち会い写真.jpg'), nz + ' ' + JSON.stringify(zipNames));
+  T('月（2026-10）でZIP: 2頭4枚・名前は通し番号_個体番号（通し番号が無いキョンは個体番号から）', nz === '個体写真_2026-10_4枚.zip' && zipNames.length === 4 && zipNames.includes('TGC-08-キ067_立ち会い写真.jpg') && zipNames.includes('094_TGC-08-T370_その他_2.jpg'), nz + ' ' + JSON.stringify(zipNames));
   // チェックした個体が優先
   await page.evaluate(() => { document.querySelectorAll('.ind-chk').forEach(c => { c.checked = c.dataset.id === 'TGC-08-キ067'; }); });
   const [dz2] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => indPhotosZip())]);
