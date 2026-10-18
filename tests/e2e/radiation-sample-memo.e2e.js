@@ -1,6 +1,6 @@
 // 個体一覧（index.html）: 放射能検査の検体メモ印刷（A4普通紙・3列×8段=24枚）
 //   手書きの検体メモ（10/13・604・T383・鈴木政孝）と同じ4行を、一覧から印刷する。
-//   実寸で描画して、1枚に24個・各メモ70×37.125mm・文字がはみ出さないことを測る。
+//   実寸で描画して、1枚に24個・各メモ66.7×35.9mm（周囲5mmはプリンタが刷れないので空ける）・文字がはみ出さないことを測る。
 const pw = (() => { try { return require('/opt/node22/lib/node_modules/playwright'); } catch (e) { return require('playwright'); } })();
 const { chromium } = pw;
 const path = require('path');
@@ -64,13 +64,23 @@ const INDS = [
     const sh = document.querySelector('.sheet').getBoundingClientRect();
     const memos = [...document.querySelectorAll('.sheet')[0].querySelectorAll('.memo')];
     const rs = memos.map(e => e.getBoundingClientRect());
-    const over = memos.filter(e => [...e.children].some(c => c.scrollWidth > e.clientWidth + 1 || c.getBoundingClientRect().right > e.getBoundingClientRect().right + 0.5 || c.getBoundingClientRect().left < e.getBoundingClientRect().left - 0.5) || e.scrollHeight > e.clientHeight + 1).map(e => e.querySelector('.id').textContent);
-    return { sw: sh.width / PX, shh: sh.height / PX, n: memos.length, w: rs[0].width / PX, h: rs[0].height / PX, lastBottom: (rs[23].bottom - sh.top) / PX, lastRight: (rs[23].right - sh.left) / PX, over };
+    // 文字の実際の描画範囲（Range）で測る。flexの中央寄せは上にもはみ出すため上下左右とも見る
+    const inkOut = (e, c) => { const r = document.createRange(); r.selectNodeContents(c); const b = r.getBoundingClientRect(), m = e.getBoundingClientRect(); return b.left < m.left - 0.5 || b.right > m.right + 0.5 || b.top < m.top - 0.5 || b.bottom > m.bottom + 0.5; };
+    const over = [...document.querySelectorAll('.memo')].filter(e => [...e.children].some(c => inkOut(e, c))).map(e => e.querySelector('.id').textContent);
+    const pt = sel => parseFloat(getComputedStyle(document.querySelector(sel)).fontSize) * 72 / 96;
+    const minHn = Math.min(...[...document.querySelectorAll('.memo')].map(e => parseFloat(getComputedStyle(e.querySelector('.hn')).fontSize) * 72 / 96));
+    // 全シートの文字が用紙の端から何mm離れているか（家庭用プリンタの非印字域 3〜5mm を避ける）
+    let edge = 99;
+    document.querySelectorAll('.sheet').forEach(shEl => { const S = shEl.getBoundingClientRect(); shEl.querySelectorAll('.memo > div').forEach(c => { const r = document.createRange(); r.selectNodeContents(c); const b = r.getBoundingClientRect(); edge = Math.min(edge, (b.left - S.left) / PX, (S.right - b.right) / PX, (b.top - S.top) / PX, (S.bottom - b.bottom) / PX); }); });
+    return { edge, sw: sh.width / PX, shh: sh.height / PX, n: memos.length, w: rs[0].width / PX, h: rs[0].height / PX, lastBottom: (rs[23].bottom - sh.top) / PX, lastRight: (rs[23].right - sh.left) / PX, over, idPt: pt('.id'), hnPt: pt('.hn'), minHn };
   });
   T('用紙はA4（210×297mm）', Math.abs(m.sw - 210) < 0.5 && Math.abs(m.shh - 297) < 0.5, `${m.sw.toFixed(1)}×${m.shh.toFixed(1)}`);
-  T('1枚目に24個・各70×37.1mm', m.n === 24 && Math.abs(m.w - 70) < 0.3 && Math.abs(m.h - 37.125) < 0.3, `${m.n} ${m.w.toFixed(2)}×${m.h.toFixed(2)}`);
-  T('24個目が用紙内に収まる（右下 210×297mm 以内）', m.lastRight <= 210.3 && m.lastBottom <= 297.3, `${m.lastRight.toFixed(1)},${m.lastBottom.toFixed(1)}`);
-  T('どのメモも文字がはみ出さない（長い捕獲者名を含む）', m.over.length === 0, m.over.join(','));
+  T('1枚目に24個・各66.7×35.9mm', m.n === 24 && Math.abs(m.w - 200 / 3) < 0.3 && Math.abs(m.h - 35.875) < 0.3, `${m.n} ${m.w.toFixed(2)}×${m.h.toFixed(2)}`);
+  T('24個目の枠が右下5mmの余白の内側（205×292mm 以内）', m.lastRight <= 205.3 && m.lastBottom <= 292.3, `${m.lastRight.toFixed(1)},${m.lastBottom.toFixed(1)}`);
+  T('文字は用紙の端から5mm以上離れている（プリンタで切れない）', m.edge >= 5, `${m.edge.toFixed(1)}mm`);
+  T('どのメモも文字が上下左右にはみ出さない（長い捕獲者名を含む）', m.over.length === 0, m.over.join(','));
+  T('文字はできるだけ大きく: 日付・通し番号・個体番号 22pt以上、普通の名前（4字）も22pt以上', m.idPt >= 22 && m.hnPt >= 22, `${m.idPt}pt / ${m.hnPt}pt`);
+  T('10字の長い名前でも 16pt 以上は保つ（縮めすぎない）', m.minHn >= 16, `${m.minHn.toFixed(1)}pt`);
   T('pageerrorなし', errors.length === 0, errors.join(' / '));
 
   let pass = 0;
