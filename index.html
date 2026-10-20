@@ -661,6 +661,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
         </label>
         <button class="btn btn-danger" id="invBulkDelBtn" style="display:none;" onclick="invBulkDelete()">選択削除</button>
         <button class="btn" onclick="invShowTrash()" id="invTrashBtn">🗑 削除履歴</button>
+        <span id="inv-count" style="font-size:12.5px;color:var(--text2);"></span>
       </div>
       <!-- アクティブ在庫 -->
       <div id="inv-active-section" style="overflow-x:auto;">
@@ -3013,11 +3014,27 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 
 // PostgREST は1回の応答を最大1000行で切る（max-rows）。limit にそれより大きい数を書いても1000行しか来ない
 // （過年度ページが令和5の途中で止まって見えた原因・2026-09-17）。limit>1000 の GET は 1000行ずつ offset を進めて全部つなぐ。
-const SB_PAGE = 1000;
+// limit を書かない GET も同じく1000行で黙って切れていた（2026-10-18 確認: 在庫が1000行を超えると、ダッシュボードの
+// 在庫点数・重量が実際よりずっと少なく出ていた）。limit なしは「全件」とみなして同じく継ぎ足す。
+// 並び順の指定がないまま offset で継ぐと行が重複・欠落し得るので、1000行ちょうど来たときだけ id 順で取り直す。
+const SB_PAGE = 1000, SB_ALL = 100000;
 async function sbPaged(query, fetchOnce){
-  const m = /([?&])limit=(\d+)/.exec(query || '');
-  const want = m ? Number(m[2]) : 0;
-  if (!(want > SB_PAGE) || /[?&]offset=/.test(query)) return fetchOnce(query);
+  query = query || '';
+  if (/[?&]offset=/.test(query)) return fetchOnce(query);
+  const m = /([?&])limit=(\d+)/.exec(query);
+  if (!m) {
+    const first = await fetchOnce(query);
+    if (!Array.isArray(first) || first.length < SB_PAGE) return first;
+    let q = query;
+    if (!/[?&]order=/.test(q)) {
+      q += (q.includes('?') ? '&' : '?') + 'order=id.asc';
+      try { await fetchOnce(q.replace(/([?&])select=[^&]*/, '$1select=id') + '&limit=1'); }
+      catch (e) { q = query; }   // id 列がない表は元の並びのまま継ぐ
+    }
+    return sbPaged(q + (q.includes('?') ? '&' : '?') + 'limit=' + SB_ALL, fetchOnce);
+  }
+  const want = Number(m[2]);
+  if (!(want > SB_PAGE)) return fetchOnce(query);
   const out = []; let offset = 0;
   for (;;) {
     const lim = Math.min(SB_PAGE, want - out.length);
@@ -3028,6 +3045,17 @@ async function sbPaged(query, fetchOnce){
     offset += rows.length;
   }
 }
+// 件数だけを数える（行は取らない）。表示件数から合計を作らないために使う。失敗時は null
+async function sbCount(table, query = '?select=id') {
+  try {
+    const headers = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, Prefer: 'count=exact', Range: '0-0' };
+    const sk = staffKeyGet(); if (sk) headers['x-staff-key'] = sk;
+    const res = await fetch(`${SB_URL}/rest/v1/${table}${query}`, { method: 'GET', headers });
+    const m = /\/(\d+)$/.exec(res.headers.get('content-range') || '');
+    return res.ok && m ? Number(m[1]) : null;
+  } catch (e) { return null; }
+}
+const INV_LIST_LIMIT = 200;
 async function sb(method, table, body, query = '', opts = {}) {
   if (method === 'GET') return sbPaged(query, q => sbOnce(method, table, body, q, opts));
   return sbOnce(method, table, body, query, opts);
@@ -4264,7 +4292,7 @@ async function loadDashboard() {
   try {
     const [individuals, allInv, procLogs, ships] = await Promise.all([
       sb('GET', 'individuals', null, '?select=label_id&deleted_at=is.null'),
-      sb('GET', 'inventory', null, '?select=id,individual_id,part_name,weight,status,ident_code,updated_at,grade&deleted_at=is.null'),
+      sb('GET', 'inventory', null, '?select=id,individual_id,part_name,weight,status,ident_code,updated_at,grade,species&deleted_at=is.null'),
       sb('GET', 'processing_log', null, '?select=*&order=created_at.desc&limit=10'),
       sb('GET', 'shipments', null, '?select=*&order=created_at.desc&limit=10')
     ]);
@@ -4304,7 +4332,8 @@ async function loadDashboard() {
 
     const boar = {}, deer = {}, other = {};
     stock.forEach(item => {
-      const sp = speciesMap[item.individual_id] || '';
+      // 加工パック（tier 3）は個体番号を持たないので、在庫行の species を使う（個体に紐づく行は個体台帳と一致することを確認済み）
+      const sp = item.species || speciesMap[item.individual_id] || '';
       const p = item.part_name || 'その他';
       const w = parseFloat(item.weight) || 0;
       if (sp === 'イノシシ') { boar[p] = (boar[p] || 0) + w; }
@@ -4356,12 +4385,15 @@ async function loadInventory() {
     if (status) filters.push(`status=eq.${encodeURIComponent(status)}`);
     if (part) filters.push(`part_name=eq.${encodeURIComponent(part)}`);
     if (search) filters.push(`or=(ident_code.ilike.*${encodeURIComponent(search)}*,individual_id.ilike.*${encodeURIComponent(search)}*)`);
+    // 獣種は在庫行の species でDB側で絞る（2026-10-18 外部レビュー指摘の検証）。新しい200件を取ってから画面で絞っていたため、
+    // 古いシカ在庫が「シカ」で0件になり、加工パック（個体番号なし）は獣種で絞ると全部消えていた。
+    if (species) filters.push(`species=eq.${encodeURIComponent(species)}`);
 
-    // Can't easily filter by species without join, so we filter client-side
-    let q = '?select=*&deleted_at=is.null&order=created_at.desc&limit=200';
-    if (filters.length) q += '&' + filters.join('&');
+    const where = '&deleted_at=is.null' + (filters.length ? '&' + filters.join('&') : '');
+    const q = '?select=*' + where + '&order=created_at.desc&limit=' + INV_LIST_LIMIT;
 
-    let data = await sb('GET', 'inventory', null, q);
+    const [rows, total] = await Promise.all([sb('GET', 'inventory', null, q), sbCount('inventory', '?select=id' + where)]);
+    let data = rows;
 
     // Get species mapping
     const indIds = [...new Set(data.map(i => i.individual_id).filter(Boolean))];
@@ -4373,17 +4405,19 @@ async function loadInventory() {
       } catch(e) {}
     }
 
-    // Attach species
-    data.forEach(item => item._species = speciesMap[item.individual_id] || '-');
-
-    // Filter by species if selected
-    if (species) data = data.filter(i => i._species === species);
+    // Attach species（加工パックは個体を持たないので在庫行の species）
+    data.forEach(item => item._species = item.species || speciesMap[item.individual_id] || '-');
 
     invData = data;
     renderInventory();
+    // 件数は表示した行ではなくDBの全件数で出す。全件が出ていないときはそう書く
+    const cnt = document.getElementById('inv-count');
+    if (cnt) cnt.textContent = total == null ? `${data.length}件を表示`
+      : total > data.length ? `該当 ${total}件のうち新しい順に ${data.length}件を表示（絞り込むと全件出ます）` : `該当 ${total}件`;
 
-    // Populate part filter
-    const parts = [...new Set(data.map(i => i.part_name).filter(Boolean))];
+    // 部位の選択肢は、表示中の行ではなく（部位以外の）条件に合う全在庫から作る
+    const partWhere = where.replace(/&part_name=eq\.[^&]*/, '');
+    const parts = [...new Set((await sb('GET', 'inventory', null, '?select=part_name' + partWhere)).map(i => i.part_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ja'));
     const partSel = document.getElementById('inv-filter-part');
     const curVal = partSel.value;
     partSel.innerHTML = '<option value="">全て</option>' + parts.map(p => `<option value="${p}" ${p === curVal ? 'selected' : ''}>${p}</option>`).join('');
@@ -5187,7 +5221,7 @@ async function loadShipping() {
     container.innerHTML = html;
 
     // Load available inventory for assignment dropdowns
-    const stockItems = await sb('GET', 'inventory', null, `?status=eq.在庫&deleted_at=is.null&select=id,ident_code,part_name,weight,weight_kg,individual_id`);
+    const stockItems = await sb('GET', 'inventory', null, `?status=eq.在庫&deleted_at=is.null&select=id,ident_code,part_name,weight,weight_kg,individual_id,species`);
     window._shipStockById = {}; stockItems.forEach(i => { window._shipStockById[i.id] = i; });
     // Get species mapping
     const indIds = [...new Set(stockItems.map(i => i.individual_id).filter(Boolean))];
@@ -5203,7 +5237,7 @@ async function loadShipping() {
       const sp = sel.dataset.species;
       const part = sel.dataset.part;
       const matching = stockItems.filter(i => {
-        const itemSp = speciesMap[i.individual_id] || '';
+        const itemSp = i.species || speciesMap[i.individual_id] || '';   // 加工パックは在庫行の species
         // 行が「モモ」なら モモ（シンタマ）等のサブ部位も候補に出す（スキャンの部分一致と合わせる）
         return itemSp === sp && (i.part_name === part || String(i.part_name || '').startsWith(part + '（'));
       });
