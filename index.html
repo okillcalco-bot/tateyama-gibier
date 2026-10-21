@@ -2776,7 +2776,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
           ① 上の<strong>部位ボタン</strong>を押す<br>
           ② <strong>はかりに肉を載せて、はかり本体の「プリント」ボタンを押す</strong>（押すと右に重量が表示されます。載せただけでは表示されません）。はかりが無いときは右の「🔢 手動入力」で数字を入力<br>
           ③ 右の<strong>「登録」</strong>を押す → ラベルが自動印刷され、在庫に登録されます<br>
-          ・骨付き / 小売 / ランク / 冷凍庫は<strong>登録の前に</strong>上で選ぶ<br>
+          ・骨付き / 小売 / ランク / 冷凍庫は<strong>登録の前に</strong>上で選ぶ（<strong>骨付きは1パック登録するごとに OFF に戻ります</strong>）<br>
           ・続けて登録するときは、次の部位ボタンを押すだけ<br>
           ・ラベルの刷り直しは「🖨 ラベル印刷」、全部終わったら右下の「全部位完了」
         </div>
@@ -7122,6 +7122,9 @@ async function pmOnWeightReceived(weight_kg, plan) {
       grade: pmGrade,
       bone_in: pmBoneIn
     });
+    // 骨付きは1パックごとに OFF に戻す（2026-10-21 沖）。ON のまま残ると、後の部位すべてに「骨付き」が付く
+    //（10/21 T370: 最初のバラだけ骨付きのはずが、続く9パックのラベル・在庫も「骨付き」になった）
+    if (pmBoneIn) { pmBoneIn = false; try { pmRenderOptions(); pmUpdateSelectedPartDisplay(); } catch (e) {} }
     pmSaveSession(); // 作業途中もChrome再起動に耐えるよう都度保存
 
     // 5.5 ラベル未印刷なら自動で印刷（はかりの「プリント」ボタン経由の登録でも同時に印刷する）
