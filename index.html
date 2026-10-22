@@ -5187,7 +5187,8 @@ async function loadShipping() {
     container.innerHTML = html;
 
     // Load available inventory for assignment dropdowns
-    const stockItems = await sb('GET', 'inventory', null, `?status=eq.在庫&deleted_at=is.null&select=id,ident_code,part_name,weight,weight_kg,individual_id`);
+    // 在庫は1,000件を超えるので limit を付けて全件ページングする（付けないと先頭1,000件で切れ、候補から漏れる）。個体番号順に並べる
+    const stockItems = await sb('GET', 'inventory', null, `?status=eq.在庫&deleted_at=is.null&select=id,ident_code,part_name,weight,weight_kg,individual_id,species&order=ident_code.asc,id.asc&limit=20000`);
     window._shipStockById = {}; stockItems.forEach(i => { window._shipStockById[i.id] = i; });
     // Get species mapping
     const indIds = [...new Set(stockItems.map(i => i.individual_id).filter(Boolean))];
@@ -5199,14 +5200,18 @@ async function loadShipping() {
       } catch(e) {}
     }
 
+    const itemById = {};
+    Object.values(shipOrdersCache).forEach(c => (c.items || []).forEach(it => { itemById[it.id] = it; }));
     document.querySelectorAll('.assign-select').forEach(sel => {
-      const sp = sel.dataset.species;
-      const part = sel.dataset.part;
+      const row = itemById[sel.dataset.orderItemId] || { species: sel.dataset.species, part_name: sel.dataset.part };
+      const part = row.part_name;
       const matching = stockItems.filter(i => {
-        const itemSp = speciesMap[i.individual_id] || '';
-        // 行が「モモ」なら モモ（シンタマ）等のサブ部位も候補に出す（スキャンの部分一致と合わせる）
-        return itemSp === sp && (i.part_name === part || String(i.part_name || '').startsWith(part + '（'));
+        const invSp = i.species || speciesMap[i.individual_id] || '';   // 加工パックは個体を持たないので在庫行の species
+        // スキャンと同じ判定（ポータルの商品名「猪バラ」でも「バラ」の在庫が候補に出る。モモならサブ部位も）
+        return shipSpeciesOk(invSp, row) && shipPartOk(i.part_name, part);
       });
+      // 候補が無ければ、何の部位を探して無かったのかを書く（空のドロップダウンだと壊れているのか在庫が無いのか分からない）
+      if (!matching.length) { const o = sel.querySelector('option'); if (o) o.textContent = `在庫なし（${shipItemParts(part).join('・')}）`; }
       matching.forEach(i => {
         const opt = document.createElement('option');
         opt.value = i.id;
@@ -5274,6 +5279,45 @@ async function shipScanOfferPacks(indBase, headline) {
    「このパックの分（実重量×単価）」と「残り（未割当）」に分ける。残りの行に次のパックを読み取れる。
    足りた・超えたときは、その行を実重量で確定する。重量の無い行（本数など）はこれまでどおり1行1パック。 */
 const SHIP_SPLIT_MIN_KG = 0.05;   // これより小さい残りは分けない（はかりの誤差）
+/* 注文の明細名と在庫の部位名を照らす（2026-10-22 沖「注文入ってるのの割り当てが変。個別で割り当てられない」）。
+   ポータルの注文は明細名が商品名（「猪バラ」「猪カタ（ウデ）」「猪タン（舌）」「猪ロース（上）」…）で入るため、
+   「明細名＝部位名」や「部位名が明細名を含む」の比べ方ではスキャンも手動割当も全部弾かれていた。
+   商品→部位の正本は portal_product_parts（公開キーでは読めない）。ここでは同じ対応を「猪/鹿を外す・等級（上/極上）を外す・
+   言い換え表」で作る。全55商品で portal_product_parts と一致することを tests/e2e/ship-portal-part-match で確かめている。 */
+const SHIP_PART_ALIAS = {
+  'カタ（ウデ）': ['カタ'], 'タン（舌）': ['タン'], 'ハツ（心臓）': ['ハツ'], 'レバ（肝臓）': ['レバー', 'レバ'], 'レバー（肝臓）': ['レバー'],
+  'フワ（肺）': ['フワ'], 'マメ（腎臓）': ['マメ'], 'チレ（脾臓）': ['チレ'],
+  '粗挽きミンチ': ['ミンチ肉（粗挽き）'], 'ミンチ原料用': ['ミンチ用'], 'ミンチ': ['ミンチ用', 'ミンチ肉（粗挽き）'],
+  'ペットフード・骨あり': ['ペットフード用（あり）'], 'ペットフード・骨なし': ['ペットフード用（なし）'],
+  '内部用途（味肉用）': ['味肉用'], '希少部位（チチカブ）': ['チチカブ'], 'キョン商品（ロース）': ['ロース'],
+};
+const shipHasBone = s => /^骨付き?|骨付き?$/.test(s);
+const shipStripBone = s => s.replace(/^骨付き?\s*/, '').replace(/\s*骨付き?$/, '');
+function shipItemParts(name) {
+  let t = shipStripBone(String(name || '').trim());
+  if (/（一頭分・ご希望）$/.test(t)) return ['枝肉（全体）'];
+  // 等級（上）（極上）を外すのはポータルの商品名（猪〜・鹿〜）だけ。手入力の「枝肉（上）」は上半身のことで等級ではない
+  if (/^(猪|鹿)/.test(t)) t = t.replace(/^(猪|鹿)/, '').replace(/（(上|極上|並)）$/, '');
+  return [t, ...(SHIP_PART_ALIAS[t] || [])].filter(Boolean);
+}
+// 在庫側の古い書き方（上ロース・ロース骨付・内モモ…）を今の部位名に寄せる
+const SHIP_INV_ALIAS = { '内モモ': 'モモ（ウチ）', '外モモ': 'モモ（ソト）', 'シンタマ': 'モモ（シンタマ）' };
+function shipPartOk(invPart, itemPartName) {
+  const raw = String(invPart || '').trim();
+  // 「骨付き」の行には骨付きのパックだけ（骨なしは当てない）。骨付きのパックは普通の行にも当てられる（これまでどおり）
+  if (shipHasBone(String(itemPartName || '').trim()) && !shipHasBone(raw)) return false;
+  let p = shipStripBone(raw).replace(/^(極上|上)(?=\S)/, '');
+  p = SHIP_INV_ALIAS[p] || p;
+  if (!p) return false;
+  // 明細が「モモ」なら モモ（ソト）等のサブ部位、「バラ」なら「バラ [小売]」も当てられる。「ロース」の明細に「肩ロース」は当てない
+  return shipItemParts(itemPartName).some(a => p === a || p.startsWith(a + '（') || p.startsWith(a + ' ['));
+}
+// 鳥獣種。ポータルの「キョン（一頭分・ご希望）」等は明細が「中型獣」、在庫は「キョン」なので商品名の頭で見る
+function shipSpeciesOk(invSp, item) {
+  const s = item && item.species;
+  if (!s || !invSp || s === invSp) return true;
+  return s === '中型獣' && String(item.part_name || '').startsWith(invSp);
+}
 async function shipAssignPackToItem(orderId, item, inv, via) {
   const w = Math.round((parseFloat(inv.weight_kg != null ? inv.weight_kg : inv.weight) || 0) * 1000) / 1000;
   const need = parseFloat(item.requested_kg != null ? item.requested_kg : (item.weight_kg != null ? item.weight_kg : item.weight));
@@ -5404,14 +5448,14 @@ async function handleShippingScan() {
     const unassigned = items.filter(i => !i.inventory_id);
     if (!unassigned.length) { shipScanFail(`注文 ${orderLabel} は全商品行が割当済みです。出荷確定に進んでください。`); return; }
 
-    const speciesOk = unassigned.filter(i => !i.species || !invSpecies || i.species === invSpecies);
+    const speciesOk = unassigned.filter(i => shipSpeciesOk(invSpecies, i));
     if (!speciesOk.length) {
       shipScanFail(`鳥獣種が一致しません。在庫「${code}」は ${invSpecies || '不明'} ですが、未割当の商品行は ${[...new Set(unassigned.map(i => i.species || '-'))].join('・')} です。`);
       return;
     }
     const invPart = inv.part_name || '';
     const target = speciesOk.find(i => i.part_name === invPart)
-      || speciesOk.find(i => i.part_name && invPart && invPart.includes(i.part_name));
+      || speciesOk.find(i => shipPartOk(invPart, i.part_name));
     if (!target) {
       shipScanFail(`部位が一致しません。在庫「${code}」は「${invPart || '-'}」ですが、未割当の商品行は ${[...new Set(speciesOk.map(i => i.part_name || '-'))].join('・')} です。`);
       return;
