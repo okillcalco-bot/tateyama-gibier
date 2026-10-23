@@ -51,8 +51,8 @@ language plpgsql as $$
 begin
   raise exception '銀行明細は取込後に変更・削除できません（消込の取消は payments 側で行う）';
 end $$;
-drop trigger if exists bank_transactions_immutable on public.bank_transactions;
-create trigger bank_transactions_immutable before update or delete on public.bank_transactions
+-- （drop trigger を書かない: MCP 経由の適用では DROP を含む文が確認待ちで止まるため）
+create or replace trigger bank_transactions_immutable before update or delete on public.bank_transactions
   for each row execute function public.bank_transactions_immutable();
 
 -- ── 振込名義のゆらぎ（正規化した名義 → 取引先）──
@@ -101,8 +101,9 @@ alter table public.payments add column if not exists matched_at timestamptz;
 alter table public.payments add column if not exists matched_by text;
 create unique index if not exists payments_txn_doc_uidx on public.payments (bank_transaction_id, document_id) where bank_transaction_id is not null;
 
-alter table public.customers add column if not exists department text check (department in ('gibier','arco'));
-alter table public.documents add column if not exists department text check (department in ('gibier','arco'));
+-- 部門（値の制約は 20261023_finance_cards_receipts.sql で departments 表への参照として付ける）
+alter table public.customers add column if not exists department text;
+alter table public.documents add column if not exists department text;
 
 -- ── 公開キーから読めないようにする（RLS 有効・ポリシーなし）──
 alter table public.bank_profiles enable row level security;
@@ -138,55 +139,9 @@ exception when others then return null;
 end $$;
 
 -- ── 1. 銀行CSV取込（プレビュー／確定）──
--- p_rows: [{row_no, txn_date:'YYYY-MM-DD', description, amount_in, amount_out, balance}]（画面のCSVパーサが銀行の列定義で解釈したもの）
+-- staff_bank_import は口座（bank_accounts）を指定する形で 20261023_finance_cards_receipts.sql に定義する。
+-- p_rows: [{row_no, txn_date:'YYYY-MM-DD', description, amount_in, amount_out, balance}]（画面のパーサが解釈したもの）
 -- 1行でも解釈できない行があれば何も入れない（fail-closed）。重複は raw_hash で数え、確定時は増やさない。
-create or replace function public.staff_bank_import(p_staff_key text, p_bank_name text, p_file_name text, p_rows jsonb, p_commit boolean, p_by text default null)
-returns jsonb language plpgsql volatile security definer set search_path = public, extensions as $$
-declare v_prof uuid; v_bad jsonb; v_total int; v_dup int; v_batch uuid; v_new int;
-begin
-  if not staff_key_ok(p_staff_key) then raise exception 'スタッフキーが違います'; end if;
-  if jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) = 0 then raise exception '明細がありません'; end if;
-  select id into v_prof from bank_profiles where bank_name = p_bank_name;
-
-  -- 解釈できない行（日付・金額の形、入出金の両方0）を全部数える
-  select coalesce(jsonb_agg(r->'row_no'), '[]'::jsonb) into v_bad
-    from jsonb_array_elements(p_rows) r
-   where _recon_safe_date(r->>'txn_date') is null
-      or coalesce(r->>'amount_in','0') !~ '^\d{1,9}$' or coalesce(r->>'amount_out','0') !~ '^\d{1,9}$'
-      or (r->>'balance' is not null and r->>'balance' !~ '^-?\d{1,15}$')
-      or (coalesce(r->>'amount_in','0') ~ '^0+$' and coalesce(r->>'amount_out','0') ~ '^0+$');
-  if jsonb_array_length(v_bad) > 0 then
-    return jsonb_build_object('ok', false, 'invalid_rows', v_bad, 'row_count', jsonb_array_length(p_rows));
-  end if;
-
-  drop table if exists _rows;
-  create temp table _rows on commit drop as
-  select (r->>'row_no')::int row_no, (r->>'txn_date')::date txn_date, btrim(coalesce(r->>'description','')) description,
-         coalesce((r->>'amount_in')::int,0) amount_in, coalesce((r->>'amount_out')::int,0) amount_out,
-         (r->>'balance')::bigint balance
-    from jsonb_array_elements(p_rows) r;
-  alter table _rows add column raw_hash text;
-  update _rows t set raw_hash = h.hash from (
-    select row_no, encode(digest(concat_ws('|', txn_date, description, amount_in, amount_out, coalesce(balance::text,''),
-             row_number() over (partition by txn_date, description, amount_in, amount_out, balance order by row_no) - 1), 'sha256'), 'hex') hash
-      from _rows) h where h.row_no = t.row_no;
-
-  select count(*) into v_total from _rows;
-  select count(*) into v_dup from _rows t where exists (select 1 from bank_transactions b where b.raw_hash = t.raw_hash);
-  if not p_commit then
-    return jsonb_build_object('ok', true, 'preview', true, 'row_count', v_total, 'new_count', v_total - v_dup, 'dup_count', v_dup);
-  end if;
-
-  insert into import_batches (file_name, bank_profile_id, row_count, new_count, dup_count, imported_by)
-  values (p_file_name, v_prof, v_total, 0, v_dup, p_by) returning id into v_batch;
-  insert into bank_transactions (txn_date, description, amount_in, amount_out, balance, raw_hash, import_batch_id, row_no)
-  select txn_date, description, amount_in, amount_out, balance, raw_hash, v_batch, row_no from _rows
-  on conflict (raw_hash) do nothing;
-  get diagnostics v_new = row_count;
-  update import_batches set new_count = v_new, dup_count = v_total - v_new where id = v_batch;
-  insert into recon_events (kind, detail, created_by) values ('import', jsonb_build_object('batch', v_batch, 'rows', v_total, 'new', v_new), p_by);
-  return jsonb_build_object('ok', true, 'preview', false, 'batch_id', v_batch, 'row_count', v_total, 'new_count', v_new, 'dup_count', v_total - v_new);
-end $$;
 
 -- ── 2. 消込に使うデータ（未消込の入金明細・未入金の請求書・名義）──
 create or replace function public.staff_recon_snapshot(p_staff_key text)
@@ -364,11 +319,11 @@ begin
                        where p.paid_date between v_from and v_to) u group by dep) z), '[]'));
 end $$;
 
-revoke all on function public.staff_bank_import(text,text,text,jsonb,boolean,text), public.staff_recon_snapshot(text),
+revoke all on function public.staff_recon_snapshot(text),
   public.staff_recon_confirm(text,uuid,jsonb,text,text,numeric,text,text), public.staff_recon_undo(text,uuid,text),
   public.staff_unpaid_list(text,date), public.staff_dunning_record(text,uuid,uuid[],text,text),
   public.staff_alias_set(text,uuid,text,boolean,text), public.staff_recon_month(text,text) from public;
-grant execute on function public.staff_bank_import(text,text,text,jsonb,boolean,text), public.staff_recon_snapshot(text),
+grant execute on function public.staff_recon_snapshot(text),
   public.staff_recon_confirm(text,uuid,jsonb,text,text,numeric,text,text), public.staff_recon_undo(text,uuid,text),
   public.staff_unpaid_list(text,date), public.staff_dunning_record(text,uuid,uuid[],text,text),
   public.staff_alias_set(text,uuid,text,boolean,text), public.staff_recon_month(text,text) to anon, authenticated;

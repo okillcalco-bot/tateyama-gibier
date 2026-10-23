@@ -24,9 +24,7 @@ insert into public.departments (code, name, short_name, sort, report_to) values
   ('gibier', '館山ジビエセンター', 'ジビエ', 10, '館山市（通帳の報告義務）'),
   ('arco', '合同会社アルコ（本体）', 'アルコ', 20, null)
 on conflict (code) do nothing;
--- 20261021 で固定の check だった部門列を、部門表への参照に変える（まだ本番未適用なので壊れない）
-alter table public.customers drop constraint if exists customers_department_check;
-alter table public.documents drop constraint if exists documents_department_check;
+-- 20261021 で足した部門列（customers / documents）に、部門表への参照を付ける
 do $$ begin
   if not exists (select 1 from pg_constraint where conname = 'customers_department_fkey') then
     alter table public.customers add constraint customers_department_fkey foreign key (department) references public.departments(code);
@@ -102,8 +100,7 @@ create table if not exists public.card_transactions (
   created_at timestamptz not null default now()
 );
 create index if not exists card_transactions_date_idx on public.card_transactions (txn_date);
-drop trigger if exists card_transactions_immutable on public.card_transactions;
-create trigger card_transactions_immutable before update or delete on public.card_transactions
+create or replace trigger card_transactions_immutable before update or delete on public.card_transactions
   for each row execute function public.bank_transactions_immutable();
 
 -- ── 4. 明細の分類（銀行の出金・ジビエ以外の入金・カード利用に勘定科目・部門を付ける。明細そのものは変えない）──
@@ -456,8 +453,7 @@ begin
 end $$;
 
 -- 通帳の取込（口座を指定。プレビュー → 確定、重複は増えない、読めない行が1つでもあれば入れない）
--- 20261021 の口座なしの版は置き換える（同じ内容でも口座が違えば別の明細）
-drop function if exists public.staff_bank_import(text, text, text, jsonb, boolean, text);
+-- 同じ内容でも口座が違えば別の明細（raw_hash に口座を含める）
 create or replace function public.staff_bank_import(p_staff_key text, p_account uuid, p_file_name text, p_rows jsonb, p_commit boolean, p_by text default null)
 returns jsonb language plpgsql volatile security definer set search_path = public, extensions as $$
 declare v_acc bank_accounts%rowtype; v_prof uuid; v_bad jsonb; v_total int; v_dup int; v_batch uuid; v_new int;
