@@ -6,7 +6,7 @@ $$ insert into _t (name, ok, got) values (p_name, coalesce(p_ok, false), p_got) 
 do $t$
 declare r jsonb; k text := 'TEST-staff-key'; v_c uuid := gen_random_uuid(); v_c2 uuid := gen_random_uuid();
   v_d1 uuid := gen_random_uuid(); v_d2 uuid := gen_random_uuid(); v_d3 uuid := gen_random_uuid(); v_d4 uuid := gen_random_uuid();
-  t1 uuid; t2 uuid; t3 uuid; t4 uuid; rows jsonb; n int; e text;
+  t1 uuid; t2 uuid; t3 uuid; t4 uuid; rows jsonb; n int; e text; acc1 uuid; acc2 uuid;
 begin
   insert into customers (id, code, name, kana) values (v_c, 'CT001', '架空商店', 'ｶｸｳｼｮｳﾃﾝ'), (v_c2, 'CT002', '架空食堂', null);
   insert into documents (id, doc_type, doc_number, customer_id, issue_date, due_date, total_amount, tax_amount, status, billing_status) values
@@ -15,23 +15,25 @@ begin
     (v_d3,'請求書','INV-T-3',v_c,'2026-09-06','2026-10-31',5000,370,'発行済','未入金'),
     (v_d4,'請求書','INV-T-4',v_c2,'2026-10-06','2026-11-30',3000,222,'取消','未入金');
 
-  -- 1. 取込（プレビュー → 確定 → 同じCSVをもう一度）
+  -- 1. 取込（口座を登録 → プレビュー → 確定 → 同じCSVをもう一度）
+  acc1 := (staff_account_set(k, '{"bank_name":"テスト銀行","branch":"テスト支店","account_type":"普通","account_no":"0000001","label":"テスト口座","department":"gibier"}')->>'id')::uuid;
+  acc2 := (staff_account_set(k, '{"bank_name":"残高なし銀行","account_no":"0000002","label":"残高なし口座","department":"arco"}')->>'id')::uuid;
   rows := '[{"row_no":2,"txn_date":"2026-10-31","description":"TA","amount_in":12000,"amount_out":0,"balance":112000},
             {"row_no":3,"txn_date":"2026-10-31","description":"TB","amount_in":7600,"amount_out":0,"balance":119600},
             {"row_no":4,"txn_date":"2026-10-31","description":"TC","amount_in":0,"amount_out":3000,"balance":116600},
             {"row_no":5,"txn_date":"2026-10-31","description":"TD","amount_in":5000,"amount_out":0,"balance":121600}]';
-  r := staff_bank_import(k,'テスト銀行','t.csv',rows,false);
+  r := staff_bank_import(k,acc1,'t.csv',rows,false);
   perform pg_temp.chk('取込プレビュー: 新規4・重複0・まだ入れない', (r->>'new_count')::int = 4 and (r->>'dup_count')::int = 0 and (select count(*) from bank_transactions) = 0, r::text);
-  r := staff_bank_import(k,'テスト銀行','t.csv',rows,true);
+  r := staff_bank_import(k,acc1,'t.csv',rows,true);
   perform pg_temp.chk('取込確定: 4件入る', (r->>'new_count')::int = 4 and (select count(*) from bank_transactions) = 4, r::text);
-  r := staff_bank_import(k,'テスト銀行','t.csv',rows,true);
+  r := staff_bank_import(k,acc1,'t.csv',rows,true);
   perform pg_temp.chk('同じCSVを2回入れても増えない（重複4）', (r->>'new_count')::int = 0 and (r->>'dup_count')::int = 4 and (select count(*) from bank_transactions) = 4, r::text);
-  r := staff_bank_import(k,'テスト銀行','t.csv','[{"row_no":2,"txn_date":"2026-02-30","amount_in":1},{"row_no":3,"txn_date":"2026-10-01","amount_in":"x"},{"row_no":4,"txn_date":"2026-10-01","amount_in":0,"amount_out":0},{"row_no":5,"txn_date":"2026-10-01","amount_in":5}]',true);
+  r := staff_bank_import(k,acc1,'t.csv','[{"row_no":2,"txn_date":"2026-02-30","amount_in":1},{"row_no":3,"txn_date":"2026-10-01","amount_in":"x"},{"row_no":4,"txn_date":"2026-10-01","amount_in":0,"amount_out":0},{"row_no":5,"txn_date":"2026-10-01","amount_in":5}]',true);
   perform pg_temp.chk('読めない行（2/30・金額x・入出金0）が1行でもあれば全体を入れない（fail-closed）', (r->>'ok')::boolean = false and r->'invalid_rows' = '[2,3,4]'::jsonb and (select count(*) from bank_transactions) = 4, r::text);
   rows := '[{"row_no":2,"txn_date":"2026-11-02","description":"SAME","amount_in":1000},{"row_no":3,"txn_date":"2026-11-02","description":"SAME","amount_in":1000}]';
-  r := staff_bank_import(k,'残高なし銀行','u.csv',rows,true);
+  r := staff_bank_import(k,acc2,'u.csv',rows,true);
   perform pg_temp.chk('残高列がない銀行で同じ日・同じ名義・同じ金額が2件あっても両方入る（出現順で区別）', (r->>'new_count')::int = 2, r::text);
-  r := staff_bank_import(k,'残高なし銀行','u.csv',rows,true);
+  r := staff_bank_import(k,acc2,'u.csv',rows,true);
   perform pg_temp.chk('…それを2回目に入れても増えない', (r->>'new_count')::int = 0, r::text);
 
   select id into t1 from bank_transactions where description='TA'; select id into t2 from bank_transactions where description='TB';

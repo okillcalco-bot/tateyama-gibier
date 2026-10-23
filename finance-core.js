@@ -157,7 +157,7 @@
     return s;
   };
 
-  // 仕訳の行（税理士が会計ソフトに入れやすい汎用形）。摘要に元の明細と証憑（領収書）の有無を書く。
+  // 仕訳の行（税理士が会計ソフトに入れやすい汎用形）。摘要に元の明細と証憑（領収書）の有無を書く。部門は明細側の department をそのまま持つ。
   FC.journalRows = function (month, data, titles) {
     var inM = function (d) { return String(d || '').slice(0, 7) === month; };
     var name = function (code, fallback) { var t = (titles || []).filter(function (x) { return x.code === code; })[0]; return t ? t.name : (fallback || '未分類'); };
@@ -166,19 +166,19 @@
       if (!inM(b.txn_date)) return;
       if (b.amount_in > 0) {
         var docs = b.matched_docs || [];
-        if (docs.length) docs.forEach(function (d) { out.push({ date: b.txn_date, debit: '普通預金', credit: '売掛金', amount: d.amount, tax: '対象外', memo: '入金 ' + (b.description || '') + ' ' + d.doc_number + (d.fee ? '（手数料差 ' + d.fee + '円）' : ''), source: 'bank', evidence: '銀行明細' });
-          if (d.fee) out.push({ date: b.txn_date, debit: '支払手数料', credit: '売掛金', amount: d.fee, tax: '課税仕入10%', memo: '振込手数料差 ' + d.doc_number, source: 'bank', evidence: '銀行明細' }); });
-        else out.push({ date: b.txn_date, debit: '普通預金', credit: name(b.category_code, '仮受金'), amount: b.amount_in, tax: b.category_code ? '' : '要確認', memo: '入金 ' + (b.description || '') + (b.memo ? ' / ' + b.memo : ''), source: 'bank', evidence: '銀行明細' });
+        if (docs.length) docs.forEach(function (d) { out.push({ date: b.txn_date, department: b.department, debit: '普通預金', credit: '売掛金', amount: d.amount, tax: '対象外', memo: '入金 ' + (b.description || '') + ' ' + d.doc_number + (d.fee ? '（手数料差 ' + d.fee + '円）' : ''), source: 'bank', evidence: '銀行明細' });
+          if (d.fee) out.push({ date: b.txn_date, department: b.department, debit: '支払手数料', credit: '売掛金', amount: d.fee, tax: '課税仕入10%', memo: '振込手数料差 ' + d.doc_number, source: 'bank', evidence: '銀行明細' }); });
+        else out.push({ date: b.txn_date, department: b.department, debit: '普通預金', credit: name(b.category_code, '仮受金'), amount: b.amount_in, tax: b.category_code ? '' : '要確認', memo: '入金 ' + (b.description || '') + (b.memo ? ' / ' + b.memo : ''), source: 'bank', evidence: '銀行明細' });
       }
-      if (b.amount_out > 0) out.push({ date: b.txn_date, debit: name(b.category_code, '仮払金'), credit: '普通預金', amount: b.amount_out, tax: b.category_code ? '' : '要確認', memo: '出金 ' + (b.description || '') + (b.memo ? ' / ' + b.memo : '') + (b.receipt_id ? '【領収書あり】' : ''), source: 'bank', evidence: b.receipt_id ? '領収書' : '銀行明細' });
+      if (b.amount_out > 0) out.push({ date: b.txn_date, department: b.department, debit: name(b.category_code, '仮払金'), credit: '普通預金', amount: b.amount_out, tax: b.category_code ? '' : '要確認', memo: '出金 ' + (b.description || '') + (b.memo ? ' / ' + b.memo : '') + (b.receipt_id ? '【領収書あり】' : ''), source: 'bank', evidence: b.receipt_id ? '領収書' : '銀行明細' });
     });
     (data.card || []).forEach(function (c) {
       if (!inM(c.txn_date)) return;
-      out.push({ date: c.txn_date, debit: c.amount >= 0 ? name(c.category_code, '仮払金') : '未払金', credit: c.amount >= 0 ? '未払金' : name(c.category_code, '仮払金'), amount: Math.abs(c.amount), tax: c.category_code ? '' : '要確認', memo: 'カード ' + (c.card_name || '') + ' ' + (c.description || '') + (c.memo ? ' / ' + c.memo : '') + (c.receipt_id ? '【領収書あり】' : ''), source: 'card', evidence: c.receipt_id ? '領収書' : 'カード明細' });
+      out.push({ date: c.txn_date, department: c.department, debit: c.amount >= 0 ? name(c.category_code, '仮払金') : '未払金', credit: c.amount >= 0 ? '未払金' : name(c.category_code, '仮払金'), amount: Math.abs(c.amount), tax: c.category_code ? '' : '要確認', memo: 'カード ' + (c.card_name || '') + ' ' + (c.description || '') + (c.memo ? ' / ' + c.memo : '') + (c.receipt_id ? '【領収書あり】' : ''), source: 'card', evidence: c.receipt_id ? '領収書' : 'カード明細' });
     });
     (data.receipts || []).forEach(function (r) {
       if (!inM(r.receipt_date) || r.status === 'rejected' || r.paid_by !== 'cash') return;
-      out.push({ date: r.receipt_date, debit: name(r.category_code, '仮払金'), credit: '現金', amount: r.amount, tax: r.category_code ? '' : '要確認', memo: '現金 ' + (r.vendor || '') + (r.memo ? ' / ' + r.memo : '') + '【領収書あり】', source: 'receipt', evidence: '領収書' });
+      out.push({ date: r.receipt_date, department: r.department, debit: name(r.category_code, '仮払金'), credit: '現金', amount: r.amount, tax: r.category_code ? '' : '要確認', memo: '現金 ' + (r.vendor || '') + (r.memo ? ' / ' + r.memo : '') + '【領収書あり】', source: 'receipt', evidence: '領収書' });
     });
     out.sort(function (a, b) { return String(a.date).localeCompare(String(b.date)) || String(a.source).localeCompare(String(b.source)); });
     return out;

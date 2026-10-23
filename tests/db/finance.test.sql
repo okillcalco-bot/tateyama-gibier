@@ -4,7 +4,7 @@ create or replace function pg_temp.chk(p_name text, p_ok boolean, p_got text def
 $$ insert into _t (name, ok, got) values (p_name, coalesce(p_ok, false), p_got) $$;
 
 do $t$
-declare r jsonb; k text := 'TEST-staff-key'; vk text := 'TEST-viewer-key-0123456789'; e text; n int; ok boolean;
+declare r jsonb; k text := 'TEST-staff-key'; vk text := 'TEST-viewer-key-0123456789'; e text; n int; ok boolean; acc1 uuid; acc2 uuid; tb3 uuid;
   v_c uuid := gen_random_uuid(); v_d1 uuid := gen_random_uuid(); tb uuid; tb2 uuid; tc uuid; tc2 uuid; rid uuid; rid2 uuid;
 begin
   -- 管理者用回復コード（本番と同じ置き場 app_secrets.recovery_code）
@@ -39,9 +39,11 @@ begin
     and (select name from account_titles where code = 'expense.misc') = '雑費（その他）' and exists (select 1 from account_titles where code = 'expense.feed')
     and not exists (select 1 from account_titles where code = 'BAD CODE'), r::text);
 
-  -- 4. カード明細の取込（プレビュー → 確定 → 重複 → 読めない行）
+  -- 4. カード明細の取込（はじめてのカードは部門が要る → プレビュー → 確定 → 重複 → 読めない行）
+  begin perform staff_card_import(k, 'テストカード', 'c.csv', '[{"row_no":2,"txn_date":"2026-10-03","description":"X","amount":1}]', false); e := null; exception when others then e := sqlerrm; end;
+  perform pg_temp.chk('はじめてのカードは部門を選ばないと取り込めない', e like '%部門を選んで%', e);
   r := staff_card_import(k, 'テストカード', 'c.csv', '[{"row_no":2,"txn_date":"2026-10-03","description":"ガソリン","amount":5500},
-       {"row_no":3,"txn_date":"2026-10-05","description":"ホームセンター","amount":3200},{"row_no":4,"txn_date":"2026-10-07","description":"返品","amount":-1200}]', false);
+       {"row_no":3,"txn_date":"2026-10-05","description":"ホームセンター","amount":3200},{"row_no":4,"txn_date":"2026-10-07","description":"返品","amount":-1200}]', false, 'テスト', 'gibier');
   perform pg_temp.chk('カード取込プレビュー: 新規3・重複0・まだ入れない', (r->>'preview')::boolean and (r->>'new_count')::int = 3 and (select count(*) from card_transactions) = 0, r::text);
   r := staff_card_import(k, 'テストカード', 'c.csv', '[{"row_no":2,"txn_date":"2026-10-03","description":"ガソリン","amount":5500},
        {"row_no":3,"txn_date":"2026-10-05","description":"ホームセンター","amount":3200},{"row_no":4,"txn_date":"2026-10-07","description":"返品","amount":-1200}]', true, 'テスト');
@@ -49,7 +51,7 @@ begin
   r := staff_card_import(k, 'テストカード', 'c.csv', '[{"row_no":2,"txn_date":"2026-10-03","description":"ガソリン","amount":5500},
        {"row_no":3,"txn_date":"2026-10-05","description":"ホームセンター","amount":3200},{"row_no":4,"txn_date":"2026-10-07","description":"返品","amount":-1200}]', true);
   perform pg_temp.chk('同じCSVを2回入れても増えない（重複3）', (r->>'new_count')::int = 0 and (r->>'dup_count')::int = 3 and (select count(*) from card_transactions) = 3, r::text);
-  r := staff_card_import(k, '別カード', 'd.csv', '[{"row_no":2,"txn_date":"2026-10-03","description":"ガソリン","amount":5500}]', true);
+  r := staff_card_import(k, '別カード', 'd.csv', '[{"row_no":2,"txn_date":"2026-10-03","description":"ガソリン","amount":5500}]', true, 'テスト', 'arco');
   perform pg_temp.chk('別のカード名なら同じ内容でも別の明細として入る', (r->>'new_count')::int = 1, r::text);
   r := staff_card_import(k, 'テストカード', 'e.csv', '[{"row_no":2,"txn_date":"2026-10-03","description":"A","amount":100},{"row_no":3,"txn_date":"2026-13-01","description":"B","amount":100},{"row_no":4,"txn_date":"2026-10-04","description":"C","amount":0}]', true);
   perform pg_temp.chk('読めない行（13月・金額0）が1行でもあれば全体を入れない（fail-closed）', (r->>'ok')::boolean = false and r->'invalid_rows' = '[3,4]'::jsonb and (select count(*) from card_transactions) = 4, r::text);
@@ -62,7 +64,13 @@ begin
   insert into customers (id, code, name, kana) values (v_c, 'CT001', '架空商店', 'ｶｸｳｼｮｳﾃﾝ');
   insert into documents (id, doc_type, doc_number, customer_id, issue_date, due_date, total_amount, tax_amount, status, billing_status)
     values (v_d1, '請求書', 'INV-T-1', v_c, '2026-10-06', '2026-11-30', 12000, 888, '発行済', '未入金');
-  r := staff_bank_import(k, 'テスト銀行', 'b.csv', '[{"row_no":2,"txn_date":"2026-10-31","description":"ｶｸｳｼｮｳﾃﾝ","amount_in":12000,"amount_out":0,"balance":112000},
+  acc1 := (staff_account_set(k, '{"bank_name":"テスト銀行","branch":"テスト支店","account_type":"普通","account_no":"0000001","label":"ジビエ口座","department":"gibier"}', 'テスト')->>'id')::uuid;
+  acc2 := (staff_account_set(k, '{"bank_name":"テスト銀行","account_no":"0000002","label":"アルコ口座","department":"arco"}', 'テスト')->>'id')::uuid;
+  begin perform staff_account_set(k, '{"bank_name":"テスト銀行","account_no":"0000003","label":"x","department":"nothing"}'); e := null; exception when others then e := sqlerrm; end;
+  perform pg_temp.chk('無い部門では口座を登録できない', e like '%部門を選んで%', e);
+  begin perform staff_bank_import(k, gen_random_uuid(), 'b.csv', '[{"row_no":2,"txn_date":"2026-10-31","description":"x","amount_in":1,"amount_out":0}]', true); e := null; exception when others then e := sqlerrm; end;
+  perform pg_temp.chk('無い口座には取り込めない', e like '%口座を選んで%', e);
+  r := staff_bank_import(k, acc1, 'b.csv', '[{"row_no":2,"txn_date":"2026-10-31","description":"ｶｸｳｼｮｳﾃﾝ","amount_in":12000,"amount_out":0,"balance":112000},
        {"row_no":3,"txn_date":"2026-10-31","description":"ガス","amount_in":0,"amount_out":3000,"balance":109000}]', true);
   select id into tb from bank_transactions where amount_in = 12000; select id into tb2 from bank_transactions where amount_out = 3000;
   select id into tc from card_transactions where description = 'ガソリン' and card_name = 'テストカード'; select id into tc2 from card_transactions where description = '返品';
@@ -117,8 +125,43 @@ begin
   r := finance_receipts_list(vk, null, null, 'pending');
   perform pg_temp.chk('領収書一覧（未確認だけ）を閲覧専用キーで読める', jsonb_array_length(r) = 1 and r->0->>'vendor' = '文具店', r::text);
 
+  -- 7b. 部門: 口座の部門が既定、1件ずつ付け替えられる。別口座の明細は別部門
+  r := staff_bank_import(k, acc2, 'c2.csv', '[{"row_no":2,"txn_date":"2026-10-20","description":"アルコノニユウキン","amount_in":22000,"amount_out":0,"balance":500000}]', true);
+  perform pg_temp.chk('別の口座（アルコ）にも取り込める', (r->>'new_count')::int = 1 and r->>'account' = 'アルコ口座', r::text);
+  select id into tb3 from bank_transactions where amount_in = 22000;
+  r := finance_setup(vk);
+  perform pg_temp.chk('設定の一覧: 部門2・口座2・カード2・科目が返る（閲覧専用でも）', jsonb_array_length(r->'departments') = 2 and jsonb_array_length(r->'accounts') = 2 and jsonb_array_length(r->'cards') = 2 and jsonb_array_length(r->'titles') >= 28, r::text);
+  perform pg_temp.chk('部門で絞ると、その口座の明細だけ（gibier 2件・arco 1件・全部 3件）',
+    jsonb_array_length(finance_bank_list(vk, '2026-10-01', '2026-10-31', 'gibier')) = 2 and jsonb_array_length(finance_bank_list(vk, '2026-10-01', '2026-10-31', 'arco')) = 1
+    and jsonb_array_length(finance_bank_list(vk, '2026-10-01', '2026-10-31', null)) = 3, null);
+  perform pg_temp.chk('口座で絞ることもできる', jsonb_array_length(finance_bank_list(vk, '2026-10-01', '2026-10-31', null, acc2)) = 1, null);
+  r := staff_classify(k, 'bank', tb2, 'expense.utilities', 'プロパン', 'arco', 'テスト');
+  perform pg_temp.chk('ジビエ口座の出金を1件だけアルコの経費に付け替えられる（gibier 1件・arco 2件）',
+    jsonb_array_length(finance_bank_list(vk, '2026-10-01', '2026-10-31', 'gibier')) = 1 and jsonb_array_length(finance_bank_list(vk, '2026-10-01', '2026-10-31', 'arco')) = 2
+    and (select x->>'department' from jsonb_array_elements(finance_bank_list(vk, '2026-10-01', '2026-10-31', null)) x where x->>'id' = tb2::text) = 'arco', null);
+  r := staff_classify(k, 'bank', tb2, 'expense.utilities', 'プロパン', null, 'テスト');
+  perform pg_temp.chk('部門を空にすると口座の部門（gibier）に戻る', (select x->>'department' from jsonb_array_elements(finance_bank_list(vk, '2026-10-01', '2026-10-31', null)) x where x->>'id' = tb2::text) = 'gibier', null);
+  begin perform staff_classify(k, 'bank', tb2, null, null, 'nothing'); e := null; exception when others then e := sqlerrm; end;
+  perform pg_temp.chk('無い部門には付け替えられない', e like '%部門がありません%', e);
+  begin perform finance_bank_list(vk, '2026-10-01', '2026-10-31', 'nothing'); e := null; exception when others then e := sqlerrm; end;
+  perform pg_temp.chk('無い部門で絞ろうとすると例外', e like '%部門がありません%', e);
+  perform pg_temp.chk('カードは登録した部門で絞れる（テストカード=gibier 3件・別カード=arco 1件）',
+    jsonb_array_length(finance_card_list(vk, '2026-10-01', '2026-10-31', 'gibier')) = 3 and jsonb_array_length(finance_card_list(vk, '2026-10-01', '2026-10-31', 'arco')) = 1, null);
+  r := staff_receipt_update(k, rid2, '{"department":"arco"}', 'テスト');
+  perform pg_temp.chk('領収書に部門を付けて絞れる（arco 1件）', jsonb_array_length(finance_receipts_list(vk, null, null, null, 'arco')) = 1 and jsonb_array_length(finance_receipts_list(vk, null, null, null, 'gibier')) = 1, null);
+  r := staff_department_set(k, '[{"code":"nature","name":"ネイチャーキャピタル","short_name":"NC","sort":30},{"code":"Bad","name":"x"}]', 'テスト');
+  perform pg_temp.chk('部門を足せる（code が形に合わない行は入れない）', (r->>'count')::int = 1 and exists (select 1 from departments where code = 'nature'), r::text);
+  r := finance_overview(vk, 'arco');
+  perform pg_temp.chk('ダッシュボードを部門で絞る: アルコの口座だけ・残高・未処理（未消込1・未分類0・カード1）', jsonb_array_length(r->'accounts') = 1 and (r->'accounts'->0->'latest'->>'balance')::int = 500000
+    and (r->'pending'->>'bank_in_unmatched')::int = 1 and (r->'pending'->>'card_unclassified')::int = 1 and (r->'unpaid'->>'count')::int = 0, r::text);
+  insert into documents (doc_type, doc_number, customer_id, issue_date, due_date, total_amount, tax_amount, status, billing_status, department)
+    values ('請求書', 'INV-T-9', v_c, '2026-10-06', '2026-11-30', 5000, 370, '発行済', '未入金', 'arco');
+  perform pg_temp.chk('未入金は請求書の部門で絞れる（arco 1件・gibier 0件・全部 1件）', jsonb_array_length(staff_unpaid_list_any(vk, '2026-10-31', 'arco')) = 1
+    and jsonb_array_length(staff_unpaid_list_any(vk, '2026-10-31', 'gibier')) = 0 and jsonb_array_length(staff_unpaid_list_any(vk, '2026-10-31', null)) = 1, null);
+  delete from documents where doc_number = 'INV-T-9';
+
   -- 8. 一覧・ダッシュボード・月次
-  r := finance_bank_list(vk, '2026-10-01', '2026-10-31');
+  r := finance_bank_list(vk, '2026-10-01', '2026-10-31', 'gibier');
   perform pg_temp.chk('銀行明細一覧: 消込済みの入金には請求書、分類した出金には科目が出る', jsonb_array_length(r) = 2
     and (select x->'matched_docs'->0->>'doc_number' from jsonb_array_elements(r) x where (x->>'amount_in')::int = 12000) = 'INV-T-1'
     and (select x->>'category_code' from jsonb_array_elements(r) x where (x->>'amount_out')::int = 3000) = 'expense.utilities', r::text);
@@ -126,19 +169,22 @@ begin
   perform pg_temp.chk('カード明細一覧: 科目と紐づいた領収書が出る', jsonb_array_length(r) = 4
     and (select x->>'receipt_id' from jsonb_array_elements(r) x where x->>'id' = tc::text) = rid::text, r::text);
   r := finance_overview(vk);
-  perform pg_temp.chk('ダッシュボード: 役割・直近残高・未処理件数（未分類カード3・未確認領収書1）', r->>'role' = 'viewer' and (r->'latest'->>'balance')::int = 109000
-    and (r->'pending'->>'card_unclassified')::int = 3 and (r->'pending'->>'receipts_pending')::int = 1 and (r->'pending'->>'bank_in_unmatched')::int = 0
+  perform pg_temp.chk('ダッシュボード（全部門）: 役割・口座ごとの直近残高・未処理件数（未消込1・未分類カード3・未確認領収書1）', r->>'role' = 'viewer'
+    and (select (a->'latest'->>'balance')::int from jsonb_array_elements(r->'accounts') a where a->>'label' = 'ジビエ口座') = 109000
+    and (r->'pending'->>'card_unclassified')::int = 3 and (r->'pending'->>'receipts_pending')::int = 1 and (r->'pending'->>'bank_in_unmatched')::int = 1
     and (r->'pending'->>'bank_out_unclassified')::int = 0, r::text);
   r := finance_month(vk, '2026-10');
-  perform pg_temp.chk('月次: 銀行・カード・領収書・科目・請求書がまとめて返る', jsonb_array_length(r->'bank') = 2 and jsonb_array_length(r->'card') = 4
+  perform pg_temp.chk('月次（全部門）: 銀行・カード・領収書・科目・請求書がまとめて返る', jsonb_array_length(r->'bank') = 3 and jsonb_array_length(r->'card') = 4
     and jsonb_array_length(r->'receipts') = 2 and jsonb_array_length(r->'titles') = 29 and jsonb_array_length(r->'invoices') = 1, r::text);
+  r := finance_month(vk, '2026-10', 'gibier');
+  perform pg_temp.chk('月次（ジビエだけ）: 銀行2・カード3・領収書1', jsonb_array_length(r->'bank') = 2 and jsonb_array_length(r->'card') = 3 and jsonb_array_length(r->'receipts') = 1, r::text);
   begin perform finance_month(vk, '2026/10'); e := null; exception when others then e := sqlerrm; end;
   perform pg_temp.chk('月の形が違えば例外', e like '%YYYY-MM%', e);
 end $t$;
 
 -- 9. 公開キー（anon）からは新しい表を直接読めない（anon の間は一時表に書けないので、結果を変数に取ってから記録する）
 do $t$
-declare e1 text; e2 text; e3 text; e4 text; e5 text;
+declare e1 text; e2 text; e3 text; e4 text; e5 text; e6 text;
 begin
   set local role anon;
   begin perform count(*) from card_transactions; e1 := null; exception when others then e1 := sqlerrm; end;
@@ -146,7 +192,9 @@ begin
   begin perform count(*) from account_titles; e3 := null; exception when others then e3 := sqlerrm; end;
   begin perform count(*) from finance_classifications; e4 := null; exception when others then e4 := sqlerrm; end;
   begin perform count(*) from receipt_files; e5 := null; exception when others then e5 := sqlerrm; end;
+  begin perform count(*) from bank_accounts; e6 := null; exception when others then e6 := sqlerrm; end;
   reset role;
+  perform pg_temp.chk('anon は bank_accounts を読めない', e6 like '%permission denied%', e6);
   perform pg_temp.chk('anon は receipt_files を読めない', e5 like '%permission denied%', e5);
   perform pg_temp.chk('anon は card_transactions を読めない', e1 like '%permission denied%', e1);
   perform pg_temp.chk('anon は receipts を読めない', e2 like '%permission denied%', e2);
