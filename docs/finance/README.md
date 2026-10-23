@@ -50,7 +50,7 @@
 |---|---|
 | マイグレーション | `migrations/20261021_bank_reconciliation.sql`・`migrations/20261023_finance_cards_receipts.sql`（追加のみ。新しい表はすべて RLS 有効・anon 不可。関数は SECURITY DEFINER） |
 | 権限 | 上の関数を anon から実行できるようにする（中でキーを確認する）。既存の表の権限は変えない |
-| デプロイ | `finance.html`・`finance-core.js`・`recon-core.js`、受発注管理のヘッダに「会計」リンク |
+| デプロイ | `finance.html`・`finance-core.js`・`recon-core.js`、業務アプリ（index.html）の左メニューに「会計」のグループとタブ、受発注管理のヘッダに「会計」リンク |
 | 秘密値 | 閲覧専用キーは管理者が画面から発行（DBに bcrypt／sha256 で保存）。新しい外部サービス・APIキーは無し |
 | pdf.js | ブラウザが cdnjs から読む（3.11.174 固定）。読めないときは CSV で取り込める |
 
