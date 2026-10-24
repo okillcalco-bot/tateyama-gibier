@@ -130,7 +130,7 @@ begin
   perform pg_temp.chk('別の口座（アルコ）にも取り込める', (r->>'new_count')::int = 1 and r->>'account' = 'アルコ口座', r::text);
   select id into tb3 from bank_transactions where amount_in = 22000;
   r := finance_setup(vk);
-  perform pg_temp.chk('設定の一覧: 部門2・口座2・カード2・科目が返る（閲覧専用でも）', jsonb_array_length(r->'departments') = 2 and jsonb_array_length(r->'accounts') = 2 and jsonb_array_length(r->'cards') = 2 and jsonb_array_length(r->'titles') >= 28, r::text);
+  perform pg_temp.chk('設定の一覧: 部門4（印つき）・口座2・カード2・科目が返る（閲覧専用でも）', jsonb_array_length(r->'departments') = 4 and (select string_agg(x->>'mark', '' order by (x->>'sort')::int) from jsonb_array_elements(r->'departments') x) = 'Tアヤ里' and jsonb_array_length(r->'accounts') = 2 and jsonb_array_length(r->'cards') = 2 and jsonb_array_length(r->'titles') >= 28, r::text);
   perform pg_temp.chk('部門で絞ると、その口座の明細だけ（gibier 2件・arco 1件・全部 3件）',
     jsonb_array_length(finance_bank_list(vk, '2026-10-01', '2026-10-31', 'gibier')) = 2 and jsonb_array_length(finance_bank_list(vk, '2026-10-01', '2026-10-31', 'arco')) = 1
     and jsonb_array_length(finance_bank_list(vk, '2026-10-01', '2026-10-31', null)) = 3, null);
@@ -149,8 +149,10 @@ begin
     jsonb_array_length(finance_card_list(vk, '2026-10-01', '2026-10-31', 'gibier')) = 3 and jsonb_array_length(finance_card_list(vk, '2026-10-01', '2026-10-31', 'arco')) = 1, null);
   r := staff_receipt_update(k, rid2, '{"department":"arco"}', 'テスト');
   perform pg_temp.chk('領収書に部門を付けて絞れる（arco 1件）', jsonb_array_length(finance_receipts_list(vk, null, null, null, 'arco')) = 1 and jsonb_array_length(finance_receipts_list(vk, null, null, null, 'gibier')) = 1, null);
-  r := staff_department_set(k, '[{"code":"nature","name":"ネイチャーキャピタル","short_name":"NC","sort":30},{"code":"Bad","name":"x"}]', 'テスト');
-  perform pg_temp.chk('部門を足せる（code が形に合わない行は入れない）', (r->>'count')::int = 1 and exists (select 1 from departments where code = 'nature'), r::text);
+  r := staff_department_set(k, '[{"code":"nature","name":"ネイチャーキャピタル","short_name":"NC","sort":50,"mark":"ネ"},{"code":"Bad","name":"x"}]', 'テスト');
+  perform pg_temp.chk('部門を足せる（印つき。code が形に合わない行は入れない）', (r->>'count')::int = 1 and (select mark from departments where code = 'nature') = 'ネ', r::text);
+  begin perform staff_department_set(k, '[{"code":"nature2","name":"重なる印","mark":"T"}]', 'テスト'); e := null; exception when others then e := sqlerrm; end;
+  perform pg_temp.chk('同じ印は2つの部門に付けられない', e is not null, e);
   r := finance_overview(vk, 'arco');
   perform pg_temp.chk('ダッシュボードを部門で絞る: アルコの口座だけ・残高・未処理（未消込1・未分類0・カード1）', jsonb_array_length(r->'accounts') = 1 and (r->'accounts'->0->'latest'->>'balance')::int = 500000
     and (r->'pending'->>'bank_in_unmatched')::int = 1 and (r->'pending'->>'card_unclassified')::int = 1 and (r->'unpaid'->>'count')::int = 0, r::text);
