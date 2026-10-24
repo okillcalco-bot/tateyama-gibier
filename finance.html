@@ -71,6 +71,7 @@ section{display:none}section.active{display:block}
 .bar b{font-weight:400;white-space:nowrap}
 .chip{display:inline-block;font-size:.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1px 8px;margin:1px 2px 1px 0}
 .dept{display:inline-block;font-size:.72rem;border-radius:6px;padding:0 6px;border:1px solid var(--border2);color:var(--text2);white-space:nowrap}
+.marks{display:inline-flex;gap:4px;flex-wrap:wrap;vertical-align:middle}.marks .mk{min-width:48px;height:42px;padding:0 8px;font-weight:700;font-size:1.15rem;border:1px solid var(--border2);border-radius:8px;background:var(--surface);color:inherit;cursor:pointer;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}.marks .mk small{font-size:.58rem;font-weight:400;color:var(--text2)}.marks .mk.on{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#fff;border-color:transparent}.marks .mk.on small{color:#fff}
 .dept.gibier{background:#eef4e6;color:#3d7a34;border-color:#b9cfa8}.dept.arco{background:#e9eef8;color:#2f66b5;border-color:#b6c5e6}
 select.deptsel{font-size:.75rem;padding:2px 4px}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#23271c;color:#fff;padding:10px 18px;border-radius:10px;font-size:.9rem;z-index:3000;opacity:0;transition:opacity .2s;max-width:90vw}
@@ -197,7 +198,7 @@ select.deptsel{font-size:.75rem;padding:2px 4px}
       <span id="rcFileInfo" class="small"></span>
     </div>
     <div class="row">
-      <label>部門 <select id="rcDept"></select></label>
+      <span id="rcMarks" class="marks" title="レシートに書いた印（部門の頭文字）で部門を選ぶ"></span><label>部門 <select id="rcDept" onchange="rcMarksPaint(true)"></select></label>
       <label>日付 <input type="date" id="rcDate"></label>
       <label>店名 <input id="rcVendor" placeholder="例: ホームセンター" style="width:180px"></label>
       <label>金額 <input id="rcAmount" type="number" inputmode="numeric" style="width:110px"></label>
@@ -231,8 +232,8 @@ select.deptsel{font-size:.75rem;padding:2px 4px}
 <section id="sec-settings">
   <div class="panel"><h2>この端末のキー</h2><div class="kv"><span>役割</span><span id="setRole"></span><span>保存先</span><span id="setWhere"></span></div>
     <div class="row" style="margin-top:8px"><button class="btn btn-outline btn-sm" onclick="keyDialog()">キーを入れ直す</button><button class="btn btn-danger btn-sm" onclick="keyForget()">この端末からキーを消す</button></div></div>
-  <div class="panel"><h2>部門</h2><div class="small" style="margin-bottom:6px">口座・カード・請求書・領収書に部門を付けて、部門ごとに集計・出力します。館山ジビエセンターの通帳は市役所への報告があるので、ジビエの口座の明細はそのまま出せます。</div>
-    <div class="tablewrap" style="max-height:30vh"><table><thead><tr><th>code</th><th>名前</th><th>略称</th><th>並び</th><th>報告先</th><th>有効</th></tr></thead><tbody id="deptBody"></tbody></table></div>
+  <div class="panel"><h2>部門</h2><div class="small" style="margin-bottom:6px">口座・カード・請求書・領収書に部門を付けて、部門ごとに集計・出力します。館山ジビエセンターの通帳は市役所への報告があるので、ジビエの口座の明細はそのまま出せます。「印」はレシートに手書きする部門の頭文字（T／ア／ヤ／里）で、領収書の登録でボタンになります。</div>
+    <div class="tablewrap" style="max-height:30vh"><table><thead><tr><th>code</th><th>名前</th><th>略称</th><th>印</th><th>並び</th><th>報告先</th><th>有効</th></tr></thead><tbody id="deptBody"></tbody></table></div>
     <div class="row w" style="margin-top:8px"><button class="btn btn-outline btn-sm" onclick="deptAddRow()">＋ 部門を足す</button><button class="btn btn-gold btn-sm" onclick="deptSave()">保存</button><span id="deptMsg" class="small"></span></div></div>
   <div class="panel"><h2>口座</h2><div class="small" style="margin-bottom:6px">通帳PDFを取り込むとき、未登録の口座はその場で登録できます。呼び名と部門はここで直せます。</div>
     <div class="tablewrap" style="max-height:30vh"><table><thead><tr><th>呼び名</th><th>銀行</th><th>支店</th><th>種別</th><th>口座番号</th><th>部門</th><th>有効</th><th class="w"></th></tr></thead><tbody id="accBody"></tbody></table></div>
@@ -274,7 +275,13 @@ function who(){return ls('tg_finance_operator')||ls('tg_operator')||'';}
 function dept(){return ls('tg_finance_dept')||null;}                 // null = 全部門
 function deptName(code){const d=F.depts.find(x=>x.code===code);return d?(d.short_name||d.name):(code||'');}
 function deptBadge(code){return code?`<span class="dept ${esc(code)}">${esc(deptName(code))}</span>`:'';}
-function deptOptions(sel,withAll,allLabel){return (withAll?`<option value="">${esc(allLabel||'全部門')}</option>`:'')+F.depts.filter(d=>d.is_active!==false).map(d=>`<option value="${esc(d.code)}"${d.code===sel?' selected':''}>${esc(d.name)}</option>`).join('');}
+function deptOptions(sel,withAll,allLabel){return (withAll?`<option value="">${esc(allLabel||'全部門')}</option>`:'')+F.depts.filter(d=>d.is_active!==false).map(d=>`<option value="${esc(d.code)}"${d.code===sel?' selected':''}>${d.mark?esc(d.mark)+'　':''}${esc(d.name)}</option>`).join('');}
+function deptMark(code){const d=F.depts.find(x=>x.code===code);return d&&d.mark?d.mark:'';}
+/* 領収書の登録: レシートに書いた印（T／ア／ヤ／里）のボタン。押すと部門が入り、次回も同じ部門から始まる */
+function rcDeptRemembered(){try{return localStorage.getItem('tg_finance_rcdept')||'';}catch(e){return '';}}
+function rcMarksPaint(remember){const sel=document.getElementById('rcDept'),el=document.getElementById('rcMarks');if(!sel||!el)return;const cur=sel.value;if(remember){try{localStorage.setItem('tg_finance_rcdept',cur);}catch(e){}}
+  el.innerHTML=F.depts.filter(d=>d.is_active!==false&&d.mark).map(d=>`<button type="button" class="mk${d.code===cur?' on':''}" onclick="rcMarkPick('${esc(d.code)}')" title="${esc(d.name)}">${esc(d.mark)}<small>${esc(d.short_name||d.name)}</small></button>`).join('');}
+function rcMarkPick(code){document.getElementById('rcDept').value=code;rcMarksPaint(true);}
 async function rpc(fn,args){
   const res=await fetch(`${SB_URL}/rest/v1/rpc/${fn}`,{method:'POST',headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`,'Content-Type':'application/json'},body:JSON.stringify(args||{})});
   const t=await res.text();
@@ -311,10 +318,10 @@ function applySetup(s){
   const cur=dept();const sel=document.getElementById('deptSel');sel.innerHTML=deptOptions('',true);if(cur&&F.depts.some(d=>d.code===cur))sel.value=cur;else{ls('tg_finance_dept',null);sel.value='';}
   const af=document.getElementById('bankAccountFilter');const afv=af.value;af.innerHTML='<option value="">すべての口座</option>'+F.accounts.map(a=>`<option value="${a.id}">${esc(a.label)}（${esc(deptName(a.department))}）</option>`).join('');af.value=afv;
   document.getElementById('cardList').innerHTML=F.cards.map(c=>`<option value="${esc(c.card_name)}">`).join('');
-  document.getElementById('cardDept').innerHTML=deptOptions(dept()||'gibier');document.getElementById('rcDept').innerHTML=deptOptions(dept()||'gibier');
+  document.getElementById('cardDept').innerHTML=deptOptions(dept()||'gibier');{const rd=dept()||rcDeptRemembered();document.getElementById('rcDept').innerHTML=deptOptions(F.depts.some(d=>d.code===rd&&d.is_active!==false)?rd:'gibier');}rcMarksPaint();
   document.getElementById('rcCat').innerHTML=titleOptions('','expense');
 }
-function deptChange(){const v=document.getElementById('deptSel').value;ls('tg_finance_dept',v||null);Object.keys(loaded).forEach(k=>loaded[k]=false);document.getElementById('cardDept').value=v||'gibier';document.getElementById('rcDept').value=v||'gibier';showTab(currentTab);}
+function deptChange(){const v=document.getElementById('deptSel').value;ls('tg_finance_dept',v||null);Object.keys(loaded).forEach(k=>loaded[k]=false);document.getElementById('cardDept').value=v||'gibier';document.getElementById('rcDept').value=v||'gibier';rcMarksPaint();showTab(currentTab);}
 function keyDialog(){
   openModal(`<h2>キーを入れる</h2><p class="muted">スタッフキー（業務アプリと同じ）か、税理士用の閲覧専用キーを入れてください。この端末に残ります（共有端末では設定の「キーを消す」で消せます）。</p>
     <div class="row"><input id="keyIn" type="password" style="width:100%;max-width:360px" placeholder="キー"><input id="opIn" placeholder="担当者名（任意）" style="width:160px" value="${esc(who())}"></div>
@@ -645,7 +652,7 @@ const CARD_COLS=[{key:'txn_date',label:'利用日'},{key:'card_name',label:'カ�
 function downloadCardCsv(){download(`カード明細_${deptName(dept())||'全部門'}_${document.getElementById('cardFrom').value}_${document.getElementById('cardTo').value}.csv`,RC.toCsv(F.card,CARD_COLS));}
 
 /* ── 領収書 ── */
-function rcForTxn(kind,id){const r=(kind==='card'?F.card:F.bank).find(x=>x.id===id);if(!r)return;showTab('receipts');document.getElementById('rcDate').value=r.txn_date;document.getElementById('rcVendor').value=r.description||'';document.getElementById('rcAmount').value=kind==='card'?r.amount:r.amount_out;document.getElementById('rcCat').value=r.category_code||'';document.getElementById('rcPaidBy').value=kind==='card'?'card':'bank';document.getElementById('rcDept').value=r.department||dept()||'gibier';F._rcLink={kind,id};document.getElementById('rcAddMsg').textContent=`${kind==='card'?'カード':'銀行'}明細 ${r.txn_date} ${esc(r.description)} に紐づけて登録します`;document.getElementById('rcFile').scrollIntoView({behavior:'smooth'});}
+function rcForTxn(kind,id){const r=(kind==='card'?F.card:F.bank).find(x=>x.id===id);if(!r)return;showTab('receipts');document.getElementById('rcDate').value=r.txn_date;document.getElementById('rcVendor').value=r.description||'';document.getElementById('rcAmount').value=kind==='card'?r.amount:r.amount_out;document.getElementById('rcCat').value=r.category_code||'';document.getElementById('rcPaidBy').value=kind==='card'?'card':'bank';document.getElementById('rcDept').value=r.department||dept()||'gibier';rcMarksPaint();F._rcLink={kind,id};document.getElementById('rcAddMsg').textContent=`${kind==='card'?'カード':'銀行'}明細 ${r.txn_date} ${esc(r.description)} に紐づけて登録します`;document.getElementById('rcFile').scrollIntoView({behavior:'smooth'});}
 async function rcFileChosen(files){const f=files&&files[0];F.rcFile=null;if(!f)return;const info=document.getElementById('rcFileInfo');info.textContent='準備中...';
   try{if(/^image\//.test(f.type)){const r=await shrinkImage(f,1600,0.82);F.rcFile=r;info.textContent=`${f.name} → ${Math.round(r.size/1024)}KB（縮小済み）`;}
     else if(f.type==='application/pdf'){if(f.size>3*1024*1024)throw new Error('PDF は 3MB までです');F.rcFile={blob:f,mime:'application/pdf',size:f.size,name:f.name};info.textContent=`${f.name}（${Math.round(f.size/1024)}KB）`;}
@@ -746,11 +753,12 @@ async function loadSettings(){
   if(F.role==='staff'){try{F.snapshot=await rpc('staff_recon_snapshot',{p_staff_key:staffKeyGet()});F.aliases=F.snapshot.aliases||[];F.customers=F.snapshot.customers||[];}catch(e){fail('名義表の読み込み',e);}}
   renderAliases();
 }
-function deptRowHtml(d,ro){return `<tr class="drow"><td><input value="${esc(d.code)}" data-f="code" style="width:120px" ${d._new?'':'readonly'}></td><td><input value="${esc(d.name)}" data-f="name" ${ro?'disabled':''}></td><td><input value="${esc(d.short_name||'')}" data-f="short_name" style="width:90px" ${ro?'disabled':''}></td><td><input type="number" value="${esc(d.sort)}" data-f="sort" style="width:70px" ${ro?'disabled':''}></td><td><input value="${esc(d.report_to||'')}" data-f="report_to" placeholder="例: 館山市" ${ro?'disabled':''}></td><td><input type="checkbox" data-f="is_active" ${d.is_active!==false?'checked':''} ${ro?'disabled':''}></td></tr>`;}
+function deptRowHtml(d,ro){return `<tr class="drow"><td><input value="${esc(d.code)}" data-f="code" style="width:120px" ${d._new?'':'readonly'}></td><td><input value="${esc(d.name)}" data-f="name" ${ro?'disabled':''}></td><td><input value="${esc(d.short_name||'')}" data-f="short_name" style="width:90px" ${ro?'disabled':''}></td><td><input value="${esc(d.mark||'')}" data-f="mark" maxlength="2" style="width:44px;text-align:center" placeholder="T" ${ro?'disabled':''}></td><td><input type="number" value="${esc(d.sort)}" data-f="sort" style="width:70px" ${ro?'disabled':''}></td><td><input value="${esc(d.report_to||'')}" data-f="report_to" placeholder="例: 館山市" ${ro?'disabled':''}></td><td><input type="checkbox" data-f="is_active" ${d.is_active!==false?'checked':''} ${ro?'disabled':''}></td></tr>`;}
 function deptAddRow(){document.getElementById('deptBody').insertAdjacentHTML('beforeend',deptRowHtml({code:'',name:'',short_name:'',sort:(Math.max(0,...F.depts.map(d=>Number(d.sort)))+10),is_active:true,_new:true},false));}
 async function deptSave(){
-  const rows=[...document.querySelectorAll('#deptBody tr.drow')].map(tr=>{const g=f=>tr.querySelector(`[data-f="${f}"]`);return {code:g('code').value.trim(),name:g('name').value.trim(),short_name:g('short_name').value.trim()||null,sort:Number(g('sort').value),report_to:g('report_to').value.trim()||null,is_active:g('is_active').checked};}).filter(r=>r.code&&r.name);
+  const rows=[...document.querySelectorAll('#deptBody tr.drow')].map(tr=>{const g=f=>tr.querySelector(`[data-f="${f}"]`);return {code:g('code').value.trim(),name:g('name').value.trim(),short_name:g('short_name').value.trim()||null,mark:g('mark').value.trim()||null,sort:Number(g('sort').value),report_to:g('report_to').value.trim()||null,is_active:g('is_active').checked};}).filter(r=>r.code&&r.name);
   const bad=rows.filter(r=>!/^[a-z][a-z0-9_]*$/.test(r.code));if(bad.length)return toast('code は英小文字で始まる英数字にしてください: '+bad.map(b=>b.code).join(', '),'error');
+  const mk=rows.map(r=>r.mark).filter(Boolean);if(new Set(mk).size!==mk.length)return toast('印が重なっています（部門ごとに別の印にしてください）','error');
   try{const r=await rpc('staff_department_set',{p_staff_key:staffKeyGet(),p_rows:rows,p_by:who()||null});document.getElementById('deptMsg').textContent=`${r.count}件を保存しました`;toast('部門を保存しました');loadSettings();}catch(e){fail('保存',e);}
 }
 async function cardPatch(el){const name=el.dataset.card;const tr=el.closest('tr');const g=f=>tr.querySelector(`[data-f="${f}"]`);
