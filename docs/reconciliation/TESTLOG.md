@@ -1,0 +1,19 @@
+# 入金消込：検証の記録
+
+実データ（銀行CSV・請求書）を使う検証は手元で行い、ここには実行日・データ範囲・件数・結果だけを書く（取引先名・名義・金額は書かない）。
+
+| 実行日 | データ範囲 | 内容 | 結果 | 未達・残件 |
+|---|---|---|---|---|
+| 2026-10-21 | — | Step 0（スキーマ・既存コードの確認） | CONTEXT.md に記録 | 銀行CSV・正解データ未受領 |
+| 2026-10-21 | 架空データ | 照合ロジック `tests/e2e/recon-core.e2e.js`（文字コード・CSV・日付・金額・名義の正規化・ルール1〜3・候補・不明・取り合い・性質テスト3,200件） | 29/29。性質テストで自動確定159件すべてが名義完全一致・金額一致・手数料0・取り合いなし | 実データ未検証 |
+| 2026-10-21 | 架空データ（手元の使い捨てDB） | DB関数 `tests/db/recon.test.sql`（取込プレビュー・確定・重複0・fail-closed・残高なし銀行の同額2件・anon拒否・明細の不変・確定・再送1回限り・過入金/合計不一致/手数料超過/取消済/出金の拒否・失敗時に何も残らない・取消→再計算・未入金一覧・期日超過日数・督促回数・月次） | 32/32。マイグレーションを2回流しても壊れない | 本番未適用 |
+| 2026-10-23 | 実データ（千葉銀行PDF 4か月分・手元のみ） | 通帳PDF→明細（python 版と pdf.js 版）、請求書87件との突合 | 各月の入金・出金の合計と件数が PDF の印字と一致、残高の繋がり全行一致、python 版と pdf.js 版が全行一致。突合は名義一致1件・金額一致17件・名義一致で金額不一致1件・該当なし18件（9〜10月）、7〜8月は請求書が基幹に無く対象外 | 結果は沖へ報告（リポジトリ外）。名義表は確定操作で育てる |
+| 2026-10-23 | 架空データ | `tests/e2e/finance-core.e2e.js` 30/30、`tests/e2e/finance-ui.e2e.js` 45/45、`tests/db/finance.test.sql` 45/45、`tests/db/recon.test.sql` 32/32（マイグレーション2本を2回ずつ流しても壊れない） | 通過 | 本番未適用・未デプロイ |
+| 2026-10-23 | 実データ（千葉銀行PDF・2口座目の4か月分・手元のみ） | 通帳PDF→明細（口座番号の読み取りを含む） | 各月の合計・件数が印字と一致、残高の繋がり全行一致 | 本番未適用 |
+| 2026-10-23 | 架空データ | 部門・口座対応後: `tests/e2e/finance-core.e2e.js` 30/30、`tests/e2e/finance-ui.e2e.js` 56/56、`tests/db/finance.test.sql` 63/63、`tests/db/recon.test.sql` 32/32（口座つきの取込に書き換え）。受発注管理を読む既存 e2e 34本: ok 32・NG 2（invoice-batch-month はテスト用PDF部品が無いため、portal-password は単独で流すと 31/31 通過） | 通過 | 本番未適用・未デプロイ |
+
+## 2026-10-24 本番適用（沖「進めて」）
+
+- 20261021_bank_reconciliation.sql・20261023_finance_cards_receipts.sql を Supabase MCP（apply_migration／execute_sql）で分割適用。表15・関数31・RLS・権限は適用済み。`staff_recon_undo`（消込の取消）だけは本体の `delete from payments` に MCP の確認プロンプトが出て適用できず、`scratchpad/finance_remaining.sql`（1関数＋権限）を沖に渡した。
+- 適用のために変えたこと: トップレベルの DROP 文を無くした（drop trigger → create or replace trigger、department 列は check なし＋20261023 で FK、旧署名の staff_bank_import は作らない）。取込関数2本は一時表（drop/alter/update）をやめて CTE＋変数に。手元PGで recon 32/32・finance 63/63。
+- 本番での確認SQL: 新しい表15すべて RLS 有効・anon/authenticated の表権限なし。departments 2件・account_titles 28件・customers/documents の department FK あり。

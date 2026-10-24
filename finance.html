@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TGC 会計 - 館山ジビエセンター</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f5f6f2;--surface:#ffffff;--surface2:#eff1ea;--border:#dfe3d6;--border2:#c7ccba;--gold:#8d6a1d;--gold2:#97772a;--gold-light:#6e5314;
+--text:#23271c;--text2:#626854;--text3:#9aa08c;--red:#b93d3d;--green:#3d7a34;--blue:#2f66b5;--radius:8px}
+html{font-size:14px}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+a{color:var(--gold);text-decoration:none}a:hover{color:var(--gold-light)}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:var(--text)}
+input,select,textarea{font-family:inherit;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:.9rem}
+input:focus,select:focus,textarea:focus{border-color:var(--gold2);outline:none}
+table{width:100%;border-collapse:collapse}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--text2);font-weight:500;font-size:.78rem;white-space:nowrap;background:var(--surface2);position:sticky;top:0}
+td{font-size:.9rem}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr:hover td{background:#fbfbf7}
+.badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:12px;display:inline-block;white-space:nowrap;border:1px solid}
+.b-green{background:rgba(106,158,90,.15);color:var(--green);border-color:var(--green)}
+.b-gold{background:rgba(200,164,90,.15);color:var(--gold);border-color:var(--gold2)}
+.b-red{background:rgba(200,80,80,.12);color:var(--red);border-color:var(--red)}
+.b-blue{background:rgba(90,140,216,.15);color:var(--blue);border-color:var(--blue)}
+.b-gray{background:var(--surface2);color:var(--text2);border-color:var(--border2)}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.header-left{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.header-left h1{font-size:1.15rem;font-weight:700;color:var(--gold)}
+.header-nav{display:flex;gap:12px;font-size:.85rem;flex-wrap:wrap}
+.header-right{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{padding:7px 14px;border-radius:var(--radius);font-size:.85rem;font-weight:500;transition:all .2s;white-space:nowrap}
+.btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#fff;font-weight:700}
+.btn-gold:hover{filter:brightness(1.1)}
+.btn-outline{border:1px solid var(--border2);color:var(--text2)}.btn-outline:hover{border-color:var(--gold2);color:var(--text)}
+.btn-sm{padding:4px 9px;font-size:.78rem}
+.btn-danger{background:rgba(200,80,80,.12);color:var(--red);border:1px solid var(--red)}
+.btn-green{background:rgba(106,158,90,.15);color:var(--green);border:1px solid var(--green)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--border);padding:0 12px;overflow-x:auto}
+.tab{padding:12px 16px;font-size:.9rem;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.tab:hover{color:var(--text)}.tab.active{color:var(--gold);border-bottom-color:var(--gold);font-weight:700}
+.tab .cnt{font-size:.7rem;background:var(--red);color:#fff;border-radius:10px;padding:0 6px;margin-left:4px;vertical-align:middle}
+main{padding:16px 20px 60px;max-width:1400px;margin:0 auto}
+section{display:none}section.active{display:block}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.card-label{font-size:.78rem;color:var(--text2)}
+.card-value{font-size:1.5rem;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+.card-sub{font-size:.78rem;color:var(--text3);margin-top:2px}
+.card.warn{border-color:var(--red)}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
+.panel h2{font-size:1rem;color:var(--gold);margin-bottom:10px}
+.panel h3{font-size:.92rem;margin:12px 0 6px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.muted{color:var(--text2);font-size:.85rem}
+.small{font-size:.78rem;color:var(--text3)}
+.err{color:var(--red);font-weight:700}
+.ok{color:var(--green);font-weight:700}
+.drop{border:2px dashed var(--border2);border-radius:12px;padding:22px;text-align:center;color:var(--text2);cursor:pointer;background:var(--surface2)}
+.drop.over{border-color:var(--gold2);background:#f6f1e3}
+.tablewrap{overflow:auto;max-height:70vh;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+.bars{display:flex;gap:10px;align-items:flex-end;height:120px;padding:8px 0}
+.bar{flex:1;max-width:96px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;font-size:.68rem;color:var(--text2)}
+.bar i{display:block;width:100%;border-radius:4px 4px 0 0;background:var(--green);opacity:.75}
+.bar i.out{background:var(--red);opacity:.55}
+.bar b{font-weight:400;white-space:nowrap}
+.chip{display:inline-block;font-size:.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1px 8px;margin:1px 2px 1px 0}
+.dept{display:inline-block;font-size:.72rem;border-radius:6px;padding:0 6px;border:1px solid var(--border2);color:var(--text2);white-space:nowrap}
+.dept.gibier{background:#eef4e6;color:#3d7a34;border-color:#b9cfa8}.dept.arco{background:#e9eef8;color:#2f66b5;border-color:#b6c5e6}
+select.deptsel{font-size:.75rem;padding:2px 4px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#23271c;color:#fff;padding:10px 18px;border-radius:10px;font-size:.9rem;z-index:3000;opacity:0;transition:opacity .2s;max-width:90vw}
+.toast.show{opacity:1}.toast.error{background:var(--red)}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;align-items:center;justify-content:center;padding:16px}
+.modal-overlay.show{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;max-width:720px;width:100%;max-height:90vh;overflow-y:auto;padding:22px}
+.modal h2{font-size:1rem;color:var(--gold);margin-bottom:10px}
+.thumb{width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--border);background:var(--surface2);cursor:pointer}
+.rcard{display:grid;grid-template-columns:90px 1fr;gap:12px;border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px;background:var(--surface)}
+.rcard .f{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px;font-size:.85rem}
+.rcard label{font-size:.72rem;color:var(--text3);display:block}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 12px;font-size:.88rem}
+.readonly .w{display:none!important}
+@media(max-width:700px){main{padding:10px 10px 60px}.rcard{grid-template-columns:1fr}th,td{padding:6px 6px}.card-value{font-size:1.2rem}}
+@media print{header,.tabs,.w,.noprint{display:none!important}main{padding:0}}
+</style>
+<script src="recon-core.js"></script>
+<script src="finance-core.js"></script>
+<script>var RC=window.ReconCore;</script>
+</head>
+<body>
+<header>
+  <div class="header-left">
+    <h1>💰 会計</h1>
+    <nav class="header-nav">
+      <a href="index.html">&#x2190; 業務トップ</a>
+      <a href="order-admin.html#invoice">請求書（受発注管理）</a>
+    </nav>
+  </div>
+  <div class="header-right">
+    <select id="deptSel" onchange="deptChange()" title="部門で絞る"><option value="">全部門</option></select>
+    <span id="roleBadge" class="badge b-gray">未接続</span>
+    <span id="whoami" class="small"></span>
+    <button class="btn btn-outline btn-sm" onclick="keyDialog()">🔑 キー</button>
+  </div>
+</header>
+<div class="tabs" id="tabs">
+  <div class="tab active" data-tab="dash" onclick="showTab('dash')">ダッシュボード</div>
+  <div class="tab" data-tab="bank" onclick="showTab('bank')">銀行</div>
+  <div class="tab" data-tab="recon" onclick="showTab('recon')">入金消込<span class="cnt" id="cnt-recon" style="display:none"></span></div>
+  <div class="tab" data-tab="unpaid" onclick="showTab('unpaid')">未入金・督促<span class="cnt" id="cnt-unpaid" style="display:none"></span></div>
+  <div class="tab" data-tab="card" onclick="showTab('card')">カード</div>
+  <div class="tab" data-tab="receipts" onclick="showTab('receipts')">領収書<span class="cnt" id="cnt-receipts" style="display:none"></span></div>
+  <div class="tab" data-tab="month" onclick="showTab('month')">月次・出力</div>
+  <div class="tab" data-tab="settings" onclick="showTab('settings')">設定</div>
+</div>
+<main id="main">
+
+<!-- ── ダッシュボード ── -->
+<section id="sec-dash" class="active">
+  <div id="dashErr" class="err" style="display:none;margin-bottom:10px"></div>
+  <div class="grid" id="dashAccounts"></div>
+  <div class="grid" id="dashCards"></div>
+  <div class="panel"><h2>月ごとの入金・出金（通帳）<span id="dashDeptLabel" class="small"></span></h2><div class="bars" id="dashBars"></div><div class="small">緑＝入金・赤＝出金。通帳を取り込んだ月だけ出ます。</div></div>
+  <div class="panel"><h2>やること</h2><div id="dashTodo" class="muted">読み込み中...</div></div>
+</section>
+
+<!-- ── 銀行 ── -->
+<section id="sec-bank">
+  <div class="panel w">
+    <h2>通帳を取り込む</h2>
+    <div class="row">
+      <span class="small">千葉銀行のインターネットバンキングの「入出金明細」PDF は口座を自動で見分けます。各銀行の CSV は口座を選んでください。同じ月を2回入れても増えません。</span>
+    </div>
+    <div class="drop" id="bankDrop" onclick="document.getElementById('bankFile').click()">📄 ここにPDF／CSVを置く（またはタップして選ぶ）</div>
+    <input type="file" id="bankFile" accept=".pdf,.csv,.txt,application/pdf,text/csv" style="display:none" onchange="bankFileChosen(this.files)">
+    <div id="bankImportBox" style="margin-top:12px"></div>
+  </div>
+  <div class="panel">
+    <div class="row">
+      <h2 style="margin:0">明細</h2>
+      <select id="bankAccountFilter" onchange="loadBank()"><option value="">すべての口座</option></select>
+      <input type="date" id="bankFrom" onchange="loadBank()"> 〜 <input type="date" id="bankTo" onchange="loadBank()">
+      <select id="bankFilter" onchange="renderBank()"><option value="all">すべて</option><option value="in">入金</option><option value="out">出金</option><option value="in_unmatched">入金・未消込</option><option value="out_unclassified">出金・未分類</option></select>
+      <button class="btn btn-outline btn-sm" onclick="loadBank()">更新</button>
+      <button class="btn btn-outline btn-sm" onclick="downloadBankCsv()">CSV</button>
+      <span id="bankSum" class="small"></span>
+    </div>
+    <div class="tablewrap"><table id="bankTable"><thead><tr><th>日付</th><th>口座・部門</th><th>摘要</th><th class="num">入金</th><th class="num">出金</th><th class="num">残高</th><th>消込・科目</th><th>メモ</th></tr></thead><tbody id="bankBody"><tr><td colspan="8" class="muted">期間を選ぶと出ます</td></tr></tbody></table></div>
+  </div>
+</section>
+
+<!-- ── 入金消込 ── -->
+<section id="sec-recon">
+  <div id="reconBox"><div class="muted">読み込み中...</div></div>
+</section>
+
+<!-- ── 未入金・督促 ── -->
+<section id="sec-unpaid">
+  <div class="panel">
+    <div class="row"><h2 style="margin:0">未入金の請求書</h2><button class="btn btn-outline btn-sm" onclick="loadUnpaid()">更新</button><button class="btn btn-outline btn-sm" onclick="downloadUnpaidCsv()">CSV</button><span id="unpaidSum" class="small"></span></div>
+    <div class="tablewrap"><table><thead><tr><th>取引先</th><th class="num">件数</th><th class="num">残額</th><th class="num">期日超過（最大）</th><th>督促</th><th class="w"></th></tr></thead><tbody id="unpaidBody"></tbody></table></div>
+  </div>
+  <div class="panel w" id="dunPanel" style="display:none">
+    <h2>督促文（コピーして LINE・メールで送る）</h2>
+    <div class="row"><span id="dunWho" class="muted"></span><label>何回目 <select id="dunRound"><option value="1">1回目（確認のお願い）</option><option value="2">2回目（期日超過）</option><option value="3">3回目以降</option></select></label><label>新しい期日 <input type="date" id="dunNewDue"></label><button class="btn btn-outline btn-sm" onclick="dunDraft()">文面を作り直す</button></div>
+    <textarea id="dunText" rows="12" style="width:100%"></textarea>
+    <div class="row" style="margin-top:8px"><button class="btn btn-gold" onclick="dunCopy()">📋 コピー</button><label>送った方法 <select id="dunChannel"><option value="line">LINE</option><option value="email">メール</option><option value="messenger">Messenger</option><option value="phone">電話</option><option value="other">その他</option></select></label><button class="btn btn-green" onclick="dunRecord()">送った記録を残す</button></div>
+  </div>
+</section>
+
+<!-- ── カード ── -->
+<section id="sec-card">
+  <div class="panel w">
+    <h2>カード明細を取り込む</h2>
+    <div class="row"><label>カード <input id="cardName" list="cardList" placeholder="例: 事業用カードB" style="width:180px" onchange="cardNameChanged()"><datalist id="cardList"></datalist></label><label id="cardDeptWrap">部門 <select id="cardDept"></select></label><span class="small">カード会社のサイトから出した CSV。列は見出しから自動で当たりをつけます（違えば選び直せます）。</span></div>
+    <div class="drop" id="cardDrop" onclick="document.getElementById('cardFile').click()">📄 ここにCSVを置く（またはタップして選ぶ）</div>
+    <input type="file" id="cardFile" accept=".csv,.txt,text/csv" style="display:none" onchange="cardFileChosen(this.files)">
+    <div id="cardImportBox" style="margin-top:12px"></div>
+  </div>
+  <div class="panel">
+    <div class="row"><h2 style="margin:0">明細</h2><input type="date" id="cardFrom" onchange="loadCard()"> 〜 <input type="date" id="cardTo" onchange="loadCard()"><select id="cardFilter" onchange="renderCard()"><option value="all">すべて</option><option value="unclassified">未分類</option><option value="noreceipt">領収書なし</option></select><button class="btn btn-outline btn-sm" onclick="loadCard()">更新</button><button class="btn btn-outline btn-sm" onclick="downloadCardCsv()">CSV</button><span id="cardSum" class="small"></span></div>
+    <div class="tablewrap"><table><thead><tr><th>日付</th><th>カード・部門</th><th>利用先</th><th class="num">金額</th><th>科目</th><th>メモ</th><th>領収書</th></tr></thead><tbody id="cardBody"><tr><td colspan="7" class="muted">期間を選ぶと出ます</td></tr></tbody></table></div>
+  </div>
+</section>
+
+<!-- ── 領収書 ── -->
+<section id="sec-receipts">
+  <div class="panel w">
+    <h2>領収書を登録する</h2>
+    <div class="row">
+      <input type="file" id="rcFile" accept="image/*,application/pdf" capture="environment" onchange="rcFileChosen(this.files)">
+      <span id="rcFileInfo" class="small"></span>
+    </div>
+    <div class="row">
+      <label>部門 <select id="rcDept"></select></label>
+      <label>日付 <input type="date" id="rcDate"></label>
+      <label>店名 <input id="rcVendor" placeholder="例: ホームセンター" style="width:180px"></label>
+      <label>金額 <input id="rcAmount" type="number" inputmode="numeric" style="width:110px"></label>
+      <label>税率 <select id="rcTax"><option value="10">10%</option><option value="8">8%（軽減）</option><option value="0">対象外</option></select></label>
+      <label>科目 <select id="rcCat"></select></label>
+      <label>支払い <select id="rcPaidBy"><option value="card">カード</option><option value="cash">現金</option><option value="bank">振込</option><option value="other">その他</option></select></label>
+      <label>メモ <input id="rcMemo" style="width:200px"></label>
+      <button class="btn btn-gold" id="rcAddBtn" onclick="rcAdd()">登録</button>
+    </div>
+    <div id="rcAddMsg" class="small"></div>
+  </div>
+  <div class="panel">
+    <div class="row"><h2 style="margin:0">領収書</h2><select id="rcStatus" onchange="loadReceipts()"><option value="pending">未確認</option><option value="confirmed">確認済み</option><option value="rejected">却下</option><option value="">すべて</option></select><input type="month" id="rcMonth" onchange="loadReceipts()"><button class="btn btn-outline btn-sm" onclick="loadReceipts()">更新</button><button class="btn btn-outline btn-sm" onclick="downloadReceiptsCsv()">CSV</button><span id="rcSum" class="small"></span></div>
+    <div id="rcList"></div>
+  </div>
+</section>
+
+<!-- ── 月次・出力 ── -->
+<section id="sec-month">
+  <div class="panel">
+    <div class="row"><h2 style="margin:0">月次 <span id="monthDeptLabel" class="small"></span></h2><input type="month" id="monthPick" onchange="loadMonth()"><button class="btn btn-outline btn-sm" onclick="loadMonth()">更新</button>
+      <button class="btn btn-gold btn-sm" onclick="downloadJournal()">仕訳CSV</button><button class="btn btn-outline btn-sm" onclick="downloadMonthAll()">税理士向けにまとめて出す（仕訳・銀行・カード・領収書・未入金）</button></div>
+    <div id="monthReportNote" class="small" style="margin-bottom:8px"></div>
+    <div class="grid" id="monthCards"></div>
+    <div id="monthTitles"></div>
+  </div>
+  <div class="panel"><h2>仕訳（会計ソフトに入れる形）</h2><div class="small" style="margin-bottom:6px">科目が付いていない行は「仮払金／仮受金・要確認」で出ます。領収書が紐づいた行には【領収書あり】。</div><div class="tablewrap" style="max-height:60vh"><table><thead><tr><th>日付</th><th>部門</th><th>借方</th><th>貸方</th><th class="num">金額</th><th>税区分</th><th>摘要</th><th>証憑</th></tr></thead><tbody id="journalBody"></tbody></table></div></div>
+</section>
+
+<!-- ── 設定 ── -->
+<section id="sec-settings">
+  <div class="panel"><h2>この端末のキー</h2><div class="kv"><span>役割</span><span id="setRole"></span><span>保存先</span><span id="setWhere"></span></div>
+    <div class="row" style="margin-top:8px"><button class="btn btn-outline btn-sm" onclick="keyDialog()">キーを入れ直す</button><button class="btn btn-danger btn-sm" onclick="keyForget()">この端末からキーを消す</button></div></div>
+  <div class="panel"><h2>部門</h2><div class="small" style="margin-bottom:6px">口座・カード・請求書・領収書に部門を付けて、部門ごとに集計・出力します。館山ジビエセンターの通帳は市役所への報告があるので、ジビエの口座の明細はそのまま出せます。</div>
+    <div class="tablewrap" style="max-height:30vh"><table><thead><tr><th>code</th><th>名前</th><th>略称</th><th>並び</th><th>報告先</th><th>有効</th></tr></thead><tbody id="deptBody"></tbody></table></div>
+    <div class="row w" style="margin-top:8px"><button class="btn btn-outline btn-sm" onclick="deptAddRow()">＋ 部門を足す</button><button class="btn btn-gold btn-sm" onclick="deptSave()">保存</button><span id="deptMsg" class="small"></span></div></div>
+  <div class="panel"><h2>口座</h2><div class="small" style="margin-bottom:6px">通帳PDFを取り込むとき、未登録の口座はその場で登録できます。呼び名と部門はここで直せます。</div>
+    <div class="tablewrap" style="max-height:30vh"><table><thead><tr><th>呼び名</th><th>銀行</th><th>支店</th><th>種別</th><th>口座番号</th><th>部門</th><th>有効</th><th class="w"></th></tr></thead><tbody id="accBody"></tbody></table></div>
+    <div class="row w" style="margin-top:8px"><button class="btn btn-outline btn-sm" onclick="accDialog()">＋ 口座を登録</button></div></div>
+  <div class="panel"><h2>カード</h2>
+    <div class="tablewrap" style="max-height:30vh"><table><thead><tr><th>カード名</th><th>呼び名</th><th>部門</th><th>有効</th><th class="w"></th></tr></thead><tbody id="cardsBody"></tbody></table></div></div>
+  <div class="panel w"><h2>勘定科目</h2><div class="small" style="margin-bottom:6px">名前・税率・並びを直せます。code は会計ソフトとの対応に使うので変えません。使わない科目は「有効」を外します。</div>
+    <div class="tablewrap" style="max-height:50vh"><table><thead><tr><th>code</th><th>名前</th><th>種類</th><th>税率</th><th>並び</th><th>有効</th></tr></thead><tbody id="titlesBody"></tbody></table></div>
+    <div class="row" style="margin-top:8px"><button class="btn btn-outline btn-sm" onclick="titlesAddRow()">＋ 科目を足す</button><button class="btn btn-gold btn-sm" onclick="titlesSave()">保存</button><span id="titlesMsg" class="small"></span></div></div>
+  <div class="panel w"><h2>振込名義（この名義はこの取引先）</h2><div class="small" style="margin-bottom:6px">消込を手で確定すると自動で登録されます。ここで足す・消すこともできます。</div>
+    <div class="row"><input id="aliasCust" list="custList" placeholder="取引先（名前で検索）" style="width:220px"><datalist id="custList"></datalist><input id="aliasName" placeholder="振込名義（例 カ）テスト）" style="width:220px"><button class="btn btn-outline btn-sm" onclick="aliasAdd()">登録</button></div>
+    <div id="aliasList" class="muted">入金消込を一度開くと出ます</div></div>
+  <div class="panel w" id="viewerKeyPanel" style="display:none"><h2>税理士用の閲覧専用キー（管理者）</h2>
+    <div class="small" style="margin-bottom:6px">このキーを持つ人は会計の画面をすべて見られますが、何も書き換えられません。発行・変更には管理者用回復コードが必要です。キーは発行時に一度だけ表示します。</div>
+    <div class="row"><input id="vkRecovery" type="password" placeholder="管理者用回復コード" style="width:200px"><input id="vkNew" placeholder="新しいキー（16文字以上）" style="width:260px"><button class="btn btn-outline btn-sm" onclick="vkGenerate()">自動で作る</button><button class="btn btn-gold btn-sm" onclick="vkSet()">発行する</button></div>
+    <div id="vkMsg" class="small"></div></div>
+</section>
+</main>
+
+<div class="toast" id="toast"></div>
+<div class="modal-overlay" id="modal"><div class="modal" id="modalBody"></div></div>
+
+<script>
+/* ── 接続・キー・役割 ──
+   スタッフ（作業員）: スタッフキー（tg_staff_key。業務アプリ・受発注管理と共通）→ 取込・分類・領収書・消込
+   管理者: スタッフキー＋業務アプリの管理者コード（sessionStorage tg_role_v1=admin）→ さらに閲覧専用キーの発行・消込の取消
+   税理士: 閲覧専用キー（tg_finance_key）→ 読む・出力するだけ。書く操作（class="w"）は画面から消す
+   部門: 口座・カード・請求書・領収書が部門を持つ。右上の選択で全部門／1部門に絞って見る・出す */
+const SB_URL='https://clpdyrehdgzgiidbfucj.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
+const PDFJS_URL='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+const PDFJS_WORKER='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const F={role:null,setup:null,overview:null,titles:[],depts:[],accounts:[],cards:[],bank:[],card:[],receipts:[],unpaid:[],snapshot:null,recon:[],aliases:[],customers:[],month:null,journal:[],summary:null,dun:null,rcFile:null,bankParsed:null,cardParsed:null};
+const ls=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k)||sessionStorage.getItem(k)||'';if(v===null){localStorage.removeItem(k);sessionStorage.removeItem(k);}else localStorage.setItem(k,v);}catch(e){try{if(v)sessionStorage.setItem(k,v);}catch(_){}}};
+function staffKeyGet(){return ls('tg_staff_key');}
+function finKey(){return staffKeyGet()||ls('tg_finance_key');}
+function isAdmin(){try{return sessionStorage.getItem('tg_role_v1')==='admin';}catch(e){return false;}}
+function who(){return ls('tg_finance_operator')||ls('tg_operator')||'';}
+function dept(){return ls('tg_finance_dept')||null;}                 // null = 全部門
+function deptName(code){const d=F.depts.find(x=>x.code===code);return d?(d.short_name||d.name):(code||'');}
+function deptBadge(code){return code?`<span class="dept ${esc(code)}">${esc(deptName(code))}</span>`:'';}
+function deptOptions(sel,withAll,allLabel){return (withAll?`<option value="">${esc(allLabel||'全部門')}</option>`:'')+F.depts.filter(d=>d.is_active!==false).map(d=>`<option value="${esc(d.code)}"${d.code===sel?' selected':''}>${esc(d.name)}</option>`).join('');}
+async function rpc(fn,args){
+  const res=await fetch(`${SB_URL}/rest/v1/rpc/${fn}`,{method:'POST',headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`,'Content-Type':'application/json'},body:JSON.stringify(args||{})});
+  const t=await res.text();
+  if(!res.ok){let m=t;try{const j=JSON.parse(t);m=j.message||j.hint||t;}catch(e){} throw new Error(m);}
+  return t?JSON.parse(t):null;
+}
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const yen=n=>'¥'+Math.round(Number(n||0)).toLocaleString('ja-JP');
+const num=n=>Math.round(Number(n||0)).toLocaleString('ja-JP');
+const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+const thisMonth=()=>today().slice(0,7);
+const monthRange=m=>{const [y,mo]=m.split('-').map(Number);const last=new Date(y,mo,0).getDate();return [m+'-01',m+'-'+String(last).padStart(2,'0')];};
+let toastTimer=null;
+function toast(msg,type){const el=document.getElementById('toast');el.textContent=msg;el.className='toast show'+(type==='error'?' error':'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),type==='error'?7000:3500);}
+function fail(where,e){console.error(where,e);toast(where+': '+(e&&e.message||e),'error');}
+function openModal(html){document.getElementById('modalBody').innerHTML=html;document.getElementById('modal').classList.add('show');}
+function closeModal(){document.getElementById('modal').classList.remove('show');}
+document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal();});
+function download(name,text,mime){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:mime||'text/csv;charset=utf-8'}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);}
+function titleName(code){const t=F.titles.find(x=>x.code===code);return t?t.name:(code||'');}
+function titleOptions(sel,kind){const list=F.titles.filter(t=>t.is_active!==false&&(!kind||t.kind===kind||t.kind==='other'));return '<option value="">（未分類）</option>'+list.map(t=>`<option value="${esc(t.code)}"${t.code===sel?' selected':''}>${esc(t.name)}</option>`).join('');}
+function applyRole(){
+  const r=F.role;const badge=document.getElementById('roleBadge');
+  badge.textContent=r==='staff'?(isAdmin()?'管理者':'スタッフ'):r==='viewer'?'税理士（閲覧のみ）':'未接続';
+  badge.className='badge '+(r==='staff'?(isAdmin()?'b-gold':'b-green'):r==='viewer'?'b-blue':'b-gray');
+  document.body.classList.toggle('readonly',r!=='staff');
+  document.getElementById('viewerKeyPanel').style.display=(r==='staff'&&isAdmin())?'':'none';
+  document.getElementById('setRole').textContent=badge.textContent;
+  document.getElementById('setWhere').textContent=staffKeyGet()?'スタッフキー（tg_staff_key）':ls('tg_finance_key')?'閲覧専用キー（tg_finance_key）':'なし';
+  document.getElementById('whoami').textContent=who()?'担当: '+who():'';
+}
+function applySetup(s){
+  F.setup=s;F.role=s.role;F.depts=s.departments||[];F.accounts=s.accounts||[];F.cards=s.cards||[];F.titles=s.titles||F.titles;
+  const cur=dept();const sel=document.getElementById('deptSel');sel.innerHTML=deptOptions('',true);if(cur&&F.depts.some(d=>d.code===cur))sel.value=cur;else{ls('tg_finance_dept',null);sel.value='';}
+  const af=document.getElementById('bankAccountFilter');const afv=af.value;af.innerHTML='<option value="">すべての口座</option>'+F.accounts.map(a=>`<option value="${a.id}">${esc(a.label)}（${esc(deptName(a.department))}）</option>`).join('');af.value=afv;
+  document.getElementById('cardList').innerHTML=F.cards.map(c=>`<option value="${esc(c.card_name)}">`).join('');
+  document.getElementById('cardDept').innerHTML=deptOptions(dept()||'gibier');document.getElementById('rcDept').innerHTML=deptOptions(dept()||'gibier');
+  document.getElementById('rcCat').innerHTML=titleOptions('','expense');
+}
+function deptChange(){const v=document.getElementById('deptSel').value;ls('tg_finance_dept',v||null);Object.keys(loaded).forEach(k=>loaded[k]=false);document.getElementById('cardDept').value=v||'gibier';document.getElementById('rcDept').value=v||'gibier';showTab(currentTab);}
+function keyDialog(){
+  openModal(`<h2>キーを入れる</h2><p class="muted">スタッフキー（業務アプリと同じ）か、税理士用の閲覧専用キーを入れてください。この端末に残ります（共有端末では設定の「キーを消す」で消せます）。</p>
+    <div class="row"><input id="keyIn" type="password" style="width:100%;max-width:360px" placeholder="キー"><input id="opIn" placeholder="担当者名（任意）" style="width:160px" value="${esc(who())}"></div>
+    <div class="row"><button class="btn btn-gold" onclick="keySubmit()">確認して保存</button><button class="btn btn-outline" onclick="closeModal()">閉じる</button></div><div id="keyMsg" class="err"></div>`);
+  setTimeout(()=>document.getElementById('keyIn').focus(),50);
+}
+async function keySubmit(){
+  const k=(document.getElementById('keyIn').value||'').trim();const op=(document.getElementById('opIn').value||'').trim();const msg=document.getElementById('keyMsg');
+  if(!k){msg.textContent='キーを入れてください';return;}
+  try{
+    const role=await rpc('finance_role',{p_key:k});
+    if(role==='staff'){ls('tg_staff_key',k);ls('tg_finance_key',null);}else{ls('tg_finance_key',k);}
+    if(op)ls('tg_finance_operator',op);
+    closeModal();await init();
+  }catch(e){msg.textContent=e.message;}
+}
+function keyForget(){if(!confirm('この端末から会計のキーを消しますか？（業務アプリのスタッフキーも消えます）'))return;ls('tg_staff_key',null);ls('tg_finance_key',null);F.role=null;applyRole();toast('キーを消しました');keyDialog();}
+(function(){const m=(location.hash||'').match(/[#&]fkey=([^&]+)/);if(!m)return;const k=decodeURIComponent(m[1]);history.replaceState(null,'',location.pathname+location.search);
+  rpc('finance_role',{p_key:k}).then(r=>{if(r==='viewer'||r==='staff'){ls(r==='staff'?'tg_staff_key':'tg_finance_key',k);toast('共有リンクからキーを設定しました');init();}}).catch(e=>toast('共有リンクのキーが正しくありません: '+e.message,'error'));})();
+
+/* ── タブ ── */
+const loaded={};let currentTab='dash';
+function showTab(name){
+  currentTab=name;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));
+  document.querySelectorAll('main section').forEach(s=>s.classList.toggle('active',s.id==='sec-'+name));
+  history.replaceState(null,'',location.pathname+location.search+'#'+name);
+  if(!F.role)return;
+  const first=!loaded[name];loaded[name]=true;
+  ({dash:loadDash,bank:()=>first&&loadBank(),recon:loadRecon,unpaid:loadUnpaid,card:()=>first&&loadCard(),receipts:()=>first&&loadReceipts(),month:()=>first&&loadMonth(),settings:loadSettings})[name]();
+}
+
+/* ── 初期化 ── */
+async function init(){
+  const k=finKey();
+  if(!k){F.role=null;applyRole();keyDialog();return;}
+  try{applySetup(await rpc('finance_setup',{p_key:k}));}catch(e){
+    if(/キーが違います|待って/.test(e.message)){F.role=null;applyRole();document.getElementById('dashErr').style.display='';document.getElementById('dashErr').textContent='キーが違います。右上の「キー」から入れ直してください。';keyDialog();return;}
+    fail('読み込み',e);return;}
+  applyRole();
+  const m=thisMonth(),[a,b]=monthRange(m);
+  if(!document.getElementById('bankFrom').value){document.getElementById('bankFrom').value=a;document.getElementById('bankTo').value=today();document.getElementById('cardFrom').value=a;document.getElementById('cardTo').value=today();document.getElementById('monthPick').value=m;document.getElementById('rcMonth').value='';}
+  const tab=(location.hash||'').replace('#','')||'dash';
+  Object.keys(loaded).forEach(x=>loaded[x]=false);showTab(['dash','bank','recon','unpaid','card','receipts','month','settings'].includes(tab)?tab:'dash');
+}
+
+/* ── ダッシュボード ── */
+async function loadDash(){
+  const k=finKey();
+  try{F.overview=await rpc('finance_overview',{p_key:k,p_department:dept()});}catch(e){fail('ダッシュボード',e);return;}
+  const o=F.overview,p=o.pending||{},u=o.unpaid||{};
+  const months=o.months||[];const cur=months.find(x=>x.month===thisMonth())||{amount_in:0,amount_out:0};
+  document.getElementById('dashDeptLabel').textContent=dept()?'（'+deptName(dept())+'）':'（全部門）';
+  document.getElementById('dashAccounts').innerHTML=(o.accounts||[]).length?o.accounts.map(a=>`<div class="card"><div class="card-label">${esc(a.label)} ${deptBadge(a.department)}</div><div class="card-value">${a.latest?yen(a.latest.balance):'—'}</div><div class="card-sub">${a.latest?a.latest.date+' 時点の残高':'通帳が未取込'}・${esc(a.bank_name)}</div></div>`).join('')
+    :`<div class="card"><div class="card-label">口座</div><div class="card-value">—</div><div class="card-sub">通帳PDFを取り込むと口座が登録されます（銀行タブ）</div></div>`;
+  document.getElementById('dashCards').innerHTML=[
+    ['今月の入金（通帳）',yen(cur.amount_in),thisMonth()],['今月の出金（通帳）',yen(cur.amount_out),thisMonth()],
+    ['未入金の請求書',yen(u.total),num(u.count)+'件',u.overdue_count>0],['うち期日超過',yen(u.overdue_total),num(u.overdue_count)+'件',u.overdue_count>0]
+  ].map(c=>`<div class="card${c[3]?' warn':''}"><div class="card-label">${esc(c[0])}</div><div class="card-value">${esc(c[1])}</div><div class="card-sub">${esc(c[2])}</div></div>`).join('');
+  const mx=Math.max(1,...months.map(x=>Math.max(x.amount_in,x.amount_out)));
+  document.getElementById('dashBars').innerHTML=months.length?months.map(x=>`<div class="bar" title="${x.month} 入金 ${num(x.amount_in)} / 出金 ${num(x.amount_out)}"><div style="display:flex;gap:2px;width:100%;align-items:flex-end;height:90px"><i style="height:${Math.round(x.amount_in/mx*90)}px"></i><i class="out" style="height:${Math.round(x.amount_out/mx*90)}px"></i></div><b>${x.month.slice(2)}</b></div>`).join(''):'<div class="muted">通帳を取り込むと出ます</div>';
+  const todo=[];
+  if(p.bank_in_unmatched>0)todo.push(`<a href="#recon" onclick="showTab('recon');return false">入金消込: 請求書に当てていない入金が <b>${num(p.bank_in_unmatched)}件</b></a>`);
+  if(p.bank_out_unclassified>0)todo.push(`<a href="#bank" onclick="document.getElementById('bankFilter').value='out_unclassified';showTab('bank');return false">銀行: 科目を付けていない出金が <b>${num(p.bank_out_unclassified)}件</b></a>`);
+  if(p.card_unclassified>0)todo.push(`<a href="#card" onclick="document.getElementById('cardFilter').value='unclassified';showTab('card');return false">カード: 科目を付けていない利用が <b>${num(p.card_unclassified)}件</b></a>`);
+  if(p.receipts_pending>0)todo.push(`<a href="#receipts" onclick="showTab('receipts');return false">領収書: 未確認が <b>${num(p.receipts_pending)}件</b></a>`);
+  if(u.overdue_count>0)todo.push(`<a href="#unpaid" onclick="showTab('unpaid');return false">督促: 期日を過ぎた請求書が <b>${num(u.overdue_count)}件</b>（${yen(u.overdue_total)}）</a>`);
+  if(o.last_import)todo.push(`<span class="small">最後の取込: ${esc(o.last_import.account||'')} ${esc(o.last_import.file_name||'')}（${esc(String(o.last_import.imported_at||'').slice(0,16).replace('T',' '))}・新規${num(o.last_import.new_count)}件）</span>`);
+  document.getElementById('dashTodo').innerHTML=todo.length?'<ul style="padding-left:18px">'+todo.map(t=>'<li>'+t+'</li>').join('')+'</ul>':'<span class="ok">未処理はありません</span>';
+  const cnt=(id,n)=>{const el=document.getElementById(id);el.style.display=n>0?'':'none';el.textContent=n;};
+  cnt('cnt-recon',p.bank_in_unmatched||0);cnt('cnt-receipts',p.receipts_pending||0);cnt('cnt-unpaid',u.overdue_count||0);
+}
+
+/* ── 銀行: 取込 ── */
+function loadPdfJs(){return new Promise((ok,ng)=>{if(window.pdfjsLib)return ok(window.pdfjsLib);const s=document.createElement('script');s.src=PDFJS_URL;s.onload=()=>{window.pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS_WORKER;ok(window.pdfjsLib);};s.onerror=()=>ng(new Error('PDF読み取り部品（pdf.js）を読み込めませんでした。通信を確認するか、銀行の CSV を使ってください'));document.head.appendChild(s);});}
+async function pdfPages(file){const lib=await loadPdfJs();const doc=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;const pages=[];
+  for(let p=1;p<=doc.numPages;p++){const page=await doc.getPage(p);const vp=page.getViewport({scale:1});const tc=await page.getTextContent();pages.push({width:vp.width,height:vp.height,items:tc.items.map(it=>({str:it.str,x:it.transform[4],y:it.transform[5]}))});}
+  return pages;}
+['bankDrop','cardDrop'].forEach(id=>{const el=document.getElementById(id);['dragenter','dragover'].forEach(ev=>el.addEventListener(ev,e=>{e.preventDefault();el.classList.add('over');}));['dragleave','drop'].forEach(ev=>el.addEventListener(ev,e=>{e.preventDefault();el.classList.remove('over');}));
+  el.addEventListener('drop',e=>{(id==='bankDrop'?bankFileChosen:cardFileChosen)(e.dataTransfer.files);});});
+// PDF の見出し「館山支店 普通 3661185」→ {branch, type, no}
+function parseAccount(s){const m=/(\S+?支店|\S+?本店|\S+?出張所)?\s*(普通|当座|貯蓄|通知|定期)?\s*(\d{5,})/.exec(String(s||''));return m?{branch:m[1]||'',type:m[2]||'',no:m[3]}:null;}
+function findAccount(bank,no){return F.accounts.find(a=>a.account_no===no&&(!bank||a.bank_name===bank));}
+async function bankFileChosen(files){
+  const f=files&&files[0];if(!f)return;const box=document.getElementById('bankImportBox');box.innerHTML='<div class="muted">読み取り中...</div>';
+  try{
+    if(/\.pdf$/i.test(f.name)||f.type==='application/pdf'){
+      const r=FC.chibaPdfRows(await pdfPages(f));const rows=FC.toImportRows(r.rows);
+      if(!rows.length)throw new Error('明細を読み取れませんでした（千葉銀行の「入出金明細」PDF以外は CSV で取り込んでください）');
+      const acc=parseAccount(r.header.account);const found=acc?findAccount(r.header.bank,acc.no):null;
+      F.bankParsed={rows:rows,file:f,checks:r.checks,header:r.header,src:'pdf',parsedAccount:acc,account:found||null};renderBankPreview();
+    }else{
+      const dec=RC.decode(await f.arrayBuffer());const csv=RC.parseCsv(dec.text);const map=FC.guessColumns(csv);
+      if(!map)throw new Error('見出し行が見つかりません（日付・摘要・入金・出金の列名を含むCSVを使ってください）');
+      F.bankParsed={csv:csv,map:map,file:f};return renderBankCsvMapping();
+    }
+  }catch(e){box.innerHTML=`<div class="err">読み取れませんでした: ${esc(e.message)}</div>`;}
+}
+function renderBankCsvMapping(){
+  const {csv,map}=F.bankParsed;const hdr=csv[map.header_rows-1]||[];const opt=(k)=>'<option value="">—</option>'+hdr.map((h,i)=>`<option value="${i}"${map[k]===i?' selected':''}>${esc(h||('列'+(i+1)))}</option>`).join('');
+  document.getElementById('bankImportBox').innerHTML=`<div class="muted">CSV の列を確かめてください（見出し行: ${map.header_rows} 行目）</div>
+    <div class="row">${['date:日付','description:摘要','amount_in:入金','amount_out:出金','amount:金額（±1列）','balance:残高'].map(x=>{const [k,l]=x.split(':');return `<label>${l} <select data-k="${k}" class="bankmap">${opt(k)}</select></label>`;}).join('')}
+    <button class="btn btn-outline btn-sm" onclick="bankCsvApply()">この列で読む</button></div>`;
+}
+function bankCsvApply(){
+  const {csv,map,file}=F.bankParsed;const cm={header_rows:map.header_rows};document.querySelectorAll('.bankmap').forEach(s=>{if(s.value!=='')cm[s.dataset.k]=Number(s.value);});
+  if(cm.date==null||(cm.amount==null&&cm.amount_in==null&&cm.amount_out==null)){toast('日付と金額の列を選んでください','error');return;}
+  const r=RC.applyProfile(csv,{column_map:cm});
+  const rows=r.txns.map((t,i)=>({row_no:t.row_no,txn_date:t.txn_date,description:t.description,amount_in:t.amount_in,amount_out:t.amount_out,balance:t.balance}));
+  const only=F.accounts.length===1?F.accounts[0]:null;
+  F.bankParsed={rows:rows,file:file,invalid:r.invalid,src:'csv',checks:null,account:only};renderBankPreview();
+}
+function accountFormHtml(prefix,acc,bank){
+  return `<div class="row"><span class="badge b-gold">未登録の口座</span><span class="muted">${esc(bank||'')} ${esc(acc?acc.branch+' '+acc.type+' '+acc.no:'')}</span></div>
+    <div class="row"><label>呼び名 <input id="${prefix}Label" placeholder="例: ジビエセンター口座" style="width:200px"></label><label>部門 <select id="${prefix}Dept">${deptOptions(dept()||'gibier')}</select></label><button class="btn btn-outline btn-sm" onclick="bankRegisterAccount()">この口座を登録して続ける</button></div>`;
+}
+function renderBankPreview(){
+  const p=F.bankParsed,rows=p.rows;const sumIn=rows.reduce((a,r)=>a+r.amount_in,0),sumOut=rows.reduce((a,r)=>a+r.amount_out,0);
+  let chk='';
+  if(p.checks){chk=p.checks.ok?`<div class="ok">✔ PDF の合計（入金 ${num(p.checks.in_count)}件 ${yen(p.checks.in_total)} / 出金 ${num(p.checks.out_count)}件 ${yen(p.checks.out_total)}）と残高の繋がりが全行一致</div>`
+    :`<div class="err">✖ 検算が合いません（合計一致: 入金 ${p.checks.in_total_ok} / 出金 ${p.checks.out_total_ok}、残高の繋がりの不整合 ${p.checks.balance_chain_bad} 行）。このままでは取り込みません。PDF を出し直すか CSV を使ってください。</div>`;}
+  if(p.invalid&&p.invalid.length)chk+=`<div class="err">読めない行 ${p.invalid.length} 件（${p.invalid.slice(0,3).map(x=>x.row_no+'行目: '+x.reason).join(' / ')}）。直してから入れてください。</div>`;
+  let accHtml='';
+  if(p.src==='pdf'){accHtml=p.account?`<div class="row"><span class="chip">口座: <b>${esc(p.account.label)}</b> ${deptBadge(p.account.department)}</span><span class="small">${esc(p.header.bank||'')} ${esc(p.header.account||'')}</span></div>`:accountFormHtml('newAcc',p.parsedAccount,p.header.bank);}
+  else accHtml=`<div class="row"><label>口座 <select id="csvAccount" onchange="F.bankParsed.account=F.accounts.find(a=>a.id===this.value)||null;renderBankPreview()"><option value="">選んでください</option>${F.accounts.map(a=>`<option value="${a.id}"${p.account&&p.account.id===a.id?' selected':''}>${esc(a.label)}（${esc(deptName(a.department))}）</option>`).join('')}</select></label><button class="btn btn-outline btn-sm" onclick="accDialog()">＋ 口座を登録</button></div>`;
+  const canImport=rows.length>0&&(!p.checks||p.checks.ok)&&!(p.invalid&&p.invalid.length)&&!!p.account;
+  document.getElementById('bankImportBox').innerHTML=`<div class="row"><b>${esc(p.file.name)}</b> ${p.header?`<span class="chip">${esc(p.header.period||'')}</span>`:''} <span class="muted">${rows.length}行・入金 ${yen(sumIn)}・出金 ${yen(sumOut)}</span></div>${accHtml}${chk}
+    <div class="tablewrap" style="max-height:260px"><table><thead><tr><th>日付</th><th>摘要</th><th class="num">入金</th><th class="num">出金</th><th class="num">残高</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.txn_date}</td><td>${esc(r.description)||'<span class="small">（摘要なし）</span>'}</td><td class="num">${r.amount_in?num(r.amount_in):''}</td><td class="num">${r.amount_out?num(r.amount_out):''}</td><td class="num">${r.balance!=null?num(r.balance):''}</td></tr>`).join('')}</tbody></table></div>
+    <div class="row" style="margin-top:8px"><button class="btn btn-gold" id="bankImportBtn" onclick="bankImport(false)" ${canImport?'':'disabled'}>取り込む（まず件数を確認）</button><span id="bankImportMsg" class="small">${!p.account?'口座を登録（選択）すると取り込めます':''}</span></div>`;
+}
+async function bankRegisterAccount(){
+  const p=F.bankParsed;const label=document.getElementById('newAccLabel').value.trim(),dp=document.getElementById('newAccDept').value;
+  if(!label)return toast('口座の呼び名を入れてください','error');
+  try{const r=await rpc('staff_account_set',{p_staff_key:staffKeyGet(),p_account:{bank_name:p.header.bank||'銀行',branch:p.parsedAccount.branch,account_type:p.parsedAccount.type,account_no:p.parsedAccount.no,label:label,department:dp},p_by:who()||null});
+    applySetup(await rpc('finance_setup',{p_key:finKey()}));p.account=F.accounts.find(a=>a.id===r.id)||null;toast('口座を登録しました');renderBankPreview();}catch(e){fail('口座の登録',e);}
+}
+async function bankImport(commit){
+  const p=F.bankParsed,k=staffKeyGet(),btn=document.getElementById('bankImportBtn'),msg=document.getElementById('bankImportMsg');
+  if(!k){toast('取込はスタッフキーが必要です','error');return;}if(!p.account){toast('口座を選んでください','error');return;}
+  btn.disabled=true;msg.textContent=commit?'取り込んでいます...':'確認中...';
+  try{
+    const r=await rpc('staff_bank_import',{p_staff_key:k,p_account:p.account.id,p_file_name:p.file.name,p_rows:p.rows,p_commit:commit,p_by:who()||null});
+    if(r.ok===false){msg.innerHTML=`<span class="err">読めない行があるため取り込みませんでした（行: ${esc(JSON.stringify(r.invalid_rows))}）</span>`;btn.disabled=false;return;}
+    if(!commit){msg.innerHTML=`${esc(p.account.label)} に ${num(r.row_count)}行のうち <b>新規 ${num(r.new_count)}件</b>・すでに取込済み ${num(r.dup_count)}件。`+(r.new_count>0?' <button class="btn btn-green btn-sm" onclick="bankImport(true)">この内容で取り込む</button>':' <span class="ok">新しい明細はありません</span>');btn.disabled=false;return;}
+    msg.innerHTML=`<span class="ok">取り込みました: 新規 ${num(r.new_count)}件（重複 ${num(r.dup_count)}件は飛ばしました）</span>`;toast('通帳を取り込みました');
+    const d=p.rows.map(r=>r.txn_date).sort();const fr=document.getElementById('bankFrom'),to=document.getElementById('bankTo');if(!fr.value||d[0]<fr.value)fr.value=d[0];if(!to.value||d[d.length-1]>to.value)to.value=d[d.length-1];
+    F.bankParsed=null;await loadBank();loadDash();
+  }catch(e){msg.innerHTML=`<span class="err">取込に失敗しました: ${esc(e.message)}</span>`;btn.disabled=false;}
+}
+function accDialog(acc){
+  acc=acc||{};openModal(`<h2>${acc.id?'口座を直す':'口座を登録'}</h2><div class="row"><label>呼び名 <input id="acLabel" value="${esc(acc.label||'')}" placeholder="例: ジビエセンター口座"></label><label>部門 <select id="acDept">${deptOptions(acc.department||dept()||'gibier')}</select></label></div>
+    <div class="row"><label>銀行 <input id="acBank" value="${esc(acc.bank_name||'千葉銀行')}" ${acc.id?'readonly':''}></label><label>支店 <input id="acBranch" value="${esc(acc.branch||'')}"></label><label>種別 <select id="acType">${['普通','当座','貯蓄'].map(t=>`<option${(acc.account_type||'普通')===t?' selected':''}>${t}</option>`).join('')}</select></label><label>口座番号 <input id="acNo" value="${esc(acc.account_no||'')}" ${acc.id?'readonly':''} inputmode="numeric"></label></div>
+    <div class="row"><label><input type="checkbox" id="acActive" ${acc.is_active===false?'':'checked'}> 有効</label></div>
+    <div class="row"><button class="btn btn-gold" onclick="accSave()">保存</button><button class="btn btn-outline" onclick="closeModal()">閉じる</button></div><div id="acMsg" class="err"></div>`);
+}
+async function accSave(){
+  const g=id=>document.getElementById(id);const body={bank_name:g('acBank').value.trim(),branch:g('acBranch').value.trim(),account_type:g('acType').value,account_no:g('acNo').value.trim(),label:g('acLabel').value.trim(),department:g('acDept').value,is_active:g('acActive').checked};
+  if(!body.bank_name||!body.account_no||!body.label){g('acMsg').textContent='銀行・口座番号・呼び名を入れてください';return;}
+  try{const r=await rpc('staff_account_set',{p_staff_key:staffKeyGet(),p_account:body,p_by:who()||null});applySetup(await rpc('finance_setup',{p_key:finKey()}));closeModal();toast('口座を保存しました');
+    if(F.bankParsed&&F.bankParsed.src==='csv'){F.bankParsed.account=F.accounts.find(a=>a.id===r.id)||null;renderBankPreview();}if(currentTab==='settings')loadSettings();}catch(e){g('acMsg').textContent=e.message;}
+}
+
+/* ── 銀行: 明細 ── */
+async function loadBank(){
+  const k=finKey(),a=document.getElementById('bankFrom').value,b=document.getElementById('bankTo').value;if(!a||!b)return;
+  document.getElementById('bankBody').innerHTML='<tr><td colspan="8" class="muted">読み込み中...</td></tr>';
+  try{F.bank=await rpc('finance_bank_list',{p_key:k,p_from:a,p_to:b,p_department:dept(),p_account:document.getElementById('bankAccountFilter').value||null});renderBank();}catch(e){document.getElementById('bankBody').innerHTML=`<tr><td colspan="8" class="err">読み込めませんでした: ${esc(e.message)}</td></tr>`;}
+}
+function deptOverrideSel(kind,r,base){const ro=F.role!=='staff';return `<select class="deptsel" data-kind="${kind}" data-id="${r.id}" ${ro?'disabled':''} onchange="classify(this)" title="部門（既定は${esc(deptName(base))}）"><option value="">${esc(deptName(base)||'—')}${base?'（既定）':''}</option>${F.depts.filter(d=>d.is_active!==false&&d.code!==base).map(d=>`<option value="${esc(d.code)}"${r.department_override===d.code?' selected':''}>→ ${esc(d.short_name||d.name)}</option>`).join('')}</select>`;}
+function renderBank(){
+  const f=document.getElementById('bankFilter').value;
+  const rows=F.bank.filter(r=>f==='all'||(f==='in'&&r.amount_in>0)||(f==='out'&&r.amount_out>0)||(f==='in_unmatched'&&r.amount_in>0&&!(r.matched_docs||[]).length&&!r.category_code)||(f==='out_unclassified'&&r.amount_out>0&&!r.category_code));
+  document.getElementById('bankSum').textContent=`${rows.length}件・入金 ${yen(rows.reduce((a,r)=>a+r.amount_in,0))}・出金 ${yen(rows.reduce((a,r)=>a+r.amount_out,0))}`;
+  const ro=F.role!=='staff';
+  document.getElementById('bankBody').innerHTML=rows.length?rows.map(r=>{
+    const matched=(r.matched_docs||[]);let st='';
+    if(r.amount_in>0){st=matched.length?matched.map(d=>`<span class="chip" title="${esc(d.customer_name)}">${esc(d.doc_number)} ${num(d.amount)}${d.fee?'（手数料差'+num(d.fee)+'）':''}</span>`).join('')+`<span class="badge b-green">消込済</span>`
+        :`<select class="catsel" data-kind="bank" data-id="${r.id}" ${ro?'disabled':''} onchange="classify(this)">${titleOptions(r.category_code,'income')}</select>`+(r.category_code?'':` <span class="badge b-gold">未消込</span> <a href="#recon" onclick="showTab('recon');return false" class="small w">消込へ</a>`);}
+    else{const sug=!r.category_code&&FC.suggestTitle(r.description);st=`<select class="catsel" data-kind="bank" data-id="${r.id}" ${ro?'disabled':''} onchange="classify(this)">${titleOptions(r.category_code,'expense')}</select>`+(sug&&!ro?` <button class="btn btn-outline btn-sm w" onclick="classifyWith(this,'bank','${r.id}','${esc(sug)}')">候補: ${esc(titleName(sug))}</button>`:'')+(!r.category_code&&!sug?' <span class="badge b-gold">未分類</span>':'');}
+    st+=r.receipt_id?` <a href="#receipts" onclick="rcOpen('${r.receipt_id}');return false" class="chip">🧾 領収書</a>`:'';
+    const accCell=`<div class="small">${esc(r.account_label||'口座なし')}</div>${deptOverrideSel('bank',r,r.account_department||'gibier')}`;
+    return `<tr><td>${r.txn_date}</td><td>${accCell}</td><td>${esc(r.description)||'<span class="small">（摘要なし）</span>'}</td><td class="num">${r.amount_in?num(r.amount_in):''}</td><td class="num">${r.amount_out?num(r.amount_out):''}</td><td class="num">${r.balance!=null?num(r.balance):''}</td><td>${st}</td><td><input class="memo" data-kind="bank" data-id="${r.id}" value="${esc(r.memo||'')}" placeholder="メモ" style="width:140px" ${ro?'disabled':''} onchange="classify(this)"></td></tr>`;}).join('')
+    :'<tr><td colspan="8" class="muted">該当する明細はありません</td></tr>';
+}
+async function classify(el){
+  const tr=el.closest('tr'),kind=el.dataset.kind,id=el.dataset.id;const sel=tr.querySelector('select.catsel'),memo=tr.querySelector('input.memo'),dp=tr.querySelector('select.deptsel');
+  try{await rpc('staff_classify',{p_staff_key:staffKeyGet(),p_kind:kind,p_txn:id,p_category:sel&&sel.value||null,p_memo:memo&&memo.value||null,p_department:dp&&dp.value||null,p_by:who()||null});
+    const list=kind==='bank'?F.bank:F.card;const r=list.find(x=>x.id===id);if(r){r.category_code=sel&&sel.value||null;r.memo=memo&&memo.value||null;r.department_override=dp&&dp.value||null;}
+    toast('保存しました');}catch(e){fail('保存',e);}
+}
+async function classifyWith(btn,kind,id,code){const tr=btn.closest('tr');const sel=tr.querySelector('select.catsel');sel.value=code;await classify(sel);(kind==='bank'?renderBank:renderCard)();}
+const BANK_COLS=[{key:'txn_date',label:'日付'},{key:'account_label',label:'口座'},{label:'部門',get:r=>deptName(r.department)},{key:'description',label:'摘要'},{key:'amount_in',label:'入金'},{key:'amount_out',label:'出金'},{key:'balance',label:'残高'},{label:'消込',get:r=>(r.matched_docs||[]).map(d=>d.doc_number).join(' ')},{label:'科目',get:r=>titleName(r.category_code)},{key:'memo',label:'メモ'}];
+function downloadBankCsv(){download(`銀行明細_${deptName(dept())||'全部門'}_${document.getElementById('bankFrom').value}_${document.getElementById('bankTo').value}.csv`,RC.toCsv(F.bank,BANK_COLS));}
+
+/* ── 入金消込 ── */
+async function loadRecon(){
+  const box=document.getElementById('reconBox');const k=finKey();
+  if(F.role!=='staff'){box.innerHTML=`<div class="panel"><h2>消込（閲覧）</h2><div class="muted">消込の操作はスタッフが行います。消込の結果は「銀行」タブ（入金・未消込で絞る）と「月次・出力」で見られます。</div></div>`;return;}
+  box.innerHTML='<div class="muted">読み込み中...</div>';
+  try{F.snapshot=await rpc('staff_recon_snapshot',{p_staff_key:k});}catch(e){box.innerHTML=`<div class="err">読み込めませんでした: ${esc(e.message)}</div>`;return;}
+  F.aliases=F.snapshot.aliases||[];F.customers=F.snapshot.customers||[];
+  F.recon=RC.reconcile(F.snapshot);renderRecon();
+}
+function invOf(id){return (F.snapshot.invoices||[]).find(v=>v.id===id);}
+function renderRecon(){
+  const s=RC.summarize(F.recon);const auto=F.recon.filter(r=>r.kind==='auto'),cand=F.recon.filter(r=>r.kind==='candidate'),unk=F.recon.filter(r=>r.kind==='unknown');
+  const open=(F.snapshot.invoices||[]);
+  const custName=id=>{const c=F.customers.find(x=>x.id===id);return c?c.name:'';};
+  const invRow=v=>`${esc(v.doc_number)} ${esc(v.partner_name||custName(v.customer_id))} 残${num(Number(v.total_amount)-Number(v.paid))}（期日 ${v.due_date||''}）`;
+  let html=`<div class="grid"><div class="card"><div class="card-label">未消込の入金</div><div class="card-value">${num(s.total)}件</div><div class="card-sub">全口座</div></div><div class="card"><div class="card-label">自動で当たった</div><div class="card-value ok">${num(s.auto)}件</div><div class="card-sub">名義と金額が一致</div></div><div class="card"><div class="card-label">候補から選ぶ</div><div class="card-value">${num(s.candidate)}件</div></div><div class="card"><div class="card-label">請求書なし</div><div class="card-value">${num(s.unknown)}件</div><div class="card-sub">ジビエ以外の入金など</div></div><div class="card"><div class="card-label">未入金の請求書</div><div class="card-value">${num(open.length)}件</div><div class="card-sub">${yen(open.reduce((a,v)=>a+Number(v.total_amount)-Number(v.paid),0))}</div></div></div>`;
+  if(!F.recon.length)html+=`<div class="panel"><span class="ok">未消込の入金はありません。</span> <span class="muted">通帳を取り込むとここに出ます。</span></div>`;
+  if(auto.length)html+=`<div class="panel"><div class="row"><h2 style="margin:0">自動で当たった ${auto.length}件</h2><button class="btn btn-gold btn-sm" onclick="reconConfirmAuto()">まとめて確定</button><span class="small">名義が顧客台帳・名義表と完全一致し、残額がぴったり合うものだけ</span></div>
+    <div class="tablewrap" style="max-height:40vh"><table><thead><tr><th>入金日</th><th>振込名義</th><th class="num">金額</th><th>請求書</th><th></th></tr></thead><tbody>${auto.map(r=>`<tr id="rc-${r.txn.id}"><td>${r.txn.txn_date}</td><td>${esc(r.txn.description)}</td><td class="num">${num(r.txn.amount_in)}</td><td>${r.allocs.map(a=>{const v=invOf(a.document_id);return `<span class="chip">${esc(v.doc_number)} ${esc(v.partner_name||custName(v.customer_id))}</span>`;}).join('')}<span class="small"> ${esc(r.reason)}</span></td><td><button class="btn btn-green btn-sm" onclick="reconConfirm('${r.txn.id}','auto')">確定</button></td></tr>`).join('')}</tbody></table></div></div>`;
+  if(cand.length)html+=`<div class="panel"><h2>候補から選ぶ ${cand.length}件</h2><div class="small" style="margin-bottom:6px">確定すると、その振込名義がその取引先の名義として登録され、次回から自動で当たります。</div>
+    ${cand.map(r=>`<div class="rcard" id="rc-${r.txn.id}" style="grid-template-columns:1fr"><div><b>${r.txn.txn_date}</b> <b>${esc(r.txn.description)||'（摘要なし）'}</b> <span class="num">${yen(r.txn.amount_in)}</span> <span class="badge b-gold">${esc(r.reason)}</span></div>
+      <div>${r.candidates.map((c,i)=>{const v=invOf(c.document_id);const fee=c.fee||0;return `<label style="display:block"><input type="radio" name="cand-${r.txn.id}" value="${c.document_id}" data-fee="${fee}" ${i===0?'checked':''}> ${invRow(v)} <span class="small">${esc(c.reason)}${fee?'・手数料差 '+num(fee)+'円を認める':''}</span></label>`;}).join('')}
+      <label style="display:block"><input type="radio" name="cand-${r.txn.id}" value="__other"> 別の請求書を選ぶ: <select id="other-${r.txn.id}"><option value="">—</option>${open.map(v=>`<option value="${v.id}">${invRow(v)}</option>`).join('')}</select></label></div>
+      <div class="row"><button class="btn btn-green btn-sm" onclick="reconConfirmCand('${r.txn.id}')">この請求書に確定</button><button class="btn btn-outline btn-sm" onclick="reconNotSales('${r.txn.id}')">請求書ではない（科目を付ける）</button></div></div>`).join('')}</div>`;
+  if(unk.length)html+=`<div class="panel"><h2>請求書に当たらない入金 ${unk.length}件</h2><div class="small" style="margin-bottom:6px">補助金・他事業・利息・返金などはここで科目を付けます。請求書の入金なら「請求書を選ぶ」。</div>
+    ${unk.map(r=>`<div class="rcard" id="rc-${r.txn.id}" style="grid-template-columns:1fr"><div><b>${r.txn.txn_date}</b> <b>${esc(r.txn.description)||'（摘要なし）'}</b> <span class="num">${yen(r.txn.amount_in)}</span> <span class="small">${esc(r.reason)}</span></div>
+      <div class="row"><select id="cat-${r.txn.id}">${titleOptions(FC.suggestTitle(r.txn.description,'in')||'','income')}</select><button class="btn btn-outline btn-sm" onclick="reconNotSales('${r.txn.id}')">この科目で記録</button>
+      <select id="other-${r.txn.id}"><option value="">請求書を選ぶ…</option>${open.map(v=>`<option value="${v.id}">${invRow(v)}</option>`).join('')}</select><button class="btn btn-green btn-sm" onclick="reconConfirmOther('${r.txn.id}')">この請求書に確定</button></div></div>`).join('')}</div>`;
+  html+=`<div class="panel"><div class="row"><h2 style="margin:0">最近の消込（取り消せます）</h2><button class="btn btn-outline btn-sm" onclick="loadRecentMatched()">表示</button></div><div id="recentMatched"></div></div>`;
+  document.getElementById('reconBox').innerHTML=html;
+}
+async function reconConfirm(txnId,method,allocs,rule,conf,alias){
+  const r=F.recon.find(x=>x.txn.id===txnId);if(!r)return;
+  const a=allocs||r.allocs;
+  try{const res=await rpc('staff_recon_confirm',{p_staff_key:staffKeyGet(),p_txn:txnId,p_allocs:a,p_method:method,p_rule:rule||r.rule,p_confidence:conf!=null?conf:r.confidence,p_alias:alias||null,p_by:who()||null});
+    if(res&&res.ok===false)throw new Error(res.reason||'確定できませんでした');
+    toast('消込を確定しました');F.recon=F.recon.filter(x=>x.txn.id!==txnId);if(alias&&a[0]){const v=invOf(a[0].document_id);if(v){F.aliases.push({customer_id:v.customer_id,name:RC.normName(alias)});F.snapshot.aliases=F.aliases;}}a.forEach(x=>{const v=invOf(x.document_id);if(v)v.paid=Number(v.paid)+Number(x.amount)+Number(x.fee||0);});
+    F.recon=RC.reconcile(Object.assign({},F.snapshot,{txns:F.recon.map(x=>x.txn)}));renderRecon();return true;}
+  catch(e){fail('確定',e);return false;}
+}
+async function reconConfirmAuto(){const list=F.recon.filter(r=>r.kind==='auto');if(!list.length)return;if(!confirm(`自動で当たった ${list.length} 件を確定します。よろしいですか？`))return;let ok=0;for(const r of list){if(await reconConfirm(r.txn.id,'auto'))ok++;}toast(`${ok}/${list.length} 件を確定しました`);loadDash();}
+async function reconConfirmCand(txnId){
+  const r=F.recon.find(x=>x.txn.id===txnId);const sel=document.querySelector(`input[name="cand-${txnId}"]:checked`);if(!sel)return toast('請求書を選んでください','error');
+  let docId=sel.value,fee=Number(sel.dataset.fee||0);if(docId==='__other'){docId=document.getElementById('other-'+txnId).value;fee=0;if(!docId)return toast('請求書を選んでください','error');}
+  const v=invOf(docId);const remain=Number(v.total_amount)-Number(v.paid);const amt=r.txn.amount_in;
+  if(amt>remain){return toast(`入金 ${num(amt)} が請求書の残額 ${num(remain)} より多いため、1件には充てられません（過入金）。受発注管理で請求書を確認してください`,'error');}
+  if(amt<remain&&!fee){if(!confirm(`入金 ${num(amt)} は残額 ${num(remain)} より ${num(remain-amt)} 少ないです。一部入金として記録しますか？（残りは未入金のまま）`))return;}
+  await reconConfirm(txnId,'manual',[{document_id:docId,amount:amt,fee:fee}],'manual',0.9,r.txn.description||null);loadDash();
+}
+async function reconConfirmOther(txnId){const r=F.recon.find(x=>x.txn.id===txnId);const docId=document.getElementById('other-'+txnId).value;if(!docId)return toast('請求書を選んでください','error');
+  const v=invOf(docId);const remain=Number(v.total_amount)-Number(v.paid);const amt=r.txn.amount_in;if(amt>remain)return toast(`入金 ${num(amt)} が残額 ${num(remain)} より多いため充てられません`,'error');
+  if(amt<remain&&!confirm(`入金 ${num(amt)} は残額 ${num(remain)} より少ないです。一部入金として記録しますか？`))return;
+  await reconConfirm(txnId,'manual',[{document_id:docId,amount:amt,fee:0}],'manual',0.8,r.txn.description||null);loadDash();}
+async function reconNotSales(txnId){
+  const sel=document.getElementById('cat-'+txnId);const code=sel?sel.value:'';
+  if(!code){openModal(`<h2>科目を付ける</h2><div class="row"><select id="nsCat">${titleOptions(FC.suggestTitle((F.recon.find(x=>x.txn.id===txnId)||{txn:{}}).txn.description,'in')||'','income')}</select><button class="btn btn-gold btn-sm" onclick="reconNotSalesDo('${txnId}',document.getElementById('nsCat').value)">記録</button><button class="btn btn-outline btn-sm" onclick="closeModal()">閉じる</button></div>`);return;}
+  await reconNotSalesDo(txnId,code);
+}
+async function reconNotSalesDo(txnId,code){if(!code)return toast('科目を選んでください','error');closeModal();
+  try{await rpc('staff_classify',{p_staff_key:staffKeyGet(),p_kind:'bank',p_txn:txnId,p_category:code,p_memo:null,p_department:null,p_by:who()||null});toast('記録しました');
+    F.recon=F.recon.filter(x=>x.txn.id!==txnId);renderRecon();loadDash();}catch(e){fail('記録',e);}}
+async function loadRecentMatched(){
+  const el=document.getElementById('recentMatched');el.innerHTML='<div class="muted">読み込み中...</div>';
+  try{const to=today(),from=new Date(Date.now()-90*86400000).toISOString().slice(0,10);const list=(await rpc('finance_bank_list',{p_key:finKey(),p_from:from,p_to:to,p_department:null,p_account:null})).filter(r=>(r.matched_docs||[]).length);
+    el.innerHTML=list.length?`<div class="tablewrap" style="max-height:40vh"><table><thead><tr><th>入金日</th><th>振込名義</th><th class="num">金額</th><th>請求書</th><th class="w"></th></tr></thead><tbody>${list.map(r=>`<tr><td>${r.txn_date}</td><td>${esc(r.description)}</td><td class="num">${num(r.amount_in)}</td><td>${r.matched_docs.map(d=>`<span class="chip">${esc(d.doc_number)} ${esc(d.customer_name)} ${d.method==='auto'?'自動':'手動'}</span>`).join('')}</td><td class="w"><button class="btn btn-danger btn-sm" onclick="reconUndo('${r.id}')">取消</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="muted">直近90日に消込はありません</div>';
+  }catch(e){el.innerHTML=`<div class="err">${esc(e.message)}</div>`;}
+}
+async function reconUndo(txnId){if(!confirm('この消込を取り消しますか？（請求書は未入金に戻ります）'))return;try{const r=await rpc('staff_recon_undo',{p_staff_key:staffKeyGet(),p_txn:txnId,p_by:who()||null});if(r&&r.ok===false)throw new Error(r.reason);toast('取り消しました');loadRecon();loadDash();}catch(e){fail('取消',e);}}
+
+/* ── 未入金・督促 ── */
+async function loadUnpaid(){
+  const body=document.getElementById('unpaidBody');body.innerHTML='<tr><td colspan="6" class="muted">読み込み中...</td></tr>';
+  try{F.unpaid=await rpc('staff_unpaid_list_any',{p_key:finKey(),p_as_of:null,p_department:dept()});}catch(e){body.innerHTML=`<tr><td colspan="6" class="err">${esc(e.message)}</td></tr>`;return;}
+  const g={};F.unpaid.forEach(d=>{const key=d.customer_id||d.customer_name;(g[key]=g[key]||{name:d.customer_name,customer_id:d.customer_id,docs:[]}).docs.push(d);});
+  const groups=Object.values(g).sort((a,b)=>Math.max(...b.docs.map(d=>d.days_overdue))-Math.max(...a.docs.map(d=>d.days_overdue))||b.docs.reduce((s,d)=>s+d.remain,0)-a.docs.reduce((s,d)=>s+d.remain,0));
+  document.getElementById('unpaidSum').textContent=`${F.unpaid.length}件・${yen(F.unpaid.reduce((a,d)=>a+Number(d.remain),0))}（期日超過 ${F.unpaid.filter(d=>d.days_overdue>0).length}件）${dept()?'・'+deptName(dept()):''}`;
+  body.innerHTML=groups.length?groups.map((gr,i)=>{const over=Math.max(...gr.docs.map(d=>d.days_overdue));const dun=Math.max(...gr.docs.map(d=>d.dunning_count||0));
+    return `<tr><td><b>${esc(gr.name)}</b> ${deptBadge(gr.docs[0].department)}<div class="small">${gr.docs.map(d=>`${esc(d.doc_number)} ${num(d.remain)}（期日 ${d.due_date}${d.days_overdue>0?' <span class="err">'+d.days_overdue+'日超過</span>':''}）`).join('<br>')}</div></td><td class="num">${gr.docs.length}</td><td class="num">${num(gr.docs.reduce((s,d)=>s+Number(d.remain),0))}</td><td class="num">${over>0?`<span class="err">${over}日</span>`:'—'}</td><td>${dun?`<span class="badge b-gold">${dun}回</span>`:''}</td><td class="w"><button class="btn btn-outline btn-sm" onclick="dunOpen(${i})">督促文</button></td></tr>`;}).join('')
+    :'<tr><td colspan="6" class="ok">未入金はありません</td></tr>';
+  F._groups=groups;
+}
+function dunOpen(i){const gr=F._groups[i];F.dun=gr;document.getElementById('dunPanel').style.display='';document.getElementById('dunWho').textContent=gr.name+'（'+gr.docs.length+'件）';
+  const round=Math.max(...gr.docs.map(d=>d.dunning_count||0))+1;document.getElementById('dunRound').value=String(Math.min(round,3));dunDraft();document.getElementById('dunPanel').scrollIntoView({behavior:'smooth'});}
+function dunDraft(){if(!F.dun)return;const round=Number(document.getElementById('dunRound').value);document.getElementById('dunText').value=RC.dunningDraft(F.dun.name,F.dun.docs,round,{as_of:today(),new_due:document.getElementById('dunNewDue').value||''});}
+function dunCopy(){const t=document.getElementById('dunText');t.select();navigator.clipboard&&navigator.clipboard.writeText(t.value).then(()=>toast('コピーしました')).catch(()=>document.execCommand('copy'));}
+async function dunRecord(){if(!F.dun)return;try{const r=await rpc('staff_dunning_record',{p_staff_key:staffKeyGet(),p_customer:F.dun.customer_id,p_docs:F.dun.docs.map(d=>d.document_id),p_channel:document.getElementById('dunChannel').value,p_by:who()||null});toast(`督促 ${r.round}回目として記録しました`);loadUnpaid();}catch(e){fail('記録',e);}}
+const UNPAID_COLS=[{key:'customer_code',label:'取引先コード'},{key:'customer_name',label:'取引先'},{label:'部門',get:r=>deptName(r.department)},{key:'doc_number',label:'請求書'},{key:'issue_date',label:'発行日'},{key:'due_date',label:'期日'},{key:'total',label:'請求額'},{key:'paid',label:'入金済'},{key:'remain',label:'残額'},{key:'days_overdue',label:'超過日数'},{key:'dunning_count',label:'督促回数'}];
+function downloadUnpaidCsv(){download(`未入金_${deptName(dept())||'全部門'}_${today()}.csv`,RC.toCsv(F.unpaid,UNPAID_COLS));}
+
+/* ── カード ── */
+function cardNameChanged(){const c=F.cards.find(x=>x.card_name===document.getElementById('cardName').value.trim());const w=document.getElementById('cardDeptWrap');if(c){document.getElementById('cardDept').value=c.department;w.title='登録済み: '+deptName(c.department);}}
+async function cardFileChosen(files){
+  const f=files&&files[0];if(!f)return;const box=document.getElementById('cardImportBox');box.innerHTML='<div class="muted">読み取り中...</div>';
+  try{const dec=RC.decode(await f.arrayBuffer());const csv=RC.parseCsv(dec.text);const map=FC.guessColumns(csv);
+    if(!map){box.innerHTML='<div class="err">見出し行が見つかりません（利用日・利用先・金額の列名を含むCSVを使ってください）</div>';return;}
+    if(map.amount==null&&map.amount_out!=null)map.amount=map.amount_out;
+    F.cardParsed={csv:csv,map:map,file:f};const hdr=csv[map.header_rows-1]||[];const opt=k=>'<option value="">—</option>'+hdr.map((h,i)=>`<option value="${i}"${map[k]===i?' selected':''}>${esc(h||('列'+(i+1)))}</option>`).join('');
+    box.innerHTML=`<div class="muted">${esc(f.name)}（${dec.encoding}・${csv.length}行）列を確かめてください</div><div class="row">${['date:利用日','description:利用先','amount:金額'].map(x=>{const [k,l]=x.split(':');return `<label>${l} <select data-k="${k}" class="cardmap">${opt(k)}</select></label>`;}).join('')}<button class="btn btn-outline btn-sm" onclick="cardCsvApply()">この列で読む</button></div>`;
+  }catch(e){box.innerHTML=`<div class="err">読み取れませんでした: ${esc(e.message)}</div>`;}
+}
+function cardCsvApply(){
+  const {csv,map,file}=F.cardParsed;const cm={header_rows:map.header_rows};document.querySelectorAll('.cardmap').forEach(s=>{if(s.value!=='')cm[s.dataset.k]=Number(s.value);});
+  if(cm.date==null||cm.amount==null){toast('利用日と金額の列を選んでください','error');return;}
+  const r=FC.cardRows(csv,{column_map:cm},RC);F.cardParsed.rows=r.txns;F.cardParsed.invalid=r.invalid;
+  const sum=r.txns.reduce((a,t)=>a+t.amount,0);const box=document.getElementById('cardImportBox');
+  box.innerHTML=`<div class="row"><b>${esc(file.name)}</b> <span class="muted">${r.txns.length}行・合計 ${yen(sum)}</span></div>${r.invalid.length?`<div class="err">読めない行 ${r.invalid.length} 件（${r.invalid.slice(0,3).map(x=>x.row_no+'行目: '+x.reason).join(' / ')}）。直してから入れてください。</div>`:''}
+    <div class="tablewrap" style="max-height:260px"><table><thead><tr><th>利用日</th><th>利用先</th><th class="num">金額</th></tr></thead><tbody>${r.txns.map(t=>`<tr><td>${t.txn_date}</td><td>${esc(t.description)}</td><td class="num">${num(t.amount)}</td></tr>`).join('')}</tbody></table></div>
+    <div class="row" style="margin-top:8px"><button class="btn btn-gold" id="cardImportBtn" onclick="cardImport(false)" ${r.txns.length&&!r.invalid.length?'':'disabled'}>取り込む（まず件数を確認）</button><span id="cardImportMsg" class="small"></span></div>`;
+}
+async function cardImport(commit){
+  const p=F.cardParsed,k=staffKeyGet(),btn=document.getElementById('cardImportBtn'),msg=document.getElementById('cardImportMsg');const name=document.getElementById('cardName').value.trim(),dp=document.getElementById('cardDept').value;
+  if(!name){toast('カード名を入れてください（例: 事業用カードB）','error');return;}if(!dp){toast('このカードの部門を選んでください','error');return;}if(!k){toast('取込はスタッフキーが必要です','error');return;}
+  ls('tg_finance_card',name);btn.disabled=true;msg.textContent=commit?'取り込んでいます...':'確認中...';
+  try{const r=await rpc('staff_card_import',{p_staff_key:k,p_card_name:name,p_file_name:p.file.name,p_rows:p.rows,p_commit:commit,p_by:who()||null,p_department:dp});
+    if(r.ok===false){msg.innerHTML=`<span class="err">読めない行があるため取り込みませんでした（行: ${esc(JSON.stringify(r.invalid_rows))}）</span>`;btn.disabled=false;return;}
+    if(!commit){msg.innerHTML=`${num(r.row_count)}行のうち <b>新規 ${num(r.new_count)}件</b>・取込済み ${num(r.dup_count)}件。`+(r.new_count>0?' <button class="btn btn-green btn-sm" onclick="cardImport(true)">この内容で取り込む</button>':' <span class="ok">新しい明細はありません</span>');btn.disabled=false;return;}
+    msg.innerHTML=`<span class="ok">取り込みました: 新規 ${num(r.new_count)}件</span>`;toast('カード明細を取り込みました');const d=p.rows.map(r=>r.txn_date).sort();const fr=document.getElementById('cardFrom'),to=document.getElementById('cardTo');if(!fr.value||d[0]<fr.value)fr.value=d[0];if(!to.value||d[d.length-1]>to.value)to.value=d[d.length-1];F.cardParsed=null;
+    if(!F.cards.some(c=>c.card_name===name))applySetup(await rpc('finance_setup',{p_key:finKey()}));await loadCard();loadDash();
+  }catch(e){msg.innerHTML=`<span class="err">取込に失敗しました: ${esc(e.message)}</span>`;btn.disabled=false;}
+}
+async function loadCard(){
+  const a=document.getElementById('cardFrom').value,b=document.getElementById('cardTo').value;if(!a||!b)return;document.getElementById('cardName').value=document.getElementById('cardName').value||ls('tg_finance_card');cardNameChanged();
+  document.getElementById('cardBody').innerHTML='<tr><td colspan="7" class="muted">読み込み中...</td></tr>';
+  try{F.card=await rpc('finance_card_list',{p_key:finKey(),p_from:a,p_to:b,p_department:dept()});renderCard();}catch(e){document.getElementById('cardBody').innerHTML=`<tr><td colspan="7" class="err">${esc(e.message)}</td></tr>`;}
+}
+function renderCard(){
+  const f=document.getElementById('cardFilter').value;const rows=F.card.filter(r=>f==='all'||(f==='unclassified'&&!r.category_code)||(f==='noreceipt'&&!r.receipt_id&&r.amount>0));const ro=F.role!=='staff';
+  document.getElementById('cardSum').textContent=`${rows.length}件・${yen(rows.reduce((a,r)=>a+Number(r.amount),0))}`;
+  document.getElementById('cardBody').innerHTML=rows.length?rows.map(r=>{const sug=!r.category_code&&FC.suggestTitle(r.description);const base=(F.cards.find(c=>c.card_name===r.card_name)||{}).department||'';
+    return `<tr><td>${r.txn_date}</td><td><div class="small">${esc(r.card_label||r.card_name)}</div>${deptOverrideSel('card',r,base)}</td><td>${esc(r.description)}</td><td class="num">${num(r.amount)}</td><td><select class="catsel" data-kind="card" data-id="${r.id}" ${ro?'disabled':''} onchange="classify(this)">${titleOptions(r.category_code,'expense')}</select>${sug&&!ro?` <button class="btn btn-outline btn-sm w" onclick="classifyWith(this,'card','${r.id}','${esc(sug)}')">候補: ${esc(titleName(sug))}</button>`:''}</td><td><input class="memo" data-kind="card" data-id="${r.id}" value="${esc(r.memo||'')}" style="width:120px" ${ro?'disabled':''} onchange="classify(this)"></td><td>${r.receipt_id?`<a href="#receipts" class="chip" onclick="rcOpen('${r.receipt_id}');return false">🧾 あり</a>`:(r.amount>0?`<span class="badge b-gold">なし</span> <button class="btn btn-outline btn-sm w" onclick="rcForTxn('card','${r.id}')">登録</button>`:'')}</td></tr>`;}).join('')
+    :'<tr><td colspan="7" class="muted">該当する明細はありません</td></tr>';
+}
+const CARD_COLS=[{key:'txn_date',label:'利用日'},{key:'card_name',label:'カード'},{label:'部門',get:r=>deptName(r.department)},{key:'description',label:'利用先'},{key:'amount',label:'金額'},{label:'科目',get:r=>titleName(r.category_code)},{key:'memo',label:'メモ'},{label:'領収書',get:r=>r.receipt_id?'あり':''}];
+function downloadCardCsv(){download(`カード明細_${deptName(dept())||'全部門'}_${document.getElementById('cardFrom').value}_${document.getElementById('cardTo').value}.csv`,RC.toCsv(F.card,CARD_COLS));}
+
+/* ── 領収書 ── */
+function rcForTxn(kind,id){const r=(kind==='card'?F.card:F.bank).find(x=>x.id===id);if(!r)return;showTab('receipts');document.getElementById('rcDate').value=r.txn_date;document.getElementById('rcVendor').value=r.description||'';document.getElementById('rcAmount').value=kind==='card'?r.amount:r.amount_out;document.getElementById('rcCat').value=r.category_code||'';document.getElementById('rcPaidBy').value=kind==='card'?'card':'bank';document.getElementById('rcDept').value=r.department||dept()||'gibier';F._rcLink={kind,id};document.getElementById('rcAddMsg').textContent=`${kind==='card'?'カード':'銀行'}明細 ${r.txn_date} ${esc(r.description)} に紐づけて登録します`;document.getElementById('rcFile').scrollIntoView({behavior:'smooth'});}
+async function rcFileChosen(files){const f=files&&files[0];F.rcFile=null;if(!f)return;const info=document.getElementById('rcFileInfo');info.textContent='準備中...';
+  try{if(/^image\//.test(f.type)){const r=await shrinkImage(f,1600,0.82);F.rcFile=r;info.textContent=`${f.name} → ${Math.round(r.size/1024)}KB（縮小済み）`;}
+    else if(f.type==='application/pdf'){if(f.size>3*1024*1024)throw new Error('PDF は 3MB までです');F.rcFile={blob:f,mime:'application/pdf',size:f.size,name:f.name};info.textContent=`${f.name}（${Math.round(f.size/1024)}KB）`;}
+    else throw new Error('画像か PDF を選んでください');}catch(e){info.textContent='';toast(e.message,'error');}}
+function shrinkImage(file,max,q){return new Promise((ok,ng)=>{const img=new Image();const url=URL.createObjectURL(file);img.onload=()=>{let w=img.naturalWidth,h=img.naturalHeight;const s=Math.min(1,max/Math.max(w,h));w=Math.round(w*s);h=Math.round(h*s);const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);c.toBlob(b=>{URL.revokeObjectURL(url);if(!b)return ng(new Error('画像を変換できませんでした'));ok({blob:b,mime:'image/jpeg',size:b.size,name:file.name.replace(/\.[^.]+$/,'')+'.jpg'});},'image/jpeg',q);};img.onerror=()=>{URL.revokeObjectURL(url);ng(new Error('画像を読めませんでした（HEIC は一度 JPEG にしてください）'));};img.src=url;});}
+function blobToBase64(b){return new Promise((ok,ng)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]);r.onerror=()=>ng(new Error('ファイルを読めませんでした'));r.readAsDataURL(b);});}
+async function rcAdd(){
+  const k=staffKeyGet();if(!k)return toast('登録はスタッフキーが必要です','error');
+  const vendor=document.getElementById('rcVendor').value.trim(),amount=document.getElementById('rcAmount').value;const msg=document.getElementById('rcAddMsg'),btn=document.getElementById('rcAddBtn');
+  if(!F.rcFile&&!vendor)return toast('写真か店名のどちらかは必要です','error');
+  const rec={receipt_date:document.getElementById('rcDate').value||null,vendor:vendor||null,amount:amount===''?null:Number(amount),tax_rate:Number(document.getElementById('rcTax').value),category_code:document.getElementById('rcCat').value||null,department:document.getElementById('rcDept').value||null,paid_by:document.getElementById('rcPaidBy').value,memo:document.getElementById('rcMemo').value.trim()||null,file_name:F.rcFile?F.rcFile.name:null,mime:F.rcFile?F.rcFile.mime:null,size_bytes:F.rcFile?F.rcFile.size:null};
+  if(F._rcLink){if(F._rcLink.kind==='card')rec.card_transaction_id=F._rcLink.id;else rec.bank_transaction_id=F._rcLink.id;}
+  btn.disabled=true;msg.textContent='登録しています...';
+  try{const r=await rpc('staff_receipt_add',{p_staff_key:k,p_receipt:rec,p_by:who()||null});
+    if(F.rcFile){msg.textContent='ファイルを送っています...';const b64=await blobToBase64(F.rcFile.blob);const u=await rpc('staff_receipt_file_put',{p_staff_key:k,p_receipt:r.id,p_mime:F.rcFile.mime,p_base64:b64,p_by:who()||null});if(!u||!u.ok)throw new Error('ファイルの保存に失敗しました（台帳には登録済み。あとで写真だけ付け直せます）');}
+    msg.innerHTML='<span class="ok">登録しました</span>';toast('領収書を登録しました');
+    ['rcVendor','rcAmount','rcMemo'].forEach(id=>document.getElementById(id).value='');document.getElementById('rcFile').value='';document.getElementById('rcFileInfo').textContent='';F.rcFile=null;F._rcLink=null;
+    document.getElementById('rcStatus').value='pending';await loadReceipts();loadDash();
+  }catch(e){msg.innerHTML=`<span class="err">${esc(e.message)}</span>`;}
+  btn.disabled=false;
+}
+async function loadReceipts(){
+  const st=document.getElementById('rcStatus').value,m=document.getElementById('rcMonth').value;const [a,b]=m?monthRange(m):[null,null];const el=document.getElementById('rcList');el.innerHTML='<div class="muted">読み込み中...</div>';
+  try{F.receipts=await rpc('finance_receipts_list',{p_key:finKey(),p_from:a,p_to:b,p_status:st||null,p_department:dept()});renderReceipts();}catch(e){el.innerHTML=`<div class="err">${esc(e.message)}</div>`;}
+}
+function renderReceipts(){
+  const ro=F.role!=='staff';const list=F.receipts;document.getElementById('rcSum').textContent=`${list.length}件・${yen(list.reduce((a,r)=>a+Number(r.amount||0),0))}`;
+  document.getElementById('rcList').innerHTML=list.length?list.map(r=>`<div class="rcard" id="rc-card-${r.id}"><div><div class="thumb" id="th-${r.id}" onclick="rcView('${r.id}')" style="display:flex;align-items:center;justify-content:center;font-size:1.6rem">${r.storage_path?'🧾':'—'}</div><div class="small" style="margin-top:4px">${r.status==='confirmed'?'<span class="badge b-green">確認済</span>':r.status==='rejected'?'<span class="badge b-red">却下</span>':'<span class="badge b-gold">未確認</span>'}</div></div>
+    <div><div class="f"><div><label>部門</label><select data-f="department" data-id="${r.id}" ${ro?'disabled':''} onchange="rcPatch(this)">${deptOptions(r.department||'',true,'（未設定）')}</select></div><div><label>日付</label><input type="date" value="${esc(r.receipt_date||'')}" data-f="receipt_date" data-id="${r.id}" ${ro?'disabled':''} onchange="rcPatch(this)"></div><div><label>店名</label><input value="${esc(r.vendor||'')}" data-f="vendor" data-id="${r.id}" ${ro?'disabled':''} onchange="rcPatch(this)"></div><div><label>金額</label><input type="number" value="${esc(r.amount==null?'':r.amount)}" data-f="amount" data-id="${r.id}" ${ro?'disabled':''} onchange="rcPatch(this)"></div>
+      <div><label>科目</label><select data-f="category_code" data-id="${r.id}" ${ro?'disabled':''} onchange="rcPatch(this)">${titleOptions(r.category_code,'expense')}</select></div><div><label>支払い</label><select data-f="paid_by" data-id="${r.id}" ${ro?'disabled':''} onchange="rcPatch(this)">${['card:カード','cash:現金','bank:振込','other:その他'].map(x=>{const [v,l]=x.split(':');return `<option value="${v}"${r.paid_by===v?' selected':''}>${l}</option>`;}).join('')}</select></div><div><label>メモ</label><input value="${esc(r.memo||'')}" data-f="memo" data-id="${r.id}" ${ro?'disabled':''} onchange="rcPatch(this)"></div></div>
+      <div class="row" style="margin-top:6px"><span class="small">${r.card_transaction_id?'カード明細に紐づけ済':r.bank_transaction_id?'銀行明細に紐づけ済':'<span class="badge b-gray">明細と未紐づけ</span>'}</span>
+        ${ro?'':`<button class="btn btn-outline btn-sm" onclick="rcLinkDialog('${r.id}')">明細に紐づける</button>${r.status!=='confirmed'?`<button class="btn btn-green btn-sm" onclick="rcStatus('${r.id}','confirmed')">確認済にする</button>`:''}${r.status!=='rejected'?`<button class="btn btn-danger btn-sm" onclick="rcStatus('${r.id}','rejected')">却下</button>`:`<button class="btn btn-outline btn-sm" onclick="rcStatus('${r.id}','pending')">戻す</button>`}`}
+        <span class="small">${esc(r.uploaded_by||'')} ${esc(String(r.created_at||'').slice(0,10))}</span></div></div></div>`).join('')
+    :'<div class="muted">該当する領収書はありません</div>';
+  list.forEach(r=>{if(r.storage_path&&/^image\//.test(r.mime||''))rcThumb(r.id);});
+}
+const rcFileCache={};
+async function rcFileGet(id){if(rcFileCache[id])return rcFileCache[id];const r=await rpc('finance_receipt_file',{p_key:finKey(),p_receipt:id});if(!r||!r.ok)throw new Error(r&&r.reason||'ファイルがありません');rcFileCache[id]='data:'+r.mime+';base64,'+r.base64;return rcFileCache[id];}
+async function rcThumb(id){try{const src=await rcFileGet(id);const el=document.getElementById('th-'+id);if(el){const img=document.createElement('img');img.className='thumb';img.src=src;img.onclick=()=>rcView(id);el.replaceWith(img);}}catch(e){}}
+async function rcView(id){try{const src=await rcFileGet(id);openModal(src.startsWith('data:application/pdf')?`<h2>領収書</h2><iframe src="${src}" style="width:100%;height:70vh;border:0"></iframe><div class="row"><button class="btn btn-outline" onclick="closeModal()">閉じる</button></div>`:`<h2>領収書</h2><img src="${src}" style="max-width:100%;max-height:75vh;display:block;margin:0 auto"><div class="row" style="margin-top:8px"><button class="btn btn-outline" onclick="closeModal()">閉じる</button></div>`);}catch(e){toast(e.message,'error');}}
+function rcOpen(id){showTab('receipts');document.getElementById('rcStatus').value='';loadReceipts().then(()=>{const el=document.getElementById('rc-card-'+id);if(el){el.scrollIntoView({behavior:'smooth'});el.style.outline='2px solid var(--gold)';}});}
+async function rcPatch(el){const id=el.dataset.id,f=el.dataset.f;let v=el.value;if(f==='amount')v=v===''?null:Number(v);if(f==='category_code'||f==='memo'||f==='vendor'||f==='receipt_date'||f==='department')v=v||null;
+  try{await rpc('staff_receipt_update',{p_staff_key:staffKeyGet(),p_id:id,p_patch:{[f]:v},p_by:who()||null});const r=F.receipts.find(x=>x.id===id);if(r)r[f]=v;toast('保存しました');}catch(e){fail('保存',e);}}
+async function rcStatus(id,st){try{await rpc('staff_receipt_update',{p_staff_key:staffKeyGet(),p_id:id,p_patch:{status:st},p_by:who()||null});toast(st==='confirmed'?'確認済にしました':st==='rejected'?'却下しました':'未確認に戻しました');await loadReceipts();loadDash();}catch(e){fail('更新',e);}}
+async function rcLinkDialog(id){
+  const r=F.receipts.find(x=>x.id===id);if(!r)return;const d=r.receipt_date||today();const from=new Date(new Date(d).getTime()-10*86400000).toISOString().slice(0,10),to=new Date(new Date(d).getTime()+10*86400000).toISOString().slice(0,10);
+  openModal('<h2>明細に紐づける</h2><div class="muted">読み込み中...</div>');
+  try{const [card,bank]=await Promise.all([rpc('finance_card_list',{p_key:finKey(),p_from:from,p_to:to,p_department:null}),rpc('finance_bank_list',{p_key:finKey(),p_from:from,p_to:to,p_department:null,p_account:null})]);
+    const amt=Number(r.amount||0);const near=x=>amt?Math.abs(Number(x)-amt)<=Math.max(10,amt*0.02):true;
+    const cl=card.filter(x=>!x.receipt_id&&x.amount>0).sort((a,b)=>(near(b.amount)-near(a.amount)));const bl=bank.filter(x=>!x.receipt_id&&x.amount_out>0).sort((a,b)=>(near(b.amount_out)-near(a.amount_out)));
+    openModal(`<h2>明細に紐づける</h2><div class="muted">${esc(r.vendor||'')} ${yen(r.amount)} ${esc(r.receipt_date||'')} — 日付の前後10日で、領収書の無い明細を出しています。金額が近いものが上です。</div>
+      <h3>カード</h3>${cl.length?cl.slice(0,30).map(x=>`<label style="display:block"><input type="radio" name="lk" value="card:${x.id}"> ${x.txn_date} ${esc(x.card_name)} ${esc(x.description)} <b>${num(x.amount)}</b>${near(x.amount)?' <span class="badge b-green">金額一致</span>':''}</label>`).join(''):'<div class="small">該当なし</div>'}
+      <h3>銀行（出金）</h3>${bl.length?bl.slice(0,30).map(x=>`<label style="display:block"><input type="radio" name="lk" value="bank:${x.id}"> ${x.txn_date} ${esc(x.account_label||'')} ${esc(x.description)} <b>${num(x.amount_out)}</b>${near(x.amount_out)?' <span class="badge b-green">金額一致</span>':''}</label>`).join(''):'<div class="small">該当なし</div>'}
+      <div class="row" style="margin-top:10px"><button class="btn btn-gold" onclick="rcLinkDo('${id}')">紐づける</button><button class="btn btn-outline" onclick="rcLinkDo('${id}',true)">紐づけを外す</button><button class="btn btn-outline" onclick="closeModal()">閉じる</button></div>`);
+  }catch(e){openModal(`<h2>明細に紐づける</h2><div class="err">${esc(e.message)}</div><div class="row"><button class="btn btn-outline" onclick="closeModal()">閉じる</button></div>`);}
+}
+async function rcLinkDo(id,clear){const sel=document.querySelector('input[name="lk"]:checked');const patch={card_transaction_id:null,bank_transaction_id:null};
+  if(!clear){if(!sel)return toast('明細を選んでください','error');const [kind,tid]=sel.value.split(':');patch[kind==='card'?'card_transaction_id':'bank_transaction_id']=tid;}
+  try{await rpc('staff_receipt_update',{p_staff_key:staffKeyGet(),p_id:id,p_patch:patch,p_by:who()||null});closeModal();toast(clear?'紐づけを外しました':'紐づけました');await loadReceipts();}catch(e){fail('紐づけ',e);}}
+const RC_COLS=[{key:'receipt_date',label:'日付'},{label:'部門',get:r=>deptName(r.department)},{key:'vendor',label:'店名'},{key:'amount',label:'金額'},{key:'tax_rate',label:'税率'},{label:'科目',get:r=>titleName(r.category_code)},{key:'paid_by',label:'支払い'},{key:'status',label:'状態'},{key:'memo',label:'メモ'},{label:'紐づけ',get:r=>r.card_transaction_id?'カード':r.bank_transaction_id?'銀行':''},{label:'ファイル',get:r=>r.storage_path?'あり':''}];
+function downloadReceiptsCsv(){download(`領収書_${deptName(dept())||'全部門'}_${document.getElementById('rcMonth').value||'all'}.csv`,RC.toCsv(F.receipts,RC_COLS));}
+
+/* ── 月次・出力 ── */
+async function loadMonth(){
+  const m=document.getElementById('monthPick').value;if(!m)return;document.getElementById('monthCards').innerHTML='<div class="muted">読み込み中...</div>';
+  try{F.month=await rpc('finance_month',{p_key:finKey(),p_month:m,p_department:dept()});}catch(e){document.getElementById('monthCards').innerHTML=`<div class="err">${esc(e.message)}</div>`;return;}
+  const d=F.month;F.titles=d.titles||F.titles;F.summary=FC.monthSummary(m,d,F.titles);F.journal=FC.journalRows(m,d,F.titles);const s=F.summary;
+  document.getElementById('monthDeptLabel').textContent=dept()?'（'+deptName(dept())+'）':'（全部門）';
+  const dp=F.depts.find(x=>x.code===dept());document.getElementById('monthReportNote').innerHTML=dp&&dp.report_to?`この部門は <b>${esc(dp.report_to)}</b> への報告があります。「銀行明細」CSV がその口座の入出金明細（科目つき）です。`:(dept()?'':'部門を右上で選ぶと、その部門だけの集計・出力になります。');
+  const invTotal=(d.invoices||[]).reduce((a,v)=>a+Number(v.total),0);const exp=Object.values(s.expense_by_title).reduce((a,v)=>a+v,0);
+  document.getElementById('monthCards').innerHTML=[['売上（この月に発行した請求書）',yen(invTotal),num((d.invoices||[]).length)+'件'],['入金（通帳）',yen(s.bank_in),'うち請求書に当てた '+yen(s.bank_in_matched)],['出金（通帳）',yen(s.bank_out),'未分類 '+yen(s.unclassified.bank_out)],['カード利用',yen(s.card),'未分類 '+yen(s.unclassified.card)],['現金の領収書',yen(s.cash_receipts),''],['経費（科目付き）',yen(exp),'通帳＋カード＋現金']].map(c=>`<div class="card"><div class="card-label">${esc(c[0])}</div><div class="card-value">${esc(c[1])}</div><div class="card-sub">${esc(c[2])}</div></div>`).join('');
+  const rows=Object.entries(s.expense_by_title).sort((a,b)=>b[1]-a[1]);const inc=Object.entries(s.income_by_title);
+  document.getElementById('monthTitles').innerHTML=`<div class="row" style="align-items:flex-start"><div style="flex:1;min-width:260px"><h3>経費（科目別）</h3><table>${rows.map(([n,v])=>`<tr><td>${esc(n)}</td><td class="num">${num(v)}</td></tr>`).join('')||'<tr><td class="muted">科目を付けた経費はありません</td></tr>'}${s.unclassified.bank_out||s.unclassified.card?`<tr><td class="err">未分類（通帳 ${num(s.unclassified.bank_out)}・カード ${num(s.unclassified.card)}）</td><td class="num err">${num(s.unclassified.bank_out+s.unclassified.card)}</td></tr>`:''}</table></div>
+    <div style="flex:1;min-width:260px"><h3>請求書以外の入金（科目別）</h3><table>${inc.map(([n,v])=>`<tr><td>${esc(n)}</td><td class="num">${num(v)}</td></tr>`).join('')||'<tr><td class="muted">なし</td></tr>'}${s.bank_in_unmatched-inc.reduce((a,[,v])=>a+v,0)>0?`<tr><td class="err">未消込・未分類</td><td class="num err">${num(s.bank_in_unmatched-inc.reduce((a,[,v])=>a+v,0))}</td></tr>`:''}</table></div></div>`;
+  document.getElementById('journalBody').innerHTML=F.journal.length?F.journal.slice(0,300).map(j=>`<tr><td>${j.date}</td><td>${deptBadge(j.department)}</td><td>${esc(j.debit)}</td><td>${esc(j.credit)}</td><td class="num">${num(j.amount)}</td><td>${j.tax==='要確認'?'<span class="badge b-red">要確認</span>':esc(j.tax)}</td><td>${esc(j.memo)}</td><td>${esc(j.evidence)}</td></tr>`).join('')+(F.journal.length>300?`<tr><td colspan="8" class="small">…ほか ${F.journal.length-300} 行（CSV に全部入ります）</td></tr>`:''):'<tr><td colspan="8" class="muted">この月の明細はありません</td></tr>';
+}
+const JOURNAL_COLS=[{key:'date',label:'日付'},{label:'部門',get:j=>deptName(j.department)}].concat(FC.JOURNAL_COLS.slice(1));
+function downloadJournal(){if(!F.month)return toast('先に月を選んでください','error');download(`仕訳_${deptName(dept())||'全部門'}_${F.month.month}.csv`,RC.toCsv(F.journal,JOURNAL_COLS));}
+async function downloadMonthAll(){
+  if(!F.month)return toast('先に月を選んでください','error');const m=F.month.month,d=F.month,dn=deptName(dept())||'全部門';
+  download(`仕訳_${dn}_${m}.csv`,RC.toCsv(F.journal,JOURNAL_COLS));
+  download(`銀行明細_${dn}_${m}.csv`,RC.toCsv(d.bank,BANK_COLS));
+  download(`カード明細_${dn}_${m}.csv`,RC.toCsv(d.card,CARD_COLS));
+  download(`領収書_${dn}_${m}.csv`,RC.toCsv(d.receipts,RC_COLS));
+  try{const u=await rpc('staff_unpaid_list_any',{p_key:finKey(),p_as_of:monthRange(m)[1],p_department:dept()});download(`未入金_${dn}_${m}末.csv`,RC.toCsv(u,UNPAID_COLS));}catch(e){fail('未入金の出力',e);}
+  toast('5つのCSVを出しました');
+}
+
+/* ── 設定 ── */
+async function loadSettings(){
+  applyRole();
+  const ro=F.role!=='staff';
+  try{applySetup(await rpc('finance_setup',{p_key:finKey()}));}catch(e){fail('設定の読み込み',e);}
+  document.getElementById('deptBody').innerHTML=F.depts.map(d=>deptRowHtml(d,ro)).join('');
+  document.getElementById('accBody').innerHTML=F.accounts.length?F.accounts.map(a=>`<tr><td><b>${esc(a.label)}</b></td><td>${esc(a.bank_name)}</td><td>${esc(a.branch||'')}</td><td>${esc(a.account_type||'')}</td><td>${esc(a.account_no)}</td><td>${deptBadge(a.department)}</td><td>${a.is_active===false?'<span class="badge b-gray">無効</span>':'<span class="badge b-green">有効</span>'}</td><td class="w"><button class="btn btn-outline btn-sm" onclick='accDialog(${JSON.stringify(a).replace(/'/g,"&#39;")})'>直す</button></td></tr>`).join(''):'<tr><td colspan="8" class="muted">口座はまだありません（通帳PDFを取り込むと登録できます）</td></tr>';
+  document.getElementById('cardsBody').innerHTML=F.cards.length?F.cards.map(c=>`<tr><td><b>${esc(c.card_name)}</b></td><td><input value="${esc(c.label||'')}" data-card="${esc(c.card_name)}" data-f="label" ${ro?'disabled':''} onchange="cardPatch(this)" style="width:160px"></td><td><select data-card="${esc(c.card_name)}" data-f="department" ${ro?'disabled':''} onchange="cardPatch(this)">${deptOptions(c.department)}</select></td><td><input type="checkbox" data-card="${esc(c.card_name)}" data-f="is_active" ${c.is_active!==false?'checked':''} ${ro?'disabled':''} onchange="cardPatch(this)"></td><td></td></tr>`).join(''):'<tr><td colspan="5" class="muted">カードはまだありません（カード明細を取り込むと登録されます）</td></tr>';
+  document.getElementById('titlesBody').innerHTML=F.titles.map(t=>titleRowHtml(t,ro)).join('');
+  if(F.role==='staff'){try{F.snapshot=await rpc('staff_recon_snapshot',{p_staff_key:staffKeyGet()});F.aliases=F.snapshot.aliases||[];F.customers=F.snapshot.customers||[];}catch(e){fail('名義表の読み込み',e);}}
+  renderAliases();
+}
+function deptRowHtml(d,ro){return `<tr class="drow"><td><input value="${esc(d.code)}" data-f="code" style="width:120px" ${d._new?'':'readonly'}></td><td><input value="${esc(d.name)}" data-f="name" ${ro?'disabled':''}></td><td><input value="${esc(d.short_name||'')}" data-f="short_name" style="width:90px" ${ro?'disabled':''}></td><td><input type="number" value="${esc(d.sort)}" data-f="sort" style="width:70px" ${ro?'disabled':''}></td><td><input value="${esc(d.report_to||'')}" data-f="report_to" placeholder="例: 館山市" ${ro?'disabled':''}></td><td><input type="checkbox" data-f="is_active" ${d.is_active!==false?'checked':''} ${ro?'disabled':''}></td></tr>`;}
+function deptAddRow(){document.getElementById('deptBody').insertAdjacentHTML('beforeend',deptRowHtml({code:'',name:'',short_name:'',sort:(Math.max(0,...F.depts.map(d=>Number(d.sort)))+10),is_active:true,_new:true},false));}
+async function deptSave(){
+  const rows=[...document.querySelectorAll('#deptBody tr.drow')].map(tr=>{const g=f=>tr.querySelector(`[data-f="${f}"]`);return {code:g('code').value.trim(),name:g('name').value.trim(),short_name:g('short_name').value.trim()||null,sort:Number(g('sort').value),report_to:g('report_to').value.trim()||null,is_active:g('is_active').checked};}).filter(r=>r.code&&r.name);
+  const bad=rows.filter(r=>!/^[a-z][a-z0-9_]*$/.test(r.code));if(bad.length)return toast('code は英小文字で始まる英数字にしてください: '+bad.map(b=>b.code).join(', '),'error');
+  try{const r=await rpc('staff_department_set',{p_staff_key:staffKeyGet(),p_rows:rows,p_by:who()||null});document.getElementById('deptMsg').textContent=`${r.count}件を保存しました`;toast('部門を保存しました');loadSettings();}catch(e){fail('保存',e);}
+}
+async function cardPatch(el){const name=el.dataset.card;const tr=el.closest('tr');const g=f=>tr.querySelector(`[data-f="${f}"]`);
+  try{await rpc('staff_card_set',{p_staff_key:staffKeyGet(),p_card_name:name,p_department:g('department').value,p_label:g('label').value.trim()||null,p_is_active:g('is_active').checked,p_by:who()||null});toast('保存しました');applySetup(await rpc('finance_setup',{p_key:finKey()}));}catch(e){fail('保存',e);}}
+function titleRowHtml(t,ro){return `<tr class="trow"><td><input value="${esc(t.code)}" data-f="code" style="width:170px" ${t._new?'':'readonly'}></td><td><input value="${esc(t.name)}" data-f="name" ${ro?'disabled':''}></td><td><select data-f="kind" ${ro?'disabled':''}>${['income:収入','expense:経費','asset:資産','liability:負債','other:その他'].map(x=>{const [v,l]=x.split(':');return `<option value="${v}"${t.kind===v?' selected':''}>${l}</option>`;}).join('')}</select></td><td><select data-f="tax_rate" ${ro?'disabled':''}>${[10,8,0].map(v=>`<option value="${v}"${Number(t.tax_rate)===v?' selected':''}>${v?v+'%':'対象外'}</option>`).join('')}</select></td><td><input type="number" value="${esc(t.sort)}" data-f="sort" style="width:70px" ${ro?'disabled':''}></td><td><input type="checkbox" data-f="is_active" ${t.is_active!==false?'checked':''} ${ro?'disabled':''}></td></tr>`;}
+function titlesAddRow(){document.getElementById('titlesBody').insertAdjacentHTML('beforeend',titleRowHtml({code:'expense.',name:'',kind:'expense',tax_rate:10,sort:(Math.max(0,...F.titles.map(t=>Number(t.sort)))+10),is_active:true,_new:true},false));}
+async function titlesSave(){
+  const rows=[...document.querySelectorAll('#titlesBody tr.trow')].map(tr=>{const g=f=>tr.querySelector(`[data-f="${f}"]`);return {code:g('code').value.trim(),name:g('name').value.trim(),kind:g('kind').value,tax_rate:Number(g('tax_rate').value),sort:Number(g('sort').value),is_active:g('is_active').checked};}).filter(r=>r.code&&r.name);
+  const bad=rows.filter(r=>!/^[a-z_]+\.[a-z0-9_]+$/.test(r.code));if(bad.length)return toast('code は 英小文字.英数字 の形にしてください: '+bad.map(b=>b.code).join(', '),'error');
+  try{const r=await rpc('staff_titles_set',{p_staff_key:staffKeyGet(),p_rows:rows,p_by:who()||null});document.getElementById('titlesMsg').textContent=`${r.count}件を保存しました`;toast('勘定科目を保存しました');loadSettings();}catch(e){fail('保存',e);}
+}
+function renderAliases(){
+  const el=document.getElementById('aliasList');const custName=id=>{const c=F.customers.find(x=>x.id===id);return c?c.name:id;};
+  document.getElementById('custList').innerHTML=F.customers.map(c=>`<option value="${esc(c.name)}">`).join('');
+  el.innerHTML=F.aliases.length?`<table><thead><tr><th>振込名義（正規化後）</th><th>取引先</th><th class="w"></th></tr></thead><tbody>${F.aliases.map(a=>`<tr><td>${esc(a.name)}</td><td>${esc(custName(a.customer_id))}</td><td class="w"><button class="btn btn-danger btn-sm" onclick="aliasRemove('${a.customer_id}','${esc(a.name)}')">消す</button></td></tr>`).join('')}</tbody></table>`:'<div class="muted">登録された名義はまだありません（消込を手で確定すると増えます）</div>';
+}
+async function aliasAdd(){const cn=document.getElementById('aliasCust').value.trim(),nm=document.getElementById('aliasName').value.trim();const c=F.customers.find(x=>x.name===cn);if(!c)return toast('取引先を一覧から選んでください（未入金の請求書がある取引先だけ出ます）','error');if(!nm)return toast('振込名義を入れてください','error');
+  try{await rpc('staff_alias_set',{p_staff_key:staffKeyGet(),p_customer:c.id,p_name:nm,p_remove:false,p_by:who()||null});toast('登録しました');F.snapshot=null;loadSettings();}catch(e){fail('登録',e);}}
+async function aliasRemove(cid,nm){if(!confirm('この名義の登録を消しますか？'))return;try{await rpc('staff_alias_set',{p_staff_key:staffKeyGet(),p_customer:cid,p_name:nm,p_remove:true,p_by:who()||null});toast('消しました');F.snapshot=null;loadSettings();}catch(e){fail('削除',e);}}
+function vkGenerate(){const a=new Uint8Array(18);crypto.getRandomValues(a);document.getElementById('vkNew').value='TGC-'+Array.from(a,b=>'abcdefghjkmnpqrstuvwxyz23456789'[b%31]).join('');}
+async function vkSet(){const code=document.getElementById('vkRecovery').value,nw=document.getElementById('vkNew').value.trim(),msg=document.getElementById('vkMsg');if(!code||nw.length<16)return toast('回復コードと16文字以上のキーを入れてください','error');
+  try{const ok=await rpc('admin_set_finance_viewer_key',{p_recovery_code:code,p_new_key:nw});if(!ok){msg.innerHTML='<span class="err">回復コードが違います</span>';return;}
+    const url=location.origin+location.pathname+'#fkey='+encodeURIComponent(nw);document.getElementById('vkRecovery').value='';
+    msg.innerHTML=`<div class="ok">発行しました。このキーは今だけ表示します。</div><div class="kv"><span>キー</span><code>${esc(nw)}</code><span>共有リンク</span><code style="word-break:break-all">${esc(url)}</code></div><div class="small">税理士には共有リンクを個別に送ってください（開くだけでキーが入ります）。以前のキーは使えなくなります。</div>`;}
+  catch(e){fail('発行',e);}}
+
+init();
+</script>
+</body>
+</html>

@@ -54,6 +54,7 @@
   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node tests/e2e/<name>.e2e.js`
   **変更したら関連する既存テストも全部流す**（tests/e2e/ 配下）
 - デプロイ: PRを作って squash merge → Vercelが自動反映（**約6分**）
+- **Supabase MCP（apply_migration / execute_sql）は、DROP・DELETE などを含む文を流すと「本人への確認」を出し、答えが無いと60秒で止まる**（何も適用されない）。マイグレーションにトップレベルの DROP は書かない（`create or replace trigger` を使う、不要になった関数は残す）。関数本体に delete が要るものは、沖に確認プロンプトへ答えてもらうか、Supabase の SQL Editor で流してもらう。1回の文は 7KB 程度に分けると通りやすい（2026-10-24 実測）
 - 反映確認: サンドボックスからvercel.appへ直接出られないため、Supabaseの
   `execute_sql` で `select position('目印' in (extensions.http_get('https://tateyama-gibier.vercel.app/index.html')).content)`
 - **元データ（individuals / inventory / orders）は書き換えない。** 復元や補完は追記のみ。
