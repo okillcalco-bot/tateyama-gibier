@@ -11,3 +11,9 @@
 | 2026-10-23 | 架空データ | `tests/e2e/finance-core.e2e.js` 30/30、`tests/e2e/finance-ui.e2e.js` 45/45、`tests/db/finance.test.sql` 45/45、`tests/db/recon.test.sql` 32/32（マイグレーション2本を2回ずつ流しても壊れない） | 通過 | 本番未適用・未デプロイ |
 | 2026-10-23 | 実データ（千葉銀行PDF・2口座目の4か月分・手元のみ） | 通帳PDF→明細（口座番号の読み取りを含む） | 各月の合計・件数が印字と一致、残高の繋がり全行一致 | 本番未適用 |
 | 2026-10-23 | 架空データ | 部門・口座対応後: `tests/e2e/finance-core.e2e.js` 30/30、`tests/e2e/finance-ui.e2e.js` 56/56、`tests/db/finance.test.sql` 63/63、`tests/db/recon.test.sql` 32/32（口座つきの取込に書き換え）。受発注管理を読む既存 e2e 34本: ok 32・NG 2（invoice-batch-month はテスト用PDF部品が無いため、portal-password は単独で流すと 31/31 通過） | 通過 | 本番未適用・未デプロイ |
+
+## 2026-10-24 本番適用（沖「進めて」）
+
+- 20261021_bank_reconciliation.sql・20261023_finance_cards_receipts.sql を Supabase MCP（apply_migration／execute_sql）で分割適用。表15・関数31・RLS・権限は適用済み。`staff_recon_undo`（消込の取消）だけは本体の `delete from payments` に MCP の確認プロンプトが出て適用できず、`scratchpad/finance_remaining.sql`（1関数＋権限）を沖に渡した。
+- 適用のために変えたこと: トップレベルの DROP 文を無くした（drop trigger → create or replace trigger、department 列は check なし＋20261023 で FK、旧署名の staff_bank_import は作らない）。取込関数2本は一時表（drop/alter/update）をやめて CTE＋変数に。手元PGで recon 32/32・finance 63/63。
+- 本番での確認SQL: 新しい表15すべて RLS 有効・anon/authenticated の表権限なし。departments 2件・account_titles 28件・customers/documents の department FK あり。
