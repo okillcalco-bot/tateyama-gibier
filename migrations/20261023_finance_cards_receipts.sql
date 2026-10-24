@@ -456,7 +456,7 @@ end $$;
 -- 同じ内容でも口座が違えば別の明細（raw_hash に口座を含める）
 create or replace function public.staff_bank_import(p_staff_key text, p_account uuid, p_file_name text, p_rows jsonb, p_commit boolean, p_by text default null)
 returns jsonb language plpgsql volatile security definer set search_path = public, extensions as $$
-declare v_acc bank_accounts%rowtype; v_prof uuid; v_bad jsonb; v_total int; v_dup int; v_batch uuid; v_new int;
+declare v_acc bank_accounts%rowtype; v_prof uuid; v_bad jsonb; v_rows jsonb; v_total int; v_dup int; v_batch uuid; v_new int;
 begin
   if not staff_key_ok(p_staff_key) then raise exception 'スタッフキーが違います'; end if;
   select * into v_acc from bank_accounts where id = p_account;
@@ -472,25 +472,24 @@ begin
   if jsonb_array_length(v_bad) > 0 then
     return jsonb_build_object('ok', false, 'invalid_rows', v_bad, 'row_count', jsonb_array_length(p_rows));
   end if;
-  drop table if exists _rows;
-  create temp table _rows on commit drop as
-  select (r->>'row_no')::int row_no, (r->>'txn_date')::date txn_date, btrim(coalesce(r->>'description','')) description,
-         coalesce((r->>'amount_in')::int,0) amount_in, coalesce((r->>'amount_out')::int,0) amount_out, (r->>'balance')::bigint balance
-    from jsonb_array_elements(p_rows) r;
-  alter table _rows add column raw_hash text;
-  update _rows t set raw_hash = h.hash from (
-    select row_no, encode(digest(concat_ws('|', p_account, txn_date, description, amount_in, amount_out, coalesce(balance::text,''),
-             row_number() over (partition by txn_date, description, amount_in, amount_out, balance order by row_no) - 1), 'sha256'), 'hex') hash
-      from _rows) h where h.row_no = t.row_no;
-  select count(*) into v_total from _rows;
-  select count(*) into v_dup from _rows t where exists (select 1 from bank_transactions b where b.raw_hash = t.raw_hash);
+  -- 行を解釈し raw_hash（口座|日付|摘要|入金|出金|残高|同一行の出現順）を付ける。一時表は使わない（変数に持つ）
+  select jsonb_agg(to_jsonb(h)) into v_rows from (
+    select row_no, txn_date, description, amount_in, amount_out, balance,
+           encode(digest(concat_ws('|', p_account, txn_date, description, amount_in, amount_out, coalesce(balance::text,''),
+             row_number() over (partition by txn_date, description, amount_in, amount_out, balance order by row_no) - 1), 'sha256'), 'hex') raw_hash
+      from (select (r->>'row_no')::int row_no, (r->>'txn_date')::date txn_date, btrim(coalesce(r->>'description','')) description,
+                   coalesce((r->>'amount_in')::int,0) amount_in, coalesce((r->>'amount_out')::int,0) amount_out, (r->>'balance')::bigint balance
+              from jsonb_array_elements(p_rows) r) s) h;
+  v_total := jsonb_array_length(v_rows);
+  select count(*) into v_dup from jsonb_array_elements(v_rows) x where exists (select 1 from bank_transactions b where b.raw_hash = x->>'raw_hash');
   if not p_commit then
     return jsonb_build_object('ok', true, 'preview', true, 'row_count', v_total, 'new_count', v_total - v_dup, 'dup_count', v_dup, 'account', v_acc.label);
   end if;
   insert into import_batches (file_name, bank_profile_id, account_id, row_count, new_count, dup_count, imported_by)
   values (p_file_name, v_prof, p_account, v_total, 0, v_dup, p_by) returning id into v_batch;
   insert into bank_transactions (txn_date, description, amount_in, amount_out, balance, raw_hash, import_batch_id, row_no, account_id)
-  select txn_date, description, amount_in, amount_out, balance, raw_hash, v_batch, row_no, p_account from _rows
+  select (x->>'txn_date')::date, x->>'description', (x->>'amount_in')::int, (x->>'amount_out')::int, (x->>'balance')::bigint, x->>'raw_hash', v_batch, (x->>'row_no')::int, p_account
+    from jsonb_array_elements(v_rows) x
   on conflict (raw_hash) do nothing;
   get diagnostics v_new = row_count;
   update import_batches set new_count = v_new, dup_count = v_total - v_new where id = v_batch;
@@ -501,7 +500,7 @@ end $$;
 -- カード明細の取込（カードは finance_cards に登録済みであること。未登録なら p_department を渡せばその場で登録）
 create or replace function public.staff_card_import(p_staff_key text, p_card_name text, p_file_name text, p_rows jsonb, p_commit boolean, p_by text default null, p_department text default null)
 returns jsonb language plpgsql volatile security definer set search_path = public, extensions as $$
-declare v_prof uuid; v_bad jsonb; v_total int; v_dup int; v_batch uuid; v_new int; v_card text := btrim(coalesce(p_card_name,''));
+declare v_prof uuid; v_bad jsonb; v_rows jsonb; v_total int; v_dup int; v_batch uuid; v_new int; v_card text := btrim(coalesce(p_card_name,''));
 begin
   if not staff_key_ok(p_staff_key) then raise exception 'スタッフキーが違います'; end if;
   if v_card = '' then raise exception 'カード名がありません'; end if;
@@ -517,24 +516,23 @@ begin
   if jsonb_array_length(v_bad) > 0 then
     return jsonb_build_object('ok', false, 'invalid_rows', v_bad, 'row_count', jsonb_array_length(p_rows));
   end if;
-  drop table if exists _crows;
-  create temp table _crows on commit drop as
-  select (r->>'row_no')::int row_no, (r->>'txn_date')::date txn_date, btrim(coalesce(r->>'description','')) description, (r->>'amount')::int amount
-    from jsonb_array_elements(p_rows) r;
-  alter table _crows add column raw_hash text;
-  update _crows t set raw_hash = h.hash from (
-    select row_no, encode(digest(concat_ws('|', v_card, txn_date, description, amount,
-             row_number() over (partition by txn_date, description, amount order by row_no) - 1), 'sha256'), 'hex') hash from _crows) h
-   where h.row_no = t.row_no;
-  select count(*) into v_total from _crows;
-  select count(*) into v_dup from _crows t where exists (select 1 from card_transactions c where c.raw_hash = t.raw_hash);
+  -- 行を解釈し raw_hash（カード名|日付|摘要|金額|同一行の出現順）を付ける。一時表は使わない（変数に持つ）
+  select jsonb_agg(to_jsonb(h)) into v_rows from (
+    select row_no, txn_date, description, amount,
+           encode(digest(concat_ws('|', v_card, txn_date, description, amount,
+             row_number() over (partition by txn_date, description, amount order by row_no) - 1), 'sha256'), 'hex') raw_hash
+      from (select (r->>'row_no')::int row_no, (r->>'txn_date')::date txn_date, btrim(coalesce(r->>'description','')) description, (r->>'amount')::int amount
+              from jsonb_array_elements(p_rows) r) s) h;
+  v_total := jsonb_array_length(v_rows);
+  select count(*) into v_dup from jsonb_array_elements(v_rows) x where exists (select 1 from card_transactions c where c.raw_hash = x->>'raw_hash');
   if not p_commit then
     return jsonb_build_object('ok', true, 'preview', true, 'row_count', v_total, 'new_count', v_total - v_dup, 'dup_count', v_dup);
   end if;
   insert into import_batches (file_name, bank_profile_id, row_count, new_count, dup_count, imported_by)
   values (p_file_name, v_prof, v_total, 0, v_dup, p_by) returning id into v_batch;
   insert into card_transactions (txn_date, description, amount, card_name, raw_hash, import_batch_id, row_no)
-  select txn_date, description, amount, v_card, raw_hash, v_batch, row_no from _crows
+  select (x->>'txn_date')::date, x->>'description', (x->>'amount')::int, v_card, x->>'raw_hash', v_batch, (x->>'row_no')::int
+    from jsonb_array_elements(v_rows) x
   on conflict (raw_hash) do nothing;
   get diagnostics v_new = row_count;
   update import_batches set new_count = v_new, dup_count = v_total - v_new where id = v_batch;
