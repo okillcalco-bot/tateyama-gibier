@@ -239,6 +239,18 @@ const FC = require(path.resolve(__dirname, '../../finance-core.js'));
   await p.click('#rcList button:has-text("写真を付ける")'); await p.waitForTimeout(300);
   await p.setInputFiles('#rcAttachFile', { name: 'later.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') }); await p.click('#rcAttachBtn'); await p.waitForTimeout(1500);
   ck('領収書: あとから写真を付けられる（縮小して送り、サムネイルが出て、ボタンが消える）', !!S.files[S.receipts[1].id] && S.files[S.receipts[1].id].mime === 'image/jpeg' && !!S.receipts[1].storage_path && (await p.$('#rcList img.thumb')) !== null && (await p.$('#rcList button:has-text("写真を付ける")')) === null, JSON.stringify(Object.keys(S.files)));
+  // 8c. 写真の本体が Google ドライブにある領収書（storage_path が URL）→ 🔗 で新しいタブに開く。DBのファイル取得は呼ばない
+  const driveUrl = 'https://drive.google.com/file/d/TESTFILEID/view';
+  S.receipts.push({ id: 'r3', status: 'pending', receipt_date: '2026-10-20', vendor: 'ドライブの写真', amount: 700, category_code: 'expense.supplies', paid_by: 'cash', department: 'gibier', storage_path: driveUrl, file_name: 'IMG_0001.JPG', mime: 'image/jpeg', uploaded_by: 'テスト', created_at: '2026-10-25' });
+  const fileCalls0 = calls.filter(c => c[0] === 'finance_receipt_file').length;
+  await ctx.route('https://drive.google.com/**', rt => rt.fulfill({ status: 200, contentType: 'text/html', body: '<title>drive</title>' }));
+  await p.evaluate(() => loadReceipts()); await p.waitForTimeout(600);
+  const extCard = await txt('#rc-card-r3');
+  ck('領収書: Drive の写真は 🔗 と「Driveで開く」が出て、「写真を付ける」は出ない', /🔗/.test(extCard) && /Driveで開く/.test(extCard) && !/写真を付ける/.test(extCard) && (await p.$eval('#rc-card-r3 a[target="_blank"]', a => a.href)) === driveUrl, extCard.slice(0, 200));
+  ck('領収書: Drive の写真は DB のファイル取得（finance_receipt_file）を呼ばない', calls.filter(c => c[0] === 'finance_receipt_file').length === fileCalls0, String(calls.filter(c => c[0] === 'finance_receipt_file').length - fileCalls0));
+  const [pop] = await Promise.all([ctx.waitForEvent('page', { timeout: 3000 }).catch(() => null), p.click('#th-r3')]);
+  ck('領収書: 🔗 をクリックすると Drive のページが新しいタブで開く', !!pop && pop.url() === driveUrl, pop ? pop.url() : 'ポップアップなし');
+  if (pop) await pop.close();
 
   // 9. 月次
   const dl = []; await p.exposeFunction('__dl', (n) => dl.push(n)); await p.evaluate(() => { window.download = (n) => window.__dl(n); });
