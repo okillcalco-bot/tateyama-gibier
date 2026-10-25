@@ -30,7 +30,7 @@ const FC = require(path.resolve(__dirname, '../../finance-core.js'));
 
   // ── 架空のDB ──
   const S = {
-    departments: [{ code: 'gibier', name: '館山ジビエセンター', short_name: 'ジビエ', sort: 10, is_active: true, report_to: '館山市（通帳の報告義務）' }, { code: 'arco', name: '合同会社アルコ（本体）', short_name: 'アルコ', sort: 20, is_active: true, report_to: null }],
+    departments: [{ code: 'gibier', name: '館山ジビエセンター', short_name: 'ジビエ', mark: 'T', sort: 10, is_active: true, report_to: '館山市（通帳の報告義務）' }, { code: 'arco', name: '合同会社アルコ（本体）', short_name: 'アルコ', mark: 'ア', sort: 20, is_active: true, report_to: null }],
     accounts: [{ id: 'acc1', bank_name: '千葉銀行', branch: '館山支店', account_type: '普通', account_no: '0000001', label: 'ジビエ口座', department: 'gibier', is_active: true }],
     cards: [{ card_name: 'テストカード', label: null, department: 'gibier', is_active: true }],
     titles: FC.DEFAULT_TITLES.map(t => Object.assign({ is_active: true }, t)),
@@ -120,7 +120,7 @@ const FC = require(path.resolve(__dirname, '../../finance-core.js'));
   await p.fill('#keyIn', 'WRONG'); await p.click('#modalBody .btn-gold'); await p.waitForTimeout(300);
   ck('違うキーは理由を出す', /キーが違います/.test(await txt('#keyMsg')), await txt('#keyMsg'));
   await p.fill('#keyIn', 'STAFF'); await p.fill('#opIn', 'テスト担当'); await p.click('#modalBody .btn-gold'); await p.waitForTimeout(900);
-  ck('スタッフキーで入ると役割が「スタッフ」になり、担当者名と部門の選択が出る', (await txt('#roleBadge')) === 'スタッフ' && /テスト担当/.test(await txt('#whoami')) && (await p.$$eval('#deptSel option', os => os.map(o => o.textContent).join('|'))) === '全部門|館山ジビエセンター|合同会社アルコ（本体）', await txt('#roleBadge'));
+  ck('スタッフキーで入ると役割が「スタッフ」になり、担当者名と部門の選択が出る', (await txt('#roleBadge')) === 'スタッフ' && /テスト担当/.test(await txt('#whoami')) && (await p.$$eval('#deptSel option', os => os.map(o => o.textContent).join('|'))) === '全部門|T　館山ジビエセンター|ア　合同会社アルコ（本体）', await txt('#roleBadge'));
 
   // 2. ダッシュボード
   const dash = await txt('#sec-dash');
@@ -218,6 +218,8 @@ const FC = require(path.resolve(__dirname, '../../finance-core.js'));
   const png = await p.evaluate(() => { const c = document.createElement('canvas'); c.width = 2400; c.height = 1800; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 2400, 1800); g.fillStyle = '#000'; g.font = '80px sans-serif'; g.fillText('RECEIPT 5,500', 100, 300); return c.toDataURL('image/png').split(',')[1]; });
   await p.setInputFiles('#rcFile', { name: 'receipt.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') }); await p.waitForTimeout(800);
   ck('領収書: 写真は長辺1600pxの JPEG に縮小してから送る', /縮小済み/.test(await txt('#rcFileInfo')), await txt('#rcFileInfo'));
+  await p.click('#rcMarks .mk:has-text("ア")'); await p.waitForTimeout(100);
+  ck('領収書: レシートの印（T／ア…）のボタンで部門が選べる（ア → アルコ）', (await p.$eval('#rcDept', el => el.value)) === 'arco' && /ア/.test(await txt('#rcMarks .mk.on')) && (await p.$$('#rcMarks .mk')).length === 2, await txt('#rcMarks'));
   await p.selectOption('#rcDept', 'gibier'); await p.fill('#rcDate', '2026-10-03'); await p.fill('#rcVendor', 'ガソリンスタンド'); await p.fill('#rcAmount', '5500'); await p.selectOption('#rcCat', 'expense.vehicle'); await p.selectOption('#rcPaidBy', 'card');
   await p.click('#rcAddBtn'); await p.waitForTimeout(1200);
   const put = last('staff_receipt_file_put');
@@ -252,9 +254,9 @@ const FC = require(path.resolve(__dirname, '../../finance-core.js'));
     (await p.$$('#deptBody tr')).length === 2 && (await p.$$('#accBody tr')).length === 2 && /3725493/.test(await txt('#accBody')) && /アルコ口座/.test(await txt('#accBody')) && (await p.$$('#cardsBody tr')).length === 2
     && (await p.$$('#titlesBody tr')).length === 28 && (await p.$eval('#viewerKeyPanel', el => getComputedStyle(el).display)) === 'none', [(await p.$$('#deptBody tr')).length, (await p.$$('#accBody tr')).length, (await p.$$('#cardsBody tr')).length].join('/'));
   await p.click('text=＋ 部門を足す'); const drows = await p.$$('#deptBody tr');
-  await drows[drows.length - 1].$eval('[data-f="code"]', el => el.value = 'nature'); await drows[drows.length - 1].$eval('[data-f="name"]', el => el.value = 'ネイチャーキャピタル');
+  await drows[drows.length - 1].$eval('[data-f="code"]', el => el.value = 'nature'); await drows[drows.length - 1].$eval('[data-f="name"]', el => el.value = 'ネイチャーキャピタル'); await drows[drows.length - 1].$eval('[data-f="mark"]', el => el.value = 'ネ');
   await p.click('#sec-settings button:has-text("保存") >> nth=0'); await p.waitForTimeout(500);
-  ck('設定: 部門を足して保存できる（右上の選択にも増える）', last('staff_department_set')[1].p_rows.some(r => r.code === 'nature' && r.name === 'ネイチャーキャピタル') && S.departments.length === 3 && (await p.$$('#deptSel option')).length === 4, await txt('#deptMsg'));
+  ck('設定: 部門を足して保存できる（右上の選択にも増える）', last('staff_department_set')[1].p_rows.some(r => r.code === 'nature' && r.name === 'ネイチャーキャピタル' && r.mark === 'ネ') && S.departments.length === 3 && (await p.$$('#deptSel option')).length === 4, await txt('#deptMsg'));
   await p.click('text=＋ 科目を足す'); const rowsN = await p.$$('#titlesBody tr');
   await rowsN[rowsN.length - 1].$eval('[data-f="code"]', el => el.value = 'expense.feed'); await rowsN[rowsN.length - 1].$eval('[data-f="name"]', el => el.value = '飼料費');
   await p.click('#sec-settings button:has-text("保存") >> nth=1'); await p.waitForTimeout(500);

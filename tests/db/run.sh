@@ -15,7 +15,7 @@ as_pg "$BIN/initdb -D $DIR/data -A trust -U postgres --no-sync" >/dev/null
 as_pg "$BIN/pg_ctl -D $DIR/data -o '-p $PORT -k $DIR -c listen_addresses=' -l $DIR/log start -w" >/dev/null
 PSQL="psql -h $DIR -p $PORT -U postgres -d postgres -v ON_ERROR_STOP=1 -q -X"
 $PSQL -f tests/db/stub-schema.sql >/dev/null
-for mig in migrations/20261021_bank_reconciliation.sql migrations/20261023_finance_cards_receipts.sql; do
+for mig in migrations/20261021_bank_reconciliation.sql migrations/20261023_finance_cards_receipts.sql migrations/20261024_departments_marks.sql; do
   $PSQL -f "$mig" >/dev/null
   $PSQL -f "$mig" >/dev/null   # 2回流しても壊れない（追加のみ・冪等）
 done
