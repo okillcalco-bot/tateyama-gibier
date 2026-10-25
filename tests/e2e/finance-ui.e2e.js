@@ -233,6 +233,12 @@ const FC = require(path.resolve(__dirname, '../../finance-core.js'));
   await shot('06-receipts');
   await p.click('#rcList button:has-text("確認済にする")'); await p.waitForTimeout(500);
   ck('領収書: 確認済にすると未確認の一覧から消え、件数が減る', S.receipts[0].status === 'confirmed' && /該当する領収書はありません/.test(await txt('#rcList')), '');
+  // 8b. 内容だけ先に登録（写真なし）→ あとから「写真を付ける」
+  await p.fill('#rcVendor', '写真はあとで'); await p.fill('#rcAmount', '1200'); await p.click('#rcAddBtn'); await p.waitForTimeout(900);
+  ck('領収書: 写真なしでも内容だけ登録でき、一覧に「写真を付ける」が出る', S.receipts.length === 2 && !S.receipts[1].storage_path && (await p.$('#rcList button:has-text("写真を付ける")')) !== null, (await txt('#rcList')).slice(0, 200));
+  await p.click('#rcList button:has-text("写真を付ける")'); await p.waitForTimeout(300);
+  await p.setInputFiles('#rcAttachFile', { name: 'later.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') }); await p.click('#rcAttachBtn'); await p.waitForTimeout(1500);
+  ck('領収書: あとから写真を付けられる（縮小して送り、サムネイルが出て、ボタンが消える）', !!S.files[S.receipts[1].id] && S.files[S.receipts[1].id].mime === 'image/jpeg' && !!S.receipts[1].storage_path && (await p.$('#rcList img.thumb')) !== null && (await p.$('#rcList button:has-text("写真を付ける")')) === null, JSON.stringify(Object.keys(S.files)));
 
   // 9. 月次
   const dl = []; await p.exposeFunction('__dl', (n) => dl.push(n)); await p.evaluate(() => { window.download = (n) => window.__dl(n); });
