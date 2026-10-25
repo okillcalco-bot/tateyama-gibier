@@ -17,7 +17,7 @@ begin
 
   -- 1. 取込（口座を登録 → プレビュー → 確定 → 同じCSVをもう一度）
   acc1 := (staff_account_set(k, '{"bank_name":"テスト銀行","branch":"テスト支店","account_type":"普通","account_no":"0000001","label":"テスト口座","department":"gibier"}')->>'id')::uuid;
-  acc2 := (staff_account_set(k, '{"bank_name":"残高なし銀行","account_no":"0000002","label":"残高なし口座","department":"arco"}')->>'id')::uuid;
+  acc2 := (staff_account_set(k, '{"bank_name":"残高なし銀行","account_no":"0000002","label":"残高なし口座","department":"alco"}')->>'id')::uuid;
   rows := '[{"row_no":2,"txn_date":"2026-10-31","description":"TA","amount_in":12000,"amount_out":0,"balance":112000},
             {"row_no":3,"txn_date":"2026-10-31","description":"TB","amount_in":7600,"amount_out":0,"balance":119600},
             {"row_no":4,"txn_date":"2026-10-31","description":"TC","amount_in":0,"amount_out":3000,"balance":116600},

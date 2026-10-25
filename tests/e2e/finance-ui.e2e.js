@@ -30,7 +30,7 @@ const FC = require(path.resolve(__dirname, '../../finance-core.js'));
 
   // ── 架空のDB ──
   const S = {
-    departments: [{ code: 'gibier', name: '館山ジビエセンター', short_name: 'ジビエ', mark: 'T', sort: 10, is_active: true, report_to: '館山市（通帳の報告義務）' }, { code: 'arco', name: '合同会社アルコ（本体）', short_name: 'アルコ', mark: 'ア', sort: 20, is_active: true, report_to: null }],
+    departments: [{ code: 'gibier', name: '館山ジビエセンター', short_name: 'ジビエ', mark: 'T', sort: 10, is_active: true, report_to: '館山市（通帳の報告義務）' }, { code: 'alco', name: '合同会社アルコ（本体）', short_name: 'アルコ', mark: 'ア', sort: 20, is_active: true, report_to: null }],
     accounts: [{ id: 'acc1', bank_name: '千葉銀行', branch: '館山支店', account_type: '普通', account_no: '0000001', label: 'ジビエ口座', department: 'gibier', is_active: true }],
     cards: [{ card_name: 'テストカード', label: null, department: 'gibier', is_active: true }],
     titles: FC.DEFAULT_TITLES.map(t => Object.assign({ is_active: true }, t)),
@@ -148,8 +148,8 @@ const FC = require(path.resolve(__dirname, '../../finance-core.js'));
   await p.evaluate(items => { window.__pdfItems = items; }, mk([['2026/10/08', '入金', 9000, 'カ）ピ－ディ－エフ', 4300000], ['2026/10/09', '出金', 1500, 'テストツウシン', 4298500]], '口座:  館山支店 普通 3725493'));
   await p.setInputFiles('#bankFile', { name: 'tsucho.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 fake') }); await p.waitForTimeout(700);
   ck('銀行PDF: 口座番号を読み取り、未登録なら登録の欄を出す（取込ボタンはまだ押せない）', /未登録の口座/.test(await txt('#bankImportBox')) && /館山支店 普通 3725493/.test(await txt('#bankImportBox')) && (await p.$eval('#bankImportBtn', b => b.disabled)), (await txt('#bankImportBox')).slice(0, 200));
-  await p.fill('#newAccLabel', 'アルコ口座'); await p.selectOption('#newAccDept', 'arco'); await p.click('text=この口座を登録して続ける'); await p.waitForTimeout(500);
-  ck('銀行PDF: 口座を登録すると（銀行・支店・番号・部門つき）取り込めるようになり、検算 OK が出る', last('staff_account_set')[1].p_account.account_no === '3725493' && last('staff_account_set')[1].p_account.department === 'arco' && last('staff_account_set')[1].p_account.branch === '館山支店' && /口座: アルコ口座 アルコ/.test(await txt('#bankImportBox')) && /✔ PDF の合計/.test(await txt('#bankImportBox')) && !(await p.$eval('#bankImportBtn', b => b.disabled)), JSON.stringify(last('staff_account_set')[1]));
+  await p.fill('#newAccLabel', 'アルコ口座'); await p.selectOption('#newAccDept', 'alco'); await p.click('text=この口座を登録して続ける'); await p.waitForTimeout(500);
+  ck('銀行PDF: 口座を登録すると（銀行・支店・番号・部門つき）取り込めるようになり、検算 OK が出る', last('staff_account_set')[1].p_account.account_no === '3725493' && last('staff_account_set')[1].p_account.department === 'alco' && last('staff_account_set')[1].p_account.branch === '館山支店' && /口座: アルコ口座 アルコ/.test(await txt('#bankImportBox')) && /✔ PDF の合計/.test(await txt('#bankImportBox')) && !(await p.$eval('#bankImportBtn', b => b.disabled)), JSON.stringify(last('staff_account_set')[1]));
   await p.click('#bankImportBtn'); await p.waitForTimeout(400); await p.click('#bankImportMsg .btn-green'); await p.waitForTimeout(700);
   ck('銀行PDF: アルコ口座に取り込まれる', last('staff_bank_import')[1].p_account === 'acc2' && S.bank.filter(x => x.account_id === 'acc2').length === 2, S.bank.length);
   await p.evaluate(items => { window.__pdfItems = items; }, mk([['2026/10/10', '入金', 9000, 'ズレ', 4310000], ['2026/10/11', '出金', 1500, 'ズレ2', 4308499]], '口座:  館山支店 普通 3725493'));
@@ -165,13 +165,13 @@ const FC = require(path.resolve(__dirname, '../../finance-core.js'));
 
   // 4. 部門
   ck('全部門: 明細は2口座ぶん（7＋2＝9行）', (await p.$$('#bankBody tr')).length === 9 && /アルコ口座/.test(await txt('#bankBody')), (await p.$$('#bankBody tr')).length);
-  await p.selectOption('#bankBody select.deptsel[data-id="b2"]', 'arco'); await p.waitForTimeout(400);
-  ck('部門の付け替え: ジビエ口座の出金1件をアルコに（staff_classify に p_department）', last('staff_classify')[1].p_txn === 'b2' && last('staff_classify')[1].p_department === 'arco' && last('staff_classify')[1].p_category === 'expense.utilities', JSON.stringify(last('staff_classify')[1]));
+  await p.selectOption('#bankBody select.deptsel[data-id="b2"]', 'alco'); await p.waitForTimeout(400);
+  ck('部門の付け替え: ジビエ口座の出金1件をアルコに（staff_classify に p_department）', last('staff_classify')[1].p_txn === 'b2' && last('staff_classify')[1].p_department === 'alco' && last('staff_classify')[1].p_category === 'expense.utilities', JSON.stringify(last('staff_classify')[1]));
   await p.selectOption('#deptSel', 'gibier'); await p.waitForTimeout(700);
   ck('右上で「ジビエ」に絞ると、銀行の明細はジビエ口座の分だけ（付け替えた1件は消える）', (await p.$$('#bankBody tr')).length === 6 && !/アルコ口座/.test(await txt('#bankBody')) && !/テストガス/.test(await txt('#bankBody')), (await p.$$('#bankBody tr')).length);
   await p.click('.tab[data-tab="dash"]'); await p.waitForTimeout(500);
   ck('ジビエに絞ったダッシュボード: 口座はジビエ口座だけ・未処理も部門ぶん', /ジビエ口座/.test(await txt('#dashAccounts')) && !/アルコ口座/.test(await txt('#dashAccounts')) && /（ジビエ）/.test(await txt('#dashDeptLabel')), await txt('#dashAccounts'));
-  await p.selectOption('#deptSel', 'arco'); await p.waitForTimeout(500);
+  await p.selectOption('#deptSel', 'alco'); await p.waitForTimeout(500);
   ck('アルコに絞ると、アルコ口座だけになり、PDFで入れた未消込1件・未分類の出金1件と、付け替えた出金（科目つき）が部門の数に入る', /アルコ口座/.test(await txt('#dashAccounts')) && !/ジビエ口座/.test(await txt('#dashAccounts')) && /請求書に当てていない入金が 1件/.test(await txt('#dashTodo')) && /科目を付けていない出金が 1件/.test(await txt('#dashTodo')) && (await txt('#dashCards')).includes('今月の出金（通帳） ¥4,500'), await txt('#dashTodo') + ' | ' + await txt('#dashCards'));
   await p.selectOption('#deptSel', ''); await p.waitForTimeout(500);
 
@@ -202,12 +202,12 @@ const FC = require(path.resolve(__dirname, '../../finance-core.js'));
 
   // 7. カード（はじめてのカードは部門つきで取込）
   await p.click('.tab[data-tab="card"]'); await p.waitForTimeout(500);
-  await p.fill('#cardName', '事業用カードB'); await p.selectOption('#cardDept', 'arco');
+  await p.fill('#cardName', '事業用カードB'); await p.selectOption('#cardDept', 'alco');
   await p.setInputFiles('#cardFile', { name: 'card.csv', mimeType: 'text/csv', buffer: Buffer.from('ご利用日,ご利用先,ご利用金額,支払区分\n2026/10/12,ホームセンター,3200,1回\n2026/10/13,返品,-1200,1回\n', 'utf8') }); await p.waitForTimeout(400);
   await p.click('#cardImportBox button:has-text("この列で読む")'); await p.waitForTimeout(300);
   ck('カードCSV: 利用額と返金が読める（2行・合計 2,000）', /2行・合計 ¥2,000/.test(await txt('#cardImportBox')), await txt('#cardImportBox'));
   await p.click('#cardImportBtn'); await p.waitForTimeout(400); await p.click('#cardImportMsg .btn-green'); await p.waitForTimeout(700);
-  ck('カードCSV: カード名と部門つきで取り込め、カードが登録される', last('staff_card_import')[1].p_card_name === '事業用カードB' && last('staff_card_import')[1].p_department === 'arco' && last('staff_card_import')[1].p_commit === true && S.card.length === 3 && S.cards.some(c => c.card_name === '事業用カードB' && c.department === 'arco'), S.card.length);
+  ck('カードCSV: カード名と部門つきで取り込め、カードが登録される', last('staff_card_import')[1].p_card_name === '事業用カードB' && last('staff_card_import')[1].p_department === 'alco' && last('staff_card_import')[1].p_commit === true && S.card.length === 3 && S.cards.some(c => c.card_name === '事業用カードB' && c.department === 'alco'), S.card.length);
   ck('カード: 一覧にカードの部門が出る（事業用カードB → アルコ）', /アルコ/.test(await txt('#cardBody')) && (await p.$$('#cardBody tr')).length === 3, await txt('#cardBody'));
   await p.selectOption('#cardBody select.catsel >> nth=0', 'expense.vehicle'); await p.waitForTimeout(400);
   ck('カード: 科目を付けられる', last('staff_classify')[1].p_kind === 'card' && last('staff_classify')[1].p_category === 'expense.vehicle', '');
@@ -219,7 +219,7 @@ const FC = require(path.resolve(__dirname, '../../finance-core.js'));
   await p.setInputFiles('#rcFile', { name: 'receipt.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') }); await p.waitForTimeout(800);
   ck('領収書: 写真は長辺1600pxの JPEG に縮小してから送る', /縮小済み/.test(await txt('#rcFileInfo')), await txt('#rcFileInfo'));
   await p.click('#rcMarks .mk:has-text("ア")'); await p.waitForTimeout(100);
-  ck('領収書: レシートの印（T／ア…）のボタンで部門が選べる（ア → アルコ）', (await p.$eval('#rcDept', el => el.value)) === 'arco' && /ア/.test(await txt('#rcMarks .mk.on')) && (await p.$$('#rcMarks .mk')).length === 2, await txt('#rcMarks'));
+  ck('領収書: レシートの印（T／ア…）のボタンで部門が選べる（ア → アルコ）', (await p.$eval('#rcDept', el => el.value)) === 'alco' && /ア/.test(await txt('#rcMarks .mk.on')) && (await p.$$('#rcMarks .mk')).length === 2, await txt('#rcMarks'));
   await p.selectOption('#rcDept', 'gibier'); await p.fill('#rcDate', '2026-10-03'); await p.fill('#rcVendor', 'ガソリンスタンド'); await p.fill('#rcAmount', '5500'); await p.selectOption('#rcCat', 'expense.vehicle'); await p.selectOption('#rcPaidBy', 'card');
   await p.click('#rcAddBtn'); await p.waitForTimeout(1200);
   const put = last('staff_receipt_file_put');
