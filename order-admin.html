@@ -134,6 +134,65 @@ header{padding:10px 14px}
 th,td{padding:8px 6px;font-size:.8rem}
 }
 
+/* ══ 請求書作成（2026-10-30 使いやすさ見直し）══
+   freee請求書・Misoca・マネーフォワード クラウド請求書の作成画面にならう:
+   上から順に「種類→取引先→日付→明細→確認」、右に仕上がりのプレビュー、保存・発行ボタンは下に固定。
+   スマホでは1列（以前は2列のまま横にはみ出していた: 画面390pxに対し752px）。 */
+.inv-mode{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.inv-mode button{border:1px solid var(--border2);background:var(--surface);color:var(--text);padding:8px 14px;border-radius:999px;cursor:pointer;font:inherit;font-size:.85rem}
+.inv-mode button.active{background:var(--gold);border-color:var(--gold);color:#fff;font-weight:700}
+.inv-layout{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:20px;align-items:start}
+.inv-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px}
+.inv-step{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--gold);margin-bottom:10px;flex-wrap:wrap}
+.inv-step .no{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--gold);color:#fff;font-size:.75rem}
+.inv-hint{font-size:.75rem;color:var(--text2);margin-top:4px;min-height:1em}
+.inv-hint.ok{color:#2f7a3a}
+.inv-row-name{display:grid;grid-template-columns:minmax(0,1fr) 90px minmax(0,1.4fr);gap:12px}
+.inv-chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.inv-chips button{border:1px solid var(--border2);background:var(--surface2);color:var(--text);border-radius:999px;padding:3px 10px;font:inherit;font-size:.72rem;cursor:pointer}
+.inv-chips button:hover,.inv-chips button.on{border-color:var(--gold);color:var(--gold)}
+.inv-pull{border:1px dashed var(--border2);border-radius:var(--radius);padding:8px 12px;background:var(--surface2);margin-bottom:12px}
+.inv-pull summary{cursor:pointer;font-weight:700;font-size:.85rem}
+.inv-line{display:grid;grid-template-columns:minmax(0,1fr) 68px 52px 86px 70px 84px 112px;gap:6px;align-items:center;margin-bottom:6px}
+.inv-line input,.inv-line select{width:100%;min-width:0}
+.inv-line [data-f=qty],.inv-line [data-f=price]{text-align:right;padding:8px 6px}
+.inv-line [data-f=unit]{text-align:center;padding:8px 4px}
+.inv-line [data-f=tax]{padding:8px 2px;font-size:.8rem}
+.inv-line [data-f=amt]{text-align:right;font-size:.85rem;white-space:nowrap}
+.inv-line.warn [data-f=price]{border-color:var(--red);background:rgba(200,60,60,.06)}
+.inv-line.tax10 [data-f=tax]{border-color:#2f66b5}
+.inv-lines-head{font-size:.72rem;color:var(--text2);margin-bottom:4px}
+.inv-line-ops{display:flex;gap:2px;justify-content:center}
+.inv-line-ops button{border:1px solid var(--border);background:var(--surface);color:var(--text2);border-radius:6px;width:28px;height:30px;padding:0;cursor:pointer;font-size:.85rem;line-height:1}
+.inv-line-ops button:hover:not(:disabled){border-color:var(--gold);color:var(--gold)}
+.inv-line-ops button:disabled{opacity:.35;cursor:default}
+.inv-line-ops button.del{color:var(--red)}
+.inv-warn{margin-top:8px;font-size:.8rem;color:var(--red);background:rgba(200,60,60,.06);border:1px solid rgba(200,60,60,.3);border-radius:var(--radius);padding:6px 10px}
+.inv-actionbar{position:sticky;bottom:0;z-index:5;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;box-shadow:0 -4px 14px rgba(0,0,0,.07)}
+.inv-bar-total{font-size:.75rem;color:var(--text2);margin-right:auto;white-space:nowrap}
+.inv-bar-total strong{display:block;font-size:1.15rem;color:var(--gold)}
+.inv-side{position:sticky;top:12px}
+.inv-preview-frame{position:relative;overflow:hidden;background:#e9e9e4;border-radius:6px;height:560px}
+#invLivePreview{position:absolute;left:0;top:0;width:794px;height:1123px;border:0;background:#fff;transform-origin:0 0;pointer-events:none}
+@media(max-width:1100px){
+  .inv-row-name{grid-template-columns:minmax(0,1fr) 90px}
+  .inv-row-name .inv-addr{grid-column:1 / -1}
+}
+@media(max-width:960px){
+  .inv-layout{grid-template-columns:minmax(0,1fr)}
+  .inv-side{position:static}
+}
+@media(max-width:640px){
+  .inv-lines-head{display:none}
+  .inv-line{grid-template-columns:repeat(12,minmax(0,1fr));grid-template-areas:"name name name name name name name name name name name name" "qty qty qty qty unit unit unit price price price price price" "tax tax tax amt amt amt ops ops ops ops ops ops";border:1px solid var(--border);border-radius:var(--radius);padding:8px;background:var(--surface2)}
+  .inv-line [data-f=name]{grid-area:name}.inv-line [data-f=qty]{grid-area:qty}.inv-line [data-f=unit]{grid-area:unit}
+  .inv-line [data-f=price]{grid-area:price}.inv-line [data-f=tax]{grid-area:tax}.inv-line [data-f=amt]{grid-area:amt}
+  .inv-line [data-f=ops]{grid-area:ops;justify-content:flex-end}
+  .inv-line-ops button{width:34px;height:36px}
+  .inv-row-name{grid-template-columns:minmax(0,1fr) 84px}
+  .inv-row-name .inv-addr{grid-column:1 / -1}
+}
+
 /* ══ 注文サイト設定カード（視認性重視: 本文16px・見出し18px・タップ44px+） ══ */
 .portal-card{border:1px solid var(--border2);border-radius:12px;background:var(--surface2);
   padding:16px;margin:16px 0;display:flex;flex-direction:column;gap:14px}
@@ -478,136 +537,177 @@ th,td{padding:8px 6px;font-size:.8rem}
 
   <!-- Tab: 請求書作成 -->
   <div class="tab-content" id="tab-invoice">
-    <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:20px;align-items:start">
-      <!-- 左：請求書入力 -->
-      <div>
-        <h3 style="color:var(--gold);margin-bottom:10px">🧾 書類を作成</h3>
-        <div id="invTypeTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"></div>
-        <div id="invTypeHint" style="font-size:.75rem;color:var(--text2);margin-bottom:12px"></div>
-        <div class="form-row">
+    <!-- 作り方を選ぶ（2026-10-30 使いやすさ見直し: freee・Misoca・マネーフォワードの作成画面にならい、
+         「1枚ずつ作る」と「月まとめ発行」を分け、1枚の作成は 取引先→日付→明細→確認 の順に上から下へ） -->
+    <div class="inv-mode" id="invModeTabs" role="tablist">
+      <button type="button" data-mode="single" class="active" onclick="invSetMode('single')">✏ 1枚ずつ作る</button>
+      <button type="button" data-mode="batch" onclick="invSetMode('batch')">📚 月まとめ発行（顧客ごとに1枚・まとめてPDF）</button>
+    </div>
+
+    <!-- 月まとめ発行（顧客ごとに1枚・まとめてPDF） -->
+    <div id="invBatchPanel" class="inv-card" style="display:none;border-color:var(--gold)">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <strong style="font-size:.95rem">📚 月まとめ発行（顧客ごとに1枚・まとめてPDF）</strong>
+        <span style="font-size:.72rem;color:var(--text2)">未請求の注文を請求先ごとに集計し、全員分の請求書を1つのPDFに</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
+        <div class="form-group" style="margin:0;min-width:130px"><label>期間</label>
+          <select id="invBatchPeriod" onchange="invBatchSearch()">
+            <option value="0">今月</option>
+            <option value="1" selected>先月</option>
+            <option value="2">2か月前</option>
+            <option value="3">3か月前</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:140px"><label>&nbsp;</label>
+          <button class="btn btn-outline" style="width:100%" onclick="invBatchSearch()">🔍 請求先ごとに集計</button>
+        </div>
+      </div>
+      <div id="invBatchIssued" style="display:none;margin-top:8px"></div>
+      <div id="invBatchResult" style="margin-top:8px;font-size:.8rem;color:var(--text2)">期間を選んで「請求先ごとに集計」を押してください。</div>
+      <div id="invBatchList" style="max-height:420px;overflow-y:auto;margin-top:6px"></div>
+      <div id="invBatchActions" style="display:none;margin-top:8px;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" onclick="invBatchPreview()">プレビュー（番号なし）</button>
+        <button class="btn btn-gold btn-sm" onclick="invBatchIssue()">🖨 選んだ請求先の請求書をまとめて発行（PDF）</button>
+        <button class="btn btn-outline btn-sm" onclick="invBatchLabels()" title="顧客マスタで「紙で郵送」にしている請求先の宛名ラベル（コメリ KML-506・A4 24面）">🏷 紙で送る請求先の宛名ラベル（KML-506）</button>
+        <button class="btn btn-outline btn-sm" onclick="invBatchToggleAll(true)">全て選択</button>
+        <button class="btn btn-outline btn-sm" onclick="invBatchToggleAll(false)">選択解除</button>
+      </div>
+    </div>
+
+    <div id="invSinglePanel" class="inv-layout">
+      <!-- 左：入力（上から順に埋めれば書類ができる） -->
+      <div class="inv-form">
+        <div class="inv-card">
+          <div class="inv-step" style="margin-bottom:4px"><span class="no">1</span>書類の種類 <span id="invTypeTabs" style="display:inline-flex;gap:6px;flex-wrap:wrap;font-weight:400"></span></div>
+          <div id="invTypeHint" style="font-size:.75rem;color:var(--text2)"></div>
+        </div>
+
+        <div class="inv-card">
+          <div class="inv-step"><span class="no">2</span>取引先</div>
           <div class="form-group"><label id="invPartnerLabel">請求先（顧客検索・自由入力可）</label>
-            <input type="text" id="invCustomerInput" list="invCustomerList" placeholder="店舗名・コードで検索、または宛名を直接入力" autocomplete="off" oninput="onInvCustomerInput()">
+            <input type="text" id="invCustomerInput" list="invCustomerList" placeholder="店名・ふりがな・コードで検索（台帳に無ければ宛名をそのまま入力）" autocomplete="off" oninput="onInvCustomerInput()">
             <datalist id="invCustomerList"></datalist>
             <input type="hidden" id="invCustomerId">
+            <div id="invCustomerHint" class="inv-hint"></div>
           </div>
-          <div class="form-group"><label>敬称</label><input type="text" id="invHonorific" value="御中"></div>
-        </div>
-        <div class="form-group"><label>宛名（請求先名）</label><input type="text" id="invName" placeholder="○○店"></div>
-        <div class="form-row">
-          <div class="form-group"><label>件名（任意）</label><input type="text" id="invSubject" placeholder="例: 2026年8月分 ジビエ肉代"></div>
-          <div class="form-group"><label>請求先住所（任意）</label><input type="text" id="invAddress" placeholder="千葉県…"></div>
-        </div>
-        <div class="form-group" id="invProvisoRow" style="display:none"><label>但し書き（領収書に「但し ○○ として」と印字）</label><input type="text" id="invProviso" placeholder="例: ジビエ肉代"></div>
-        <div class="form-row3">
-          <div class="form-group"><label>発行日</label><input type="date" id="invDate" onchange="regenInvNumber()"></div>
-          <div class="form-group"><label id="invDueLabel">お支払期限</label><input type="date" id="invDue"></div>
-          <div class="form-group"><label id="invNumberLabel">請求番号（発行時に確定）</label>
-            <div style="display:flex;gap:6px"><input type="text" id="invNumber" readonly style="flex:1;background:var(--surface2)"><button class="btn btn-outline btn-sm" onclick="regenInvNumber()" title="採番し直す">↻</button></div>
+          <div class="inv-row-name">
+            <div class="form-group"><label>宛名（書類に載る名前）</label><input type="text" id="invName" placeholder="○○店"></div>
+            <div class="form-group"><label>敬称</label><input type="text" id="invHonorific" value="御中" list="invHonorificList"><datalist id="invHonorificList"><option value="御中"><option value="様"><option value="殿"></datalist></div>
+            <div class="form-group inv-addr"><label>請求先住所（任意）</label><input type="text" id="invAddress" placeholder="千葉県…"></div>
           </div>
+          <div class="form-group" id="invProvisoRow" style="display:none"><label>但し書き（領収書に「但し ○○ として」と印字）</label><input type="text" id="invProviso" placeholder="例: ジビエ肉代"></div>
         </div>
-        <div id="invEditBanner" style="display:none;background:rgba(240,192,64,.14);border:1px solid #c9a52c;border-radius:var(--radius);padding:8px 12px;font-size:.8rem;margin-bottom:10px"></div>
-        <div id="invLinkedNote" style="display:none;background:rgba(90,140,216,.10);border:1px solid #2f66b5;border-radius:var(--radius);padding:8px 12px;font-size:.8rem;margin-bottom:10px"></div>
 
-        <!-- 月まとめ発行（顧客ごとに1枚・まとめてPDF） -->
-        <div style="border:1px solid var(--gold);border-radius:var(--radius);padding:12px;background:var(--surface2);margin:16px 0">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-            <strong style="font-size:.9rem">📚 月まとめ発行（顧客ごとに1枚・まとめてPDF）</strong>
-            <span style="font-size:.72rem;color:var(--text2)">未請求の注文を請求先ごとに集計し、全員分の請求書を1つのPDFに</span>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
-            <div class="form-group" style="margin:0;min-width:130px"><label>期間</label>
-              <select id="invBatchPeriod" onchange="invBatchSearch()">
-                <option value="0">今月</option>
-                <option value="1" selected>先月</option>
-                <option value="2">2か月前</option>
-                <option value="3">3か月前</option>
-              </select>
-            </div>
-            <div class="form-group" style="margin:0;flex:1;min-width:140px"><label>&nbsp;</label>
-              <button class="btn btn-outline" style="width:100%" onclick="invBatchSearch()">🔍 請求先ごとに集計</button>
+        <div class="inv-card">
+          <div class="inv-step"><span class="no">3</span>日付・番号・件名</div>
+          <div class="form-row3">
+            <div class="form-group"><label>発行日</label><input type="date" id="invDate" onchange="regenInvNumber();invRenderSubjectChips()"></div>
+            <div class="form-group"><label id="invDueLabel">お支払期限</label><input type="date" id="invDue"></div>
+            <div class="form-group"><label id="invNumberLabel">請求番号（発行時に確定）</label>
+              <div style="display:flex;gap:6px"><input type="text" id="invNumber" readonly style="flex:1;background:var(--surface2)"><button class="btn btn-outline btn-sm" onclick="regenInvNumber()" title="採番し直す">↻</button></div>
             </div>
           </div>
-          <div id="invBatchIssued" style="display:none;margin-top:8px"></div>
-          <div id="invBatchResult" style="margin-top:8px;font-size:.8rem;color:var(--text2)">期間を選んで「請求先ごとに集計」を押してください。</div>
-          <div id="invBatchList" style="max-height:320px;overflow-y:auto;margin-top:6px"></div>
-          <div id="invBatchActions" style="display:none;margin-top:8px;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-outline btn-sm" onclick="invBatchPreview()">プレビュー（番号なし）</button>
-            <button class="btn btn-gold btn-sm" onclick="invBatchIssue()">🖨 選んだ請求先の請求書をまとめて発行（PDF）</button>
-            <button class="btn btn-outline btn-sm" onclick="invBatchLabels()" title="顧客マスタで「紙で郵送」にしている請求先の宛名ラベル（コメリ KML-506・A4 24面）">🏷 紙で送る請求先の宛名ラベル（KML-506）</button>
-            <button class="btn btn-outline btn-sm" onclick="invBatchToggleAll(true)">全て選択</button>
-            <button class="btn btn-outline btn-sm" onclick="invBatchToggleAll(false)">選択解除</button>
+          <div class="inv-chips" id="invDuePresets" style="margin:-6px 0 12px"><span style="font-size:.72rem;color:var(--text2);align-self:center">期限をワンタッチで:</span>
+            <button type="button" data-due-preset="eom" onclick="invSetDue('eom')">当月末</button>
+            <button type="button" data-due-preset="eonm" onclick="invSetDue('eonm')">翌月末</button>
+            <button type="button" data-due-preset="eon2m" onclick="invSetDue('eon2m')">翌々月末</button>
+            <button type="button" data-due-preset="plus30" onclick="invSetDue('plus30')">30日後</button>
+            <button type="button" data-due-preset="none" onclick="invSetDue('none')">なし</button>
           </div>
+          <div class="form-group" style="margin-bottom:0"><label>件名（任意）</label><input type="text" id="invSubject" placeholder="例: 2026年8月分 ジビエ肉代">
+            <div class="inv-chips" id="invSubjectChips"></div>
+          </div>
+          <div id="invEditBanner" style="display:none;background:rgba(240,192,64,.14);border:1px solid #c9a52c;border-radius:var(--radius);padding:8px 12px;font-size:.8rem;margin-top:10px"></div>
+          <div id="invLinkedNote" style="display:none;background:rgba(90,140,216,.10);border:1px solid #2f66b5;border-radius:var(--radius);padding:8px 12px;font-size:.8rem;margin-top:10px"></div>
         </div>
 
-        <!-- 注文から取り込む（締め請求） -->
-        <div style="border:1px dashed var(--border2);border-radius:var(--radius);padding:12px;background:var(--surface2);margin:16px 0">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-            <strong style="font-size:.9rem">📦 注文から取り込む（締め請求）</strong>
-            <span style="font-size:.72rem;color:var(--text2)">納品済みの注文をまとめて1枚の請求書に</span>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
-            <div class="form-group" style="margin:0;min-width:130px"><label>期間</label>
-              <select id="invPullPeriod" onchange="invPullSearch()">
-                <option value="thisMonth">今月</option>
-                <option value="lastMonth">先月</option>
-                <option value="2">2か月前</option>
-                <option value="3">3か月前</option>
-                <option value="all">すべて（未請求）</option>
-              </select>
+        <div class="inv-card">
+          <div class="inv-step"><span class="no">4</span>明細 <span style="font-size:.72rem;color:var(--text2);font-weight:400">肉・食品は軽減税率8%、送料・加工賃などは10%（品名に「送料」などと入れると自動で10%・個）</span></div>
+
+          <!-- 注文から取り込む（締め請求）: 明細の入れ方のひとつなので明細のすぐ上に。ふだんは畳んでおく -->
+          <details id="invPullBox" class="inv-pull">
+            <summary>📦 この請求先の注文から明細を取り込む（締め請求・二重請求防止）</summary>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
+              <div class="form-group" style="margin:0;min-width:130px"><label>期間</label>
+                <select id="invPullPeriod" onchange="invPullSearch()">
+                  <option value="thisMonth">今月</option>
+                  <option value="lastMonth">先月</option>
+                  <option value="2">2か月前</option>
+                  <option value="3">3か月前</option>
+                  <option value="all">すべて（未請求）</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin:0;flex:1;min-width:140px"><label>&nbsp;</label>
+                <button class="btn btn-outline" style="width:100%" onclick="invPullSearch()">🔍 対象の注文を探す</button>
+              </div>
+              <label style="font-size:.75rem;color:var(--text2);display:flex;align-items:center;gap:4px;padding-bottom:9px">
+                <input type="checkbox" id="invPullShowBilled" onchange="invPullSearch()"> 請求済みも表示
+              </label>
             </div>
-            <div class="form-group" style="margin:0;flex:1;min-width:140px"><label>&nbsp;</label>
-              <button class="btn btn-outline" style="width:100%" onclick="invPullSearch()">🔍 対象の注文を探す</button>
+            <div id="invPullResult" style="margin-top:8px;font-size:.8rem;color:var(--text2)">請求先を選んでから「対象の注文を探す」を押してください。</div>
+            <div id="invPullList" style="max-height:230px;overflow-y:auto;margin-top:6px"></div>
+            <div id="invPullActions" style="display:none;margin-top:8px;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-gold btn-sm" onclick="invPullApply()">選んだ注文を明細に入れる</button>
+              <button class="btn btn-outline btn-sm" onclick="invPullToggleAll(true)">全て選択</button>
+              <button class="btn btn-outline btn-sm" onclick="invPullToggleAll(false)">選択解除</button>
             </div>
-            <label style="font-size:.75rem;color:var(--text2);display:flex;align-items:center;gap:4px;padding-bottom:9px">
-              <input type="checkbox" id="invPullShowBilled" onchange="invPullSearch()"> 請求済みも表示
-            </label>
+          </details>
+
+          <div class="inv-line inv-lines-head" aria-hidden="true">
+            <div>品名</div><div style="text-align:right">数量</div><div style="text-align:center">単位</div><div style="text-align:right">単価</div><div style="text-align:center">税率</div><div style="text-align:right">金額</div><div style="text-align:center">並べ替え・複製・削除</div>
           </div>
-          <div id="invPullResult" style="margin-top:8px;font-size:.8rem;color:var(--text2)">請求先を選んでから「対象の注文を探す」を押してください。</div>
-          <div id="invPullList" style="max-height:230px;overflow-y:auto;margin-top:6px"></div>
-          <div id="invPullActions" style="display:none;margin-top:8px;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-gold btn-sm" onclick="invPullApply()">選んだ注文を明細に入れる</button>
-            <button class="btn btn-outline btn-sm" onclick="invPullToggleAll(true)">全て選択</button>
-            <button class="btn btn-outline btn-sm" onclick="invPullToggleAll(false)">選択解除</button>
+          <div id="invLinesBox"></div>
+          <datalist id="invItemList"></datalist>
+          <datalist id="invUnitList"><option value="kg"><option value="個"><option value="枚"><option value="式"><option value="頭"><option value="箱"><option value="パック"></datalist>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
+            <button class="btn btn-outline btn-sm" onclick="invAddLine(true)">+ 明細を追加</button>
+            <span style="font-size:.72rem;color:var(--text2)">Enter で 数量→単価→次の行（最後の行なら行が増えます）。Excel・スプレッドシートの「品名・数量・単位・単価」の列をコピーして品名欄に貼り付けると、まとめて入ります。</span>
           </div>
+          <div id="invPasteMsg" class="inv-hint ok"></div>
+          <div id="invLineWarn" class="inv-warn" style="display:none"></div>
+
+          <div class="cart-total" style="border-top:1px solid var(--border);margin-top:14px;text-align:right;color:var(--text);font-weight:400;font-size:.95rem">
+            <div>小計（税抜）: <strong id="invSubtotal">¥0</strong></div>
+            <div id="invTaxBreakdown" style="font-size:.8rem;color:var(--text2)"></div>
+            <div>消費税 合計: <strong id="invTax">¥0</strong></div>
+            <div style="font-size:1.2rem;color:var(--gold);font-weight:700;margin-top:4px">合計（税込）: <span id="invTotal">¥0</span></div>
+          </div>
+          <div class="form-group" style="margin:12px 0 0"><label>備考（任意）</label><textarea id="invMemo" rows="2" placeholder="お振込手数料は御社にてご負担ください 等"></textarea></div>
         </div>
 
-        <h3 style="color:var(--gold);margin:16px 0 8px">明細 <span style="font-size:.72rem;color:var(--text2);font-weight:400">肉・食品は軽減税率8%、加工賃・送料などは10%</span></h3>
-        <div style="display:grid;grid-template-columns:1fr 64px 56px 88px 78px 88px 26px;gap:6px;font-size:.72rem;color:var(--text2);padding:0 2px 4px">
-          <div>品名</div><div style="text-align:right">数量</div><div style="text-align:center">単位</div><div style="text-align:right">単価</div><div style="text-align:center">税率</div><div style="text-align:right">金額</div><div></div>
-        </div>
-        <div id="invLinesBox"></div>
-        <datalist id="invItemList"></datalist>
-        <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="invAddLine()">+ 明細を追加</button>
-
-        <div class="cart-total" style="border-top:1px solid var(--border);margin-top:16px;text-align:right;color:var(--text);font-weight:400;font-size:.95rem">
-          <div>小計（税抜）: <strong id="invSubtotal">¥0</strong></div>
-          <div id="invTaxBreakdown" style="font-size:.8rem;color:var(--text2)"></div>
-          <div>消費税 合計: <strong id="invTax">¥0</strong></div>
-          <div style="font-size:1.2rem;color:var(--gold);font-weight:700;margin-top:4px">合計（税込）: <span id="invTotal">¥0</span></div>
-        </div>
-        <div class="form-group" style="margin-top:12px"><label>備考（任意）</label><textarea id="invMemo" rows="2" placeholder="お振込手数料は御社にてご負担ください 等"></textarea></div>
-
-        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+        <!-- 操作は画面の下に固定（長い明細でも、上へ戻らずに保存・発行できる） -->
+        <div class="inv-actionbar">
+          <div class="inv-bar-total">合計（税込）<strong id="invBarTotal">¥0</strong></div>
           <button class="btn btn-outline" onclick="invSaveDraft()">💾 下書き保存</button>
-          <button class="btn btn-outline" onclick="invPreview()" title="番号を確定せず内容だけ確認">プレビュー</button>
+          <button class="btn btn-outline" onclick="invPreview()" title="番号を確定せず、印刷する形で別ウィンドウに出す">プレビュー</button>
           <button class="btn btn-gold" style="flex:1;min-width:200px" onclick="invIssue()">🖨 発行する（番号確定・PDF/印刷）</button>
         </div>
         <div style="font-size:.75rem;color:var(--text2);margin-top:8px;line-height:1.7">「発行」で番号を確定し、明細ごと保存して印刷用ウィンドウを開きます。<strong>発行後の編集はできません</strong>（訂正は下の一覧から「取消」→ 複製して再発行）。PDFのファイル名は <code>書類種別_発行日_宛名_番号</code> になります。<br>発行済みの書類は一覧の <strong>「→納品書」「→請求書」「→領収書」</strong> で次の書類に引き継げます（見積書→納品書→請求書→領収書）。</div>
       </div>
 
-      <!-- 右：発行元・振込先・社判 設定 -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
-        <h3 style="color:var(--gold);margin-bottom:10px">発行元の設定</h3>
-        <div style="font-size:.82rem;color:var(--text2);line-height:1.9;margin-bottom:12px" id="invIssuerView">読み込み中…</div>
-        <div class="form-group"><label>振込先（変更があればここを編集）</label><textarea id="invBank" rows="3"></textarea></div>
-        <div class="form-group">
-          <label>社判（印影画像・PNG/JPG）</label>
-          <input type="file" id="invSealFile" accept="image/*" onchange="onInvSealFile(this)">
-          <div style="margin-top:8px"><img id="invSealPreview" alt="" style="max-width:110px;max-height:110px;display:none;border:1px dashed var(--border);padding:4px;border-radius:6px"></div>
-          <button class="btn btn-outline btn-sm" id="invSealRemove" style="display:none;margin-top:6px;color:var(--red)" onclick="removeInvSeal()">社判を削除</button>
+      <!-- 右：仕上がりのプレビュー（入力するとすぐ反映）と、発行元の設定（変えるときだけ開く） -->
+      <div class="inv-side">
+        <div class="inv-card" style="padding:10px 12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">
+            <strong style="color:var(--gold);font-size:.9rem;white-space:nowrap">プレビュー <span style="font-weight:400;font-size:.72rem;color:var(--text2)">入力すると自動で反映</span></strong>
+            <button class="btn btn-outline btn-sm" style="white-space:nowrap" onclick="invPreview()" title="番号を確定せず、印刷する形で別ウィンドウに出す">別窓で開く</button>
+          </div>
+          <div class="inv-preview-frame" id="invPreviewFrame"><iframe id="invLivePreview" title="書類のプレビュー" tabindex="-1"></iframe></div>
         </div>
-        <button class="btn btn-gold" style="width:100%;margin-top:8px" onclick="saveInvoiceSettings()">発行元・振込先・社判を保存</button>
-        <div style="font-size:.72rem;color:var(--text2);margin-top:8px">ここで保存した振込先・社判は、<strong>これから発行する</strong>請求書に反映されます（発行済みの請求書は発行時の内容のまま変わりません）。</div>
+        <details class="inv-card" id="invIssuerBox">
+          <summary style="cursor:pointer;color:var(--gold);font-weight:700">発行元・振込先・社判の設定 <span style="font-weight:400;font-size:.72rem;color:var(--text2)">（変えるときだけ開く）</span></summary>
+          <div style="font-size:.82rem;color:var(--text2);line-height:1.9;margin:10px 0 12px" id="invIssuerView">読み込み中…</div>
+          <div class="form-group"><label>振込先（変更があればここを編集）</label><textarea id="invBank" rows="3"></textarea></div>
+          <div class="form-group">
+            <label>社判（印影画像・PNG/JPG）</label>
+            <input type="file" id="invSealFile" accept="image/*" onchange="onInvSealFile(this)">
+            <div style="margin-top:8px"><img id="invSealPreview" alt="" style="max-width:110px;max-height:110px;display:none;border:1px dashed var(--border);padding:4px;border-radius:6px"></div>
+            <button class="btn btn-outline btn-sm" id="invSealRemove" style="display:none;margin-top:6px;color:var(--red)" onclick="removeInvSeal()">社判を削除</button>
+          </div>
+          <button class="btn btn-gold" style="width:100%;margin-top:8px" onclick="saveInvoiceSettings()">発行元・振込先・社判を保存</button>
+          <div style="font-size:.72rem;color:var(--text2);margin-top:8px">ここで保存した振込先・社判は、<strong>これから発行する</strong>請求書に反映されます（発行済みの請求書は発行時の内容のまま変わりません）。</div>
+        </details>
       </div>
     </div>
 
@@ -3586,9 +3686,12 @@ function populateInvCustomerDatalist(){
   dl.innerHTML=allCustomers.filter(c=>c.is_active!==false).map(c=>
     `<option value="${esc(c.code)} ${esc(c.name)}">${esc(custReadingLabel(c))} / ${esc(c.phone||'')}</option>`).join('');
 }
+const INV_RANK_LABEL={standard:'標準',local:'地元',startmember:'スタートメンバー',premium:'プレミアム',wholesale:'卸'};
 function onInvCustomerInput(){
   const v=(document.getElementById('invCustomerInput').value||'').trim();
-  if(!v){document.getElementById('invCustomerId').value='';return;}
+  const hint=document.getElementById('invCustomerHint');
+  const setHint=(t,ok)=>{ if(hint){ hint.textContent=t; hint.classList.toggle('ok',!!ok); } };
+  if(!v){document.getElementById('invCustomerId').value='';setHint('');invSchedulePreview();return;}
   const c=allCustomers.find(x=>`${x.code} ${x.name}`===v)
     || allCustomers.filter(x=>x.is_active!==false).find(x=>custMatches(x,v));
   if(c){
@@ -3596,9 +3699,13 @@ function onInvCustomerInput(){
     document.getElementById('invName').value=c.name||'';
     document.getElementById('invAddress').value=[c.address||'',c.building||''].filter(Boolean).join(' ');
     document.getElementById('invHonorific').value=c.honorific||'御中';
+    // 台帳のどのお客さんにつながったかを、その場で見せる（宛名・敬称・住所を入れたことも）
+    setHint(`✓ 顧客台帳: ${c.code||''} ${c.name||''}（価格ランク: ${INV_RANK_LABEL[c.price_rank]||c.price_rank||'標準'}）。宛名・敬称・住所を入れました`+(c.address?'':'（住所は台帳に未登録）'),true);
   }else{
     document.getElementById('invCustomerId').value='';
+    setHint('台帳に無い宛名として作ります（この場合、注文からの取り込みはできません）');
   }
+  invSchedulePreview();
 }
 
 // 品目datalist（価格マスタから。顧客の価格パターンで単価を初期入力）
@@ -3613,36 +3720,107 @@ function populateInvItemDatalist(){
   }).join('');
 }
 function invLineNameInput(i,el){
-  invLines[i].name=el.value;
+  const l=invLines[i];
+  l.name=el.value;
   const p=invItemMap[(el.value||'').trim()];
-  if(p && (invLines[i].price===''||invLines[i].price==null)){
+  if(p && (l.price===''||l.price==null)){
     const cust=allCustomers.find(c=>c.id===document.getElementById('invCustomerId').value);
     const rank=cust?.price_rank||'standard';
     const price=p['price_'+rank]??p.price_standard;
-    if(price!=null){ invLines[i].price=price; invLines[i].unit='kg'; invLines[i].tax=8; renderInvLines(); }
+    if(price!=null){ l.price=price; l.unit='kg'; l.tax=8; renderInvLines(); invFocusLine(i,'qty'); return; }
   }
+  // 送料・加工賃などは10%・個（自分で税率を選び直した行は変えない）
+  if(!l._taxTouched){
+    const hit=INV_TAX10_RE.test(l.name||'');
+    let changed=false;
+    if(hit && l.tax===8){ l.tax=10; l._autoTax=true; changed=true; if(!l._unitTouched && (l.unit==='kg'||!l.unit)) l.unit='個'; }
+    else if(!hit && l._autoTax && l.tax===10){ l.tax=8; l._autoTax=false; changed=true; if(!l._unitTouched && l.unit==='個') l.unit='kg'; }
+    if(changed){
+      const row=el.closest('.inv-line');
+      if(row){ const t=row.querySelector('[data-f=tax]'), u=row.querySelector('[data-f=unit]'); if(t) t.value=String(l.tax); if(u) u.value=l.unit; row.classList.toggle('tax10',l.tax===10); }
+    }
+  }
+  invRecalc();
 }
 
+/* 明細の行（2026-10-30 使いやすさ見直し）
+   - 行ごとに ↑↓（並べ替え）・⧉（複製）・×（削除）。マネーフォワードの品目の並べ替え・Misocaの行の挿入/移動にならう
+   - Enter で 品名→数量→単価→次の行の品名（最後の行なら行を足す）。表計算ソフトと同じ感覚で続けて打てる
+   - 品名に「送料」「加工賃」などが入ったら税率10%・単位「個」に自動で変える（自分で選び直した行は変えない）
+     以前は「送料（クール120）」も 8%・kg のまま入り、税率を間違えやすかった
+   - 単価が空で金額0円の行は赤枠にし、下に件数を出す（黙って0円の明細にしない） */
+const INV_TAX10_RE=/送料|運賃|配送|配達|手数料|加工賃|加工料|梱包|箱代|保冷|クール便/;
+function invLineNeedsPrice(l){ return (l.name||'').trim()!=='' && (parseFloat(l.qty)||0)>0 && (l.price===''||l.price==null); }
 function renderInvLines(){
   const box=document.getElementById('invLinesBox');
   if(!box) return;
-  box.innerHTML=invLines.map((l,i)=>`<div style="display:grid;grid-template-columns:1fr 64px 56px 88px 78px 88px 26px;gap:6px;margin-bottom:6px;align-items:center">
-    <input type="text" list="invItemList" placeholder="品名（例: イノシシ ロース）" value="${escAttr(l.name)}" oninput="invLineNameInput(${i},this)">
-    <input type="number" min="0" step="0.01" placeholder="数量" value="${escAttr(l.qty)}" style="text-align:right;padding:8px 6px" oninput="invLines[${i}].qty=this.value;invRecalc()">
-    <input type="text" placeholder="単位" value="${escAttr(l.unit)}" style="text-align:center;padding:8px 4px" oninput="invLines[${i}].unit=this.value">
-    <input type="number" min="0" step="0.01" placeholder="単価" value="${escAttr(l.price)}" style="text-align:right;padding:8px 6px" oninput="invLines[${i}].price=this.value;invRecalc()">
-    <select style="padding:8px 2px;font-size:.8rem" onchange="invLines[${i}].tax=parseInt(this.value);invRecalc()">
+  const n=invLines.length;
+  box.innerHTML=invLines.map((l,i)=>`<div class="inv-line${invLineNeedsPrice(l)?' warn':''}${l.tax===10?' tax10':''}" data-i="${i}">
+    <input data-f="name" type="text" list="invItemList" placeholder="品名（例: イノシシ ロース／送料（クール120））" aria-label="${i+1}行目の品名" value="${escAttr(l.name)}" oninput="invLineNameInput(${i},this)" onpaste="invLinePaste(event,${i})" onkeydown="invLineKey(event,${i},'name')">
+    <input data-f="qty" type="number" min="0" step="0.01" placeholder="数量" aria-label="${i+1}行目の数量" value="${escAttr(l.qty)}" oninput="invLines[${i}].qty=this.value;invRecalc()" onkeydown="invLineKey(event,${i},'qty')">
+    <input data-f="unit" type="text" list="invUnitList" placeholder="単位" aria-label="${i+1}行目の単位" value="${escAttr(l.unit)}" oninput="invLines[${i}].unit=this.value;invLines[${i}]._unitTouched=true;invSchedulePreview()" onkeydown="invLineKey(event,${i},'unit')">
+    <input data-f="price" type="number" min="0" step="0.01" placeholder="単価" aria-label="${i+1}行目の単価" value="${escAttr(l.price)}" oninput="invLines[${i}].price=this.value;invRecalc()" onkeydown="invLineKey(event,${i},'price')">
+    <select data-f="tax" aria-label="${i+1}行目の税率" onchange="invLines[${i}].tax=parseInt(this.value);invLines[${i}]._taxTouched=true;invLines[${i}]._autoTax=false;invRecalc()">
       <option value="8"${l.tax===8?' selected':''}>8%軽</option>
       <option value="10"${l.tax===10?' selected':''}>10%</option>
       <option value="0"${l.tax===0?' selected':''}>対象外</option>
     </select>
-    <span id="invAmt${i}" style="text-align:right;font-size:.85rem;white-space:nowrap">¥0</span>
-    <button class="btn btn-sm" style="color:var(--red);padding:2px 4px" onclick="invRemoveLine(${i})" title="削除">×</button>
+    <span data-f="amt" id="invAmt${i}">¥0</span>
+    <div class="inv-line-ops" data-f="ops">
+      <button type="button" data-act="up" title="上へ" aria-label="${i+1}行目を上へ" onclick="invMoveLine(${i},-1)"${i===0?' disabled':''}>↑</button>
+      <button type="button" data-act="down" title="下へ" aria-label="${i+1}行目を下へ" onclick="invMoveLine(${i},1)"${i===n-1?' disabled':''}>↓</button>
+      <button type="button" data-act="dup" title="この行を複製（すぐ下に入ります）" aria-label="${i+1}行目を複製" onclick="invDupLine(${i})">⧉</button>
+      <button type="button" data-act="del" class="del" title="削除" aria-label="${i+1}行目を削除" onclick="invRemoveLine(${i})">×</button>
+    </div>
   </div>`).join('');
   invRecalc();
 }
-function invAddLine(){ invLines.push(newInvLine()); renderInvLines(); }
+function invFocusLine(i,f){ const el=document.querySelector(`#invLinesBox .inv-line[data-i="${i}"] [data-f="${f||'name'}"]`); if(el){ el.focus(); if(el.select) try{el.select();}catch(e){} } }
+function invAddLine(focus){ invLines.push(newInvLine()); renderInvLines(); if(focus) invFocusLine(invLines.length-1,'name'); }
 function invRemoveLine(i){ invLines.splice(i,1); if(!invLines.length) invLines.push(newInvLine()); renderInvLines(); }
+function invMoveLine(i,d){
+  const j=i+d; if(j<0||j>=invLines.length) return;
+  const t=invLines[i]; invLines[i]=invLines[j]; invLines[j]=t;
+  renderInvLines();
+  const b=document.querySelector(`#invLinesBox .inv-line[data-i="${j}"] [data-act="${d<0?'up':'down'}"]`); if(b&&!b.disabled) b.focus();
+}
+function invDupLine(i){ invLines.splice(i+1,0,Object.assign({},invLines[i])); renderInvLines(); invFocusLine(i+1,'qty'); }
+// Enter: 品名→数量→単価→次の行の品名（最後の行なら行を足す）
+function invLineKey(e,i,f){
+  if(e.key!=='Enter'||e.isComposing||e.keyCode===229) return;
+  e.preventDefault();
+  if(f==='name'){ invFocusLine(i,'qty'); return; }
+  if(f==='qty'){ invFocusLine(i,'price'); return; }
+  if(i===invLines.length-1) invAddLine(false);
+  invFocusLine(i+1,'name');
+}
+// 表計算ソフトから「品名・数量・単位・単価（・税率）」の列を貼り付けると、行ごとに明細にする（Misocaの明細一括挿入にならう）
+function invParseNum(v){
+  const s=String(v==null?'':v).replace(/[０-９．，]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)).replace(/[¥￥,\s円]/g,'');
+  if(s==='') return '';
+  const n=parseFloat(s); return isFinite(n)?n:'';
+}
+function invParsePastedRows(text){
+  const rows=String(text||'').replace(/\r/g,'').split('\n').map(r=>r.split('\t')).filter(c=>c.some(x=>String(x).trim()!==''));
+  return rows.map(c=>{
+    const name=String(c[0]||'').trim();
+    const taxRaw=String(c[4]||'').trim();
+    const tax=/10/.test(taxRaw)?10:/対象外|非課税|^0/.test(taxRaw)?0:/8/.test(taxRaw)?8:(INV_TAX10_RE.test(name)?10:8);
+    return {name,qty:invParseNum(c[1]),unit:String(c[2]||'').trim()||(INV_TAX10_RE.test(name)?'個':'kg'),price:invParseNum(c[3]),tax,_taxTouched:!!taxRaw};
+  });
+}
+function invLinePaste(e,i){
+  const text=(e.clipboardData||window.clipboardData)?.getData('text')||'';
+  if(!/\t|\n./.test(text.replace(/\n+$/,''))) return; // 1つの値だけなら普通に貼り付け
+  e.preventDefault();
+  const rows=invParsePastedRows(text);
+  if(!rows.length) return;
+  const cur=invLines[i];
+  const replaceCur=!(cur.name||'').trim() && !(parseFloat(cur.qty)>0) && (cur.price===''||cur.price==null);
+  invLines.splice(i+(replaceCur?0:1),replaceCur?1:0,...rows);
+  renderInvLines();
+  const m=document.getElementById('invPasteMsg'); if(m){ m.textContent=`✓ ${rows.length}行を貼り付けました`; setTimeout(()=>{ if(m.textContent.startsWith('✓')) m.textContent=''; },4000); }
+}
 function invLineAmount(l){ return Math.round((parseFloat(l.qty)||0)*(parseFloat(l.price)||0)); }
 
 // 税計算（純関数）: 明細→{sub, byRate, taxes, taxTotal, total}。税率ごとに集計して切捨て
@@ -3675,8 +3853,85 @@ function invRecalc(){
   set('invSubtotal','¥'+c.sub.toLocaleString());
   set('invTax','¥'+c.taxTotal.toLocaleString());
   set('invTotal','¥'+c.total.toLocaleString());
+  set('invBarTotal','¥'+c.total.toLocaleString());
+  // 単価が空の行（金額0円）を知らせる
+  const warnRows=[];
+  invLines.forEach((l,i)=>{
+    const need=invLineNeedsPrice(l);
+    const row=document.querySelector(`#invLinesBox .inv-line[data-i="${i}"]`);
+    if(row) row.classList.toggle('warn',need);
+    if(need) warnRows.push(i+1);
+  });
+  const w=document.getElementById('invLineWarn');
+  if(w){
+    w.style.display=warnRows.length?'':'none';
+    w.textContent=warnRows.length?`⚠ 単価が空の行があります（${warnRows.join('・')}行目）。このままだと金額0円で載ります。`:'';
+  }
+  invSchedulePreview();
   return c;
 }
+
+/* ── 右側のプレビュー（入力するとすぐ反映。印刷と同じ invPrintHtml で描くので仕上がりと一致） ── */
+let invPreviewTimer=null;
+function invSchedulePreview(){
+  if(invPreviewTimer) clearTimeout(invPreviewTimer);
+  invPreviewTimer=setTimeout(invRenderLivePreview,120);
+}
+function invRenderLivePreview(){
+  invPreviewTimer=null;
+  const f=document.getElementById('invLivePreview');
+  if(!f || typeof invCollect!=='function') return;
+  try{
+    const p=invCollect();
+    let html=invPrintHtml(p,null,{draft:true});
+    html=html.replace('</head>','<style>.noprint{display:none!important}body{padding:0}</style></head>');
+    if(f.srcdoc!==html) f.srcdoc=html;
+  }catch(e){ console.error('プレビューの描画に失敗',e); }
+  invFitPreview();
+}
+function invFitPreview(){
+  const wrap=document.getElementById('invPreviewFrame'), f=document.getElementById('invLivePreview');
+  if(!wrap||!f||!wrap.clientWidth) return;
+  const s=wrap.clientWidth/794;
+  f.style.transform=`scale(${s})`;
+  wrap.style.height=Math.round(1123*s)+'px';
+}
+window.addEventListener('resize',()=>invFitPreview());
+
+/* ── 作り方の切り替え（1枚ずつ／月まとめ） ── */
+function invSetMode(m){
+  const batch=m==='batch';
+  const bp=document.getElementById('invBatchPanel'), sp=document.getElementById('invSinglePanel');
+  if(bp) bp.style.display=batch?'':'none';
+  if(sp) sp.style.display=batch?'none':'';
+  document.querySelectorAll('#invModeTabs button').forEach(b=>b.classList.toggle('active',b.dataset.mode===(batch?'batch':'single')));
+  if(!batch) setTimeout(invFitPreview,0);
+}
+
+/* ── 支払期限をワンタッチで（当月末・翌月末・翌々月末・30日後・なし） ── */
+function invSetDue(kind){
+  const base=document.getElementById('invDate')?.value||today();
+  const d=new Date(base+'T00:00:00');
+  let v='';
+  if(kind==='eom') v=fmtDate(new Date(d.getFullYear(),d.getMonth()+1,0));
+  else if(kind==='eonm') v=fmtDate(new Date(d.getFullYear(),d.getMonth()+2,0));
+  else if(kind==='eon2m') v=fmtDate(new Date(d.getFullYear(),d.getMonth()+3,0));
+  else if(kind==='plus30'){ d.setDate(d.getDate()+30); v=fmtDate(d); }
+  const due=document.getElementById('invDue'); if(due) due.value=v;
+  document.querySelectorAll('#invDuePresets button').forEach(b=>b.classList.toggle('on',b.dataset.duePreset===kind));
+  invSchedulePreview();
+}
+
+/* ── 件名の候補（発行日の前月分・当月分） ── */
+function invRenderSubjectChips(){
+  const box=document.getElementById('invSubjectChips'); if(!box) return;
+  const base=document.getElementById('invDate')?.value||today();
+  const d=new Date(base+'T00:00:00');
+  const prev=new Date(d.getFullYear(),d.getMonth()-1,1);
+  const lab=x=>`${x.getFullYear()}年${x.getMonth()+1}月分`;
+  box.innerHTML=[prev,d].map(x=>`<button type="button" onclick="invSetSubject('${lab(x)}')">${lab(x)}</button>`).join('');
+}
+function invSetSubject(v){ const s=document.getElementById('invSubject'); if(s){ s.value=v; s.focus(); } invSchedulePreview(); }
 
 /* ── 書類の種類（見積書・納品書・請求書・領収書）──
    4種類とも同じエディタで作り、「変換」で次の書類へ引き継ぐ。 */
@@ -3786,8 +4041,13 @@ function openInvoiceTab(){
   renderInvLines();
   renderInvoiceSettings();
   invApplyTypeUI();
+  invRenderSubjectChips();
   invSetListType(invListType);
   regenInvNumber();
+  // 宛名・日付・備考など、どこを変えてもプレビューに反映する（1回だけ登録）
+  const sp=document.getElementById('invSinglePanel');
+  if(sp && !sp._invPreviewBound){ sp._invPreviewBound=true; sp.addEventListener('input',invSchedulePreview); sp.addEventListener('change',invSchedulePreview); }
+  invSchedulePreview();
 }
 
 // フォーム→ペイロード（発行時スナップショットにもなる）
@@ -3828,6 +4088,10 @@ function invResetForm(){
   renderInvLines();
   invUpdateEditBanner();
   invUpdateLinkedNote();
+  const hint=document.getElementById('invCustomerHint'); if(hint){ hint.textContent=''; hint.classList.remove('ok'); }
+  document.querySelectorAll('#invDuePresets button').forEach(b=>b.classList.remove('on'));
+  invRenderSubjectChips();
+  const pb=document.getElementById('invPullBox'); if(pb) pb.open=false;
   const pr=document.getElementById('invPullResult'), pl=document.getElementById('invPullList'), pa=document.getElementById('invPullActions');
   if(pr) pr.textContent='請求先を選んでから「対象の注文を探す」を押してください。';
   if(pl) pl.innerHTML='';
@@ -3859,6 +4123,7 @@ function invPullRange(){
 }
 
 async function invPullSearch(){
+  const box=document.getElementById('invPullBox'); if(box) box.open=true;
   const res=document.getElementById('invPullResult');
   const list=document.getElementById('invPullList');
   const acts=document.getElementById('invPullActions');
@@ -4104,6 +4369,7 @@ async function invChunkedGet(table,col,ids,select){
   return out;
 }
 async function invBatchSearch(){
+  invSetMode('batch');
   const res=document.getElementById('invBatchResult'), list=document.getElementById('invBatchList'), acts=document.getElementById('invBatchActions');
   const r=invBatchRange();
   res.textContent='集計中…'; list.innerHTML=''; acts.style.display='none'; invBatchGroups=[];
@@ -4677,7 +4943,14 @@ async function invIssue(){
   if(!p.name){alert('宛名（請求先名）を入力してください');return}
   if(!p.lines.length){alert('明細を1行以上入力してください');return}
   const c=invCalcLines(p.lines);
-  if(!confirm(`${invType}を発行します。\n\n宛名: ${p.name} ${p.honorific}\n合計: ¥${c.total.toLocaleString()}（税込・内消費税 ¥${c.taxTotal.toLocaleString()}）\n\n発行すると${invSpec().numberLabel}が確定し、以後この${invType}は編集できません（訂正は一覧から「取消」→「複製」で再発行）。よろしいですか？`)) return;
+  // 発行前の点検（止めはしないが、確認画面の先頭に出す）
+  const warns=[];
+  const zero=invLines.map((l,i)=>invLineNeedsPrice(l)?i+1:null).filter(Boolean);
+  if(zero.length) warns.push(`⚠ 単価が空の行があります（${zero.join('・')}行目・金額0円）`);
+  if(p.due && p.date && p.due<p.date && invType==='請求書') warns.push('⚠ お支払期限が発行日より前になっています');
+  const fr8=invLines.map((l,i)=>(INV_TAX10_RE.test(l.name||'')&&l.tax===8)?i+1:null).filter(Boolean);
+  if(fr8.length) warns.push(`⚠ 送料・手数料などが8%のままの行があります（${fr8.join('・')}行目）`);
+  if(!confirm(`${warns.length?warns.join('\n')+'\n\n':''}${invType}を発行します。\n\n宛名: ${p.name} ${p.honorific}\n合計: ¥${c.total.toLocaleString()}（税込・内消費税 ¥${c.taxTotal.toLocaleString()}）\n\n発行すると${invSpec().numberLabel}が確定し、以後この${invType}は編集できません（訂正は一覧から「取消」→「複製」で再発行）。よろしいですか？`)) return;
 
   for(let attempt=0;attempt<3;attempt++){
     try{
@@ -4831,7 +5104,8 @@ function invFillFormFrom(r,asCopy,forceType){
   document.getElementById('invMemo').value=p.memo||r.memo||'';
   document.getElementById('invDate').value=asCopy?today():(p.date||r.issue_date||today());
   document.getElementById('invDue').value=asCopy?invDueDefault(invType):(p.due||r.due_date||'');
-  invLines=(p.lines&&p.lines.length?p.lines:[]).map(l=>({name:l.name||'',qty:l.qty!=null?l.qty:'',unit:l.unit||'',price:l.price!=null?l.price:'',tax:l.tax!=null?l.tax:8}));
+  // 保存済みの税率・単位は、品名を直しても自動で変えない（_taxTouched/_unitTouched）
+  invLines=(p.lines&&p.lines.length?p.lines:[]).map(l=>({name:l.name||'',qty:l.qty!=null?l.qty:'',unit:l.unit||'',price:l.price!=null?l.price:'',tax:l.tax!=null?l.tax:8,_taxTouched:true,_unitTouched:true}));
   if(!invLines.length) invLines=[newInvLine()];
   // 複製時は注文の紐付けを引き継がない（同じ注文を二重請求しないため）
   invLinkedOrderIds=asCopy?[]:((p.order_ids||[]).slice());
