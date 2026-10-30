@@ -151,8 +151,14 @@ th,td{padding:8px 6px;font-size:.8rem}
 .inv-chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
 .inv-chips button{border:1px solid var(--border2);background:var(--surface2);color:var(--text);border-radius:999px;padding:3px 10px;font:inherit;font-size:.72rem;cursor:pointer}
 .inv-chips button:hover,.inv-chips button.on{border-color:var(--gold);color:var(--gold)}
-.inv-pull{border:1px dashed var(--border2);border-radius:var(--radius);padding:8px 12px;background:var(--surface2);margin-bottom:12px}
-.inv-pull summary{cursor:pointer;font-weight:700;font-size:.85rem}
+.inv-pull{border:1px solid var(--border2);border-radius:var(--radius);padding:10px 12px;background:var(--surface2);margin-top:12px}
+.inv-pull-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.inv-pull-head strong{font-size:.88rem}
+.inv-pull-ctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.78rem;color:var(--text2)}
+.inv-pull-ctl label{display:flex;align-items:center;gap:4px}
+.inv-pull-ctl select{width:auto;padding:4px 8px;font-size:.8rem}
+.inv-pull-msg{margin-top:8px;font-size:.8rem;color:var(--text2)}
+.inv-pull-list{max-height:280px;overflow-y:auto;margin-top:6px}
 .inv-line{display:grid;grid-template-columns:minmax(0,1fr) 68px 52px 86px 70px 84px 112px;gap:6px;align-items:center;margin-bottom:6px}
 .inv-line input,.inv-line select{width:100%;min-width:0}
 .inv-line [data-f=qty],.inv-line [data-f=price]{text-align:right;padding:8px 6px}
@@ -332,7 +338,7 @@ th,td{padding:8px 6px;font-size:.8rem}
   <!-- Tab 0: 出荷データ（一次データ：いつ・どこに・何を・どれくらい送ったか） -->
   <div class="tab-content active" id="tab-shipdata">
     <div class="filter-bar">
-      <input class="search-input" type="text" placeholder="顧客名・注文番号で検索..." id="shipDataSearch" oninput="renderShipData()">
+      <input class="search-input" type="text" placeholder="顧客名・請求先・注文番号・備考で検索..." id="shipDataSearch" oninput="renderShipData()">
     </div>
     <div class="table-wrap">
       <table>
@@ -596,6 +602,34 @@ th,td{padding:8px 6px;font-size:.8rem}
             <div class="form-group"><label>敬称</label><input type="text" id="invHonorific" value="御中" list="invHonorificList"><datalist id="invHonorificList"><option value="御中"><option value="様"><option value="殿"></datalist></div>
             <div class="form-group inv-addr"><label>請求先住所（任意）</label><input type="text" id="invAddress" placeholder="千葉県…"></div>
           </div>
+          <!-- この取引先の納品記録（2026-10-30 沖「新しくした請求書作成から出てこない。余計わかりづらくなってる」）
+               以前は明細の中に畳まれ、期間の初期値が「今月」・請求済みは隠す設定だったため、8〜10月に出荷のある顧客
+               100件のうち45件で何も出なかった（43件は請求済みで隠れ、2件は先月以前の未請求）。
+               取引先を選んだら自動で、すべての期間を、請求済みも灰色で（請求書番号つき）出す -->
+          <div id="invPullBox" class="inv-pull">
+            <div class="inv-pull-head">
+              <strong>📦 この取引先の納品記録</strong>
+              <span class="inv-pull-ctl">
+                <select id="invPullPeriod" onchange="invPullSearch()" aria-label="期間">
+                  <option value="all" selected>すべての期間</option>
+                  <option value="thisMonth">今月</option>
+                  <option value="lastMonth">先月</option>
+                  <option value="2">2か月前</option>
+                  <option value="3">3か月前</option>
+                </select>
+                <label><input type="checkbox" id="invPullShowBilled" checked onchange="invPullSearch()"> 請求済みも表示</label>
+                <button type="button" class="btn btn-outline btn-sm" onclick="invPullSearch()" title="読み込み直す">↻</button>
+              </span>
+            </div>
+            <div id="invPullResult" class="inv-pull-msg">取引先を台帳から選ぶと、ここにその取引先の納品記録（発送済みの注文）が出ます。</div>
+            <!-- ボタンは一覧の上（下に置くと画面下の固定の発行バーに隠れる） -->
+            <div id="invPullActions" style="display:none;margin-top:8px;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-gold btn-sm" onclick="invPullApply()">✓を付けた納品を明細に入れる</button>
+              <button class="btn btn-outline btn-sm" onclick="invPullToggleAll(true)">未請求をすべて選ぶ</button>
+              <button class="btn btn-outline btn-sm" onclick="invPullToggleAll(false)">選択解除</button>
+            </div>
+            <div id="invPullList" class="inv-pull-list"></div>
+          </div>
           <div class="form-group" id="invProvisoRow" style="display:none"><label>但し書き（領収書に「但し ○○ として」と印字）</label><input type="text" id="invProviso" placeholder="例: ジビエ肉代"></div>
         </div>
 
@@ -624,35 +658,6 @@ th,td{padding:8px 6px;font-size:.8rem}
 
         <div class="inv-card">
           <div class="inv-step"><span class="no">4</span>明細 <span style="font-size:.72rem;color:var(--text2);font-weight:400">肉・食品は軽減税率8%、送料・加工賃などは10%（品名に「送料」などと入れると自動で10%・個）</span></div>
-
-          <!-- 注文から取り込む（締め請求）: 明細の入れ方のひとつなので明細のすぐ上に。ふだんは畳んでおく -->
-          <details id="invPullBox" class="inv-pull">
-            <summary>📦 この請求先の注文から明細を取り込む（締め請求・二重請求防止）</summary>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
-              <div class="form-group" style="margin:0;min-width:130px"><label>期間</label>
-                <select id="invPullPeriod" onchange="invPullSearch()">
-                  <option value="thisMonth">今月</option>
-                  <option value="lastMonth">先月</option>
-                  <option value="2">2か月前</option>
-                  <option value="3">3か月前</option>
-                  <option value="all">すべて（未請求）</option>
-                </select>
-              </div>
-              <div class="form-group" style="margin:0;flex:1;min-width:140px"><label>&nbsp;</label>
-                <button class="btn btn-outline" style="width:100%" onclick="invPullSearch()">🔍 対象の注文を探す</button>
-              </div>
-              <label style="font-size:.75rem;color:var(--text2);display:flex;align-items:center;gap:4px;padding-bottom:9px">
-                <input type="checkbox" id="invPullShowBilled" onchange="invPullSearch()"> 請求済みも表示
-              </label>
-            </div>
-            <div id="invPullResult" style="margin-top:8px;font-size:.8rem;color:var(--text2)">請求先を選んでから「対象の注文を探す」を押してください。</div>
-            <div id="invPullList" style="max-height:230px;overflow-y:auto;margin-top:6px"></div>
-            <div id="invPullActions" style="display:none;margin-top:8px;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-gold btn-sm" onclick="invPullApply()">選んだ注文を明細に入れる</button>
-              <button class="btn btn-outline btn-sm" onclick="invPullToggleAll(true)">全て選択</button>
-              <button class="btn btn-outline btn-sm" onclick="invPullToggleAll(false)">選択解除</button>
-            </div>
-          </details>
 
           <div class="inv-line inv-lines-head" aria-hidden="true">
             <div>品名</div><div style="text-align:right">数量</div><div style="text-align:center">単位</div><div style="text-align:right">単価</div><div style="text-align:center">税率</div><div style="text-align:right">金額</div><div style="text-align:center">並べ替え・複製・削除</div>
@@ -1223,6 +1228,7 @@ async function init(){
     if(!staffKeyGet()) await staffKeyEnsure();
     await Promise.all([loadOrders(),loadCustomers(),loadProducts(),loadInvoiceSettings(),loadOrgInfo(),loadShipData()]);
     orderedCustomerIds=new Set(allOrders.map(o=>o.customer_id).filter(Boolean));
+    if(shipData.length) renderShipData();   // 顧客の備考による請求先の印（wholesalerTagOf）は顧客の読み込み後でないと出ないため描き直す（読込エラーの表示は消さない）
     await loadCustomerActivity();   // 発送/請求の実績を集計（スター・カラム用）。allOrders 確定後に呼ぶ
     populateCustomerDropdowns();
     renderCustomers(); // 会社情報・注文実績がそろってから案内文の見本を出し直す
@@ -1253,7 +1259,7 @@ let shipData=[];
 async function loadShipData(){
   try{
     shipData=await sb('GET','shipments','',
-      `?select=*,orders(order_code,customer_name,customer_id,order_date,order_items(*,inventory(grade,individual_id)))`
+      `?select=*,orders(order_code,customer_name,customer_id,order_date,memo,order_items(*,inventory(grade,individual_id)))`
       +`&order=shipment_date.desc.nullslast,created_at.desc&limit=1000`);
   }catch(e){
     console.error('出荷データの読込エラー',e);
@@ -1286,9 +1292,11 @@ function renderShipData(){
   if(!body) return;
   const search=(document.getElementById('shipDataSearch')?.value||'').toLowerCase();
   let filtered=shipData;
+  // 請求先（仲卸業者・運営会社の印）と備考でも引ける。エフユーアイジャパンあての出荷は店名「植山」で入っているため、
+  // 顧客名だけの検索では見つからず「消えた」と見えていた（2026-10-30）
   if(search) filtered=filtered.filter(s=>{
     const o=s.orders||{};
-    return (o.customer_name||'').toLowerCase().includes(search)||(o.order_code||'').toLowerCase().includes(search);
+    return [o.customer_name,o.order_code,o.memo,wholesalerTagOf(o)].some(v=>(v||'').toLowerCase().includes(search));
   });
   if(shipDataSortKey){
     filtered=filtered.slice().sort((a,b)=>{
@@ -1313,7 +1321,7 @@ function renderShipData(){
     const totalWeight=shipWeightSum(items);
     return `<tr>
       <td>${s.shipment_date||s.delivery_date||'--'}</td>
-      <td style="font-weight:700">${esc(o.customer_name||'--')}</td>
+      <td style="font-weight:700">${esc(o.customer_name||'--')}${(w=>w?`<div style="font-size:.72rem;font-weight:400;color:var(--text2)">請求先: ${esc(w)}</div>`:'')(wholesalerTagOf(o))}</td>
       <td style="max-width:340px;white-space:normal;line-height:1.6">${content||'--'}</td>
       <td style="text-align:right">${totalWeight?totalWeight.toFixed(2)+'kg':'--'}</td>
       <td style="text-align:right">${s.freight!=null?'&yen;'+Number(s.freight).toLocaleString():'<span style="color:var(--text3)">未設定</span>'}</td>
@@ -2164,9 +2172,11 @@ let docDocsMap={}; // order_id -> Set(doc_type)
 let docCustomerCandidates=[];
 function populateDocCustomerDropdown(){
   const range=docPeriodRange();
-  const shippedIds=new Set(allOrders.filter(o=>SHIP_STATUSES.includes(o.status)
-    && (!range || ((o.order_date||'')>=range.from && (o.order_date||'')<=range.to))
-  ).map(o=>o.customer_id));
+  const inRange=allOrders.filter(o=>SHIP_STATUSES.includes(o.status)
+    && (!range || ((o.order_date||'')>=range.from && (o.order_date||'')<=range.to)));
+  const shippedIds=new Set(inRange.map(o=>o.customer_id));
+  // 仲卸業者・運営会社は自分名義の注文が無いので、印の付いた店の注文があれば候補に出す（2026-10-30）
+  inRange.forEach(o=>{ const w=wholesalerTagOf(o); const wc=w&&allCustomers.find(c=>c.name===w); if(wc) shippedIds.add(wc.id); });
   docCustomerCandidates=allCustomers.filter(c=>shippedIds.has(c.id)).sort((a,b)=>(a.code||'').localeCompare(b.code||''));
   renderDocCustomerOptions();
 }
@@ -2222,9 +2232,12 @@ async function loadDocOrders(){
   el.innerHTML='<div class="empty">読み込み中…</div>';
   try{
     let q=`?status=in.(${SHIP_STATUSES.join(',')})&order_date=gte.${range.from}&order_date=lte.${range.to}&select=*,order_items(*,inventory(grade)),shipments(freight,carrier,size_code,is_cool,package_count,notes)&order=order_date.desc`;
-    if(custIds.length===1) q+=`&customer_id=eq.${custIds[0]}`;
-    else if(custIds.length>1) q+=`&customer_id=in.(${custIds.join(',')})`;
+    // 仲卸業者・運営会社を選んだときは、店名義でその印が付いた注文も出す（期間で読んでから絞る）
+    const pickWs=custIds.some(id=>wholesalerNameOfCustomer(allCustomers.find(c=>c.id===id)));
+    if(!pickWs && custIds.length===1) q+=`&customer_id=eq.${custIds[0]}`;
+    else if(!pickWs && custIds.length>1) q+=`&customer_id=in.(${custIds.join(',')})`;
     docOrders=await sb('GET','orders','',q);
+    if(pickWs) docOrders=docOrders.filter(o=>custIds.some(id=>orderIsBilledTo(o,id)));
     // 発行済み書類を突き合わせ（order_idごとにどの書類が出ているか）。
     // 複数注文をまとめた書類はdocuments.order_idを持たずdocument_ordersの中間テーブルで
     // 対応づけているため、単独注文（documents.order_id）とまとめた注文（document_orders）の
@@ -2263,7 +2276,7 @@ function renderDocOrders(){
     return `<div class="order-check-item" style="${issued.size?'opacity:.72':''}">
       <input type="checkbox" data-oid="${o.id}">
       <div>
-        <strong>${esc(o.customer_name||'')}</strong> <span style="color:var(--text2);font-size:.8rem">${esc(o.order_code||'')}</span> | ${o.order_date||''} | &yen;${Number(o.total_amount||0).toLocaleString()}<br>
+        <strong>${esc(o.customer_name||'')}</strong>${(w=>w?`<span style="font-size:.72rem;color:var(--text2)">（請求先: ${esc(w)}）</span>`:'')(wholesalerTagOf(o))} <span style="color:var(--text2);font-size:.8rem">${esc(o.order_code||'')}</span> | ${o.order_date||''} | &yen;${Number(o.total_amount||0).toLocaleString()}<br>
         <span style="font-size:.8rem;color:var(--text2)">${esc(items)}</span><br>
         <div style="margin-top:3px">${badges}</div>
       </div>
@@ -2382,6 +2395,26 @@ function wholesalerTagOf(o){
   if(fromOrder) return fromOrder;
   const c=o.customer_id&&typeof allCustomers!=='undefined'?allCustomers.find(x=>x.id===o.customer_id):null;
   return (c&&WHOLESALER_NAMES.find(w=>(c.notes||'').includes(w)))||null;
+}
+/* 請求先だけの相手（仲卸業者・運営会社）を選んだときの注文（2026-10-30 沖「エフユーアイジャパンの納品記録がなくなってる」）
+   この相手には自分名義の注文が無い（実測: トレタテ・ノブレス・エフユーアイとも0件。注文は店の名義で入り、
+   備考の印でこの相手あてになる＝53件）。そのため請求先として選ぶ・検索すると何も出ず、記録が消えたように見えていた。
+   請求先として選んだときは、店名義でこの名前の印が付いた注文も出す（印の判定は wholesalerTagOf と同じ）。 */
+function wholesalerNameOfCustomer(c){ return c&&WHOLESALER_NAMES.includes(c.name)?c.name:null; }
+// orders を探す条件（PostgREST）。普通の顧客は customer_id だけ。仲卸業者なら、備考か顧客の備考に印がある注文も
+function billToOrderQuery(custId){
+  const w=wholesalerNameOfCustomer(allCustomers.find(c=>c.id===custId));
+  if(!w) return `customer_id=eq.${custId}`;
+  const stores=allCustomers.filter(c=>c.id!==custId&&(c.notes||'').includes(w)).map(c=>c.id);
+  const conds=[`customer_id.eq.${custId}`,`memo.like.*${w}*`];
+  if(stores.length) conds.push(`customer_id.in.(${stores.join(',')})`);
+  return `or=(${conds.join(',')})`;
+}
+// この注文は請求先 custId あてか（上の条件で拾った注文を、印の優先順位どおりに絞り直す）
+function orderIsBilledTo(o,custId){
+  if(o.customer_id===custId) return true;
+  const w=wholesalerNameOfCustomer(allCustomers.find(c=>c.id===custId));
+  return !!w && wholesalerTagOf(o)===w;
 }
 
 async function generateDoc(type,forcedOrders){
@@ -3691,7 +3724,7 @@ function onInvCustomerInput(){
   const v=(document.getElementById('invCustomerInput').value||'').trim();
   const hint=document.getElementById('invCustomerHint');
   const setHint=(t,ok)=>{ if(hint){ hint.textContent=t; hint.classList.toggle('ok',!!ok); } };
-  if(!v){document.getElementById('invCustomerId').value='';setHint('');invSchedulePreview();return;}
+  if(!v){document.getElementById('invCustomerId').value='';setHint('');invPullAuto('');invSchedulePreview();return;}
   const c=allCustomers.find(x=>`${x.code} ${x.name}`===v)
     || allCustomers.filter(x=>x.is_active!==false).find(x=>custMatches(x,v));
   if(c){
@@ -3701,9 +3734,11 @@ function onInvCustomerInput(){
     document.getElementById('invHonorific').value=c.honorific||'御中';
     // 台帳のどのお客さんにつながったかを、その場で見せる（宛名・敬称・住所を入れたことも）
     setHint(`✓ 顧客台帳: ${c.code||''} ${c.name||''}（価格ランク: ${INV_RANK_LABEL[c.price_rank]||c.price_rank||'標準'}）。宛名・敬称・住所を入れました`+(c.address?'':'（住所は台帳に未登録）'),true);
+    invPullAuto(c.id);
   }else{
     document.getElementById('invCustomerId').value='';
-    setHint('台帳に無い宛名として作ります（この場合、注文からの取り込みはできません）');
+    setHint('台帳に無い宛名として作ります（この場合、納品記録からの取り込みはできません）');
+    invPullAuto('');
   }
   invSchedulePreview();
 }
@@ -4091,9 +4126,9 @@ function invResetForm(){
   const hint=document.getElementById('invCustomerHint'); if(hint){ hint.textContent=''; hint.classList.remove('ok'); }
   document.querySelectorAll('#invDuePresets button').forEach(b=>b.classList.remove('on'));
   invRenderSubjectChips();
-  const pb=document.getElementById('invPullBox'); if(pb) pb.open=false;
+  clearTimeout(invPullTimer); invPullFor='';
   const pr=document.getElementById('invPullResult'), pl=document.getElementById('invPullList'), pa=document.getElementById('invPullActions');
-  if(pr) pr.textContent='請求先を選んでから「対象の注文を探す」を押してください。';
+  if(pr) pr.textContent=INV_PULL_HINT;
   if(pl) pl.innerHTML='';
   if(pa) pa.style.display='none';
 }
@@ -4122,24 +4157,38 @@ function invPullRange(){
   return null; // all
 }
 
+/* 納品記録（2026-10-30 作り直し）: 取引先を選んだら自動で読む・初期は「すべての期間」・請求済みも灰色で番号つき。
+   以前は「今月」「請求済みは隠す」が初期値で、8〜10月に出荷のある顧客100件のうち45件で何も出なかった。
+   並びは 未請求（古い順＝請求する順）→ 請求済み（新しい順）。請求済みは✓を外しておく（二重請求防止） */
+const INV_PULL_HINT='取引先を台帳から選ぶと、ここにその取引先の納品記録（発送済みの注文）が出ます。';
+let invPullTimer=null, invPullFor='', invPullSeq=0;
+// 取引先が決まったら読む（打っている途中で何度も読まないよう少し待つ・同じ取引先なら読み直さない）
+function invPullAuto(id){
+  if(id===invPullFor) return;
+  invPullFor=id; clearTimeout(invPullTimer);
+  invPullTimer=setTimeout(()=>invPullSearch(),300);
+}
 async function invPullSearch(){
-  const box=document.getElementById('invPullBox'); if(box) box.open=true;
   const res=document.getElementById('invPullResult');
   const list=document.getElementById('invPullList');
   const acts=document.getElementById('invPullActions');
   const custId=document.getElementById('invCustomerId').value;
+  const seq=++invPullSeq;   // 取引先を続けて変えたとき、前の読み込みの結果で上書きしない
+  invPullFor=custId;
   if(!custId){
-    res.textContent='先に「請求先」で顧客を選んでください（自由入力の宛名では注文を取り込めません）。';
+    invPullOrders=[]; res.textContent=INV_PULL_HINT+'（台帳に無い宛名では出せません）';
     list.innerHTML=''; acts.style.display='none'; return;
   }
-  res.textContent='検索中…'; list.innerHTML=''; acts.style.display='none';
+  res.textContent='納品記録を読み込み中…'; list.innerHTML=''; acts.style.display='none';
   try{
-    let q=`?customer_id=eq.${custId}&status=in.(${INV_BILLABLE.join(',')})&select=*,order_items(*),shipments(freight,size_code,is_cool,package_count,notes)&order=delivery_date.asc,order_date.asc`;
+    // 仲卸業者・運営会社を選んだときは、店名義でその印が付いた注文も出す（billToOrderQuery）
+    let q=`?${billToOrderQuery(custId)}&status=in.(${INV_BILLABLE.join(',')})&select=*,order_items(*),shipments(freight,size_code,is_cool,package_count,notes)&order=delivery_date.asc,order_date.asc`;
     const r=invPullRange();
     if(r) q+=`&order_date=gte.${r.from}&order_date=lte.${r.to}`;
-    const orders=await sb('GET','orders','',q);
-    // 既に請求書に紐付いている注文を除外（取消された請求書の分は再請求できる）
-    let billed=new Set();
+    const orders=(await sb('GET','orders','',q)).filter(o=>orderIsBilledTo(o,custId));
+    if(seq!==invPullSeq) return;
+    // 取消されていない請求書に紐付いている注文＝請求済み（取消された請求書の分は再請求できる）
+    let billed=new Set(); const billedDoc=new Map();
     if(orders.length){
       const ids=orders.map(o=>o.id);
       const links=await sb('GET','document_orders','',`?order_id=in.(${ids.join(',')})&select=order_id,document_id`);
@@ -4147,36 +4196,48 @@ async function invPullSearch(){
         const docIds=[...new Set(links.map(l=>l.document_id))];
         const docs=await sb('GET','documents','',`?id=in.(${docIds.join(',')})&select=id,status,doc_number`);
         const alive=new Map(docs.filter(d=>d.status!=='取消').map(d=>[d.id,d.doc_number]));
-        links.forEach(l=>{ if(alive.has(l.document_id)) billed.add(l.order_id); });
+        links.forEach(l=>{ if(alive.has(l.document_id)){ billed.add(l.order_id); billedDoc.set(l.order_id,alive.get(l.document_id)); } });
       }
     }
+    if(seq!==invPullSeq) return;
     const showBilled=document.getElementById('invPullShowBilled').checked;
-    invPullOrders=orders.map(o=>({...o,_billed:billed.has(o.id)})).filter(o=>showBilled||!o._billed);
+    const dkey=o=>String(o.delivery_date||o.order_date||'');
+    invPullOrders=orders.map(o=>({...o,_billed:billed.has(o.id),_doc:billedDoc.get(o.id)||''})).filter(o=>showBilled||!o._billed)
+      .sort((a,b)=>(a._billed-b._billed)||(a._billed?dkey(b).localeCompare(dkey(a)):dkey(a).localeCompare(dkey(b))));
+    const docNames=[...new Set(billedDoc.values())];
+    const docText=docNames.slice(0,3).join('・')+(docNames.length>3?` ほか${docNames.length-3}枚`:'');
+    const periodLabel=r?document.getElementById('invPullPeriod').selectedOptions[0].textContent:'すべての期間';
     if(!invPullOrders.length){
-      res.textContent=billed.size?'未請求の注文はありません（請求済みを見るにはチェックを入れてください）。':'対象期間に納品済みの注文がありません。';
+      // 請求済みで隠れているときは、どの請求書に入っているかまで出す（「消えた」と見えないように）
+      res.textContent=billed.size?`未請求の納品はありません。請求済み ${billed.size}件（${docText}）は「請求済みも表示」で見られます。`
+        :`${periodLabel}に納品記録（発送済みの注文）はありません。`+(r?'「すべての期間」にすると前の月も出ます。':'');
       return;
     }
-    const sum=invPullOrders.filter(o=>!o._billed).reduce((s,o)=>s+Number(o.total_amount||0),0);
-    res.innerHTML=`未請求 <strong>${invPullOrders.filter(o=>!o._billed).length}件</strong>（合計 &yen;${sum.toLocaleString()}）${billed.size?` ／ 請求済み ${billed.size}件`:''}`;
+    const un=invPullOrders.filter(o=>!o._billed);
+    const sum=un.reduce((s,o)=>s+Number(o.total_amount||0),0);
+    res.innerHTML=(un.length?`未請求 <strong>${un.length}件</strong>（合計 &yen;${sum.toLocaleString()}）に✓を付けました`:'未請求の納品はありません')
+      +(billed.size?` ／ 請求済み ${billed.size}件（${esc(docText)}）${showBilled?'は灰色':'は非表示'}`:'')
+      +(r?`（${esc(periodLabel)}）`:'');
     list.innerHTML=invPullOrders.map((o,i)=>{
       const items=(o.order_items||[]).map(t=>`${t.species||''} ${t.part_name||''}`).filter(x=>x.trim()).join('、');
       return `<label style="display:flex;gap:8px;align-items:flex-start;padding:7px 6px;border-bottom:1px solid var(--border);${o._billed?'opacity:.55':''}">
         <input type="checkbox" class="inv-pull-cb" data-i="${i}" ${o._billed?'':'checked'} style="margin-top:3px;accent-color:var(--gold)">
         <span style="flex:1;min-width:0">
-          <strong style="font-size:.82rem">${esc(o.order_code||'')}</strong>
-          <span style="color:var(--text2);font-size:.75rem"> ${o.delivery_date||o.order_date||''} ・ ${esc(o.status||'')}</span>
-          ${o._billed?'<span style="font-size:.68rem;background:rgba(106,158,90,.15);color:#3d7a34;border-radius:4px;padding:1px 5px;margin-left:4px">請求済</span>':''}
+          <strong style="font-size:.82rem">${o.delivery_date||o.order_date||''}</strong>
+          <span style="color:var(--text2);font-size:.75rem"> ${esc(o.order_code||'')} ・ ${esc(o.status||'')}${o.customer_id!==custId?' ・ 届け先 '+esc(o.customer_name||''):''}</span>
+          ${o._billed?`<span style="font-size:.68rem;background:rgba(106,158,90,.15);color:#3d7a34;border-radius:4px;padding:1px 5px;margin-left:4px">請求済 ${esc(o._doc)}</span>`:''}
           <br><span style="font-size:.73rem;color:var(--text2)">${esc(items)}</span>
           <span style="float:right;font-weight:700;font-size:.8rem">&yen;${Number(o.total_amount||0).toLocaleString()}</span>
         </span>
       </label>`;
     }).join('');
     acts.style.display='flex';
-  }catch(e){ res.textContent='検索エラー: '+e.message; }
+  }catch(e){ if(seq===invPullSeq) res.textContent='納品記録を読み込めませんでした: '+e.message; }
 }
 
+// 「未請求をすべて選ぶ」は請求済みに✓を付けない（二重請求防止）
 function invPullToggleAll(on){
-  document.querySelectorAll('.inv-pull-cb').forEach(cb=>{cb.checked=on;});
+  document.querySelectorAll('.inv-pull-cb').forEach(cb=>{ const o=invPullOrders[parseInt(cb.dataset.i,10)]; cb.checked=on&&!(o&&o._billed); });
 }
 
 // 品名からサブ部位の丸括弧（モモ（ソト）等）を取り除いた基本部位名を返す。
@@ -4209,10 +4270,12 @@ async function invPullApply(){
   // 件名・宛名・期間を補完
   const sub=document.getElementById('invSubject');
   if(sub && !sub.value.trim()){
-    const d=new Date((document.getElementById('invDate').value||today())+'T00:00:00');
-    const pv=document.getElementById('invPullPeriod').value;
-    const m=pv==='all'?d:new Date(d.getFullYear(),d.getMonth()-invMonthsAgo(pv),1);
-    sub.value=`${m.getFullYear()}年${m.getMonth()+1}月分`;
+    // 件名は取り込んだ納品の月から（初期の期間が「すべて」になったため、期間の選択からは決めない）
+    const ms=[...new Set(picked.map(o=>String(o.delivery_date||o.order_date||'').slice(0,7)).filter(x=>/^\d{4}-\d{2}$/.test(x)))].sort();
+    const ym=x=>`${+x.slice(0,4)}年${+x.slice(5,7)}月`;
+    if(ms.length===1) sub.value=`${ym(ms[0])}分`;
+    else if(ms.length>1){ const a=ms[0], b=ms[ms.length-1]; sub.value=`${ym(a)}〜${a.slice(0,4)===b.slice(0,4)?(+b.slice(5,7))+'月':ym(b)}分`; }
+    else{ const d=new Date((document.getElementById('invDate').value||today())+'T00:00:00'); sub.value=`${d.getFullYear()}年${d.getMonth()+1}月分`; }
   }
 
   // 仲卸業者経由の注文だけを取り込んだ場合は、宛名も自動でその仲卸業者にする（2026-09-26）。
@@ -5111,6 +5174,8 @@ function invFillFormFrom(r,asCopy,forceType){
   invLinkedOrderIds=asCopy?[]:((p.order_ids||[]).slice());
   renderInvLines();
   invUpdateLinkedNote();
+  // 納品記録も開いた書類の取引先のものに読み直す（前の取引先の一覧が残らないように）
+  invPullAuto(document.getElementById('invCustomerId').value);
 }
 /* 未入金サマリー（請求書のみ）：期限超過と未入金合計を一覧の上に出す */
 function invRenderUnpaidBar(){

@@ -26,7 +26,7 @@ const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
 
 const CUSTOMERS = [
-  { id: 'c1', code: 'C0532', name: '植山', kana: 'うえやま', price_rank: 'standard', address: '東京都港区西麻布1-8-6', building: '杉下ビル2階', honorific: '様', is_active: true, search_aliases: [] },
+  { id: 'c1', code: 'C0532', name: '植山', kana: 'うえやま', price_rank: 'standard', address: '東京都テスト区1-1-1', building: 'テストビル2階', honorific: '様', is_active: true, search_aliases: [] },
   { id: 'c2', code: 'C0829', name: 'モンレーヴ館山', kana: 'もんれーゔたてやま', price_rank: 'startmember', address: null, honorific: '御中', is_active: true, search_aliases: [] },
 ];
 const PM = [{ species: 'イノシシ', part_name: 'ロース', grade: '並', price_standard: 3800 }, { species: 'イノシシ', part_name: 'バラ', grade: '並', price_standard: 3100 }];
@@ -66,7 +66,7 @@ async function typeIn(loc, v) { await loc.fill(v); await loc.dispatchEvent('inpu
   // 3. 取引先
   await typeIn(page.locator('#invCustomerInput'), 'C0532 植山');
   const cust = await page.evaluate(() => ({ id: invGv('invCustomerId'), name: invGv('invName'), hon: invGv('invHonorific'), addr: invGv('invAddress'), hint: document.getElementById('invCustomerHint').textContent, ok: document.getElementById('invCustomerHint').classList.contains('ok') }));
-  ck('取引先: 台帳のお客さんが出て（コード・価格ランク）、宛名・敬称・住所が入る', cust.id === 'c1' && cust.name === '植山' && cust.hon === '様' && /西麻布/.test(cust.addr) && /C0532/.test(cust.hint) && /標準/.test(cust.hint) && cust.ok, JSON.stringify(cust));
+  ck('取引先: 台帳のお客さんが出て（コード・価格ランク）、宛名・敬称・住所が入る', cust.id === 'c1' && cust.name === '植山' && cust.hon === '様' && /テスト区/.test(cust.addr) && /C0532/.test(cust.hint) && /標準/.test(cust.hint) && cust.ok, JSON.stringify(cust));
   await typeIn(page.locator('#invCustomerInput'), '台帳に無い店');
   const free = await page.evaluate(() => ({ id: invGv('invCustomerId'), hint: document.getElementById('invCustomerHint').textContent }));
   ck('取引先: 台帳に無い宛名は、取り込みできない旨をその場で出す', free.id === '' && /台帳に無い/.test(free.hint), JSON.stringify(free));
@@ -170,7 +170,9 @@ async function typeIn(loc, v) { await loc.fill(v); await loc.dispatchEvent('inpu
   await page.click('#invModeTabs button[data-mode="single"]');
   const v2 = await vis();
   ck('最初は1枚作成。「請求先ごとに集計」で月まとめに切り替わり、タブで戻れる', v0.single && !v0.batch && v1.batch && !v1.single && v2.single && !v2.batch, JSON.stringify({ v0, v1, v2 }));
-  ck('注文から取り込む欄はふだん畳んであり、探すと開く', !(await page.evaluate(() => document.getElementById('invPullBox').open)) && await page.evaluate(async () => { await invPullSearch(); return document.getElementById('invPullBox').open; }), '');
+  // 2026-10-30 変更: 畳むと納品記録が見つからない（沖「新しくした請求書作成から出てこない」）→ 取引先の下に常に出す
+  //   詳しくは invoice-delivery-records.e2e.js
+  ck('納品記録の欄は畳まず、取引先（2）のすぐ下・日付（3）より上にある', await page.evaluate(() => { const b = document.getElementById('invPullBox'), s3 = document.getElementById('invDate'); return b.tagName !== 'DETAILS' && b.getBoundingClientRect().height > 0 && b.getBoundingClientRect().top < s3.getBoundingClientRect().top; }), '');
   ck('PC: JSエラーなし', errors.length === 0, errors.join(' / '));
   await ctx.close();
 
