@@ -26,7 +26,7 @@ const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
 
 const CUSTOMERS = [
-  { id: 'c1', code: 'C0532', name: '植山', kana: 'うえやま', price_rank: 'standard', address: '東京都港区西麻布1-8-6', building: '杉下ビル2階', honorific: '様', is_active: true, search_aliases: [] },
+  { id: 'c1', code: 'C0532', name: '植山', kana: 'うえやま', price_rank: 'standard', address: '東京都テスト区1-1-1', building: 'テストビル2階', honorific: '様', is_active: true, search_aliases: [] },
   { id: 'c2', code: 'C0829', name: 'モンレーヴ館山', kana: 'もんれーゔたてやま', price_rank: 'startmember', address: null, honorific: '御中', is_active: true, search_aliases: [] },
 ];
 const PM = [{ species: 'イノシシ', part_name: 'ロース', grade: '並', price_standard: 3800 }, { species: 'イノシシ', part_name: 'バラ', grade: '並', price_standard: 3100 }];
@@ -66,7 +66,7 @@ async function typeIn(loc, v) { await loc.fill(v); await loc.dispatchEvent('inpu
   // 3. 取引先
   await typeIn(page.locator('#invCustomerInput'), 'C0532 植山');
   const cust = await page.evaluate(() => ({ id: invGv('invCustomerId'), name: invGv('invName'), hon: invGv('invHonorific'), addr: invGv('invAddress'), hint: document.getElementById('invCustomerHint').textContent, ok: document.getElementById('invCustomerHint').classList.contains('ok') }));
-  ck('取引先: 台帳のお客さんが出て（コード・価格ランク）、宛名・敬称・住所が入る', cust.id === 'c1' && cust.name === '植山' && cust.hon === '様' && /西麻布/.test(cust.addr) && /C0532/.test(cust.hint) && /標準/.test(cust.hint) && cust.ok, JSON.stringify(cust));
+  ck('取引先: 台帳のお客さんが出て（コード・価格ランク）、宛名・敬称・住所が入る', cust.id === 'c1' && cust.name === '植山' && cust.hon === '様' && /テスト区/.test(cust.addr) && /C0532/.test(cust.hint) && /標準/.test(cust.hint) && cust.ok, JSON.stringify(cust));
   await typeIn(page.locator('#invCustomerInput'), '台帳に無い店');
   const free = await page.evaluate(() => ({ id: invGv('invCustomerId'), hint: document.getElementById('invCustomerHint').textContent }));
   ck('取引先: 台帳に無い宛名は、取り込みできない旨をその場で出す', free.id === '' && /台帳に無い/.test(free.hint), JSON.stringify(free));
