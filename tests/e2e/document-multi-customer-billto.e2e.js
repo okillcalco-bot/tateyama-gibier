@@ -108,9 +108,11 @@ const path = require('path');
   await page.fill('#docBillToInput', '');
   await page.dispatchEvent('#docBillToInput', 'input');
   ck('請求先を空にするとidも空に戻る', await page.$eval('#docBillTo', el => el.value) === '', await page.$eval('#docBillTo', el => el.value));
-  // 絞り込み用の顧客セレクトには、発送実績の無い顧客は出ない
+  // 絞り込み用の顧客セレクトには、発送実績のある顧客と、印の付いた出荷がある請求先（仲卸業者）だけが出る
+  // （2026-10-30 変更: 以前は仲卸業者を出さなかったため、請求先名で選べず「出荷が消えた」と見えていた。
+  //   wholesaler-billto-orders.e2e.js）
   const custFilterOptions = await page.$$eval('#docCustomer option', os => os.map(o => o.textContent));
-  ck('絞り込み用セレクトには発送実績のある顧客のみ出る', custFilterOptions.some(t => t.includes('A店')) && custFilterOptions.some(t => t.includes('B店')) && !custFilterOptions.some(t => t.includes('ノブレスオブリージュ')), custFilterOptions.join(','));
+  ck('絞り込み用セレクトには発送実績のある顧客と、印の付いた出荷がある仲卸業者だけが出る', custFilterOptions.length === 3 && custFilterOptions.some(t => t.includes('A店')) && custFilterOptions.some(t => t.includes('B店')) && custFilterOptions.some(t => t.includes('ノブレスオブリージュ')), custFilterOptions.join(','));
 
   // ── 1) 単一顧客・仲卸業者の備考タグなし（B店のみ）: 従来どおり自動で宛名になる。品名に顧客タグは付かない ──
   // (A店はノブレスオブリージュの備考タグ付きなので、この「素の単一顧客」ケースの検証にはB店を使う。
