@@ -7,7 +7,7 @@ create unique index if not exists departments_mark_uidx on public.departments (m
 
 insert into public.departments as d (code, name, short_name, sort, report_to, mark) values
   ('gibier',   '館山ジビエセンター',     'ジビエ', 10, '館山市（通帳の報告義務）', 'T'),
-  ('arco',     '合同会社アルコ（本体）', 'アルコ', 20, null, 'ア'),
+  ('alco',     '合同会社アルコ（本体）', 'アルコ', 20, null, 'ア'),
   ('yamana',   'ヤマナハウス',           'ヤマナ', 30, null, 'ヤ'),
   ('satoyama', '里山未来拠点協議会',     '里山',   40, null, '里')
 on conflict (code) do update set mark = coalesce(d.mark, excluded.mark);   -- 既にある部門は印だけ補う（名前は変えない）

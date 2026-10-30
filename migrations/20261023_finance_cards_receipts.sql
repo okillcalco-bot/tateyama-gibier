@@ -2,7 +2,7 @@
 -- 前提: 20261021_bank_reconciliation.sql（銀行明細・入金消込）
 -- ※ 本番未適用。適用は沖の承認が要る（RLS・権限の変更を含む）。
 --
--- 部門: 館山ジビエセンター（gibier・通帳は市役所へ報告義務）／合同会社アルコ本体（arco）／必要なら追加。
+-- 部門: 館山ジビエセンター（gibier・通帳は市役所へ報告義務）／合同会社アルコ本体（alco）／必要なら追加。
 --   口座・カード・請求書・取引先・領収書が部門を持ち、明細は「口座（カード）の部門」が既定で、1件ずつ別の部門に付け替えられる。
 -- 役割
 --   スタッフ（作業員）: スタッフキー。取込・分類・領収書の登録・消込ができる
@@ -22,7 +22,7 @@ create table if not exists public.departments (
 );
 insert into public.departments (code, name, short_name, sort, report_to) values
   ('gibier', '館山ジビエセンター', 'ジビエ', 10, '館山市（通帳の報告義務）'),
-  ('arco', '合同会社アルコ（本体）', 'アルコ', 20, null)
+  ('alco', '合同会社アルコ（本体）', 'アルコ', 20, null)
 on conflict (code) do nothing;
 -- 20261021 で足した部門列（customers / documents）に、部門表への参照を付ける
 do $$ begin
