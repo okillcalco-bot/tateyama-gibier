@@ -170,7 +170,9 @@ async function typeIn(loc, v) { await loc.fill(v); await loc.dispatchEvent('inpu
   await page.click('#invModeTabs button[data-mode="single"]');
   const v2 = await vis();
   ck('最初は1枚作成。「請求先ごとに集計」で月まとめに切り替わり、タブで戻れる', v0.single && !v0.batch && v1.batch && !v1.single && v2.single && !v2.batch, JSON.stringify({ v0, v1, v2 }));
-  ck('注文から取り込む欄はふだん畳んであり、探すと開く', !(await page.evaluate(() => document.getElementById('invPullBox').open)) && await page.evaluate(async () => { await invPullSearch(); return document.getElementById('invPullBox').open; }), '');
+  // 2026-10-30 変更: 畳むと納品記録が見つからない（沖「新しくした請求書作成から出てこない」）→ 取引先の下に常に出す
+  //   詳しくは invoice-delivery-records.e2e.js
+  ck('納品記録の欄は畳まず、取引先（2）のすぐ下・日付（3）より上にある', await page.evaluate(() => { const b = document.getElementById('invPullBox'), s3 = document.getElementById('invDate'); return b.tagName !== 'DETAILS' && b.getBoundingClientRect().height > 0 && b.getBoundingClientRect().top < s3.getBoundingClientRect().top; }), '');
   ck('PC: JSエラーなし', errors.length === 0, errors.join(' / '));
   await ctx.close();
 

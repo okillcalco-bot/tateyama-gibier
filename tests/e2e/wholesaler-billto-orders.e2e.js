@@ -108,11 +108,9 @@ async function typeIn(page, sel, v) { await page.fill(sel, v); await page.dispat
 
   // 1. 請求書作成 → 注文から取り込む（請求先に仲卸業者）
   await page.evaluate(() => switchTab('invoice')); await page.waitForTimeout(300);
-  await typeIn(page, '#invCustomerInput', `C9003 ${FUI}`);
-  await page.evaluate(() => { document.getElementById('invPullBox').open = true; });
-  await page.selectOption('#invPullPeriod', 'all');
   state.orderUrls.length = 0;
-  await page.evaluate(() => invPullSearch()); await page.waitForTimeout(300);
+  await typeIn(page, '#invCustomerInput', `C9003 ${FUI}`);   // 取引先を選ぶと納品記録を自動で読む（すべての期間）
+  await page.waitForTimeout(800);
   const pull = await page.evaluate(() => ({ codes: invPullOrders.map(o => o.order_code), res: document.getElementById('invPullResult').textContent, list: document.getElementById('invPullList').innerText }));
   const q1 = state.orderUrls[0] || '';
   ck('取り込み: 仲卸業者を選ぶと、印の付いた店名義の注文が出る（A食堂＝顧客の備考・B商店＝注文の備考）', JSON.stringify(pull.codes) === JSON.stringify(['DIR-T-A', 'DIR-T-B']), JSON.stringify(pull));
@@ -127,15 +125,14 @@ async function typeIn(page, sel, v) { await page.fill(sel, v); await page.dispat
   ck('取り込み後: 宛名はエフユーアイジャパンのまま・備考に【出荷内訳】（A食堂・B商店）', ap.id === 'c-fui' && ap.name === FUI && /【出荷内訳】/.test(ap.memo) && /A食堂/.test(ap.memo) && /B商店/.test(ap.memo), JSON.stringify(ap));
   ck('取り込み後: 明細に2件分の部位と送料', ap.lines.some(n => /ロース/.test(n)) && ap.lines.some(n => /バラ/.test(n)) && ap.lines.filter(n => /送料/.test(n)).length === 2, JSON.stringify(ap.lines));
 
-  // 2. 請求済みで隠れているとき
+  // 2. 請求済みで隠れているとき（「請求済みも表示」は初期で入っているので外して測る）
   state.links = [{ order_id: 'o-a', document_id: 'd1' }, { order_id: 'o-b', document_id: 'd1' }];
-  await page.evaluate(() => invPullSearch()); await page.waitForTimeout(300);
+  await page.uncheck('#invPullShowBilled'); await page.waitForTimeout(300);
   const billed = await page.evaluate(() => ({ n: invPullOrders.length, res: document.getElementById('invPullResult').textContent }));
   ck('請求済みで隠れているときは、何件がどの請求書に入っているかを出す', billed.n === 0 && /請求済み 2件/.test(billed.res) && /INV-TEST-016/.test(billed.res), JSON.stringify(billed));
   await page.check('#invPullShowBilled'); await page.waitForTimeout(300);
   const shown = await page.evaluate(() => ({ codes: invPullOrders.map(o => o.order_code), list: document.getElementById('invPullList').innerText }));
   ck('「請求済みも表示」で2件が「請求済 INV-TEST-016」付きで出る', shown.codes.length === 2 && (shown.list.match(/請求済 INV-TEST-016/g) || []).length === 2, JSON.stringify(shown));
-  await page.uncheck('#invPullShowBilled');
   state.links = [];
 
   // 4. 普通の顧客は従来どおり
