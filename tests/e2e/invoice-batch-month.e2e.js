@@ -153,6 +153,23 @@ const invOthers = (h, me) => !['A食堂', 'B商店', 'トレタテ', 'ノブレ�
   ck('送料: 4個口・6,960円 → 4個×1,740円', fl.some(l => /9\/28納品　送料（クール120）$/.test(l.name) && l.qty === 4 && l.unit === '個' && l.price === 1740), JSON.stringify(fl));
   ck('送料: 箱のサイズ違いで割り切れない（2個口・2,430円）→ 1式・品名に「2個口」', fl.some(l => /送料（2個口）$/.test(l.name) && l.qty === 1 && l.unit === '式' && l.price === 2430), JSON.stringify(fl));
   ck('送料: 個口数が無い出荷は従来どおり 1個', fl.some(l => /9\/29納品　送料（クール140）$/.test(l.name) && l.qty === 1 && l.price === 1450), JSON.stringify(fl));
+  // 5d. 箱ごとのサイズと金額が備考にある出荷（2026-10-30 沖: 9/23 の「送料（クール120）1個 3,040円」が二重計上に見えた。
+  //     実際は 100サイズ 1,300円＋120サイズ 1,740円 の2箱）→ 箱ごとの行。日付の並びは 肉→送料 のまま
+  const box = await page.evaluate(() => invBuildLinesFromOrders([
+    { delivery_date: '2026-09-23', order_items: [{ species: 'キョン', part_name: '枝肉（全体）', weight_kg: 10.15, subtotal: 30453 }], shipments: [{ freight: 3040, size_code: 120, is_cool: true, package_count: 2, notes: '直販（注文なし） 植山 ／ 送料: ヤマト 2箱 391151252306（100・1,300円）＋391152050100（120・1,740円）の合計' }] },
+    { delivery_date: '2026-09-15', order_items: [{ species: 'キョン', part_name: '枝肉（全体）', weight_kg: 9.65, subtotal: 28953 }], shipments: [{ freight: 1740, size_code: 120, is_cool: true, package_count: 1, notes: '送料: ヤマト 391094896942（クール120・1,740円）' }] },
+    { delivery_date: '2026-09-25', order_items: [{ species: 'イノシシ', part_name: 'ロース', weight_kg: 5, subtotal: 19000 }], shipments: [{ freight: 3480, size_code: 120, is_cool: true, package_count: 2, notes: '2箱（120・1,740円）＋（120・1,740円）' }] },
+    { delivery_date: '2026-09-26', order_items: [{ species: 'イノシシ', part_name: 'ロース', weight_kg: 5, subtotal: 19000 }], shipments: [{ freight: 3000, size_code: 120, is_cool: true, package_count: 2, notes: '2箱（100・1,300円）＋（120・1,740円）' }] },
+  ], {}, 'standard').map(l => [l.name, l.qty, l.unit, l.price]));
+  const boxNames = box.map(b => b[0]);
+  ck('送料: 2箱（100・1,300円＋120・1,740円）→ 箱ごとに2行（クール100 1個 1,300円・クール120 1個 1,740円）',
+    box.some(b => b[0] === '9/23納品　送料（クール100）' && b[1] === 1 && b[3] === 1300) && box.some(b => b[0] === '9/23納品　送料（クール120）' && b[1] === 1 && b[3] === 1740) && !box.some(b => /9\/23/.test(b[0]) && b[3] === 3040 || /9\/23/.test(b[0]) && b[3] === 1520), JSON.stringify(box));
+  ck('送料: 箱ごとに分けても日付ごとの 肉→送料 の並び（9/15 枝肉・送料 → 9/23 枝肉・送料100・送料120）',
+    boxNames.indexOf('9/15納品　キョン 枝肉') < boxNames.indexOf('9/15納品　送料（クール120）') && boxNames.indexOf('9/15納品　送料（クール120）') < boxNames.indexOf('9/23納品　キョン 枝肉')
+      && boxNames.indexOf('9/23納品　キョン 枝肉') < boxNames.indexOf('9/23納品　送料（クール100）') && boxNames.indexOf('9/23納品　送料（クール100）') < boxNames.indexOf('9/23納品　送料（クール120）'), JSON.stringify(boxNames));
+  ck('送料: 1箱の出荷の備考（クール120・1,740円）は従来どおり1行・1個', box.filter(b => /9\/15納品　送料/.test(b[0])).length === 1 && box.some(b => b[0] === '9/15納品　送料（クール120）' && b[1] === 1 && b[3] === 1740), JSON.stringify(box));
+  ck('送料: 同じサイズ・同じ金額の2箱はまとめて 2個×1,740円', box.some(b => b[0] === '9/25納品　送料（クール120）' && b[1] === 2 && b[3] === 1740), JSON.stringify(box));
+  ck('送料: 箱の金額の合計が送料と合わないときは分けない（従来の1行。黙って金額を変えない）', box.filter(b => /9\/26納品　送料/.test(b[0])).length === 1 && box.some(b => /9\/26納品　送料/.test(b[0]) && b[1] * b[3] === 3000), JSON.stringify(box));
   ck('明細の行に内部用の日付キー（_d）が残らない', await page.evaluate(() => invBuildLinesFromOrders([{ delivery_date: '2026-09-11', order_items: [{ species: 'イノシシ', part_name: 'ロース', weight_kg: 1, subtotal: 3800 }], shipments: [{ freight: 800, size_code: 60, is_cool: true }] }], {}, 'standard').every(l => !('_d' in l))), '');
 
   // 10. 請求書の送り方
