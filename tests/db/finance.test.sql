@@ -231,5 +231,41 @@ begin
     (select string_agg(detail::text, ';') from finance_events where kind = 'department' and detail->>'action' = 'rename'));
 end $t$;
 
+-- 11. 本番と同じ形（arco だけがあり alco が無い）: DELETE を使わず、参照ごとコードを付け替える（2026-10-31 本番に適用した経路）
+--     本番の状態を作るため、いったん alco を参照ごと arco に戻す（同じ「1つの文でまとめて書き換える」やり方）
+create temp table _arco_before as select 0 as n;
+do $t$
+declare v_n int;
+begin
+  with b  as (update bank_accounts           set department = 'arco' where department = 'alco' returning 1),
+       c  as (update finance_cards           set department = 'arco' where department = 'alco' returning 1),
+       rc as (update receipts                set department = 'arco' where department = 'alco' returning 1),
+       fc as (update finance_classifications set department = 'arco' where department = 'alco' returning 1),
+       cu as (update customers               set department = 'arco' where department = 'alco' returning 1),
+       d  as (update documents               set department = 'arco' where department = 'alco' returning 1),
+       dep as (update departments            set code = 'arco'       where code = 'alco'       returning 1)
+  select (select count(*) from b) + (select count(*) from c) + (select count(*) from rc) + (select count(*) from fc)
+       + (select count(*) from cu) + (select count(*) from d) into v_n from dep;
+  update _arco_before set n = v_n;
+  perform pg_temp.chk('本番の形: arco だけ（alco なし）・arco を参照する行がある', (select count(*) from departments where code = 'alco') = 0
+    and (select count(*) from departments where code = 'arco') = 1 and v_n > 0, v_n::text);
+end $t$;
+\i migrations/20261025_alco_spelling.sql
+\i migrations/20261025_alco_spelling.sql
+do $t$
+declare want int := (select n from _arco_before);
+begin
+  perform pg_temp.chk('付け替え: arco が無くなり alco だけ・印「ア」はそのまま', (select count(*) from departments where code = 'arco') = 0
+    and (select count(*) from departments where code = 'alco') = 1 and (select mark from departments where code = 'alco') = 'ア', (select mark from departments where code = 'alco'));
+  perform pg_temp.chk('付け替え: 参照していた行が全部 alco（arco 0件）',
+    (select count(*) from bank_accounts where department = 'arco') + (select count(*) from finance_cards where department = 'arco')
+    + (select count(*) from receipts where department = 'arco') + (select count(*) from finance_classifications where department = 'arco')
+    + (select count(*) from customers where department = 'arco') + (select count(*) from documents where department = 'arco') = 0, null);
+  perform pg_temp.chk('付け替え: 記録（finance_events）は1件だけ・method update・refs が付け替えた件数と一致（2回流しても増えない）',
+    (select count(*) from finance_events where kind = 'department' and detail->>'method' = 'update') = 1
+    and (select (detail->>'refs')::int from finance_events where kind = 'department' and detail->>'method' = 'update') = want,
+    (select string_agg(detail::text, ';') from finance_events where kind = 'department' and detail->>'method' = 'update') || ' want=' || want);
+end $t$;
+
 select (case when ok then 'PASS' else 'FAIL' end) || ' : ' || name || coalesce('  [' || left(got, 240) || ']', '') from _t where not ok order by n;
 select count(*) filter (where ok) || '/' || count(*) || ' passed' from _t;

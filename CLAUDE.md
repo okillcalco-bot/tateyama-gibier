@@ -4,7 +4,7 @@
 
 - **合同会社アルコの英字は `alco`（ALCO）。`arco` は誤り。** 部門コード・ファイル名・変数名・URL・文書、
   すべて `alco`。（2026-10-25 沖「何度も言うけどアルコの綴りは alco」。会計の部門コードを
-  `arco`→`alco` に直した: migrations/20261025_alco_spelling.sql）
+  `arco`→`alco` に直した: migrations/20261025_alco_spelling.sql。本番は 2026-10-31 に「消さずに付け替え」で適用済み）
 
 ## 進め方の約束（2026-08-26 合意）
 
