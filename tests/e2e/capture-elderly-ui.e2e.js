@@ -22,6 +22,12 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
       { city: '館山市', district: '豊房', oaza: '神余', address_label: '神余' },
       { city: '館山市', district: '館山', oaza: '館山', address_label: '館山' },
     ]);
+    // 捕獲者の過去の個体（「いつもの」の元データ）。P0-5 でソース直書きの対応表を消したので、ここから引く
+    if (url.includes('/individuals') && url.includes('hunter_name=eq.模擬 捕獲者')) return j([
+      { capture_city: '館山市', capture_area: '神余', capture_method: 'くくり罠', finishing_method: 'ナイフ' },
+      { capture_city: '館山市', capture_area: '神余', capture_method: 'くくり罠', finishing_method: 'ナイフ' },
+      { capture_city: '館山市', capture_area: '館山', capture_method: '箱罠', finishing_method: 'ナイフ' },
+    ]);
     return j([]);
   });
   await p.goto('http://localhost:9076/capture-form.html'); await p.waitForTimeout(600);
@@ -62,29 +68,29 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   ck('「市役所の調査票も作る」欄が無い', await p.evaluate(() => !document.getElementById('surveyOn')));
   ck('捕獲場所の地図（市役所票用）が無い', await p.evaluate(() => !document.getElementById('capMapWrap')));
 
-  // 5) 捕獲者→地区の自動入力（onHunterPicked→loadUsualは非同期。過去データ無し→静的マップにフォールバック）
-  await p.evaluate(() => { const el = document.getElementById('hunterName'); el.value = '加藤茂'; onHunterPicked(); });
+  // 5) 捕獲者→地区の自動入力（onHunterPicked→loadUsual は非同期。個体台帳の過去データの最頻から入れる）
+  //    P0-5（2026-10-15 再適用）でソース直書きの「氏名→地区」対応表は消した。過去データの無い人は自動入力しない
+  await p.evaluate(() => { const el = document.getElementById('hunterName'); el.value = '模擬 捕獲者'; onHunterPicked(); });
   await p.waitForTimeout(500);
   const auto = await p.evaluate(() => ({
     area: document.getElementById('captureArea').value,
     oldTown: document.getElementById('captureOldTown').value,
     city: state.capture_city,
-    hint: document.getElementById('hunterAreaHint').textContent,
-    hintShown: document.getElementById('hunterAreaHint').style.display !== 'none',
+    usual: document.getElementById('usualPanel').style.display !== 'none',
   }));
-  ck('加藤茂 → 大字「神余」を自動入力', auto.area === '神余', JSON.stringify(auto));
-  ck('加藤茂 → 市町村「館山市」', auto.city === '館山市', auto.city);
-  ck('加藤茂 → 地区「豊房」を補完', auto.oldTown === '豊房', auto.oldTown);
-  ck('「いつもの場所」ヒント表示', auto.hintShown && auto.hint.includes('神余'), auto.hint);
+  ck('過去データの最頻 → 大字「神余」を自動入力', auto.area === '神余', JSON.stringify(auto));
+  ck('過去データの最頻 → 市町村「館山市」', auto.city === '館山市', auto.city);
+  ck('過去データの最頻 → 地区「豊房」を補完', auto.oldTown === '豊房', auto.oldTown);
+  ck('「いつもの」候補が表示される', auto.usual, '');
 
-  // 空白ゆらぎ（岩浪 優 / 岩浪優）でも引ける
+  // 実名→地区の直書き表がソースに残っていない（P0-5）
   const norm = await p.evaluate(() => hunterUsualArea('岩浪 優'));
-  ck('氏名の空白ゆらぎでも紐付く（岩浪 優）', !!norm && norm.area === '宮下', JSON.stringify(norm));
+  ck('ソースに実名→地区の対応表が無い（P0-5）', norm === null, JSON.stringify(norm));
 
   // 既に地区が入っていれば自動上書きしない（別の捕獲者を選んでも尊重）
   const noOverride = await p.evaluate(() => {
     document.getElementById('captureArea').value = '手入力の場所';
-    const el = document.getElementById('hunterName'); el.value = '沖浩志'; onHunterPicked();
+    const el = document.getElementById('hunterName'); el.value = '模擬 捕獲者'; onHunterPicked();
     return document.getElementById('captureArea').value;
   });
   ck('入力済みの捕獲場所は自動上書きしない', noOverride === '手入力の場所', noOverride);
