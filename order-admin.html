@@ -2247,10 +2247,11 @@ async function loadDocOrders(){
     if(ids.length){
       // 取消済みの書類は「未発行」扱いに戻す（請求書作成タブのinvPullSearch()と同じ扱い。
       // 以前はstatusを見ておらず、取消した書類の注文がずっと「発行済」バッジのままだった）。
-      const docs=await sb('GET','documents','',`?order_id=in.(${ids.join(',')})&status=neq.取消&select=order_id,doc_type`);
+      // 2026-11-03: 「発行済」だけを数える（発行の途中で止まった書類＝下書きのままのものは発行済バッジにしない）
+      const docs=await sb('GET','documents','',`?order_id=in.(${ids.join(',')})&status=eq.発行済&select=order_id,doc_type`);
       docs.forEach(d=>{ (docDocsMap[d.order_id]=docDocsMap[d.order_id]||new Set()).add(d.doc_type); });
       const linked=await sb('GET','document_orders','',`?order_id=in.(${ids.join(',')})&select=order_id,documents(doc_type,status)`);
-      linked.forEach(l=>{ if(l.documents&&l.documents.doc_type&&l.documents.status!=='取消') (docDocsMap[l.order_id]=docDocsMap[l.order_id]||new Set()).add(l.documents.doc_type); });
+      linked.forEach(l=>{ if(l.documents&&l.documents.doc_type&&l.documents.status==='発行済') (docDocsMap[l.order_id]=docDocsMap[l.order_id]||new Set()).add(l.documents.doc_type); });
     }
     renderDocOrders();
   }catch(e){console.error(e);el.innerHTML='<div class="empty">エラーが発生しました</div>'}
@@ -2421,7 +2422,14 @@ function orderIsBilledTo(o,custId){
   return !!w && wholesalerTagOf(o)===w;
 }
 
+// 画面のボタンから押されたときは連打を防ぐ（「未発行の請求書をまとめて」からの呼び出しは呼び出し側で順に回す）
 async function generateDoc(type,forcedOrders){
+  if(forcedOrders) return generateDocRun(type,forcedOrders);
+  if(invIssueBusy) return false;
+  invIssueBusy=true;
+  try{ return await generateDocRun(type); } finally{ invIssueBusy=false; }
+}
+async function generateDocRun(type,forcedOrders){
   const selected=forcedOrders||getSelectedDocOrders();
   if(!selected.length){alert('注文を選択してください');return}
   // 既にこの種類の書類が発行済みの注文が含まれていないか確認する（二重請求防止）。
@@ -2528,18 +2536,26 @@ async function generateDoc(type,forcedOrders){
       // （以前は注文ごとに同じdoc_numberの行を作っており、2件目で必ずUNIQUE制約違反になっていた＝
       // 複数注文をまとめた請求書が採番リトライを3回しても絶対に保存できない不具合の真因だった）。
       // 注文との対応づけは請求書作成タブ（invIssue）と同じくdocument_ordersの中間テーブルで持つ。
+      // 2026-11-03: 見出しは「下書き」で作り、注文の紐付けが保存できてから「発行済」にする。
+      // 以前は紐付けの保存に失敗すると、発行済みの見出しだけが残って（エラーは出るが）注文は未発行のままになり、二重発行の元になった
       const header={
         doc_type:type,doc_number:docNum,customer_id:billToId,
         order_id:sorted.length===1?sorted[0].id:null,issue_date:p.date,due_date:p.due||null,
-        total_amount:c.total,tax_amount:c.taxTotal,status:'発行済',
+        total_amount:c.total,tax_amount:c.taxTotal,status:'下書き',
         billing_status:type==='請求書'?'未入金':null,
         partner_name:p.name||null,honorific:p.honorific||null,partner_address:p.address||null,
         subject:p.subject||null,memo:shipmentNote||null,source:'doc_ui',snapshot:p
       };
       const created=await sb('POST','documents',header);
       const docId=Array.isArray(created)&&created[0]&&created[0].id;
-      if(docId){
+      if(!docId){ alert('⚠ 書類の保存結果が空でした。発行していません。もう一度お試しください。'); return false; }
+      try{
         await sb('POST','document_orders',sorted.map(o=>({document_id:docId,order_id:o.id})));
+        await sb('PATCH','documents',{status:'発行済'},`?id=eq.${docId}`);
+      }catch(e){
+        console.error('発行の途中で失敗',e);
+        alert('⚠ '+(await invAbortIssue(docId,docNum,e))+'\n\n印刷はしていません。もう一度発行してください。');
+        return false;
       }
       invRenderPrint(p,docNum,{});
       // 一覧を更新（発行済みは下がる）
@@ -4103,6 +4119,8 @@ function invCollect(){
     memo:(invGv('invMemo')||'').trim(),
     customer_id:invGv('invCustomerId')||null,
     order_ids:invLinkedOrderIds.slice(),
+    // 取消した書類から複製して出し直すときは、どの番号の差替えかを残す（一覧の「差替え」表示に使う）
+    ...(invCopySource?{replaces:invCopySource}:{}),
     type:invType,
     proviso:invGv('invProviso')||'',
     bank:invSpec().bank?(invGv('invBank')||s.bank||''):'',
@@ -4118,6 +4136,7 @@ function invCollect(){
 function invResetForm(){
   invEditingId=null;
   invLinkedOrderIds=[];
+  invCopySource=null;
   ['invCustomerInput','invCustomerId','invName','invSubject','invAddress','invMemo','invProviso'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   document.getElementById('invHonorific').value='御中';
   document.getElementById('invDate').value=today();
@@ -4151,6 +4170,10 @@ function invUpdateEditBanner(){
 let invPullOrders=[];            // 検索結果
 let invLinkedOrderIds=[];        // この請求書に紐付ける注文ID
 const INV_BILLABLE=['発送済','納品完了'];
+/* 請求済みの判定（2026-11-03）: 「発行済」の「請求書」に紐づいている注文だけを請求済みにする。
+   納品書だけの注文・下書き・取消・発行途中で止まった書類は請求済みにしない。個別取込・月まとめで同じ判定を使う。
+   以前は個別取込だけ、納品書（種類を見ない）も請求済み扱いにしていたため、納品書を出した注文が取込みの一覧から隠れていた */
+function docBills(d){ return !!d && d.status==='発行済' && (d.doc_type||'請求書')==='請求書'; }
 
 function invPullRange(){
   const v=document.getElementById('invPullPeriod').value;
@@ -4198,8 +4221,8 @@ async function invPullSearch(){
       const links=await sb('GET','document_orders','',`?order_id=in.(${ids.join(',')})&select=order_id,document_id`);
       if(links.length){
         const docIds=[...new Set(links.map(l=>l.document_id))];
-        const docs=await sb('GET','documents','',`?id=in.(${docIds.join(',')})&select=id,status,doc_number`);
-        const alive=new Map(docs.filter(d=>d.status!=='取消').map(d=>[d.id,d.doc_number]));
+        const docs=await sb('GET','documents','',`?id=in.(${docIds.join(',')})&select=id,status,doc_type,doc_number`);
+        const alive=new Map(docs.filter(docBills).map(d=>[d.id,d.doc_number]));
         links.forEach(l=>{ if(alive.has(l.document_id)){ billed.add(l.order_id); billedDoc.set(l.order_id,alive.get(l.document_id)); } });
       }
     }
@@ -4449,7 +4472,7 @@ async function invBatchSearch(){
       const links=await invChunkedGet('document_orders','order_id',orders.map(o=>o.id),'order_id,document_id');
       if(links.length){
         const docs=await invChunkedGet('documents','id',[...new Set(links.map(l=>l.document_id))],'id,status,doc_type,doc_number,customer_id,total_amount,snapshot');
-        const aliveDocs=docs.filter(d=>d.status!=='取消'&&(d.doc_type||'請求書')==='請求書');
+        const aliveDocs=docs.filter(docBills);
         const alive=new Set(aliveDocs.map(d=>d.id));
         links.forEach(l=>{ if(alive.has(l.document_id)) billed.add(l.order_id); });
         // この期間の発行済みの請求書は「発行した請求書」に出し、何度でもPDF・印刷できるようにする（2026-10-06）。
@@ -4779,13 +4802,41 @@ async function invNextNumber(type,dateStr){
   rows.forEach(r=>{const m=(r.doc_number||'').match(/-(\d+)$/);if(m){const n=parseInt(m[1],10);if(n>max)max=n;}});
   return prefix+String(max+1).padStart(3,'0');
 }
+/* 発行の途中で失敗したとき（2026-11-03）
+   見出し・明細・注文の紐付けは別々に保存しているため、以前は明細や紐付けだけ失敗しても「発行済」の見出しが残り、
+   印刷にも進んでいた（明細の無い請求書・二重請求防止の記録が無い請求書ができうる）。
+   いまは見出しを「下書き」で先に作り、明細と紐付けがそろってから「発行済」にする。途中で失敗したら、
+   その書類を取消にして（下書きから開いた書類は下書きに戻して）印刷には進まない。取消にも失敗したら番号を出して知らせる。
+   下書きのまま残っても docBills() は請求済みにしないので、注文が取込み・月まとめから消えることはない */
+async function invAbortIssue(docId,number,err,draftNumber){
+  const why=String((err&&err.message)||err||'');
+  try{
+    if(draftNumber) await sb('PATCH','documents',{status:'下書き',doc_number:draftNumber},`?id=eq.${docId}`);
+    else await sb('PATCH','documents',{status:'取消'},`?id=eq.${docId}`);
+    return `${number} は発行できませんでした（${draftNumber?'下書きに戻しました':'途中まで保存された分は取消にしました'}）。\n理由: ${why}`;
+  }catch(e2){
+    return `${number} は発行できませんでした。\n理由: ${why}\n⚠ 途中まで保存された書類（${number}・下書き）を取消にできませんでした。書類の一覧で確認してください（請求済みには数えていません）。`;
+  }
+}
+// 明細と注文の紐付けを入れてから「発行済」にする（どれかが失敗したら投げる）
+async function invFinishIssue(docId,p){
+  await sb('DELETE','document_items','',`?document_id=eq.${docId}`);
+  if(p.lines&&p.lines.length) await sb('POST','document_items',p.lines.map((l,i)=>({document_id:docId,line_no:i+1,name:l.name,quantity:l.qty,unit:l.unit||null,unit_price:l.price,tax_rate:l.tax!=null?l.tax:8,amount:l.amount||0})));
+  if(p.order_ids&&p.order_ids.length){
+    await sb('DELETE','document_orders','',`?document_id=eq.${docId}`);
+    await sb('POST','document_orders',p.order_ids.map(oid=>({document_id:docId,order_id:oid})));
+  }
+  await sb('PATCH','documents',{status:'発行済'},`?id=eq.${docId}`);
+}
+// 連打・二重送信の防止（発行中に同じボタンをもう一度押しても2枚目を作らない）
+let invIssueBusy=false;
 // 1枚発行（番号確定・明細・注文の紐付け）。失敗は投げる（握り潰さない）
 async function invIssuePayloadNow(p){
   const c=invCalcLines(p.lines);
   for(let attempt=0;attempt<4;attempt++){
     const number=await invNextNumber(p.type,p.date);
     const header={doc_type:p.type,doc_number:number,customer_id:p.customer_id,issue_date:p.date,due_date:p.due||null,
-      total_amount:c.total,tax_amount:c.taxTotal,status:'発行済',billing_status:p.type==='請求書'?'未入金':null,
+      total_amount:c.total,tax_amount:c.taxTotal,status:'下書き',billing_status:p.type==='請求書'?'未入金':null,
       partner_name:p.name,subject:p.subject||null,honorific:p.honorific,partner_address:p.address||null,
       memo:p.memo||null,source:'invoice_batch',snapshot:p};
     let rows;
@@ -4793,13 +4844,18 @@ async function invIssuePayloadNow(p){
     catch(e){ const m=String(e.message||''); if(m.includes('23505')||m.includes('duplicate')) continue; throw e; }
     const docId=rows[0]&&rows[0].id;
     if(!docId) throw new Error('書類の保存結果が空でした');
-    await sb('POST','document_items',p.lines.map((l,i)=>({document_id:docId,line_no:i+1,name:l.name,quantity:l.qty,unit:l.unit||null,unit_price:l.price,tax_rate:l.tax!=null?l.tax:8,amount:l.amount||0})));
-    if(p.order_ids&&p.order_ids.length) await sb('POST','document_orders',p.order_ids.map(oid=>({document_id:docId,order_id:oid})));
+    try{ await invFinishIssue(docId,p); }
+    catch(e){ throw new Error(await invAbortIssue(docId,number,e)); }
     return {number,docId,total:c.total};
   }
   throw new Error('請求番号の採番が競合しました。もう一度お試しください');
 }
 async function invBatchIssue(){
+  if(invIssueBusy) return;
+  invIssueBusy=true;
+  try{ await invBatchIssueRun(); } finally{ invIssueBusy=false; }
+}
+async function invBatchIssueRun(){
   const chosen=invBatchChosen(); if(!chosen) return;
   const sum=chosen.reduce((s,g)=>s+g.total,0);
   const warn=chosen.filter(g=>g.warn.length);
@@ -5006,6 +5062,11 @@ async function invSaveDraft(){
 
 // ── 発行（番号確定・明細保存・印刷） ──
 async function invIssue(){
+  if(invIssueBusy) return;   // 発行中にもう一度押されても2枚目を作らない
+  invIssueBusy=true;
+  try{ await invIssueRun(); } finally{ invIssueBusy=false; }
+}
+async function invIssueRun(){
   const p=invCollect();
   if(!p.name){alert('宛名（請求先名）を入力してください');return}
   if(!p.lines.length){alert('明細を1行以上入力してください');return}
@@ -5017,6 +5078,18 @@ async function invIssue(){
   if(p.due && p.date && p.due<p.date && invType==='請求書') warns.push('⚠ お支払期限が発行日より前になっています');
   const fr8=invLines.map((l,i)=>(INV_TAX10_RE.test(l.name||'')&&l.tax===8)?i+1:null).filter(Boolean);
   if(fr8.length) warns.push(`⚠ 送料・手数料などが8%のままの行があります（${fr8.join('・')}行目）`);
+  // 同じ注文がすでに有効な請求書に入っていないか（2026-11-03 二重請求の防止）。
+  // 実測: 9月分で、前の版を取消さずに出し直した請求書が5組（同じ注文が2〜3枚の有効な請求書に入っていた）
+  if(invType==='請求書' && p.order_ids && p.order_ids.length){
+    try{
+      const links=await sb('GET','document_orders','',`?order_id=in.(${p.order_ids.join(',')})&select=order_id,documents(id,doc_number,doc_type,status)`);
+      const other=links.filter(l=>docBills(l.documents)&&l.documents.id!==invEditingId);
+      if(other.length){
+        const nums=[...new Set(other.map(l=>l.documents.doc_number))];
+        warns.unshift(`⚠⚠ 取り込んだ注文のうち ${new Set(other.map(l=>l.order_id)).size}件は、すでに有効な請求書（${nums.join('・')}）に入っています。このまま発行すると二重請求になります。訂正して出し直すなら、先に元の請求書を「取消」してください`);
+      }
+    }catch(e){ warns.unshift('⚠ 二重請求の確認ができませんでした（'+String(e.message||e)+'）'); }
+  }
   if(!confirm(`${warns.length?warns.join('\n')+'\n\n':''}${invType}を発行します。\n\n宛名: ${p.name} ${p.honorific}\n合計: ¥${c.total.toLocaleString()}（税込・内消費税 ¥${c.taxTotal.toLocaleString()}）\n\n発行すると${invSpec().numberLabel}が確定し、以後この${invType}は編集できません（訂正は一覧から「取消」→「複製」で再発行）。よろしいですか？`)) return;
 
   for(let attempt=0;attempt<3;attempt++){
@@ -5028,35 +5101,32 @@ async function invIssue(){
       return;
     }
     const number=document.getElementById('invNumber').value;
+    // 見出しは「下書き」で保存し、明細・注文の紐付けがそろってから「発行済」にする（invFinishIssue）。
+    // 以前は明細・紐付けの保存に失敗しても警告だけ出して印刷に進み、明細の無い／紐付けの無い発行済みが残りえた
     const header={
       doc_type:invType,doc_number:number,customer_id:p.customer_id,issue_date:p.date,due_date:p.due||null,
-      total_amount:c.total,tax_amount:c.taxTotal,status:'発行済',billing_status:invType==='請求書'?'未入金':null,
+      total_amount:c.total,tax_amount:c.taxTotal,status:'下書き',billing_status:invType==='請求書'?'未入金':null,
       partner_name:p.name,subject:p.subject||null,honorific:p.honorific,partner_address:p.address||null,
       memo:p.memo||null,source:'invoice_ui',snapshot:p
     };
     try{
       let docId=invEditingId;
+      const draftNumber=docId?((invListRows.find(r=>r.id===docId)||{}).doc_number||('DRAFT-'+Date.now().toString(36).toUpperCase())):null;
       if(docId){
         await sb('PATCH','documents',header,`?id=eq.${docId}`);
       }else{
         const rows=await sb('POST','documents',[header]);
         docId=rows[0]&&rows[0].id;
       }
-      if(docId){
-        try{
-          await sb('DELETE','document_items','',`?document_id=eq.${docId}`);
-          await sb('POST','document_items',p.lines.map((l,i)=>({
-            document_id:docId,line_no:i+1,name:l.name,quantity:l.qty,unit:l.unit||null,
-            unit_price:l.price,tax_rate:l.tax!=null?l.tax:8,amount:l.amount||0
-          })));
-        }catch(e){console.error('明細保存エラー',e); alert('⚠ 明細の保存に失敗しました。請求書ヘッダーは保存済みですが明細が空の可能性があります。もう一度保存し直してください。\n\n'+String(e.message||e));}
-        // 取り込んだ注文を紐付け（二重請求防止）
-        if(p.order_ids && p.order_ids.length){
-          try{
-            await sb('DELETE','document_orders','',`?document_id=eq.${docId}`);
-            await sb('POST','document_orders',p.order_ids.map(oid=>({document_id:docId,order_id:oid})));
-          }catch(e){console.error('注文紐付けエラー',e); alert('⚠ 注文の紐付け保存に失敗しました。二重請求防止の記録が残っていない可能性があります。\n\n'+String(e.message||e));}
-        }
+      if(!docId){ alert('⚠ 書類の保存結果が空でした。発行していません。もう一度お試しください。'); return; }
+      try{ await invFinishIssue(docId,p); }
+      catch(e){
+        console.error('発行の途中で失敗',e);
+        const msg=await invAbortIssue(docId,number,e,draftNumber);
+        if(!draftNumber) invEditingId=null;
+        loadInvoiceList();
+        alert('⚠ '+msg+'\n\n印刷はしていません。入力した内容はそのまま残っています。もう一度「発行する」を押してください。');
+        return;
       }
       invRenderPrint(p,number,{});
       invResetForm();
@@ -5079,7 +5149,9 @@ async function loadInvoiceList(){
   const body=document.getElementById('invListBody');
   if(!body) return;
   try{
-    invListRows=await sb('GET','documents','',`?doc_type=eq.${encodeURIComponent(invListType)}&order_id=is.null&order=created_at.desc&limit=300`);
+    // 2026-11-03: order_id=is.null の絞り込みを外した。書類発行タブで注文1件から作った書類は order_id を持つため、
+    // この一覧に出ず（実測: 発行済の請求書18枚・納品書19枚）、再印刷・取消・入金の記録もここからできなかった
+    invListRows=await sb('GET','documents','',`?doc_type=eq.${encodeURIComponent(invListType)}&order=created_at.desc&limit=500`);
     invPayMap={};
     const ids=invListRows.filter(r=>r.status!=='下書き').map(r=>r.id);
     if(ids.length&&invListType==='請求書'){
@@ -5143,8 +5215,13 @@ function renderInvoiceList(){
             <button class="btn btn-outline btn-sm" onclick="invCopy('${r.id}')" title="内容をコピーして新規作成">複製</button>
             ${!isVoid?`<button class="btn btn-sm" style="color:var(--red)" onclick="invVoid('${r.id}')">取消</button>`:''}`;
     }
+    // 差替えの関係（取消した書類を複製して出し直したもの）を番号の下に出す（2026-11-03）
+    const rep=r.snapshot&&r.snapshot.replaces;
+    const repBy=invListRows.find(x=>x.snapshot&&x.snapshot.replaces&&x.snapshot.replaces.doc_id===r.id);
+    const relNote=(rep?`<br><span style="font-size:.68rem;font-weight:400;color:var(--text2)">← ${esc(rep.doc_number||'')} の差替え</span>`:'')
+      +(repBy?`<br><span style="font-size:.68rem;font-weight:400;color:var(--text2)">→ ${esc(repBy.doc_number||'')} に差替え</span>`:'');
     return `<tr style="${isVoid?'opacity:.55':''}">
-      <td style="font-weight:700;color:var(--gold);white-space:nowrap">${esc(isDraft?'（下書き）':r.doc_number||'')}</td>
+      <td style="font-weight:700;color:var(--gold);white-space:nowrap">${esc(isDraft?'（下書き）':r.doc_number||'')}${relNote}</td>
       <td>${r.issue_date||'--'}</td>
       <td>${r.due_date||'--'}</td>
       <td>${esc(r.partner_name||'--')}${r.subject?`<br><span style="font-size:.72rem;color:var(--text2)">${esc(r.subject)}</span>`:''}</td>
@@ -5158,6 +5235,7 @@ function renderInvoiceList(){
 
 function invFillFormFrom(r,asCopy,forceType){
   const p=r.snapshot||{};
+  invCopySource=null;   // 差替え元は invCopy（取消した書類の複製）のときだけ付け直す
   invType=forceType||p.type||r.doc_type||'請求書';
   invApplyTypeUI();
   const pv=document.getElementById('invProviso');
@@ -5230,15 +5308,27 @@ function invEdit(id){
   invUpdateEditBanner();
   window.scrollTo({top:0,behavior:'smooth'});
 }
+/* 複製（2026-11-03）
+   - 取消した書類を複製したとき（＝訂正して出し直す）: 元の注文の紐付けも引き継ぎ、「どの番号の差替えか」を書類に残す。
+     以前は紐付けを引き継がなかったため、出し直した請求書の注文が「未請求」に見え、月まとめでもう一度請求されうる状態だった
+   - 有効な書類を複製したとき: 紐付けは引き継がない（同じ注文の二重請求を防ぐ）。元が有効なままであることを知らせる */
+let invCopySource=null;
 function invCopy(id){
   const r=invListRows.find(x=>x.id===id);
   if(!r) return;
   invFillFormFrom(r,true);
   invEditingId=null;
+  const voided=r.status==='取消';
+  const oids=(r.snapshot&&Array.isArray(r.snapshot.order_ids))?r.snapshot.order_ids.slice():[];
+  invCopySource=voided?{doc_id:r.id,doc_number:r.doc_number}:null;
+  if(voided&&oids.length) invLinkedOrderIds=oids;
+  invUpdateLinkedNote();
   invUpdateEditBanner();
   regenInvNumber();
   window.scrollTo({top:0,behavior:'smooth'});
-  alert('内容をコピーしました。確認して「発行する」で新しい番号で発行されます。');
+  alert(voided
+    ? `取消済みの ${r.doc_number} の内容をコピーしました（差替えとして記録します${oids.length?`・注文${oids.length}件の紐付けも引き継ぎました`:''}）。\n直して「発行する」を押すと新しい番号で発行されます。`
+    : `内容をコピーしました。確認して「発行する」で新しい番号で発行されます。\n⚠ 元の ${r.doc_number||'書類'} は有効なままです。訂正して出し直すときは、先に元の書類を「取消」してから複製してください（二重請求を防ぐため、有効な書類からの複製は注文の紐付けを引き継ぎません）。`);
 }
 function invReprint(id){
   const r=invListRows.find(x=>x.id===id);

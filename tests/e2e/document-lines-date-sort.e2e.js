@@ -35,6 +35,8 @@ const path = require('path');
   await page.route('**/rest/v1/**', rt => {
     const req = rt.request(); const url = decodeURIComponent(req.url()); const m = req.method();
     const J = x => rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(x) });
+    // 本番と同じく、書類の保存（POST documents）は保存した行を配列で返す（2026-11-03 発行の途中失敗の判定を厳しくしたため）
+    if (m === 'POST' && /\/documents\b/.test(url) && !/document_/.test(url)) { const b = JSON.parse(req.postData() || '{}'); return J([].concat(b).map((h, i) => ({ id: 'doc-' + (i + 1), ...h }))); }
     if (m !== 'GET') return J([]);
     if (/\/customers\b/.test(url)) return J([CUST_A]);
     if (/\/documents\b/.test(url)) return J([]);

@@ -49,7 +49,7 @@ const path = require('path');
   await page.route('**/rest/v1/**', rt => {
     const req = rt.request(); const url = decodeURIComponent(req.url()); const m = req.method();
     const J = x => rt.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(x) });
-    if (m === 'POST' && /\/documents\b/.test(url)) { const b = JSON.parse(req.postData() || '[]'); postedDocs.push(...(Array.isArray(b) ? b : [b])); return J(b, 201); }
+    if (m === 'POST' && /\/documents\b/.test(url)) { const b = JSON.parse(req.postData() || '[]'); postedDocs.push(...(Array.isArray(b) ? b : [b])); return J([].concat(b).map((h, i) => ({ id: 'doc-' + postedDocs.length + '-' + i, ...h })), 201); }  // 本番と同じく保存した行を配列で返す
     if (m !== 'GET') return J([]);
     if (/\/customers\b/.test(url)) return J([CUST_A, CUST_B, CUST_C]);
     if (/\/orders\b/.test(url) && /order_items/.test(url)) return J(ORDERS);
