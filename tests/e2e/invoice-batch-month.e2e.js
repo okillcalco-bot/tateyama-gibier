@@ -82,6 +82,8 @@ const invOthers = (h, me) => !['A食堂', 'B商店', 'トレタテ', 'ノブレ�
     }
     if (/\/document_items\b/.test(url)) { if (m === 'POST') docItems.push(...body()); return J([], 201); }
     if (/\/documents\b/.test(url)) {
+      // 本番と同じく「発行済」への更新（PATCH id=eq.）を保存済みの行に反映する（2026-11-03 見出しは下書き→明細・紐付け→発行済の順になった）
+      if (m === 'PATCH') { const id = (url.match(/id=eq\.([^&]+)/) || [])[1]; const row = docs.find(d => d.id === id); if (row) Object.assign(row, JSON.parse(req.postData() || '{}')); return J(row ? [row] : []); }
       if (m === 'POST') { const h = body()[0]; const row = { id: 'd' + (docs.length + 1), ...h }; docs.push(row); return J([row], 201); }
       if (/doc_number=like/.test(url)) return J(docs.map(d => ({ doc_number: d.doc_number })));
       const ids = (url.match(/id=in\.\(([^)]*)\)/) || [])[1];
