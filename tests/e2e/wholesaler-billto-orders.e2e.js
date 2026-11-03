@@ -163,6 +163,17 @@ async function typeIn(page, sel, v) { await page.fill(sel, v); await page.dispat
   await page.waitForTimeout(300);
   const docD = await page.innerText('#docOrderList');
   ck('書類発行: 普通の顧客は従来どおり自分の注文だけ', /D屋/.test(docD) && !/A食堂|B商店|C亭/.test(docD), docD);
+  // 5b. 備考検索（2026-11-03）: 顧客を選ばずに「エフユーアイ」→ 注文の備考の印（B商店）だけでなく、顧客台帳の備考の印（A食堂）も出る
+  await page.evaluate(() => { const s = document.getElementById('docCustomer'); [...s.options].forEach(o => { o.selected = false; }); return loadDocOrders(); });
+  await page.waitForTimeout(300);
+  await page.fill('#docMemoSearch', 'エフユーアイ'); await page.dispatchEvent('#docMemoSearch', 'input');
+  const memoTxt = await page.innerText('#docOrderList');
+  ck('書類発行の備考検索: 顧客台帳の備考の印だけの注文（A食堂）も、注文の備考の印（B商店）も出る。トレタテあて（C亭）・印なし（D屋）は出ない',
+    /A食堂/.test(memoTxt) && /B商店/.test(memoTxt) && !/C亭/.test(memoTxt) && !/D屋/.test(memoTxt), memoTxt);
+  await page.fill('#docMemoSearch', 'トレタテ'); await page.dispatchEvent('#docMemoSearch', 'input');
+  const memoTt = await page.innerText('#docOrderList');
+  ck('書類発行の備考検索: 「トレタテ」→ C亭だけ（注文の備考が優先・顧客台帳がエフユーアイでもトレタテあて）', /C亭/.test(memoTt) && !/A食堂|B商店|D屋/.test(memoTt), memoTt);
+  await page.fill('#docMemoSearch', ''); await page.dispatchEvent('#docMemoSearch', 'input');
   ck('ページのエラーなし', errors.length === 0, errors.join(' / '));
   await ctx.close();
 

@@ -56,8 +56,10 @@
 - Supabase project_id: `clpdyrehdgzgiidbfucj` / 本番: https://tateyama-gibier.vercel.app
 - ブランチ: `claude/tateyama-gibier-ux-ws4c5p`
   毎回 `git fetch origin main && git checkout -B <branch> origin/main` から始める
-- E2E: `CHROME=/opt/pw-browsers/chromium-1194/chrome-linux/chrome
+- E2E: `CHROME=/opt/pw-browsers/chromium
   NODE_PATH=/opt/node22/lib/node_modules /opt/node22/bin/node tests/e2e/<name>.e2e.js`
+  （`/opt/pw-browsers/chromium` は版番号つきの実体へのリンク。2026-11-03 に chromium-1194 → 1243 へ入れ替わり、
+  版番号を直書きした旧パスでは起動できなくなった）
   **変更したら関連する既存テストも全部流す**（tests/e2e/ 配下）
 - デプロイ: PRを作って squash merge → Vercelが自動反映（**約6分**）
 - **Supabase MCP（apply_migration / execute_sql）は、DROP・DELETE などを含む文を流すと「本人への確認」を出し、答えが無いと60秒で止まる**（何も適用されない）。マイグレーションにトップレベルの DROP は書かない（`create or replace trigger` を使う、不要になった関数は残す）。関数本体に delete が要るものは、沖に確認プロンプトへ答えてもらうか、Supabase の SQL Editor で流してもらう。1回の文は 7KB 程度に分けると通りやすい（2026-10-24 実測）

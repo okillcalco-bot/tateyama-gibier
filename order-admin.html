@@ -416,7 +416,7 @@ th,td{padding:8px 6px;font-size:.8rem}
         <div class="form-group">
           <label>備考検索</label>
           <input type="text" id="docMemoSearch" oninput="renderDocOrders()" placeholder="例: ノブレスオブリージュ">
-          <div style="font-size:.75rem;color:var(--text2);margin-top:2px">注文の備考欄に含まれる文字で絞り込みます（顧客の絞り込みと併用可）。</div>
+          <div style="font-size:.75rem;color:var(--text2);margin-top:2px">注文の備考欄と請求先（顧客台帳の備考に書いた仲卸業者名）に含まれる文字で絞り込みます（顧客の絞り込みと併用可）。</div>
         </div>
       </div>
       <div class="form-row" id="docCustomDates" style="display:none;margin-bottom:12px">
@@ -2256,10 +2256,14 @@ async function loadDocOrders(){
   }catch(e){console.error(e);el.innerHTML='<div class="empty">エラーが発生しました</div>'}
 }
 
+/* 備考検索: 注文の備考欄に加えて、請求先の印（顧客台帳の備考に書いた仲卸業者名＝wholesalerTagOf）でも拾う（2026-11-03）。
+   顧客台帳に「トレタテ」と入れても、注文の備考欄が空だと出てこなかった（10月分で4件: 三茶呑場マルコ・Pizza 4P's・オネスト・六燗）。
+   一覧の「（請求先: …）」・月まとめ発行と同じ判定にそろえる */
+function docMemoMatch(o,q){ return (o.memo||'').includes(q) || (wholesalerTagOf(o)||'').includes(q); }
 function renderDocOrders(){
   const el=document.getElementById('docOrderList');
   const memoQ=(document.getElementById('docMemoSearch')?.value||'').trim();
-  const filtered=memoQ?docOrders.filter(o=>(o.memo||'').includes(memoQ)):docOrders;
+  const filtered=memoQ?docOrders.filter(o=>docMemoMatch(o,memoQ)):docOrders;
   if(!filtered.length){el.innerHTML=`<div class="empty">該当する発送は${memoQ?'（備考の絞り込みでは）':''}ありません</div>`;return}
   // 未発行（発行書類ゼロ）を上に、次に発行数の少ない順、同点は新しい発送順
   const sorted=filtered.slice().sort((a,b)=>{
@@ -2574,7 +2578,7 @@ function docPeriodLabel(){
 // 今の絞り込み（期間・顧客・備考検索）の中で、請求書がまだ出ていない顧客だけを拾う
 function docBatchQueue(){
   const memoQ=(document.getElementById('docMemoSearch')?.value||'').trim();
-  const filtered=memoQ?docOrders.filter(o=>(o.memo||'').includes(memoQ)):docOrders;
+  const filtered=memoQ?docOrders.filter(o=>docMemoMatch(o,memoQ)):docOrders;
   const unissued=filtered.filter(o=>o.customer_id && !(docDocsMap[o.id]||new Set()).has('請求書'));
   const byCust=new Map();
   unissued.forEach(o=>{
