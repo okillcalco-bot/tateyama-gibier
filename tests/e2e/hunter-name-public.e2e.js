@@ -29,7 +29,9 @@ const HUNTERS = [
     if (/cdn|jsdelivr|fonts\./.test(u)) return r.fulfill({ status: 200, contentType: 'application/javascript', body: 'window.JsBarcode=function(){};' });
     const J = x => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(x) });
     if (/\/hunters/.test(u) && m === 'GET') return J(HUNTERS);
-    if (/\/hunters/.test(u) && m === 'PATCH') { writes.push({ t: 'hunters', u, body: JSON.parse(r.request().postData() || '{}') }); return J([{}]); }
+    if (/\/hunters/.test(u) && m === 'PATCH') { writes.push({ t: 'hunters-patch', u }); return J([{}]); }
+    // P0-2: 本体 hunters への直書きは閉じたので、「名前を出すか」の既定は列固定RPCで覚える
+    if (/\/rpc\/public_hunter_set_name_public/.test(u)) { writes.push({ t: 'hunters', u, body: JSON.parse(r.request().postData() || '{}') }); return J({ ok: true, changed: true }); }
     if (/\/individuals/.test(u) && m === 'POST') { const b = JSON.parse(r.request().postData() || '{}'); writes.push({ t: 'individuals', body: b }); return J([Object.assign({ id: 'new1' }, b, { label_id: 'TGC-08-T999' })]); }
     return J([]);
   });
@@ -67,7 +69,7 @@ const HUNTERS = [
   await page.evaluate(() => handleSubmit()); await page.waitForTimeout(900);
   const ind = writes.find(w => w.t === 'individuals'), hp = writes.find(w => w.t === 'hunters');
   T('登録の POST に hunter_name_public=false が入る', ind && ind.body.hunter_name_public === false && ind.body.hunter_name === '加藤茂', JSON.stringify(ind && { n: ind.body.hunter_name, p: ind.body.hunter_name_public }));
-  T('保存後に捕獲者マスタ（加藤茂）へ name_public=false を PATCH', hp && /name=eq\.加藤茂/.test(hp.u) && hp.body.name_public === false, JSON.stringify(hp && { u: hp.u.slice(-40), b: hp.body }));
+  T('保存後に捕獲者マスタ（加藤茂）の name_public=false を RPC で覚える（本体への PATCH はしない）', hp && hp.body.p_name === '加藤茂' && hp.body.p_public === false && !writes.some(w => w.t === 'hunters-patch'), JSON.stringify(hp && { u: hp.u.slice(-40), b: hp.body }));
   T('登録後（resetForm）は「出してよい」に戻る', (await toggle()).st === '出す', '');
 
   // 3) 看板: false は捕獲者行なし、true/未設定はあり

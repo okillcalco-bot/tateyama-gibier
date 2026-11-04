@@ -31,6 +31,8 @@ async function open(browser, role, state) {
       return J([Object.assign({ id: 'new' }, body)]);
     }
     if (/\/rest\/v1\/attendance/.test(u)) return J(state.atts);
+    // 作業者はスタッフマスタ（公開VIEW staff_public）から。ソース直書きの名簿はP0-5で除去
+    if (/\/rest\/v1\/staff_public/.test(u)) return J([{ id: 's1', name: '沖浩志' }, { id: 's2', name: '大和田薫' }]);
     return J([]);
   });
   await page.goto('file://' + path.resolve(__dirname, '../../index.html') + '?tab=cleaning');

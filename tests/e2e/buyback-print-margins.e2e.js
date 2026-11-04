@@ -52,7 +52,7 @@ print(json.dumps(out))
 (async () => {
   const outDir = process.env.DOC_TEST_OUT || require('os').tmpdir();
   const browser = await chromium.launch({ executablePath: process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
-  const ctx = await browser.newContext(); await ctx.addInitScript(() => sessionStorage.setItem('tg_role_v1', 'admin'));
+  const ctx = await browser.newContext(); await ctx.addInitScript(() => { sessionStorage.setItem('tg_role_v1', 'admin'); localStorage.setItem('tg_staff_key', 'k'); })  // 捕獲者台帳はスタッフキー必須（P0-2）;
   const page = await ctx.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.route('**/*', r => {

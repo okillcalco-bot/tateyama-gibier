@@ -50,7 +50,7 @@ const ORDERS = [{ order_date: '2026-08-05', status: '納品完了', order_items:
 
 async function open(browser, { failOrders = false, failPs = false, noChart = false } = {}) {
   const ctx = await browser.newContext();
-  await ctx.addInitScript(() => sessionStorage.setItem('tg_role_v1', 'admin'));
+  await ctx.addInitScript(() => { sessionStorage.setItem('tg_role_v1', 'admin'); localStorage.setItem('tg_staff_key', 'k'); })  // 捕獲者台帳はスタッフキー必須（P0-2）;
   const page = await ctx.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.route('**/*', r => {

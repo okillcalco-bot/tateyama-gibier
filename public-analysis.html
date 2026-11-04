@@ -140,18 +140,19 @@ function sum(arr, key){ return arr.reduce((a, r) => a + (Number(key ? r[key] : r
 function byKey(arr, kf){ const m = {}; arr.forEach(r => { const k = kf(r); (m[k] = m[k] || []).push(r); }); return m; }
 
 async function loadAll(){
-  const [ps, src, inds, hunters, dist] = await Promise.all([
+  const [ps, src, inds, dist] = await Promise.all([
     sb('public_stats', '?select=dataset,fiscal_year,cal_year,month,city,area,category,metric,value,unit&limit=20000'),
     sb('v_public_sources', '?select=dataset,source,source_url,fetched_at,rows_n,y_from,y_to&order=dataset'),
     sb('v_individuals_all', '?select=label_id,fiscal_year,species,capture_date,city,area,hunter_name,weight&limit=20000'),
-    sb('hunters', '?select=name,city,trap_area&deleted_at=is.null&limit=2000'),
     sb('tateyama_districts', '?select=oaza,district&limit=500'),
   ]);
-  D.ps = ps.map(r => ({ ...r, value: r.value == null ? null : Number(r.value) })); D.src = src; D.inds = inds.map(r => ({ ...r, month: r.capture_date ? Number(r.capture_date.slice(5,7)) : null })); D.hunters = hunters;
+  D.ps = ps.map(r => ({ ...r, value: r.value == null ? null : Number(r.value) })); D.src = src; D.inds = inds.map(r => ({ ...r, month: r.capture_date ? Number(r.capture_date.slice(5,7)) : null })); D.hunters = null;
   dist.forEach(d => { D.dist[d.oaza] = d.district; });
   // 任意（失敗しても他の解析は出す）
   const opt = async (label, fn) => { try { await fn(); } catch (e) { D.errors = D.errors || []; D.errors.push(label + ': ' + (e.message || e)); } };
   await Promise.all([
+    // 捕獲者台帳の本体はスタッフキー必須（P0-2）。キーの無い端末では「捕獲者数」を出さず、その旨を表示する
+    opt('捕獲者台帳（スタッフキーが必要）', async () => { D.hunters = await sb('hunters', '?select=name,city,trap_area&deleted_at=is.null&limit=2000'); }),
     opt('注文', async () => { D.orders = await sb('orders', '?select=order_date,status,order_items(amount,weight_kg,weight)&order=order_date.asc&limit=5000'); }),
     opt('出荷', async () => { D.shipped = await sb('inventory', '?select=updated_at,weight_kg,weight,species&status=eq.出荷済&deleted_at=is.null&limit=20000'); }),
     opt('放射能', async () => { D.radOwn = await sb('individuals', '?select=radiation_test_date,radiation_result,capture_city&radiation_test_date=not.is.null&deleted_at=is.null&limit=20000'); }),
@@ -272,7 +273,7 @@ function s3(){
     areas.forEach(a => {
       const pop = pub('census_oaza', null, city, a, null, '人口'); const old = pub('census_oaza', null, city, a, null, '65歳以上'); const work = pub('census_oaza', null, city, a, null, '15〜64歳');
       const key = a.replace(/[０-９0-9]+丁目$/, '');
-      const hunters = D.hunters.filter(h => (h.trap_area||'').includes(city + key) || (h.trap_area||'').startsWith(key) || ((h.city||'')===city && (h.trap_area||'').includes(key))).length;
+      const hunters = D.hunters == null ? null : D.hunters.filter(h => (h.trap_area||'').includes(city + key) || (h.trap_area||'').startsWith(key) || ((h.city||'')===city && (h.trap_area||'').includes(key))).length;
       const c7 = D.inds.filter(r => r.city===city && r.area===key && r.fiscal_year===7).length;
       const c8 = D.inds.filter(r => r.city===city && r.area===key && r.fiscal_year===8).length;
       if (!pop) return;
@@ -280,11 +281,12 @@ function s3(){
     });
   });
   const active = rows.filter(r => r.c7 + r.c8 > 0).sort((a,b) => (b.c7+b.c8) - (a.c7+a.c8));
-  const risk = active.filter(r => r.oldPct >= 45 && r.hunters <= 1);
+  const risk = active.filter(r => r.oldPct >= 45 && r.hunters != null && r.hunters <= 1);
   const allOld = rows.filter(r => r.pop >= 50);
   const corr = pearson(active.map(r => r.oldPct), active.map(r => r.c7));
-  finding(el, `捕獲がある大字 ${active.length} のうち、<b>高齢化率45%以上で捕獲者が1人以下の大字は ${risk.length}</b>（${risk.slice(0,8).map(r=>`${r.a} ${r.oldPct}%・${r.c7+r.c8}頭`).join('、')}${risk.length>8?' …':''}）。ここは5〜10年で捕獲が途切れる候補。<br>高齢化率と捕獲頭数（R7）の相関 r = <b>${corr==null?'—':corr}</b>。<span class="muted">捕獲者の年齢は台帳に無いので「地区の高齢化率」で代用。捕獲者マスタに生年（年代）を1列足せば、本人の年齢で出せる。</span>`, risk.length ? 'warn' : '');
-  table(el, ['市','大字','人口（2020）','65歳以上','高齢化率','捕獲者数','捕獲 R7','捕獲 R8'], active.slice(0, 40).map(r => [r.city, r.a, n0(r.pop), n0(r.old), (r.oldPct==null?'—':r.oldPct+'%') + (r.oldPct>=45 && r.hunters<=1 ? ' <span class="risk">⚠</span>' : ''), n0(r.hunters), n0(r.c7), n0(r.c8)]), { note: `捕獲のある大字 上位40。捕獲者数は捕獲者マスタの「罠の地区」に大字名を含む人数。人口50人以上の大字の高齢化率の中央値: ${allOld.length ? (allOld.map(r=>r.oldPct).sort((a,b)=>a-b)[Math.floor(allOld.length/2)]) + '%' : '—'}` });
+  if (D.hunters == null) finding(el, '捕獲者台帳はスタッフキーが必要なため読み込んでいません（P0-2）。「捕獲者数」と、高齢化×捕獲者数の判定は出していません。スタッフキーを設定した端末で開くと出ます。', 'warn');
+  else finding(el, `捕獲がある大字 ${active.length} のうち、<b>高齢化率45%以上で捕獲者が1人以下の大字は ${risk.length}</b>（${risk.slice(0,8).map(r=>`${r.a} ${r.oldPct}%・${r.c7+r.c8}頭`).join('、')}${risk.length>8?' …':''}）。ここは5〜10年で捕獲が途切れる候補。<br>高齢化率と捕獲頭数（R7）の相関 r = <b>${corr==null?'—':corr}</b>。<span class="muted">捕獲者の年齢は台帳に無いので「地区の高齢化率」で代用。捕獲者マスタに生年（年代）を1列足せば、本人の年齢で出せる。</span>`, risk.length ? 'warn' : '');
+  table(el, ['市','大字','人口（2020）','65歳以上','高齢化率','捕獲者数','捕獲 R7','捕獲 R8'], active.slice(0, 40).map(r => [r.city, r.a, n0(r.pop), n0(r.old), (r.oldPct==null?'—':r.oldPct+'%') + (r.oldPct>=45 && r.hunters!=null && r.hunters<=1 ? ' <span class="risk">⚠</span>' : ''), n0(r.hunters), n0(r.c7), n0(r.c8)]), { note: `捕獲のある大字 上位40。捕獲者数は捕獲者マスタの「罠の地区」に大字名を含む人数。人口50人以上の大字の高齢化率の中央値: ${allOld.length ? (allOld.map(r=>r.oldPct).sort((a,b)=>a-b)[Math.floor(allOld.length/2)]) + '%' : '—'}` });
   sources(el, ['census_oaza']);
 }
 

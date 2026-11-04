@@ -27,7 +27,7 @@ const INV = [ { individual_id:'TGC-08-T001', part_name:'ヒレ', grade:'極上',
 
 (async () => {
   const browser = await chromium.launch({ executablePath: process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
-  const ctx = await browser.newContext(); await ctx.addInitScript(() => sessionStorage.setItem('tg_role_v1', 'admin')); // 管理者専用ページ
+  const ctx = await browser.newContext(); await ctx.addInitScript(() => { sessionStorage.setItem('tg_role_v1', 'admin'); localStorage.setItem('tg_staff_key', 'k'); })  // 捕獲者台帳はスタッフキー必須（P0-2）; // 管理者専用ページ
   const page = await ctx.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   page.on('dialog', d => d.accept('テストメモ'));

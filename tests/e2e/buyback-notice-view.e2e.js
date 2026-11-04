@@ -32,7 +32,7 @@ const INV = [{ individual_id:'TGC-08-T301', weight:14, weight_kg:14 }, { individ
 async function open(width) {
   const browser = await pw.chromium.launch({ executablePath: process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
   const ctx = await browser.newContext({ viewport: { width, height: 900 } });
-  await ctx.addInitScript(() => sessionStorage.setItem('tg_role_v1', 'admin'));
+  await ctx.addInitScript(() => { sessionStorage.setItem('tg_role_v1', 'admin'); localStorage.setItem('tg_staff_key', 'k'); })  // 捕獲者台帳はスタッフキー必須（P0-2）;
   const page = await ctx.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.route('**/*', r => {
