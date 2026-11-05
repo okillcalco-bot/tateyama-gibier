@@ -489,6 +489,7 @@ th,td{padding:8px 6px;font-size:.8rem}
         <option value="name">名前順</option>
       </select>
       <button class="btn btn-gold btn-sm" onclick="openAddCustomer()">+ 顧客追加</button>
+      <button class="btn btn-outline btn-sm" onclick="openMailLabels()" title="請求書を紙で送る先の宛名ラベル（コメリ KML-506・A4 24面）">🏷 宛名ラベル（紙で送る請求先）</button>
       <button class="btn btn-outline btn-sm" onclick="exportCustomersCSV()">⬇ CSVエクスポート</button>
       <button class="btn btn-outline btn-sm" onclick="document.getElementById('custCsvFile').click()">⬆ CSVインポート</button>
       <input type="file" id="custCsvFile" accept=".csv,text/csv" style="display:none" onchange="importCustomersCSV(this)">
@@ -1030,6 +1031,29 @@ th,td{padding:8px 6px;font-size:.8rem}
   </div>
 </div>
 
+<!-- 紙で送る請求先の宛名ラベル（KML-506）。顧客編集（custModal）を上に重ねて開けるよう、custModal より前に置く -->
+<div class="modal-overlay" id="mailLabelModal">
+  <div class="modal">
+    <span class="modal-close" onclick="closeModal('mailLabelModal')">&times;</span>
+    <h2>🏷 紙で送る請求先の宛名ラベル</h2>
+    <div style="font-size:.8rem;color:var(--text2);line-height:1.7;margin-bottom:10px">
+      コメリ <strong>KML-506</strong>（A4・24面 70×33.9mm）に印刷します。顧客台帳で「請求書の送り方＝📮 紙で郵送」の請求先が並びます。<br>
+      登録住所と違う所へ送る請求先は ✏️ 編集 の「請求書の郵送先」に宛名・住所を入れると、そちらで印刷します。
+    </div>
+    <div id="mailLabelList" style="max-height:46vh;overflow:auto;margin-bottom:10px"></div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+      <input type="text" id="mailLabelAdd" list="mailLabelCustList" placeholder="請求先を追加（名前・顧客コードで検索）" style="flex:1;min-width:200px">
+      <datalist id="mailLabelCustList"></datalist>
+      <button class="btn btn-outline btn-sm" onclick="mailLabelAddCustomer()">＋ 追加</button>
+    </div>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:10px">
+      <label style="font-size:.82rem;display:inline-flex;align-items:center;gap:4px">使いかけのシートの <input type="number" id="mailLabelStart" min="1" max="24" value="1" style="width:56px"> 枚目から</label>
+      <label style="font-size:.82rem;display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="mailLabelFrame"> 枠線を試し刷り</label>
+      <button class="btn btn-gold btn-sm" id="mailLabelPrintBtn" onclick="mailLabelPrint()" style="margin-left:auto">🖨 印刷</button>
+    </div>
+  </div>
+</div>
+
 <!-- Add/Edit Customer Modal -->
 <div class="modal-overlay" id="custModal">
   <div class="modal">
@@ -1072,6 +1096,14 @@ th,td{padding:8px 6px;font-size:.8rem}
         <option value="paper">📮 紙で郵送する（月まとめ発行で宛名ラベルを印刷）</option>
         <option value="cash">💴 請求なし（その場で現金）</option>
       </select>
+    </div>
+    <!-- 請求書の郵送先（2026-11-05）: 登録住所と違う先に紙で送るときだけ入れる。空なら登録住所・顧客名で宛名ラベルを作る -->
+    <div class="form-group" id="cfMailBox"><label>請求書の郵送先（登録住所と違うときだけ）</label>
+      <div class="form-row">
+        <div class="form-group" style="flex:2"><input type="text" id="cfMailName" placeholder="宛名（例: ○○町役場　産業振興課）空なら顧客名"></div>
+        <div class="form-group" style="flex:1"><select id="cfMailHonorific" title="郵送先の敬称"><option value="御中">御中</option><option value="様">様</option><option value="殿">殿</option></select></div>
+      </div>
+      <input type="text" id="cfMailAddress" placeholder="住所（例: 〒000-0000 ○○県○○郡○○町1番地）空なら登録住所">
     </div>
     <div class="form-group"><label>既定の配送業者（複数可）</label>
       <div id="cfCarriers" style="display:flex;gap:16px;flex-wrap:wrap;padding:6px 0;">
@@ -1331,6 +1363,8 @@ function renderShipData(){
   }).join('');
 }
 
+/* 「請求書の郵送先」の列（migrations/20261105_customer_mail_to.sql）がDBにあるか。select * の返りにキーがあれば有る */
+function custHasMailColumns(){ return allCustomers.some(c=>'mail_address' in c); }
 async function loadCustomers(){
   allCustomers=await sb('GET','customers','','?order=code.asc&limit=2000');
   renderCustomers();
@@ -3133,7 +3167,8 @@ async function custNextCode(){
 async function openAddCustomer(){
   document.getElementById('custModalTitle').textContent='顧客追加';
   document.getElementById('custEditId').value='';
-  ['cfName','cfKana','cfPhone','cfAddress','cfBuilding','cfContact','cfEmail','cfCompany1','cfCompany2','cfReqCode','cfReqPhone','cfDefaultItem','cfLoginId','cfAliases'].forEach(id=>document.getElementById(id).value='');
+  ['cfName','cfKana','cfPhone','cfAddress','cfBuilding','cfContact','cfEmail','cfCompany1','cfCompany2','cfReqCode','cfReqPhone','cfDefaultItem','cfLoginId','cfAliases','cfMailName','cfMailAddress'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('cfMailHonorific').value='御中';
   document.querySelectorAll('.cf-carrier').forEach(cb=>cb.checked=false);
   document.getElementById('cfHonorific').value='様';
   document.getElementById('cfTimeZone').value='0000';
@@ -3166,6 +3201,9 @@ function openEditCustomer(id){
   document.getElementById('cfHonorific').value=c.honorific||'様';
   document.getElementById('cfRank').value=c.price_rank||'standard';
   document.getElementById('cfBillingMethod').value=c.billing_method||'';
+  document.getElementById('cfMailName').value=c.mail_name||'';
+  document.getElementById('cfMailHonorific').value=c.mail_honorific||'御中';
+  document.getElementById('cfMailAddress').value=c.mail_address||'';
   document.getElementById('cfActive').value=c.is_active===false?'false':'true';
   document.getElementById('cfDefaultItem').value=c.default_item||'';
   document.getElementById('cfTimeZone').value=c.default_time_zone||'0000';
@@ -3342,12 +3380,20 @@ async function saveCustomer(){
     default_carriers:Array.from(document.querySelectorAll('.cf-carrier:checked')).map(cb=>cb.value)
   };
   if(!data.name){alert('名前を入力してください');return}
+  // 請求書の郵送先（DBに列があるときだけ送る。列を足す前の本番で保存が失敗しないように）
+  const mailVals={mail_name:document.getElementById('cfMailName').value.trim()||null,
+    mail_honorific:document.getElementById('cfMailHonorific').value||null,
+    mail_address:document.getElementById('cfMailAddress').value.trim()||null};
+  if(custHasMailColumns()) Object.assign(data,mailVals);
+  else if(mailVals.mail_name||mailVals.mail_address){alert('「請求書の郵送先」を保存する欄が、まだデータベースにありません（管理者に連絡してください）。\nほかの項目は保存します。');}
+  if(!data.mail_name&&!data.mail_address&&'mail_honorific' in data) data.mail_honorific=null;
   try{
     if(id){await sb('PATCH','customers',data,`?id=eq.${id}`)}
     else{await sb('POST','customers',[data])}
     closeModal('custModal');
     await loadCustomers();
     populateCustomerDropdowns();
+    if(document.getElementById('mailLabelModal')?.classList.contains('show')) mailLabelRender();
     // 月まとめ発行の「住所未登録」から開いたときは、集計をやり直して注意を消す
     if(typeof invBatchGroups!=='undefined'&&invBatchGroups.length) invBatchSearch();
   }catch(e){alert('保存エラー: '+e.message)}
@@ -4627,37 +4673,145 @@ const INV_BILLING_LABEL={'':'送り方未設定',pdf:'📧 PDF',paper:'📮 紙�
    業務アプリの捕獲者の宛名ラベル（index.html hunterPrintLabels）と同じ用紙・同じレイアウト。
    対象は月まとめ発行の一覧でチェックが入っていて、顧客マスタの送り方が「紙で郵送」の請求先。 */
 const INV_LABEL_SHEET={cols:3,rows:8,w:70,h:33.9,top:12.9};
-function invLabelSplitAddress(c){
-  const raw=[c.address||'',c.building||''].filter(Boolean).join(' ').trim();
+function invLabelSplitRaw(raw){
+  raw=String(raw||'').trim();
   const m=raw.match(/〒?\s*([0-9０-９]{3})[-－ー]?([0-9０-９]{4})/);
   const toHalf=x=>x.replace(/[０-９]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0));
   const zip=m?toHalf(m[1])+'-'+toHalf(m[2]):'';
   const adr=(m?raw.replace(m[0],''):raw).replace(/^[\s　]+/,'');
   return {zip,adr};
 }
-function invBatchLabels(){
-  const targets=invBatchGroups.filter(g=>g._use&&g.method==='paper');
-  if(!targets.length){alert('チェックの入っている請求先に「紙で郵送」の顧客がいません。\n顧客マスタの「請求書の送り方」で「紙で郵送する」を選んでください（一覧の送り方の札を押すと設定できます）。');return}
+function invLabelSplitAddress(c){
+  return invLabelSplitRaw([c.address||'',c.building||''].filter(Boolean).join(' '));
+}
+/* 宛名ラベル1枚分の中身（2026-11-05）。顧客台帳に「請求書の郵送先」（mail_name・mail_address）があればそちらへ。
+   例: 町の加工施設の請求書は、施設ではなく町役場の担当課（「○○町役場　産業振興課　御中」）へ郵送する。
+   郵送先の宛名だけ・住所だけを入れた場合は、もう片方は登録の顧客名・住所を使う。 */
+function invLabelTarget(c){
+  const mailName=String(c.mail_name||'').trim(), mailAdr=String(c.mail_address||'').trim();
+  const raw=mailAdr||[c.address||'',c.building||''].filter(Boolean).join(' ').trim();
+  const a=invLabelSplitRaw(raw);
+  return {
+    name: mailName||c.name||'',
+    honorific: mailName?(c.mail_honorific||'御中'):(c.honorific||'御中'),
+    zip:a.zip, adr:a.adr, hasAddr:!!raw,
+    mailTo: !!(mailName||mailAdr),
+  };
+}
+/* 宛名ラベルの印刷画面（KML-506・A4 24面）。list は顧客の配列。start は使いかけシートの何枚目から（1〜24）。 */
+function invLabelSheetHtml(list,{start=1,frame=false,title='宛名ラベル'}={}){
   const S=INV_LABEL_SHEET, per=S.cols*S.rows;
-  const ans=prompt(`宛名ラベル ${targets.length}件を印刷します（コメリ KML-506・A4 24面）。\n${targets.map(g=>'・'+g.cust.name).join('\n')}\n\n使いかけのシートなら、何枚目のラベルから使うか（1〜${per}）。\n枠線を試し刷りしたい場合は「枠」と入れてください。`,'1');
-  if(ans==null) return;
-  const frame=/枠/.test(ans); const start=Math.min(per,Math.max(1,parseInt(ans,10)||1));
-  const noAddr=targets.filter(g=>!g.cust.address);
-  if(noAddr.length) alert(`住所が無い請求先 ${noAddr.length}件（${noAddr.map(g=>g.cust.name).join('、')}）はラベルに「住所未登録」と出ます。`);
-  const cells=Array(start-1).fill(null).concat(targets.map(g=>g.cust));
+  start=Math.min(per,Math.max(1,parseInt(start,10)||1));
+  const cells=Array(start-1).fill(null).concat(list);
   const sheets=[]; for(let i=0;i<cells.length;i+=per) sheets.push(cells.slice(i,i+per));
   const cell=c=>{
     if(!c) return `<div class="lbl${frame?' f':''}"></div>`;
-    const a=invLabelSplitAddress(c);
-    return `<div class="lbl${frame?' f':''}">${c.address?`<div class="zip">${a.zip?'〒'+esc(a.zip):''}</div><div class="adr">${esc(a.adr)}</div>`:'<div class="zip"></div><div class="adr miss">住所未登録（顧客マスタに登録してください）</div>'}<div class="nm">${esc(c.name||'')}　${esc(c.honorific||'御中')}</div></div>`;
+    const t=invLabelTarget(c);
+    return `<div class="lbl${frame?' f':''}">${t.hasAddr?`<div class="zip">${t.zip?'〒'+esc(t.zip):''}</div><div class="adr">${esc(t.adr)}</div>`:'<div class="zip"></div><div class="adr miss">住所未登録（顧客マスタに登録してください）</div>'}<div class="nm">${esc(t.name)}　${esc(t.honorific)}</div></div>`;
   };
   const css=`@page{size:A4;margin:0} html,body{margin:0;padding:0} body{font-family:"Noto Sans JP","Yu Gothic","Hiragino Sans",sans-serif;color:#000}
     .sheet{width:210mm;height:297mm;box-sizing:border-box;padding-top:${S.top}mm;display:grid;grid-template-columns:repeat(${S.cols},${S.w}mm);grid-auto-rows:${S.h}mm;align-content:start;page-break-after:always;overflow:hidden}
     .sheet:last-child{page-break-after:auto}
     .lbl{box-sizing:border-box;width:${S.w}mm;height:${S.h}mm;padding:3.5mm 6mm 2mm;overflow:hidden;line-height:1.35}
     .lbl.f{outline:.2mm dashed #999;outline-offset:-.2mm}
-    .zip{font-size:9.5pt;min-height:4.4mm} .adr{font-size:9.5pt} .adr.miss{color:#444} .nm{font-size:13pt;font-weight:700;margin-top:1.5mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}`;
-  invOpenHtml(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>宛名ラベル_${esc(invBatchRange().label)}_${targets.length}件</title><style>${css}</style></head><body>${sheets.map(sh=>`<div class="sheet">${sh.map(cell).join('')}</div>`).join('')}<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script></body></html>`);
+    .zip{font-size:9.5pt;min-height:4.4mm} .adr{font-size:9.5pt} .adr.miss{color:#444} .nm{font-size:13pt;font-weight:700;margin-top:1.5mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .nm.long{font-size:11pt} .nm.xlong{font-size:9.5pt} .nm.wrap{font-size:9.5pt;white-space:normal;text-overflow:clip}`;
+  // 長い宛名（「○○町役場　産業振興課　御中」など）は1行に収まるよう文字を小さくする（「…」で切れて敬称が消えるのを防ぐ）。
+  // 印刷（PDF）は画面より字幅が1〜2%広くなり、画面でぎりぎり収まった宛名が印刷で切れた（2026-11-05 実測）→ 幅の94%に収まる大きさを選ぶ。
+  // 9.5ptでも収まらなければ2行に折り返す（切らない）。幅は箱（scrollWidth）ではなく文字そのもの（Range）で測る。
+  const fit=`<script>document.querySelectorAll('.nm').forEach(function(n){var ok=function(){var r=document.createRange();r.selectNodeContents(n);return r.getBoundingClientRect().width<=n.clientWidth*0.94;};if(ok())return;var cs=['long','xlong','wrap'];for(var i=0;i<cs.length;i++){if(i)n.classList.remove(cs[i-1]);n.classList.add(cs[i]);if(cs[i]==='wrap'||ok())break;}});<\/script>`;
+  return `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>${esc(title)}</title><style>${css}</style></head><body>${sheets.map(sh=>`<div class="sheet">${sh.map(cell).join('')}</div>`).join('')}${fit}<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script></body></html>`;
+}
+function invBatchLabels(){
+  const targets=invBatchGroups.filter(g=>g._use&&g.method==='paper');
+  if(!targets.length){alert('チェックの入っている請求先に「紙で郵送」の顧客がいません。\n顧客マスタの「請求書の送り方」で「紙で郵送する」を選んでください（一覧の送り方の札を押すと設定できます）。');return}
+  const S=INV_LABEL_SHEET, per=S.cols*S.rows;
+  const ans=prompt(`宛名ラベル ${targets.length}件を印刷します（コメリ KML-506・A4 24面）。\n${targets.map(g=>'・'+invLabelTarget(g.cust).name).join('\n')}\n\n使いかけのシートなら、何枚目のラベルから使うか（1〜${per}）。\n枠線を試し刷りしたい場合は「枠」と入れてください。`,'1');
+  if(ans==null) return;
+  const frame=/枠/.test(ans);
+  const noAddr=targets.filter(g=>!invLabelTarget(g.cust).hasAddr);
+  if(noAddr.length) alert(`住所が無い請求先 ${noAddr.length}件（${noAddr.map(g=>g.cust.name).join('、')}）はラベルに「住所未登録」と出ます。`);
+  invOpenHtml(invLabelSheetHtml(targets.map(g=>g.cust),{start:ans,frame,title:`宛名ラベル_${invBatchRange().label}_${targets.length}件`}));
+}
+/* 顧客管理の「🏷 宛名ラベル」（2026-11-05 沖「請求書を紙で送付する先をラベルシールKML-506-100で印刷できるようにしたい」）
+   顧客台帳で「請求書の送り方＝紙で郵送」の請求先を一覧にし、チェックしたものを印刷する。
+   ここから請求先を追加すると、その顧客の送り方を「紙で郵送」にする（月まとめ発行の宛名ラベルにも出る）。 */
+let mailLabelSel={};   // 顧客id → 印刷に入れるか（既定は入れる）
+function mailLabelCustomers(){
+  return allCustomers.filter(c=>c.billing_method==='paper'&&c.is_active!==false)
+    .sort((a,b)=>(a.kana||a.name||'').localeCompare(b.kana||b.name||'','ja'));
+}
+function openMailLabels(){
+  mailLabelSel={};
+  const dl=document.getElementById('mailLabelCustList');
+  if(dl) dl.innerHTML=allCustomers.filter(c=>c.is_active!==false).map(c=>`<option value="${esc((c.code||'')+' '+(c.name||''))}"></option>`).join('');
+  document.getElementById('mailLabelAdd').value='';
+  mailLabelRender();
+  openModal('mailLabelModal');
+}
+function mailLabelRender(){
+  const box=document.getElementById('mailLabelList'); if(!box) return;
+  const list=mailLabelCustomers();
+  if(!list.length){ box.innerHTML='<div style="color:var(--text2);font-size:.85rem;padding:10px">紙で郵送する請求先がまだありません。下の「請求先を追加」から入れてください。</div>'; mailLabelCount(); return; }
+  box.innerHTML=list.map(c=>{
+    const t=invLabelTarget(c); const on=mailLabelSel[c.id]!==false;
+    return `<div class="ml-row" data-cid="${esc(c.id)}" style="display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:6px;background:var(--surface2)">
+      <input type="checkbox" class="ml-use" ${on?'checked':''} onchange="mailLabelSel['${esc(c.id)}']=this.checked;mailLabelCount()" style="margin-top:4px;width:18px;height:18px;flex:none" title="印刷に入れる">
+      <div style="flex:1;min-width:0;font-size:.82rem;line-height:1.5">
+        <div style="color:var(--text2)">${t.hasAddr?(t.zip?'〒'+esc(t.zip)+' ':'')+esc(t.adr):'<span style="color:var(--red)">住所未登録</span>'}</div>
+        <div class="ml-name" style="font-weight:700;font-size:.95rem">${esc(t.name)}　${esc(t.honorific)}</div>
+        ${t.mailTo?`<div style="font-size:.74rem;color:var(--gold)">📮 郵送先を別に登録（顧客: ${esc(c.name||'')}）</div>`:''}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;flex:none">
+        <button class="btn btn-outline btn-sm" onclick="openEditCustomer('${esc(c.id)}')" title="住所・宛名・郵送先を直す">✏️ 編集</button>
+        <button class="btn btn-outline btn-sm" onclick="mailLabelRemove('${esc(c.id)}')" title="請求書の送り方を「紙で郵送」から外す">外す</button>
+      </div>
+    </div>`;
+  }).join('');
+  mailLabelCount();
+}
+function mailLabelCount(){
+  const n=mailLabelCustomers().filter(c=>mailLabelSel[c.id]!==false).length;
+  const el=document.getElementById('mailLabelPrintBtn'); if(el) el.textContent=`🖨 ${n}件を印刷`;
+}
+function mailLabelFind(q){
+  q=String(q||'').trim(); if(!q) return null;
+  const code=(q.match(/^(C\d{3,})/i)||[])[1];
+  if(code){ const c=allCustomers.find(x=>String(x.code||'').toUpperCase()===code.toUpperCase()); if(c) return c; }
+  const hits=allCustomers.filter(c=>c.is_active!==false&&((c.name||'').includes(q)||(c.kana||'').includes(q)));
+  return hits.length===1?hits[0]:(hits.find(c=>c.name===q)||null);
+}
+async function mailLabelAddCustomer(){
+  const inp=document.getElementById('mailLabelAdd');
+  const c=mailLabelFind(inp.value);
+  if(!c){ alert('顧客が1件に決まりませんでした。候補から選ぶか、顧客コード（C0001 など）で入れてください。\n名簿に無い送り先は、先に「+ 顧客追加」で登録してください。'); return; }
+  if(c.billing_method==='paper'){ mailLabelSel[c.id]=true; inp.value=''; mailLabelRender(); return; }
+  const cur=INV_BILLING_LABEL[c.billing_method||'']||c.billing_method;
+  if(c.billing_method&&!confirm(`${c.name} の請求書の送り方は今「${cur}」です。\n「📮 紙で郵送」に変えて一覧に入れますか？`)) return;
+  try{
+    await sb('PATCH','customers',{billing_method:'paper'},`?id=eq.${c.id}`);
+    c.billing_method='paper'; mailLabelSel[c.id]=true; inp.value='';
+    mailLabelRender(); renderCustomers();
+  }catch(e){ alert('登録できませんでした（何も変わっていません）: '+String(e.message||e)); }
+}
+async function mailLabelRemove(id){
+  const c=allCustomers.find(x=>x.id===id); if(!c) return;
+  if(!confirm(`${c.name} を「紙で郵送する請求先」から外しますか？\n（請求書の送り方が「未設定」に戻ります。住所・郵送先の登録は消えません）`)) return;
+  try{
+    await sb('PATCH','customers',{billing_method:null},`?id=eq.${c.id}`);
+    c.billing_method=null; delete mailLabelSel[id];
+    mailLabelRender(); renderCustomers();
+  }catch(e){ alert('外せませんでした（何も変わっていません）: '+String(e.message||e)); }
+}
+function mailLabelPrint(){
+  const list=mailLabelCustomers().filter(c=>mailLabelSel[c.id]!==false);
+  if(!list.length){ alert('印刷する請求先にチェックを入れてください。'); return; }
+  const start=document.getElementById('mailLabelStart').value;
+  const frame=document.getElementById('mailLabelFrame').checked;
+  const noAddr=list.filter(c=>!invLabelTarget(c).hasAddr);
+  if(noAddr.length&&!confirm(`住所が無い請求先 ${noAddr.length}件（${noAddr.map(c=>c.name).join('、')}）はラベルに「住所未登録」と出ます。このまま印刷しますか？`)) return;
+  const d=new Date(); const ymd=`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+  invOpenHtml(invLabelSheetHtml(list,{start,frame,title:`宛名ラベル_${ymd}_${list.length}件`}));
 }
 /* 発行した請求書を1社ずつPDFにする（2026-10-06）。
    まとめた印刷画面とは別に、請求先ごとのボタンで1枚だけを開く。ファイル名は「請求書_発行日_宛名_番号」。
