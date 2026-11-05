@@ -1047,10 +1047,12 @@ th,td{padding:8px 6px;font-size:.8rem}
       <button class="btn btn-outline btn-sm" onclick="mailLabelAddCustomer()">＋ 追加</button>
     </div>
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:10px">
-      <label style="font-size:.82rem;display:inline-flex;align-items:center;gap:4px">使いかけのシートの <input type="number" id="mailLabelStart" min="1" max="24" value="1" style="width:56px"> 枚目から</label>
+      <label style="font-size:.82rem;display:inline-flex;align-items:center;gap:4px">1件あたり <select id="mailLabelCopies" onchange="mailLabelCount()"><option value="auto">自動（シートを使い切る）</option><option value="1">1枚</option><option value="2">2枚</option><option value="3">3枚</option><option value="4">4枚</option><option value="6">6枚</option><option value="12">12枚</option><option value="24">24枚</option></select></label>
+      <label style="font-size:.82rem;display:inline-flex;align-items:center;gap:4px">使いかけのシートの <input type="number" id="mailLabelStart" min="1" max="24" value="1" style="width:56px" oninput="mailLabelCount()"> 枚目から</label>
       <label style="font-size:.82rem;display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="mailLabelFrame"> 枠線を試し刷り</label>
       <button class="btn btn-gold btn-sm" id="mailLabelPrintBtn" onclick="mailLabelPrint()" style="margin-left:auto">🖨 印刷</button>
     </div>
+    <div id="mailLabelPlan" style="font-size:.8rem;color:var(--text2);margin-top:6px;text-align:right"></div>
   </div>
 </div>
 
@@ -4698,11 +4700,41 @@ function invLabelTarget(c){
     mailTo: !!(mailName||mailAdr),
   };
 }
-/* 宛名ラベルの印刷画面（KML-506・A4 24面）。list は顧客の配列。start は使いかけシートの何枚目から（1〜24）。 */
-function invLabelSheetHtml(list,{start=1,frame=false,title='宛名ラベル'}={}){
+/* 1件あたり何枚刷るか（2026-11-05 沖「1回で1枚使い切りになるから、24枚全部使えるように適宜増やして。
+   4件だったら6枚ずつ、1件だったら24枚」）。
+   copies='auto': シート（使いかけなら残りの面）がちょうど埋まるよう同じ宛名を繰り返す。割り切れない分は上から1枚ずつ足す
+   （5件なら 5・5・5・5・4 枚）。件数が残りの面より多いときは1枚ずつ（次のシートへ続く）。
+   copies=数字: 1件あたりその枚数。同じ宛名は続けて並べる（3列なので6枚＝2段）。 */
+function invLabelPlan(n,start=1,copies='auto'){
+  const per=INV_LABEL_SHEET.cols*INV_LABEL_SHEET.rows;
+  start=Math.min(per,Math.max(1,parseInt(start,10)||1));
+  const avail=per-(start-1);
+  let counts;
+  if(copies==='auto'||copies==null||copies===''){
+    if(!n) counts=[];
+    else if(n>=avail) counts=Array(n).fill(1);
+    else { const base=Math.floor(avail/n), rem=avail%n; counts=Array.from({length:n},(_,i)=>base+(i<rem?1:0)); }
+  } else {
+    const k=Math.max(1,parseInt(copies,10)||1); counts=Array(n).fill(k);
+  }
+  const total=counts.reduce((s,x)=>s+x,0);
+  const used=(start-1)+total, sheets=n?Math.ceil(used/per):0, spare=sheets*per-used;
+  return {counts,total,start,avail,sheets,spare,per};
+}
+function invLabelPlanText(p){
+  if(!p.counts.length) return '';
+  const g=new Map(); p.counts.forEach(c=>g.set(c,(g.get(c)||0)+1));
+  const parts=[...g.entries()].sort((a,b)=>b[0]-a[0]);
+  const head=parts.length===1?`${p.counts.length}件 × ${parts[0][0]}枚`:parts.map(([k,c])=>`${k}枚×${c}件`).join('・');
+  return `${head} ＝ ${p.total}枚（シート${p.sheets}枚${p.spare?`・${p.spare}面あまり`:'・使い切り'}）`;
+}
+/* 宛名ラベルの印刷画面（KML-506・A4 24面）。list は顧客の配列。start は使いかけシートの何枚目から（1〜24）。
+   copies は invLabelPlan と同じ（既定は1枚ずつ。画面からは 'auto' でシートを使い切る）。 */
+function invLabelSheetHtml(list,{start=1,frame=false,title='宛名ラベル',copies=1}={}){
   const S=INV_LABEL_SHEET, per=S.cols*S.rows;
   start=Math.min(per,Math.max(1,parseInt(start,10)||1));
-  const cells=Array(start-1).fill(null).concat(list);
+  const plan=invLabelPlan(list.length,start,copies);
+  const cells=Array(start-1).fill(null).concat(list.flatMap((c,i)=>Array(plan.counts[i]).fill(c)));
   const sheets=[]; for(let i=0;i<cells.length;i+=per) sheets.push(cells.slice(i,i+per));
   const cell=c=>{
     if(!c) return `<div class="lbl${frame?' f':''}"></div>`;
@@ -4726,12 +4758,12 @@ function invBatchLabels(){
   const targets=invBatchGroups.filter(g=>g._use&&g.method==='paper');
   if(!targets.length){alert('チェックの入っている請求先に「紙で郵送」の顧客がいません。\n顧客マスタの「請求書の送り方」で「紙で郵送する」を選んでください（一覧の送り方の札を押すと設定できます）。');return}
   const S=INV_LABEL_SHEET, per=S.cols*S.rows;
-  const ans=prompt(`宛名ラベル ${targets.length}件を印刷します（コメリ KML-506・A4 24面）。\n${targets.map(g=>'・'+invLabelTarget(g.cust).name).join('\n')}\n\n使いかけのシートなら、何枚目のラベルから使うか（1〜${per}）。\n枠線を試し刷りしたい場合は「枠」と入れてください。`,'1');
+  const ans=prompt(`宛名ラベル ${targets.length}件を印刷します（コメリ KML-506・A4 24面）。\n${targets.map(g=>'・'+invLabelTarget(g.cust).name).join('\n')}\n\nシートが余らないよう、同じ宛名を繰り返して埋めます（新しいシートなら ${invLabelPlanText(invLabelPlan(targets.length,1,'auto'))}）。\n1件1枚だけにするなら顧客管理の「🏷 宛名ラベル」から刷ってください。\n\n使いかけのシートなら、何枚目のラベルから使うか（1〜${per}）。\n枠線を試し刷りしたい場合は「枠」と入れてください。`,'1');
   if(ans==null) return;
   const frame=/枠/.test(ans);
   const noAddr=targets.filter(g=>!invLabelTarget(g.cust).hasAddr);
   if(noAddr.length) alert(`住所が無い請求先 ${noAddr.length}件（${noAddr.map(g=>g.cust.name).join('、')}）はラベルに「住所未登録」と出ます。`);
-  invOpenHtml(invLabelSheetHtml(targets.map(g=>g.cust),{start:ans,frame,title:`宛名ラベル_${invBatchRange().label}_${targets.length}件`}));
+  invOpenHtml(invLabelSheetHtml(targets.map(g=>g.cust),{start:ans,frame,copies:'auto',title:`宛名ラベル_${invBatchRange().label}_${targets.length}件`}));
 }
 /* 顧客管理の「🏷 宛名ラベル」（2026-11-05 沖「請求書を紙で送付する先をラベルシールKML-506-100で印刷できるようにしたい」）
    顧客台帳で「請求書の送り方＝紙で郵送」の請求先を一覧にし、チェックしたものを印刷する。
@@ -4770,9 +4802,12 @@ function mailLabelRender(){
   }).join('');
   mailLabelCount();
 }
+function mailLabelCopies(){ const v=(document.getElementById('mailLabelCopies')||{}).value; return v&&v!=='auto'?v:'auto'; }
 function mailLabelCount(){
   const n=mailLabelCustomers().filter(c=>mailLabelSel[c.id]!==false).length;
-  const el=document.getElementById('mailLabelPrintBtn'); if(el) el.textContent=`🖨 ${n}件を印刷`;
+  const p=invLabelPlan(n,(document.getElementById('mailLabelStart')||{}).value,mailLabelCopies());
+  const el=document.getElementById('mailLabelPrintBtn'); if(el) el.textContent=n?`🖨 ${p.total}枚を印刷`:'🖨 印刷';
+  const pl=document.getElementById('mailLabelPlan'); if(pl) pl.textContent=n?invLabelPlanText(p):'印刷する請求先にチェックを入れてください';
 }
 function mailLabelFind(q){
   q=String(q||'').trim(); if(!q) return null;
@@ -4811,7 +4846,7 @@ function mailLabelPrint(){
   const noAddr=list.filter(c=>!invLabelTarget(c).hasAddr);
   if(noAddr.length&&!confirm(`住所が無い請求先 ${noAddr.length}件（${noAddr.map(c=>c.name).join('、')}）はラベルに「住所未登録」と出ます。このまま印刷しますか？`)) return;
   const d=new Date(); const ymd=`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
-  invOpenHtml(invLabelSheetHtml(list,{start,frame,title:`宛名ラベル_${ymd}_${list.length}件`}));
+  invOpenHtml(invLabelSheetHtml(list,{start,frame,copies:mailLabelCopies(),title:`宛名ラベル_${ymd}_${list.length}件`}));
 }
 /* 発行した請求書を1社ずつPDFにする（2026-10-06）。
    まとめた印刷画面とは別に、請求先ごとのボタンで1枚だけを開く。ファイル名は「請求書_発行日_宛名_番号」。

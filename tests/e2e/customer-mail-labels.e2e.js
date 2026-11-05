@@ -11,7 +11,8 @@
 //     3. チェックを外した顧客は印刷に入らない・件数表示が変わる
 //     4. 「＋ 追加」で名簿の顧客を入れると送り方を「紙で郵送」に保存する（PDFの顧客は確認してから）
 //     5. 「外す」で送り方を未設定に戻す（確認してから）・書込みの失敗は画面に出す
-//     6. 実寸: KML-506（A4・70×33.9mm・3列×8段・上余白12.9mm）、使いかけシートの開始位置
+//     6. 実寸: KML-506（A4・70×33.9mm・3列×8段・上余白12.9mm）、使いかけシートの開始位置、
+//        シートを使い切るよう同じ宛名を繰り返す（4件→6枚ずつ・1件→24枚）／1件あたりの枚数を選べる
 //     7. 長い宛名（役場＋課＋御中で15文字）も1行に収まる（切れない）
 //     8. 顧客編集で郵送先を保存できる。DBに列が無い間は郵送先を送らず、保存は失敗させない（知らせる）
 //     9. 月まとめ発行の宛名ラベルも郵送先を使う
@@ -81,9 +82,12 @@ const path = require('path');
   ck('1. 住所の無い顧客は「住所未登録」と出る', rowE && /住所未登録/.test(rowE.txt), rowE && rowE.txt);
 
   // 3. チェックを外す
-  ck('3. はじめは全部チェック（3件を印刷）', /3件を印刷/.test(await page.$eval('#mailLabelPrintBtn', b => b.textContent)), '');
+  const planNow = () => page.evaluate(() => ({ btn: document.getElementById('mailLabelPrintBtn').textContent, plan: document.getElementById('mailLabelPlan').textContent }));
+  const pl3 = await planNow();
+  ck('3. はじめは全部チェック → 3件 × 8枚 ＝ 24枚（シートを使い切る）', pl3.plan === '3件 × 8枚 ＝ 24枚（シート1枚・使い切り）' && pl3.btn === '🖨 24枚を印刷', JSON.stringify(pl3));
   await page.click('#mailLabelList .ml-row[data-cid="c-e"] .ml-use');
-  ck('3. 外すと件数が変わる（2件を印刷）', /2件を印刷/.test(await page.$eval('#mailLabelPrintBtn', b => b.textContent)), '');
+  const pl2 = await planNow();
+  ck('3. 外すと件数が変わる → 2件 × 12枚 ＝ 24枚', pl2.plan === '2件 × 12枚 ＝ 24枚（シート1枚・使い切り）', JSON.stringify(pl2));
 
   // 4. 追加（未設定の顧客 → そのまま紙で郵送に）
   await page.fill('#mailLabelAdd', 'C9106 架空工房');
@@ -91,7 +95,7 @@ const path = require('path');
   await page.waitForTimeout(150);
   const pF = patches.find(p => /id=eq\.c-f/.test(p.url));
   ck('4. 追加すると送り方を「紙で郵送」に保存する（その1項目だけ）', pF && pF.body.billing_method === 'paper' && Object.keys(pF.body).length === 1, JSON.stringify(pF));
-  ck('4. 追加した顧客が一覧に入り、チェックも入る（3件を印刷）', await page.$('#mailLabelList .ml-row[data-cid="c-f"] .ml-use:checked') && /3件を印刷/.test(await page.$eval('#mailLabelPrintBtn', b => b.textContent)), '');
+  ck('4. 追加した顧客が一覧に入り、チェックも入る（3件を印刷）', await page.$('#mailLabelList .ml-row[data-cid="c-f"] .ml-use:checked') && (await planNow()).plan.startsWith('3件 × 8枚'), '');
   ck('4. 追加欄は空に戻る', (await page.$eval('#mailLabelAdd', i => i.value)) === '', '');
   // PDFの顧客 → 確認で「いいえ」なら何もしない
   confirmAnswer = false; dialogs.length = 0;
@@ -137,7 +141,11 @@ const path = require('path');
   });
   ck('6. どのラベルも中身が縦にはみ出さない（住所が2行に折り返しても宛名まで入る）', geo.vOver.length === 0, JSON.stringify(geo.vOver));
   ck('6. 実寸がKML-506どおり（上12.9mm・幅70mm・高さ33.9mm・3列目の左端140mm・2段目46.8mm）', geo.top === 12.9 && geo.w === 70 && geo.h === 33.9 && geo.x3 === 140 && geo.y4 === 46.8, JSON.stringify(geo).slice(0, 200));
-  ck('6. 使いかけシート: 5枚目から刷る（1〜4枚目は空き）', geo.filled.join(',') === '4,5,6', JSON.stringify(geo.filled));
+  ck('6. 使いかけシート: 5枚目から刷る（1〜4枚目は空き・5〜24枚目を全部使う）', geo.filled.length === 20 && geo.filled[0] === 4 && geo.filled[19] === 23, JSON.stringify(geo.filled));
+  // シートを使い切る（2026-11-05 沖「4件だったら6枚ずつ、1件だったら24枚」）: 残り20面を3件で 7・7・6、同じ宛名は続けて並ぶ
+  const seq = geo.nms.map(x => x.t);
+  const runs = []; seq.forEach(t => { if (runs.length && runs[runs.length - 1][0] === t) runs[runs.length - 1][1]++; else runs.push([t, 1]); });
+  ck('6. 残りの20面を3件で埋める（7・7・6枚・同じ宛名は続けて並ぶ）', runs.length === 3 && runs.map(r => r[1]).join(',') === '7,7,6', JSON.stringify(runs));
   const nmB = geo.nms.find(x => x.t.includes(LONG));
   ck('7. 長い宛名（' + LONG + '　御中）も1行に収まり、ラベルからはみ出さない', nmB && !nmB.over && nmB.right <= nmB.lblRight, JSON.stringify(nmB));
   ck('7. 短い宛名は大きい字のまま（13pt）', geo.nms.filter(x => !x.t.includes(LONG)).every(x => x.cls === 'nm' && !x.over), JSON.stringify(geo.nms));
@@ -155,6 +163,28 @@ const path = require('path');
   ck('7. 印刷（PDF）でも長い宛名が敬称まで刷られる（' + LONG + '　御中・「…」で切れない）', pdfText != null && flat.includes(LONG.replace(/[\s　]+/g, '') + '御中') && !/…/.test(pdfText), pdfText == null ? 'pdftotext が無く測れない' : pdfText.replace(/\s+/g, ' ').slice(0, 200));
   ck('7. 印刷（PDF）で3件とも宛名が敬称まで刷られる', pdfText != null && flat.includes('架空精肉株式会社御中') && flat.includes('架空工房様'), pdfText == null ? 'pdftotext が無く測れない' : '');
   await lp.close();
+  // 1件あたりの枚数を選べる（1枚ずつ → 5・6・7枚目だけ）
+  await page.selectOption('#mailLabelCopies', '1');
+  const pl1 = await planNow();
+  ck('6. 1件あたり「1枚」を選ぶと 3件 × 1枚（5枚目から・残り17面）', pl1.plan === '3件 × 1枚 ＝ 3枚（シート1枚・17面あまり）' && pl1.btn === '🖨 3枚を印刷', JSON.stringify(pl1));
+  await page.evaluate(() => mailLabelPrint());
+  const html1 = await lastPop();
+  ck('6. 「1枚」で刷ると宛名は3枚だけ', (html1.match(/class="nm"/g) || []).length === 3, String((html1.match(/class="nm"/g) || []).length));
+  await page.selectOption('#mailLabelCopies', 'auto');
+  await page.fill('#mailLabelStart', '1');
+  // 割り振りの決まり（関数そのもの）
+  const plans = await page.evaluate(() => {
+    const f = (n, st, c) => { const p = invLabelPlan(n, st, c); return { counts: p.counts.join(','), total: p.total, sheets: p.sheets, spare: p.spare, text: invLabelPlanText(p) }; };
+    return { one: f(1, 1, 'auto'), four: f(4, 1, 'auto'), five: f(5, 1, 'auto'), seven: f(7, 1, 'auto'), start5: f(3, 5, 'auto'), many: f(30, 1, 'auto'), two: f(4, 1, 2), zero: f(0, 1, 'auto') };
+  });
+  ck('割り振り: 1件 → 24枚', plans.one.counts === '24' && plans.one.text === '1件 × 24枚 ＝ 24枚（シート1枚・使い切り）', JSON.stringify(plans.one));
+  ck('割り振り: 4件 → 6枚ずつ', plans.four.counts === '6,6,6,6' && plans.four.spare === 0, JSON.stringify(plans.four));
+  ck('割り振り: 5件 → 5・5・5・5・4（割り切れない分は上から）', plans.five.counts === '5,5,5,5,4' && plans.five.total === 24 && plans.five.text === '5枚×4件・4枚×1件 ＝ 24枚（シート1枚・使い切り）', JSON.stringify(plans.five));
+  ck('割り振り: 7件 → 4・4・4・3・3・3・3（24枚）', plans.seven.counts === '4,4,4,3,3,3,3' && plans.seven.total === 24, JSON.stringify(plans.seven));
+  ck('割り振り: 使いかけ（5枚目から）3件 → 残り20面を 7・7・6', plans.start5.counts === '7,7,6' && plans.start5.spare === 0, JSON.stringify(plans.start5));
+  ck('割り振り: 24件より多い（30件）→ 1枚ずつ・シート2枚', plans.many.total === 30 && plans.many.sheets === 2 && plans.many.spare === 18, JSON.stringify(plans.many));
+  ck('割り振り: 枚数を指定（4件×2枚）→ 8枚・16面あまり', plans.two.counts === '2,2,2,2' && plans.two.spare === 16, JSON.stringify(plans.two));
+  ck('割り振り: 0件は何も刷らない', plans.zero.total === 0 && plans.zero.text === '', JSON.stringify(plans.zero));
   // 何もチェックが無いときは知らせる
   dialogs.length = 0;
   await page.evaluate(() => { document.querySelectorAll('#mailLabelList .ml-use').forEach(cb => { if (cb.checked) cb.click(); }); mailLabelPrint(); });
