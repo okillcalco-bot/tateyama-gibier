@@ -12520,16 +12520,30 @@ function kkBlendOrigin() {
   return set.length === 1 ? set[0] : '千葉県産';
 }
 
+/* 同じ原料を2回入れない（2026-11-05 沖「被ってるのに登録される」）。
+   比べるのは在庫の行（id）。バーコード（数字キー 10006xxx）は読んだ文字と識別コードが違うので、
+   文字どうしで比べていると同じパックを2回読んでも通ってしまい、原料の合計kgが水増しされていた
+   （10/27 のミンチ TGC-MIB-20261027-001 では同じ1パックが3回つながっていた）。
+   出荷処理（shipDirectScan）・出店シート（evScanAdd）は id で見ていて、加工処理だけが文字で見ていた。 */
+function kkHasMaterial(inv) {
+  return !!inv && kkMaterials.some(m => String(m.id) === String(inv.id));
+}
+function kkDupMaterials() {
+  const seen = new Set(), dup = [];
+  kkMaterials.forEach(m => { const k = String(m.id); if (seen.has(k)) dup.push(m.ident_code || k); else seen.add(k); });
+  return dup;
+}
+
 async function kkScanAdd() {
   const input = document.getElementById('kk-scan');
   const code = (input.value || '').trim();
   if (!code) return;
   input.value = '';
-  if (kkMaterials.some(m => m.ident_code === code)) { toast('すでに追加済みです', 'error'); input.focus(); return; }
   try {
-    const rows = await sb('GET', 'inventory', null, `?${invScanFilter(code)}&deleted_at=is.null&select=id,ident_code,part_name,weight,weight_kg,species,individual_id,status,tier`);
+    const rows = await sb('GET', 'inventory', null, `?${invScanFilter(code)}&deleted_at=is.null&select=id,ident_code,scan_code,part_name,weight,weight_kg,species,individual_id,status,tier`);
     if (!rows.length) { toast(`在庫に見つかりません: ${code}`, 'error'); playFeedbackSound(false); input.focus(); return; }
     const inv = rows[0];
+    if (kkHasMaterial(inv)) { toast(`すでに原料に入っています: ${inv.ident_code}（同じパックを2回読みました）`, 'error'); playFeedbackSound(false); input.focus(); return; }
     if (inv.status === '加工済') { toast('この肉はすでに加工済です', 'error'); playFeedbackSound(false); input.focus(); return; }
     if (inv.status === '出荷済') { toast('この肉は出荷済です', 'error'); playFeedbackSound(false); input.focus(); return; }
     kkMaterials.push(inv);
@@ -12621,8 +12635,8 @@ async function kkPickFromStock() {
 function kkRenderStockPick() {
   const list = document.getElementById('kk-stock-list');
   const q = (document.getElementById('kk-stock-search').value || '').toLowerCase();
-  const added = new Set(kkMaterials.map(m => m.ident_code));
-  let rows = kkStockCache.filter(r => !added.has(r.ident_code));
+  const added = new Set(kkMaterials.map(m => String(m.id)));
+  let rows = kkStockCache.filter(r => !added.has(String(r.id)));
   if (q) rows = rows.filter(r => (r.ident_code || '').toLowerCase().includes(q) || (r.individual_id || '').toLowerCase().includes(q) || (r.part_name || '').toLowerCase().includes(q) || (r.species || '').toLowerCase().includes(q));
   if (!rows.length) { list.innerHTML = '<div class="empty-state">該当する在庫がありません</div>'; return; }
   list.innerHTML = rows.map(r => `<div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--border);">
@@ -12636,7 +12650,7 @@ function kkRenderStockPick() {
 function kkAddFromStock(id) {
   const inv = kkStockCache.find(r => String(r.id) === String(id));
   if (!inv) return;
-  if (kkMaterials.some(m => m.ident_code === inv.ident_code)) { toast('すでに追加済みです', 'error'); return; }
+  if (kkHasMaterial(inv)) { toast(`すでに原料に入っています: ${inv.ident_code}`, 'error'); return; }
   kkMaterials.push(inv);
   kkRenderMaterials();
   kkUpdateSummary();
@@ -12663,6 +12677,9 @@ async function kkSubmit() {
   const packN = parseInt(document.getElementById('kk-pack-n').value);
   if (!operator) { toast('作業者を選択してください', 'error'); return; }
   if (!kkMaterials.length) { toast('原料ブロックを1つ以上スキャンしてください', 'error'); return; }
+  // 念のため記録の直前にも見る（同じ原料が2行あると原料kg・トレーサビリティが水増しされる）
+  const dup = kkDupMaterials();
+  if (dup.length) { toast(`同じ原料が2回入っています: ${[...new Set(dup)].join('、')}。✕で消してから記録してください`, 'error'); playFeedbackSound(false); return; }
   if (!packW || packW <= 0) { toast('1パックの重さを入力してください', 'error'); return; }
   if (!packN || packN < 1) { toast('個数を入力してください', 'error'); return; }
   if (type === 'スライス' && kkThicknessMm() == null) { toast('スライスの厚さを入力してください', 'error'); return; }
