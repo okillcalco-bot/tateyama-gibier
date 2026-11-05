@@ -8,7 +8,7 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
     r.setHeader('content-type', 'text/html; charset=utf-8');
     try { r.end(fs.readFileSync(path.join(root, p))); } catch (e) { r.statusCode = 404; r.end('nf'); }
   }).listen(9080);
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium/chrome-linux/chrome' }).catch(() => chromium.launch());
+  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
   const out = []; const ck = (n, c, e) => out.push((c ? 'PASS ' : 'FAIL ') + n + (e ? ' — ' + e : ''));
   const ctx = await b.newContext({ viewport: { width: 390, height: 844 } });
   const p = await ctx.newPage();
@@ -121,6 +121,9 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   ck('当日番号: T272=2', byLabel['TGC-08-T272'] === '2', JSON.stringify(nums));
   ck('当日番号: M170=3', byLabel['TGC-08-M170'] === '3', JSON.stringify(nums));
   ck('当日番号は種別関係なし（シカもイノシシも連番）', new Set(Object.values(byLabel)).size === 3);
+  // 2026-11-05 沖「入力した順番にして」: 一覧も当日番号の順（1が一番上）に並ぶ。
+  // 以前は受入時刻の新しい順で、画面では 3・4・5・2・1 のように番号がばらばらに見えた
+  ck('一覧は入力した順（当日番号 1・2・3 の順に上から）', nums.map(n => n.no).join(',') === '1,2,3', nums.map(n => n.no).join(','));
 
   ck('JSエラーなし', errs.length === 0, errs.join(' / '));
   console.log(out.join('\n'));
