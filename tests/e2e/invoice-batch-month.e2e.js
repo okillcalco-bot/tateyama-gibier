@@ -182,6 +182,9 @@ const invOthers = (h, me) => !['A食堂', 'B商店', 'トレタテ', 'ノブレ�
   const lbl = await page.evaluate(() => window.__lbl ? window.__lbl.document._h : '');
   ck('宛名ラベルは「紙で郵送」の請求先だけ（A食堂・B商店。現金・未設定は出さない）', /A食堂　御中/.test(lbl) && /B商店　様/.test(lbl) && !/K現金/.test(lbl) && !/ノブレスオブリージュ/.test(lbl), '');
   ck('郵便番号と住所を分けて載せ、建物名も付ける', /〒123-4567/.test(lbl) && /東京都A区1-1 Aビル2F/.test(lbl), '');
+  // シートを使い切る（2026-11-05 沖「1回で1枚使い切りになるから、24枚全部使えるように」）: 2枚目から＝残り23面を2件で 12・11
+  const nA = (lbl.match(/A食堂　御中/g) || []).length, nB = (lbl.match(/B商店　様/g) || []).length;
+  ck('宛名ラベルはシートを使い切る（残り23面を2件で12枚・11枚）', nA + nB === 23 && [nA, nB].sort().join(',') === '11,12', nA + ',' + nB);
   ck('住所の無い請求先は「住所未登録」と出して知らせる', /住所未登録/.test(lbl) && /B商店/.test(await page.evaluate(() => window.__alert || '')), '');
   // 実寸: KML-506（A4・70×33.9mm・3列×8段・上余白12.9mm）に合っているか測る
   const lp = await ctx.newPage();
