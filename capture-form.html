@@ -4112,11 +4112,31 @@ function arRenderWhiteboard(r) {
   wb.innerHTML = `<div class="wb-title">${esc(d.title)}</div>` +
     d.lines.map(function (x) { return `<div class="wb-line">${esc(x[0])}：<b>${esc(x[1])}</b></div>`; }).join('');
 }
-function arMsg(text) {
+function arMsg(text, sticky) {
   const el = document.getElementById('arMsg'); if (!el) return;
+  clearTimeout(_arMsgT);
   if (!text) { el.style.display = 'none'; return; }
   el.textContent = text; el.style.display = 'block';
-  clearTimeout(_arMsgT); _arMsgT = setTimeout(function () { el.style.display = 'none'; }, 3500);
+  // エラーは消さずに出したままにする（3.5秒で消えると、何をすればよいか読めない）
+  if (!sticky) _arMsgT = setTimeout(function () { el.style.display = 'none'; }, 3500);
+}
+/* カメラが開けなかった理由ごとに、何をすればよいかを出す（2026-11-05 iPadで「カメラを開けませんでした」が出て撮影できなくなった）。
+   以前は理由にかかわらず同じ文で、許可の問題か・別のアプリが使っているのかが分からなかった。 */
+function arCamErrorText(e) {
+  const n = (e && e.name) || '';
+  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (/Mac/.test(navigator.platform || '') && (navigator.maxTouchPoints || 0) > 1);
+  if (n === 'NotAllowedError' || n === 'SecurityError' || n === 'PermissionDeniedError') {
+    return isIOS
+      ? 'カメラの使用が許可されていません。アドレスバー左のボタン（ぁあ／≡）→「Webサイトの設定」→「カメラ」を「許可」にして、ページを読み込み直してください。設定アプリ→Safari→「カメラ」が「拒否」になっていないかも確認してください。'
+      : 'カメラの使用が許可されていません。アドレスバーの左のマーク→「カメラ」を「許可」にして、ページを読み込み直してください。';
+  }
+  if (n === 'NotReadableError' || n === 'TrackStartError' || n === 'AbortError') {
+    return 'カメラを別のアプリかタブが使っています。カメラ・ビデオ通話などのアプリや、この画面を開いている別のタブを閉じてから、もう一度開いてください。';
+  }
+  if (n === 'NotFoundError' || n === 'DevicesNotFoundError' || n === 'OverconstrainedError') {
+    return 'この端末でカメラが見つかりませんでした。';
+  }
+  return 'カメラを開けませんでした（' + (n || '理由不明') + '）。ページを読み込み直してから、もう一度開いてください。';
 }
 async function arStart() {
   const r = _boardRec; if (!r) return;
@@ -4144,13 +4164,21 @@ async function arStart() {
     arMsg('この端末/ブラウザではカメラを使えません（看板の内容は表示されています）'); return;
   }
   try {
-    _arStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: _arFacing }, audio: false });
+    arStopStream();   // 前の映像が残っていたら止めてから開く（同じ端末でカメラを二重に取らない）
+    try {
+      _arStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: _arFacing }, audio: false });
+    } catch (e1) {
+      // 外側カメラの指定で失敗したときだけ、指定なしでもう一度（許可の問題なら同じ理由で失敗するので下で知らせる）
+      if (e1 && (e1.name === 'OverconstrainedError' || e1.name === 'NotFoundError')) {
+        _arStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      } else throw e1;
+    }
     const v = document.getElementById('arVideo'); v.srcObject = _arStream; await v.play().catch(function () {});
     // 映像の大きさが分かったら、看板の入れ物を映像の枠に合わせる（画面の回転・リサイズでも合わせ直す）
     if (!v._arFitBound) { v.addEventListener('loadedmetadata', arOverlayFit); v.addEventListener('resize', arOverlayFit); window.addEventListener('resize', arOverlayFit); v._arFitBound = true; }
     arOverlayFit();
   } catch (e) {
-    arMsg('カメラを開けませんでした（カメラの許可が必要です。HTTPSでのみ動作）');
+    arMsg(arCamErrorText(e), true);
   }
 }
 function arStopStream() { if (_arStream) { _arStream.getTracks().forEach(function (t) { t.stop(); }); _arStream = null; } }
