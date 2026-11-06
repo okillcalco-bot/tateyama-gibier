@@ -4230,6 +4230,11 @@ function invPullAuto(id){
   invPullFor=id; clearTimeout(invPullTimer);
   invPullTimer=setTimeout(()=>invPullSearch(),300);
 }
+/* その場で現金で受け取った注文（備考に【現金受領済】）は請求書に載せない（2026-11-05）。
+   平和工業 10/28 は「代金は受領済」と備考にあったのに月まとめで請求書が出ていた（INV-202611-035・取消済み）。
+   BASE（ネットショップ）と同じく、請求の対象から外す。 */
+const CASH_PAID_MARK='【現金受領済】';
+function orderCashPaid(o){ return String((o&&o.notes)||'').includes(CASH_PAID_MARK)||String((o&&o.memo)||'').includes(CASH_PAID_MARK); }
 async function invPullSearch(){
   const res=document.getElementById('invPullResult');
   const list=document.getElementById('invPullList');
@@ -4247,7 +4252,7 @@ async function invPullSearch(){
     let q=`?${billToOrderQuery(custId)}&status=in.(${INV_BILLABLE.join(',')})&select=*,order_items(*),shipments(freight,size_code,is_cool,package_count,notes)&order=delivery_date.asc,order_date.asc`;
     const r=invPullRange();
     if(r) q+=`&order_date=gte.${r.from}&order_date=lte.${r.to}`;
-    const orders=(await sb('GET','orders','',q)).filter(o=>orderIsBilledTo(o,custId));
+    const orders=(await sb('GET','orders','',q)).filter(o=>orderIsBilledTo(o,custId)&&!orderCashPaid(o));   // 現金受領済は出さない
     if(seq!==invPullSeq) return;
     // 取消されていない請求書に紐付いている注文＝請求済み（取消された請求書の分は再請求できる）
     let billed=new Set(); const billedDoc=new Map();
@@ -4545,7 +4550,8 @@ async function invBatchSearch(){
     }
     // BASE（ネットショップ）の注文はその場で支払い済みのため請求書の対象外
     const baseCount=orders.filter(o=>/^BASE/.test(o.channel||'')).length;
-    const unbilled=orders.filter(o=>!billed.has(o.id)&&!/^BASE/.test(o.channel||''));
+    const cashCount=orders.filter(o=>!/^BASE/.test(o.channel||'')&&orderCashPaid(o)).length;
+    const unbilled=orders.filter(o=>!billed.has(o.id)&&!/^BASE/.test(o.channel||'')&&!orderCashPaid(o));
     const invIds=[...new Set(unbilled.flatMap(o=>(o.order_items||[]).map(it=>it.inventory_id).filter(Boolean)))];
     const gradeMap={};
     if(invIds.length) (await invChunkedGet('inventory','id',invIds,'id,grade')).forEach(x=>{gradeMap[x.id]=x.grade;});
@@ -4572,6 +4578,7 @@ async function invBatchSearch(){
     res.innerHTML=`${r.label}：未請求 <strong>${unbilled.length}件</strong> → 請求先 <strong>${invBatchGroups.length}件</strong>（合計 &yen;${sum.toLocaleString()} 税込）`+
       (billed.size?` ／ 請求済み ${billed.size}件は除外`:'')+
       (baseCount?` ／ BASEの注文 ${baseCount}件は対象外（支払い済み）`:'')+
+      (cashCount?` ／ 現金受領済 ${cashCount}件は対象外`:'')+
       (noCust.length?`<div style="color:var(--red);margin-top:4px">⚠ 顧客につながっていない注文が ${noCust.length}件あり、集計に入っていません（押すと顧客を選べます）: ${noCust.map((o,k)=>`<button type="button" class="inv-fix-btn" onclick="invFixCustomer(${k})">${esc(o.order_code)}（${esc(o.customer_name||'名前なし')}）</button>`).join(' ')}</div>`:'');
     invBatchRender();
     invBatchIssuedSet(issuedDocs);
