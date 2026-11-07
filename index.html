@@ -4261,6 +4261,20 @@ async function loadSyncStatus() {
       '<div class="sync-node s-proc"><div class="sync-num">'+total3+'</div><div class="sync-lbl">三次<br>加工品</div></div>';
   } catch(e) { console.error('sync',e); }
 }
+// 加工記録の子（パック番号）のうち、在庫が取り消されたもの（消えた印の行だけ）を返す: Map(番号 → 取消日時)。
+// 2026-11-06 から取消しても加工記録を消さないので、記録を一覧にする所はこれで「取消」と分けて見せる。
+async function plCancelledCodes(codes) {
+  const out = new Map();
+  const list = [...new Set((codes || []).filter(Boolean))];
+  for (let i = 0; i < list.length; i += 80) {
+    const chunk = list.slice(i, i + 80).map(c => '"' + encodeURIComponent(c) + '"').join(',');
+    const rows = await sb('GET', 'inventory', null, `?ident_code=in.(${chunk})&select=ident_code,deleted_at`) || [];
+    const live = new Set(rows.filter(r => !r.deleted_at).map(r => r.ident_code));
+    rows.forEach(r => { if (r.deleted_at && !live.has(r.ident_code)) out.set(r.ident_code, r.deleted_at); });
+  }
+  return out;
+}
+
 async function loadDashboard() {
   loadSyncStatus();
   try {
@@ -4324,7 +4338,9 @@ async function loadDashboard() {
 
     // Recent processing
     const procBody = document.getElementById('dash-proc');
-    procBody.innerHTML = procLogs.length ? procLogs.map(p => `<tr><td>${fmtDt(p.created_at)}</td><td style="color:var(--text2)">${p.parent_ident_code||'-'}</td><td style="color:var(--gold)">${p.child_ident_code||'-'}</td><td>${p.weight!=null?evNum(p.weight).toFixed(2):'-'} kg</td><td>${p.operator||'-'}</td></tr>`).join('') : '<tr><td colspan="5" class="empty-state">データなし</td></tr>';
+    let procCancelled = new Map();
+    try { procCancelled = await plCancelledCodes(procLogs.map(p => p.child_ident_code)); } catch (e) {}
+    procBody.innerHTML = procLogs.length ? procLogs.map(p => `<tr><td>${fmtDt(p.created_at)}</td><td style="color:var(--text2)">${p.parent_ident_code||'-'}</td><td style="color:var(--gold)">${p.child_ident_code||'-'}${procCancelled.has(p.child_ident_code) ? ' <span style="color:var(--red);font-size:11px;">（取消）</span>' : ''}</td><td>${p.weight!=null?evNum(p.weight).toFixed(2):'-'} kg</td><td>${p.operator||'-'}</td></tr>`).join('') : '<tr><td colspan="5" class="empty-state">データなし</td></tr>';
 
     // Recent shipments
     const shipBody = document.getElementById('dash-ship');
@@ -7121,6 +7137,7 @@ async function pmOnWeightReceived(weight_kg, plan) {
       weight_kg: weight_kg,
       lot_code: lotCode,
       ident_code: identCode,
+      scan_code: scanCode || null,   // 取消のときに「捨てるラベル」の8桁と照合する
       grade: pmGrade,
       bone_in: pmBoneIn
     });
@@ -7227,17 +7244,59 @@ function pmRenderCompleted() {
 
 // ── 登録済み部位の取消（誤登録・部位間違いの削除）──
 // 印刷キャンセルでは登録は止まらない（window.print()のキャンセルはJSで検知できない）ため、
-// 誤って登録した部位はここで取り消して在庫から削除する。
+// 誤って登録した部位はここで取り消して在庫から外す。
+// 2026-11-06 改善指示書03:
+//  ・取り消しても加工記録（個体→パックの線）は消さない。在庫の「消えた印」(deleted_at)だけで取消を表す。
+//    以前は加工記録を物理削除していたため、削除履歴から在庫を戻しても個体とつながらなかった
+//    （TGC-08-M210-KR-4：同じパックを5回登録→4件取消のとき、実物に貼ったラベルの番号を消してしまい、出荷で「記録無し」）。
+//  ・取り消す前に「捨てるラベル」の8桁を読ませ、実物に貼ったラベルの番号を取り消さないようにする。
+//  ・出荷・加工・引当で使われたパックは取り消さない（訂正は出荷・加工の側で）。状態を読めないときも取り消さない。
 async function pmDeleteCompleted(index) {
   const item = pmCompletedParts[index];
   if (!item) return;
   const label = `${item.part_name} ${(item.weight_kg || 0).toFixed(3)}kg`;
-  if (!confirm(`「${label}」の登録を取り消して在庫から削除します。\n（部位・重量の間違い、印刷キャンセル後の二重登録などの修正用）\n\nよろしいですか？`)) return;
+  let row = null;
+  if (item.ident_code) {
+    try {
+      const rows = await sb('GET', 'inventory', null, `?ident_code=eq.${encodeURIComponent(item.ident_code)}&deleted_at=is.null&select=id,ident_code,scan_code,status&limit=1`);
+      row = (rows && rows[0]) || null;
+    } catch (e) {
+      playFeedbackSound(false);
+      alert(`在庫の状態を確かめられなかったため、取り消していません。\n通信を確かめて、もう一度✕を押してください。\n（${sbSafeMsg(e)}）`);
+      return;
+    }
+    if (row && row.status && row.status !== '在庫') {
+      playFeedbackSound(false);
+      alert(`「${label}」（${item.ident_code}）はすでに「${row.status}」です。取り消せません。\n出荷や加工で使ったパックを直すときは、出荷・加工の画面で訂正してください。`);
+      return;
+    }
+  }
+  const scan = String((row && row.scan_code) || item.scan_code || (item.ident_code && pmScanCodeFor[item.ident_code]) || '');
+  if (/^\d{8}$/.test(scan)) {
+    const got = prompt(`「${label}」の登録を取り消します。\n\n取り消すパックのラベル（捨てるラベル）のバーコードを読み取ってください。\n実物に貼ったラベルは読まないでください。\n\nラベルを印刷していないときは、何も入れずにOK。`, '');
+    if (got === null) return;
+    const v = String(got).trim();
+    if (v === '') {
+      if (!confirm(`ラベルを印刷していないパックとして取り消します。\n\n番号 ${scan}（${item.ident_code}）のラベルが実物に貼られていないことを確かめましたか？\n貼られているときは「キャンセル」を押してください。`)) return;
+    } else if (v !== scan && v !== item.ident_code) {
+      const other = pmCompletedParts.find(c => c !== item && (c.scan_code === v || pmScanCodeFor[c.ident_code] === v || c.ident_code === v));
+      playFeedbackSound(false);
+      alert(`読み取ったラベル（${v}）は、取り消そうとしたパック（${scan}）のものではありません。取り消していません。`
+        + (other ? `\n\n読み取ったのは「${other.part_name} ${(other.weight_kg || 0).toFixed(3)}kg」（${other.ident_code}）のラベルです。それを取り消すなら、その行の✕を押してください。` : ''));
+      return;
+    }
+  } else if (!confirm(`「${label}」の登録を取り消して在庫から外します。\n（部位・重量の間違い、印刷キャンセル後の二重登録などの修正用）\n\nよろしいですか？`)) return;
   try {
     if (item.ident_code) {
-      await sb('PATCH', 'inventory', { deleted_at: new Date().toISOString() }, `?ident_code=eq.${encodeURIComponent(item.ident_code)}&deleted_at=is.null`);
-      try { await sb('DELETE', 'processing_log', null, `?child_ident_code=eq.${encodeURIComponent(item.ident_code)}`); }
-      catch (e) { toast('在庫からは削除しましたが、加工の記録（トレーサビリティ）を消せませんでした: ' + sbSafeMsg(e), 'error'); }
+      // 在庫に「消えた印」を付けるだけ。加工記録は残す（在庫の削除履歴から戻せば線もそのまま戻る）。
+      // 確かめた後に出荷・加工へ回っていたら外さない（status=在庫 のときだけ）。
+      const guard = row && row.status === '在庫' ? '&status=eq.在庫' : '';
+      const done = await sb('PATCH', 'inventory', { deleted_at: new Date().toISOString() }, `?ident_code=eq.${encodeURIComponent(item.ident_code)}&deleted_at=is.null${guard}`);
+      if (row && Array.isArray(done) && !done.length) {
+        playFeedbackSound(false);
+        alert(`「${label}」は確かめている間に出荷・加工などへ回ったため、取り消していません。在庫の画面で状態を確かめてください。`);
+        return;
+      }
     }
     pmCompletedParts.splice(index, 1);
     // 直前登録カードが削除対象なら隠す
@@ -11025,7 +11084,7 @@ async function invShowTrash() {
     const data = await sb('GET', 'inventory', null, '?deleted_at=not.is.null&order=deleted_at.desc&limit=200');
     if (!data.length) { body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text3);">削除履歴なし</td></tr>'; return; }
     body.innerHTML = data.map(i => `<tr>
-      <td style="font-size:12px;font-family:monospace;">${i.ident_code || '-'}</td>
+      <td style="font-size:12px;font-family:monospace;">${i.ident_code || '-'}${i.scan_code ? `<br><span style="color:var(--text3);">ラベル ${i.scan_code}</span>` : ''}</td>
       <td>${i.individual_id || '-'}</td>
       <td>${i.part_name || '-'}</td>
       <td>${i.weight != null ? i.weight + ' kg' : '-'}</td>
@@ -11040,11 +11099,33 @@ function invHideTrash() {
   document.getElementById('inv-trash-section').style.display = 'none';
 }
 
+// 復元は「個体とのつながり（加工記録）」も一緒に戻す（改善指示書03）。
+// 2026-11-06 より前の取消は加工記録を物理削除していたため、在庫だけ戻すと個体からたどれないパックになる。
+// 個体から切り出したパック（識別コードが「個体番号-」で始まる）で加工記録が無いときだけ、元の登録時刻で書き足す。
 async function invRestore(id) {
   if (!requireAdmin('削除済み在庫の復元')) return;
   try {
+    let inv = null;
+    try { inv = ((await sb('GET', 'inventory', null, `?id=eq.${id}&select=id,ident_code,individual_id,weight,weight_kg,operator,processed_by,processed_at,created_at`)) || [])[0] || null; } catch (e) {}
     await sb('PATCH', 'inventory', { deleted_at: null }, '?id=eq.' + id);
-    toast('復元しました');
+    let note = '';
+    const ind = inv && inv.individual_id;
+    if (inv && inv.ident_code && /^TGC-/.test(ind || '') && inv.ident_code.startsWith(ind + '-')) {
+      try {
+        const logs = await sb('GET', 'processing_log', null, `?child_ident_code=eq.${encodeURIComponent(inv.ident_code)}&select=id&limit=1`);
+        if (!logs || !logs.length) {
+          const w = inv.weight_kg != null ? inv.weight_kg : inv.weight;
+          const rec = { parent_ident_code: ind, individual_id: ind, child_ident_code: inv.ident_code,
+            weight: w != null ? Number(w) : null, operator: inv.processed_by || inv.operator || null };
+          const t = inv.processed_at || inv.created_at; if (t) rec.created_at = t;
+          await sb('POST', 'processing_log', rec);
+          note = '（個体とのつながりも戻しました）';
+        }
+      } catch (e) {
+        alert(`在庫は戻しましたが、個体とのつながり（加工記録）を戻せませんでした。\n${inv.ident_code}\n（${sbSafeMsg(e)}）\nこの画面のまま管理者に見せてください。`);
+      }
+    }
+    toast('復元しました' + note);
     invShowTrash();
   } catch(e) { toast('復元エラー: ' + e.message, 'error'); }
 }
@@ -13719,9 +13800,11 @@ const DOC_DEFS = [
       const [d1, d2] = docMonthRange(m);
       const logs = await sb('GET', 'processing_log', null, `?created_at=gte.${d1}T00:00:00&created_at=lte.${d2}T23:59:59&select=*&order=created_at.asc&limit=1000`);
       const moves = await sb('GET', 'product_movements', null, `?movement_type=eq.完成&created_at=gte.${d1}T00:00:00&created_at=lte.${d2}T23:59:59&select=*&order=created_at.asc&limit=500`);
+      // 取り消したパックの記録も残る（2026-11-06〜）。公式の記録なので消さずに「取消」と書き分ける。読めなければ作らない。
+      const cancelled = await plCancelledCodes(logs.map(l => l.child_ident_code));
       return { columns: ['日時', '工程', '対象', '数量/重量', '担当'],
         rows: [
-          ...logs.map(l => [fmtDt(l.created_at), '精肉（分割）', `${l.parent_ident_code || ''} → ${l.child_ident_code || ''}`, (l.weight != null ? evNum(l.weight).toFixed(2) : '') + 'kg', l.operator || '']),
+          ...logs.map(l => [fmtDt(l.created_at), cancelled.has(l.child_ident_code) ? `精肉（分割）※${fmtDt(cancelled.get(l.child_ident_code))} 取消` : '精肉（分割）', `${l.parent_ident_code || ''} → ${l.child_ident_code || ''}`, (l.weight != null ? evNum(l.weight).toFixed(2) : '') + 'kg', l.operator || '']),
           ...moves.map(v => [fmtDt(v.created_at), '二次加工（完成）', `${v.source_ident_code ? v.source_ident_code + ' → ' : ''}${v.product_name}`, v.qty + '個', v.staff_name || '']),
         ], note: '精肉登録と加工処理の完成記録から自動転記。' };
     } },

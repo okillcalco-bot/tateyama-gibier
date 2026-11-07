@@ -44,7 +44,8 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
   await p.waitForTimeout(150);
   const delPatch = rest.patches.find(x => x.url.includes('/inventory') && x.body && x.body.deleted_at);
   ck('✕削除 → inventoryをdeleted_atでソフト削除', !!delPatch && delPatch.url.includes('ident_code=eq.TGC-08-T100-01'), delPatch ? delPatch.url : 'なし');
-  ck('✕削除 → processing_logもDELETE', rest.deletes.some(u => u.includes('child_ident_code=eq.TGC-08-T100-01')));
+  // 2026-11-06 改善指示書03: 取消しても加工記録（個体→パックの線）は消さない（在庫の削除履歴から戻せば線も戻る）
+  ck('✕削除 → processing_logはDELETEしない（線を残す）', rest.deletes.length === 0, rest.deletes.join(' | '));
   ck('✕削除 → 一覧から除去（0件）', (await p.evaluate(() => pmCompletedParts.length)) === 0);
 
   // 2) 同一重量 → ⚠同重量 表示

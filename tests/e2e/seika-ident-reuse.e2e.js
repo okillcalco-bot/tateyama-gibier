@@ -93,7 +93,8 @@ async function boot() {
   asked.length = 0;
   await page.evaluate(async () => { await pmDeleteCompleted(0); });
   await page.waitForTimeout(500);
-  T('削除の確認が出る', asked.some(a => /登録を取り消して在庫から削除/.test(a)), asked.join(' / ').slice(0, 50));
+  // 2026-11-06: 取消しても加工記録は残すので、文言は「在庫から外します」（ラベルの8桁が分かるときはラベル照合が先に出る）
+  T('削除の確認が出る', asked.some(a => /登録を取り消して在庫から(削除|外)/.test(a) || /捨てるラベル/.test(a)), asked.join(' / ').slice(0, 50));
   T('DBでは削除済みになる（行は残る）',
     db.rows.length === 1 && !!db.rows[0].deleted_at, JSON.stringify(db.rows.map(r => [r.ident_code, !!r.deleted_at])));
   T('登録済み一覧からは消える',
