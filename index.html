@@ -2659,7 +2659,18 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="section" id="ship-base">
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
         <span>🛒 BASEネットショップの注文</span>
-        <button class="btn btn-sm" onclick="loadBaseOrders()">🔄 更新</button>
+        <span style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-sm" onclick="baseBacklogSummary()">📋 未発送を集計（スタッフに共有）</button>
+          <button class="btn btn-sm" onclick="loadBaseOrders()">🔄 更新</button>
+        </span>
+      </div>
+      <div id="base-summary" style="display:none;margin-bottom:12px;">
+        <div style="font-size:12.5px;color:var(--text2);margin-bottom:6px;">このままLINEなどに貼り付けて共有できます（住所・電話は入れていません）</div>
+        <textarea id="base-summary-text" class="input" readonly rows="14" style="width:100%;box-sizing:border-box;font-size:14px;line-height:1.6;font-family:inherit;"></textarea>
+        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" onclick="baseSummaryCopy()">📋 コピー</button>
+          <button class="btn btn-sm" onclick="document.getElementById('base-summary').style.display='none'">閉じる</button>
+        </div>
       </div>
       <div id="base-orders"><div class="empty-state" style="font-size:13px;">読み込み中...</div></div>
     </div>
@@ -3317,6 +3328,23 @@ document.getElementById('ship-scan-code').addEventListener('keydown', (e) => {
 
 /* ── BASEネットショップの注文（表示と発送処理） ── */
 let baseOrderCache = {}; // unique_key → detail
+const BASE_FETCH_LIMIT = 50;   // BASEの注文一覧を新しい順に何件見るか（BASE側の上限も50件）
+
+// BASE側「未対応」(dispatch_status=ordered) かつ アプリ未処理（orders.order_code = BASE-キー が無い）の注文を、古い順に返す。
+// 2026-11-08: 以前は新しい20件だけを見て、さらに15件・表示8件で黙って切っていた。溜まると古い注文が見えなくなるため上限を外した。
+async function baseBacklogFetch() {
+  const r = await sb('POST', 'rpc/base_orders', { p_limit: BASE_FETCH_LIMIT });
+  if (r && r.error === 'not_connected') return { notConnected: true, list: [], candidates: [] };
+  const list = (r && r.orders) ? r.orders : [];
+  if (!list.length) return { notConnected: false, list, candidates: [] };
+  const keys = list.map(o => 'BASE-' + o.unique_key);
+  const done = await sb('GET', 'orders', null, `?order_code=in.(${keys.map(k => '"' + k + '"').join(',')})&select=order_code`);
+  const doneSet = new Set(done.map(d => d.order_code));
+  const candidates = list.filter(o => o.dispatch_status === 'ordered' && !doneSet.has('BASE-' + o.unique_key))
+    .sort((a, b) => (a.ordered || 0) - (b.ordered || 0));
+  return { notConnected: false, list, candidates };
+}
+const baseIsLeather = t => /革|レザー/.test(String(t || ''));
 
 async function loadBaseOrders() {
   // スタッフキーは求めない（キーが要るのは顧客マスタの操作だけ。2026-08-12）
@@ -3324,26 +3352,18 @@ async function loadBaseOrders() {
   if (!box) return;
   box.innerHTML = '<div class="loading"><span class="spin"></span>BASEに問い合わせ中...</div>';
   try {
-    const r = await sb('POST', 'rpc/base_orders', { p_limit: 20 });
-    if (r && r.error === 'not_connected') {
+    const { notConnected, list, candidates } = await baseBacklogFetch();
+    if (notConnected) {
       box.innerHTML = '<div class="empty-state" style="font-size:13px;">BASE未接続です。加工調理タブの「⚙ BASE連携」から接続してください。</div>';
       return;
     }
-    const list = (r && r.orders) ? r.orders : [];
     if (!list.length) { box.innerHTML = '<div class="empty-state">注文はありません</div>'; return; }
-    // ローカル処理済み（orders.order_code = BASE-キー）を除外
-    const keys = list.map(o => 'BASE-' + o.unique_key);
-    const done = await sb('GET', 'orders', null, `?order_code=in.(${keys.map(k => '"' + k + '"').join(',')})&select=order_code`);
-    const doneSet = new Set(done.map(d => d.order_code));
-    // BASE側の「未対応」(dispatch_status=ordered) かつ アプリ未処理のものだけ表示
-    const candidates = list.filter(o => o.dispatch_status === 'ordered' && !doneSet.has('BASE-' + o.unique_key)).slice(0, 15);
     if (!candidates.length) { box.innerHTML = '<div class="empty-state">未発送のBASE注文はありません 🎉</div>'; return; }
     // 革製品はジビエセンターの管轄外なので、革製品だけの注文は表示しない
-    const isLeather = t => /革|レザー/.test(String(t || ''));
+    const isLeather = baseIsLeather;
     let html = '';
     let shown = 0;
     for (const o of candidates) {
-      if (shown >= 8) break;
       let d = null;
       try { d = await sb('POST', 'rpc/base_order_detail', { p_key: o.unique_key }); } catch (e) {}
       const od = d && d.order ? d.order : null;
@@ -3376,6 +3396,74 @@ async function loadBaseOrders() {
   } catch (e) {
     box.innerHTML = `<div class="empty-state" style="font-size:13px;">BASE注文の取得に失敗しました。BASEアプリの権限に「注文情報を見る」が入っているか確認してください（${esc2(String(e.message).slice(0, 120))}）</div>`;
   }
+}
+
+/* ── BASEの未発送注文の集計（スタッフ共有用・2026-11-08 沖「溜まってる注文を集計、そのままスタッフへ共有」）──
+   BASE側「未対応」かつアプリ未処理の注文をすべて集め、①用意するものの合計（商品ごとの個数・重さ）と
+   ②注文ごとの一覧（古い順）を文字にする。LINEなどへ貼るため、住所・電話・メールは入れない（都道府県と姓だけ）。
+   明細を取れなかった注文は黙って落とさず「明細を取得できず」と書く。革製品は管轄外なので合計から外し、件数だけ書く。 */
+function baseSummaryShort(title) { return String(title || '').replace(/^イノシシ肉\s*/, ''); }
+function baseSummaryGrams(title) { const m = String(title || '').match(/([\d.]+)\s*(kg|g)\b/i); if (!m) return null; return m[2].toLowerCase() === 'kg' ? parseFloat(m[1]) * 1000 : parseFloat(m[1]); }
+function baseSummaryText(entries, now) {
+  const fmtWhen = sec => { const d = new Date((sec || 0) * 1000); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+  const totals = new Map(); let leather = 0; const failed = [];
+  entries.forEach(e => {
+    if (!e.od) { failed.push(e); return; }
+    (e.items || []).forEach(i => {
+      if (baseIsLeather(i.title)) { leather += Number(i.amount) || 0; return; }
+      const t = totals.get(i.title) || { qty: 0, grams: baseSummaryGrams(i.title) };
+      t.qty += Number(i.amount) || 0; totals.set(i.title, t);
+    });
+  });
+  const n = entries.length;
+  const head = `【BASE 未発送 ${n}件】${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} 時点`;
+  if (!n) return head + '\n未発送の注文はありません';
+  const lines = [head, '', '■ 用意するもの（合計）'];
+  [...totals.entries()].sort((a, b) => b[1].qty - a[1].qty).forEach(([title, t]) => {
+    const kg = t.grams ? `（計${Number((t.grams * t.qty / 1000).toFixed(2))}kg）` : '';
+    lines.push(`・${title} × ${t.qty}${kg}`);
+  });
+  if (!totals.size) lines.push('・（集計できる明細がありません）');
+  if (leather) lines.push(`※革製品 ${leather}点は管轄外のため合計に入れていません`);
+  if (failed.length) lines.push(`⚠ ${failed.length}件は明細を取得できませんでした（BASEの管理画面で確認してください）`);
+  lines.push('', '■ 注文ごと（古い順）');
+  entries.forEach((e, idx) => {
+    const od = e.od;
+    const who = od ? `${od.prefecture || ''} ${(od.last_name || '').trim()}様`.trim() : '（明細を取得できず）';
+    const items = od ? (e.items || []).map(i => `${baseSummaryShort(i.title)}×${i.amount}`).join('、') : `BASEで確認（${e.key}）`;
+    const wish = od && (od.delivery_date || od.delivery_time_zone) ? `　希望: ${[od.delivery_date, od.delivery_time_zone].filter(Boolean).join(' ')}` : '';
+    const memo = od && od.remark ? `　備考: ${String(od.remark).replace(/\s+/g, ' ').slice(0, 80)}` : '';
+    lines.push(`${idx + 1}. ${fmtWhen(e.ordered)} ${who}：${items}${wish}${memo}（…${String(e.key).slice(-4)}）`);
+  });
+  return lines.join('\n');
+}
+async function baseBacklogSummary() {
+  const wrap = document.getElementById('base-summary');
+  const ta = document.getElementById('base-summary-text');
+  wrap.style.display = 'block';
+  ta.value = 'BASEに問い合わせ中...';
+  try {
+    const { notConnected, candidates } = await baseBacklogFetch();
+    if (notConnected) { ta.value = 'BASE未接続です。加工調理タブの「⚙ BASE連携」から接続してください。'; return; }
+    const entries = [];
+    for (const o of candidates) {
+      let od = null;
+      try { const d = await sb('POST', 'rpc/base_order_detail', { p_key: o.unique_key }); od = d && d.order ? d.order : null; } catch (e) {}
+      if (od) baseOrderCache[o.unique_key] = od;
+      const items = od && od.order_items ? od.order_items.filter(i => i.status !== 'cancelled') : [];
+      if (od && items.length && items.every(i => baseIsLeather(i.title))) continue;   // 革製品だけの注文は管轄外
+      entries.push({ key: o.unique_key, ordered: o.ordered, od, items });
+    }
+    ta.value = baseSummaryText(entries, new Date());
+  } catch (e) {
+    ta.value = 'BASE注文の取得に失敗しました: ' + String(e.message || e).slice(0, 160);
+    toast('BASE注文の集計に失敗しました', 'error');
+  }
+}
+async function baseSummaryCopy() {
+  const ta = document.getElementById('base-summary-text');
+  try { await navigator.clipboard.writeText(ta.value); toast('コピーしました（LINEなどに貼り付けできます）'); }
+  catch (e) { ta.removeAttribute('readonly'); ta.select(); const ok = document.execCommand && document.execCommand('copy'); ta.setAttribute('readonly', ''); toast(ok ? 'コピーしました' : 'コピーできませんでした。文字を長押しして選んでください', ok ? 'success' : 'error'); }
 }
 
 async function baseOrderShip(key) {
@@ -16150,14 +16238,9 @@ async function loadTodayTodos() {
     add(o.filter(x => x.status === '確認済').length, '出荷待ちの注文', 'shipping', false);
   } catch (e) {}
   try {
-    const r = await sb('POST', 'rpc/base_orders', { p_limit: 20 });
-    const list = (r && r.orders) ? r.orders : [];
-    if (list.length) {
-      const keys = list.map(o => 'BASE-' + o.unique_key);
-      const done = await sb('GET', 'orders', null, `?order_code=in.(${keys.map(k => '"' + k + '"').join(',')})&select=order_code`);
-      const doneSet = new Set(done.map(d => d.order_code));
-      add(list.filter(o => o.dispatch_status === 'ordered' && !doneSet.has('BASE-' + o.unique_key)).length, '🛒 BASEの注文（発送処理へ）', 'shipping', true);
-    }
+    // 出荷タブの一覧と同じ数え方（新しい50件まで・未対応かつアプリ未処理）
+    const { list, candidates } = await baseBacklogFetch();
+    if (list.length) add(candidates.length, '🛒 BASEの注文（発送処理へ）', 'shipping', true);
   } catch (e) {}
   try {
     const today = ymdLocal(new Date());
