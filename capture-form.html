@@ -1127,15 +1127,19 @@ textarea { min-height: 80px; resize: vertical; }
 const SB_URL = 'https://clpdyrehdgzgiidbfucj.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscGR5cmVoZGd6Z2lpZGJmdWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODEzNDksImV4cCI6MjA4ODg1NzM0OX0.cKxpyw0gyZj0Flsd8wzojiNFqyCEcrAF8tFpXXUmZck';
 
+// スタッフキー（業務アプリで端末に1回入れたもの。同じサイトなので共有される）。捕獲者の電話番号を読むときだけ使う
+function staffKeyGet() { try { return localStorage.getItem('tg_staff_key') || sessionStorage.getItem('tg_staff_key') || ''; } catch (e) { return ''; } }
 async function sb(method, table, body, query = '') {
+  const headers = {
+    'apikey': SB_KEY,
+    'Authorization': `Bearer ${SB_KEY}`,
+    'Content-Type': 'application/json',
+    'Prefer': method === 'POST' ? 'return=representation' : (method === 'PATCH' ? 'return=representation' : '')
+  };
+  const sk = staffKeyGet(); if (sk) headers['x-staff-key'] = sk;
   const res = await fetch(`${SB_URL}/rest/v1/${table}${query}`, {
     method,
-    headers: {
-      'apikey': SB_KEY,
-      'Authorization': `Bearer ${SB_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': method === 'POST' ? 'return=representation' : (method === 'PATCH' ? 'return=representation' : '')
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined
   });
   if (!res.ok) throw new Error(await res.text());
@@ -1687,7 +1691,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadTodayCount();
   syncPending();
   // 捕獲者の電話番号（調査票で使う）を控えておく
-  try { window._huntersCache = await sb('GET', 'hunters', null, '?select=name,phone,name_public&deleted_at=is.null&limit=500'); } catch (e) { window._huntersCache = []; }
+  // 電話番号は個人情報のため、表からは読まない。スタッフキーの端末だけ staff_hunters_private で足す（2026-11-08）
+  try { window._huntersCache = await sb('GET', 'hunters', null, '?select=id,name,name_public&deleted_at=is.null&limit=500'); } catch (e) { window._huntersCache = []; }
+  try {
+    if (staffKeyGet() && window._huntersCache.length) {
+      const priv = await sb('POST', 'rpc/staff_hunters_private', { p_ids: null });
+      const m = new Map((priv || []).map(p => [String(p.id), p.phone || '']));
+      window._huntersCache.forEach(h => { h.phone = m.get(String(h.id)) || ''; });
+    }
+  } catch (e) { /* 読めなければ電話は空欄（調査票は手入力できる） */ }
   // 提出から一定期間たった写真を自動削除（保存容量を増やさないため）
   svCleanupOldPhotos();
   // 未入力チェックを常時表示（入力・選択のたびに更新）
@@ -2035,7 +2047,7 @@ async function checkHunterNameWarning(inputId, warnId) {
     return;
   }
   try {
-    await sb('POST', 'hunters', { name: v, memo: '仮登録' });
+    await sb('POST', 'hunters', { name: v, memo: '仮登録' }, '?select=id,name');
     // キャッシュ・予測変換リストへ追加して以降は警告を出さない
     window._hunterNames = [...new Set([...(window._hunterNames || []), v])];
     try { window._huntersCache = [...(window._huntersCache || []), { name: v, phone: '' }]; } catch (e) {}
@@ -3397,7 +3409,7 @@ async function handleSubmit() {
     try {
       const _hn = (record.hunter_name || '').trim();
       if (_hn && typeof record.hunter_name_public === 'boolean') {
-        sb('PATCH', 'hunters', { name_public: record.hunter_name_public }, `?name=eq.${encodeURIComponent(_hn)}&deleted_at=is.null`).catch(() => {});
+        sb('PATCH', 'hunters', { name_public: record.hunter_name_public }, `?name=eq.${encodeURIComponent(_hn)}&deleted_at=is.null&select=id`).catch(() => {});
         (window._huntersCache || []).forEach(h => { if (h && h.name === _hn) h.name_public = record.hunter_name_public; });
       }
     } catch (e) {}
@@ -4852,8 +4864,11 @@ function cityFormClose(){
 async function cityFormPrint(rec){
   let phone = '';
   try {
-    const h = await sb('GET','hunters',null,'?name=eq.' + encodeURIComponent(rec.hunter_name || '') + '&select=phone&limit=1');
-    if (h.length) phone = h[0].phone || '';
+    // 電話はスタッフキーの端末だけ（staff_hunters_private）。読めなければ空欄で印刷し、手書きで補う
+    if (staffKeyGet()) {
+      const h = await sb('GET','hunters',null,'?name=eq.' + encodeURIComponent(rec.hunter_name || '') + '&deleted_at=is.null&select=id&limit=1');
+      if (h.length) { const p = await sb('POST', 'rpc/staff_hunters_private', { p_ids: [h[0].id] }); if (p && p.length) phone = p[0].phone || ''; }
+    }
   } catch(e){}
   const era = function(d){ if(!d) return ['　','　','　']; const p = String(d).split('-'); return [parseInt(p[0]) - 2018, parseInt(p[1]), parseInt(p[2])]; };
   const cd = era(rec.capture_date), td = era(rec.trap_set_date);

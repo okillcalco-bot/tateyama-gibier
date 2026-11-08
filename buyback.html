@@ -328,9 +328,17 @@ async function init(){
   try {
     const [rules, hs] = await Promise.all([
       sb('app_settings','?key=eq.buyback_rules&select=value'),
-      sb('hunters','?select=id,name,furigana,bank_name,bank_branch,account_type,account_number,account_holder,account_furigana,payee_no,city,address,postal_code&deleted_at=is.null&limit=1000'),
+      sb('hunters','?select=id,name,furigana,city&deleted_at=is.null&limit=1000'),
     ]);
     if (rules[0] && rules[0].value && rules[0].value.boar) { RULES = rules[0].value; rulesFromDb = true; }
+    // 口座・住所は個人情報のため表からは読まず、スタッフキーの端末だけ staff_hunters_private で足す（2026-11-08）
+    try {
+      const priv = await sb('rpc/staff_hunters_private', '', 'POST', { p_ids: null });
+      const m = new Map((priv || []).map(p => [String(p.id), p]));
+      hs.forEach(h => Object.assign(h, m.get(String(h.id)) || {}));
+    } catch (e) {
+      showStatus('error', '口座・住所を読めませんでした（スタッフキーのある端末で開いてください）: ' + (e.message || e) + '。振込先と宛名は空欄になります');
+    }
     D.hunters = {}; hs.forEach(h => { D.hunters[normName(h.name)] = h; });
   } catch(e) { showStatus('error', '設定/捕獲者台帳を読み込めませんでした: ' + (e.message||e) + '（既定のルールで計算します）'); }
   rulesRender();

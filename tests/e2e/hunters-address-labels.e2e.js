@@ -23,8 +23,10 @@ const HUNTERS = [
     if (u.startsWith('file:')) return r.continue();
     if (/fonts\./.test(u)) return r.fulfill({ status: 200, body: '' });
     const J = x => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(x) });
+    // 2026-11-08: 郵便番号・住所は表から読まず、スタッフキーの端末だけ staff_hunters_private で読む
+    if (/rpc\/staff_hunters_private/.test(u)) return J(HUNTERS.map(h => ({ id: h.id, postal_code: h.postal_code, address: h.address })));
     if (m !== 'GET') { let b = null; try { b = JSON.parse(r.request().postData() || 'null'); } catch (e) {} calls.push({ m, u, b }); return J(Array.isArray(b) ? b : [b]); }
-    if (/\/hunters/.test(u)) return J(HUNTERS);
+    if (/\/hunters/.test(u)) return J(HUNTERS.map(({ address, postal_code, ...pub }) => pub));
     return J([]);
   });
   await page.goto('file://' + path.resolve(__dirname, '../../index.html'));
@@ -43,8 +45,10 @@ const HUNTERS = [
   await page.fill('#hun-f-postal_code', '294-0223');
   await page.evaluate(() => hunterSave());
   await page.waitForTimeout(300);
+  // 2026-11-08: 郵便番号・住所は表へ PATCH せず、staff_hunter_private_save で保存する
   const patch = calls.find(c => c.m === 'PATCH' && /hunters/.test(c.u));
-  T('保存すると postal_code が PATCH される', patch && patch.b.postal_code === '294-0223' && patch.b.address === '館山市神余454', JSON.stringify(patch && patch.b.postal_code));
+  const psave = calls.find(c => c.m === 'POST' && /rpc\/staff_hunter_private_save/.test(c.u));
+  T('保存すると postal_code が個人情報の関数で保存される（表へのPATCHには入らない）', psave && psave.b.p_id === 'h1' && psave.b.p.postal_code === '294-0223' && psave.b.p.address === '館山市神余454' && patch && !('postal_code' in patch.b), JSON.stringify(psave && psave.b));
 
   // 宛名ラベル: prompt で「3枠」→ 3枚目から・枠線あり
   const html = await page.evaluate(() => { let out = ''; const orig = window.open; window.open = () => ({ document: { write: h => { out += h; }, close(){} } }); try { hunterPrintLabels(); } finally { window.open = orig; } return out; });
