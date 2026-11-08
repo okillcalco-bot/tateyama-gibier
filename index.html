@@ -11155,11 +11155,32 @@ function esc2(s) {
 let huntersData = [];
 let hunterEditId = null;
 
+// 捕獲者台帳の個人情報（郵便番号・住所・電話・口座・支払先番号）は、ブラウザ用の鍵では読み書きしない（2026-11-08）。
+// スタッフキーを入れた端末だけ、関数 staff_hunters_private / staff_hunter_private_save を通して読む・書く。
+// 表を直接読むときは公開してよい列だけを明示する（?select=* は使わない。列の権限を外した後に失敗するため）。
+const HUNTER_PUBLIC_COLS = 'id,name,furigana,city,trap_area,memo,registry_number,registered_on,document_type,has_gun,name_public,created_at,updated_at,deleted_at';
+const HUNTER_PRIVATE_FIELDS = ['postal_code', 'address', 'phone', 'bank_name', 'bank_branch', 'account_type', 'account_number', 'account_holder', 'account_furigana', 'payee_no'];
+let huntersPrivateOk = false;
+let huntersPrivateReason = '';
+// rows（id を含む）に個人情報を足す。読めなかったら { ok:false, reason } を返す（黙って空にしない）
+async function huntersMergePrivate(rows) {
+  if (!rows || !rows.length) return { ok: true, reason: '' };
+  if (!staffKeyGet()) return { ok: false, reason: 'この端末にはスタッフキーが入っていません' };
+  try {
+    const priv = await sb('POST', 'rpc/staff_hunters_private', { p_ids: null });
+    const m = new Map((priv || []).map(p => [String(p.id), p]));
+    rows.forEach(r => { const p = m.get(String(r.id)); if (p) HUNTER_PRIVATE_FIELDS.forEach(f => { r[f] = p[f]; }); });
+    return { ok: true, reason: '' };
+  } catch (e) { return { ok: false, reason: sbSafeMsg(e) }; }
+}
+
 async function loadHunters() {
   const body = document.getElementById('hunters-body');
   body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text3);">読み込み中...</td></tr>';
   try {
-    huntersData = await sb('GET', 'hunters', null, '?select=*&deleted_at=is.null&order=name.asc');
+    huntersData = await sb('GET', 'hunters', null, `?select=${HUNTER_PUBLIC_COLS}&deleted_at=is.null&order=name.asc`);
+    const pv = await huntersMergePrivate(huntersData);
+    huntersPrivateOk = pv.ok; huntersPrivateReason = pv.reason;
     // 捕獲実績（個体台帳の捕獲者名で集計）
     let countMap = {};
     try {
@@ -11170,15 +11191,19 @@ async function loadHunters() {
     const list = q ? huntersData.filter(h => (h.name || '').includes(q) || (h.furigana || '').includes(q) || (h.trap_area || '').includes(q) || (h.city || '').includes(q)) : huntersData;
     const tateyama = huntersData.filter(h => h.city === '館山市').length;
     const minami = huntersData.filter(h => h.city === '南房総市').length;
-    document.getElementById('hunters-stats').textContent = `登録 ${huntersData.length}名（館山市 ${tateyama} / 南房総市 ${minami} / その他 ${huntersData.length - tateyama - minami}）`;
+    const statsEl = document.getElementById('hunters-stats');
+    statsEl.textContent = `登録 ${huntersData.length}名（館山市 ${tateyama} / 南房総市 ${minami} / その他 ${huntersData.length - tateyama - minami}）`
+      + (huntersPrivateOk ? '' : `　※口座・住所・電話は表示していません（${huntersPrivateReason}）`);
+    statsEl.style.color = huntersPrivateOk ? '' : 'var(--red)';
     if (!list.length) { body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text3);">登録がありません。「＋新規登録」から捕獲者を登録してください。</td></tr>'; return; }
+    const hidden = '<span style="color:var(--text3);">（非表示）</span>';
     body.innerHTML = list.map(h => `<tr>
       <td style="font-weight:600;">${esc2(h.name)}</td>
       <td style="font-size:12px;color:${h.furigana ? 'var(--text2)' : 'var(--red)'};">${esc2(h.furigana || '未設定')}</td>
       <td>${esc2(h.city || '-')}</td>
       <td>${esc2(h.trap_area || '-')}</td>
-      <td style="white-space:nowrap;">${esc2(h.phone || '-')}</td>
-      <td style="font-size:12px;">${h.bank_name ? esc2(h.bank_name) + ' ' + esc2(h.bank_branch || '') + '<br>' + esc2(h.account_type || '') + ' ' + esc2(h.account_number || '') : '<span style="color:var(--red);">未登録</span>'}</td>
+      <td style="white-space:nowrap;">${huntersPrivateOk ? esc2(h.phone || '-') : hidden}</td>
+      <td style="font-size:12px;">${!huntersPrivateOk ? hidden : h.bank_name ? esc2(h.bank_name) + ' ' + esc2(h.bank_branch || '') + '<br>' + esc2(h.account_type || '') + ' ' + esc2(h.account_number || '') : '<span style="color:var(--red);">未登録</span>'}</td>
       <td style="text-align:center;">${countMap[h.name] || 0}頭</td>
       <td style="font-size:12px;color:var(--text2);">${esc2(h.memo || '')}</td>
       <td style="white-space:nowrap;"><button class="btn btn-sm" onclick="hunterEdit('${h.id}')">編集</button></td>
@@ -11196,7 +11221,18 @@ function hunterOpenNew() {
   document.getElementById('hunterModalTitle').textContent = '捕獲者 新規登録';
   HUNTER_FIELDS.forEach(f => document.getElementById('hun-f-' + f).value = '');
   const _np0 = document.getElementById('hun-f-name_public'); if (_np0) _np0.value = '';
+  hunterPrivInputsState();
   document.getElementById('hunterModal').style.display = 'block';
+}
+
+// 個人情報の欄は、スタッフキーで読めた端末だけ入力できる（読めない端末で空欄のまま保存して消すのを防ぐ）
+function hunterPrivInputsState() {
+  HUNTER_FIELDS.filter(f => HUNTER_PRIVATE_FIELDS.includes(f)).forEach(f => {
+    const el = document.getElementById('hun-f-' + f); if (!el) return;
+    el.disabled = !huntersPrivateOk;
+    if (!huntersPrivateOk) { el.value = ''; el.placeholder = '（スタッフキーのある端末で表示・編集）'; }
+    else if (el.placeholder === '（スタッフキーのある端末で表示・編集）') el.placeholder = '';
+  });
 }
 
 function hunterEdit(id) {
@@ -11207,6 +11243,7 @@ function hunterEdit(id) {
   document.getElementById('hunterModalTitle').textContent = '捕獲者情報編集';
   HUNTER_FIELDS.forEach(f => document.getElementById('hun-f-' + f).value = h[f] || '');
   const _np1 = document.getElementById('hun-f-name_public'); if (_np1) _np1.value = h.name_public == null ? '' : String(h.name_public);
+  hunterPrivInputsState();
   document.getElementById('hunterModal').style.display = 'block';
 }
 
@@ -11221,6 +11258,7 @@ function hunterLabelAddress(h) {
 }
 function hunterPrintLabels() {
   if (!huntersData.length) { toast('捕獲者台帳が読み込まれていません', 'error'); return; }
+  if (!huntersPrivateOk) { alert(`住所を読めないため、宛名ラベルを作れません。\nスタッフキーのある端末で開いてください（${huntersPrivateReason}）`); return; }
   const q = (document.getElementById('hunter-search').value || '').trim();
   const people = (q ? huntersData.filter(h => (h.name || '').includes(q) || (h.furigana || '').includes(q) || (h.trap_area || '').includes(q) || (h.city || '').includes(q)) : huntersData)
     .slice().sort((a, b) => (a.furigana || a.name || '').localeCompare(b.furigana || b.name || '', 'ja'));
@@ -11246,18 +11284,31 @@ function hunterPrintLabels() {
 }
 
 async function hunterSave() {
-  const payload = {};
-  HUNTER_FIELDS.forEach(f => payload[f] = document.getElementById('hun-f-' + f).value.trim() || null);
+  // 公開してよい項目は表へ、個人情報は staff_hunter_private_save へ分けて保存する（2026-11-08）
+  const payload = {}, priv = {};
+  HUNTER_FIELDS.forEach(f => { const v = document.getElementById('hun-f-' + f).value.trim() || null; (HUNTER_PRIVATE_FIELDS.includes(f) ? priv : payload)[f] = v; });
   const _np = document.getElementById('hun-f-name_public'); if (_np) payload.name_public = _np.value === '' ? null : _np.value === 'true';
   if (!payload.name) { toast('氏名は必須です', 'error'); return; }
   try {
+    let id = hunterEditId;
     if (hunterEditId) {
-      await sb('PATCH', 'hunters', payload, '?id=eq.' + hunterEditId);
-      toast(`捕獲者「${payload.name}」を更新しました`);
+      await sb('PATCH', 'hunters', payload, `?id=eq.${hunterEditId}&select=id`);
     } else {
-      await sb('POST', 'hunters', payload);
-      toast(`捕獲者「${payload.name}」を登録しました`);
+      const created = await sb('POST', 'hunters', payload, '?select=id');
+      id = created && created[0] && created[0].id;
     }
+    if (huntersPrivateOk) {
+      try {
+        if (!id) throw new Error('登録した捕獲者の番号が分かりません');
+        await sb('POST', 'rpc/staff_hunter_private_save', { p_id: id, p: priv });
+      } catch (e) {
+        alert(`「${payload.name}」の氏名などは保存しましたが、口座・住所・電話を保存できませんでした。\n（${sbSafeMsg(e)}）\nもう一度「保存」を押してください。`);
+        hunterEditId = id || hunterEditId;
+        loadHunters();
+        return;
+      }
+    }
+    toast(hunterEditId ? `捕獲者「${payload.name}」を更新しました` : `捕獲者「${payload.name}」を登録しました`);
     document.getElementById('hunterModal').style.display = 'none';
     loadHunters();
   } catch (err) { toast('保存に失敗しました: ' + sbSafeMsg(err), 'error'); }
@@ -12291,7 +12342,14 @@ function loadDataMgmt() {
 
 async function exportCSV(table, label) {
   try {
-    const rows = await sb('GET', table, null, '?select=*&limit=10000');
+    // 捕獲者台帳は公開してよい列だけを表から読み、個人情報はスタッフキーの端末でだけ足す（2026-11-08）
+    const rows = table === 'hunters'
+      ? await sb('GET', table, null, `?select=${HUNTER_PUBLIC_COLS}&limit=10000`)
+      : await sb('GET', table, null, '?select=*&limit=10000');
+    if (table === 'hunters') {
+      const pv = await huntersMergePrivate(rows);
+      if (!pv.ok && !confirm(`口座・住所・電話を読めません（${pv.reason}）。\nそれらの列を除いてCSVを出力しますか？`)) return;
+    }
     if (!rows.length) { toast(`${label}: データがありません`, 'info'); return; }
     const cols = [...new Set(rows.flatMap(r => Object.keys(r)))];
     const escCsv = v => { const s = v == null ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v)); return '"' + s.replace(/"/g, '""') + '"'; };
@@ -14012,7 +14070,10 @@ const DOC_DEFS = [
     } },
   // ── 認証・監査対応 ──
   { key: 'hunter_registry', cat: '認証・監査対応', title: '捕獲者台帳（国産ジビエ認証様式）', gen: async () => {
-      const hs = await sb('GET', 'hunters', null, '?select=*&deleted_at=is.null&order=registry_number.asc.nullslast&limit=500');
+      const hs = await sb('GET', 'hunters', null, `?select=${HUNTER_PUBLIC_COLS}&deleted_at=is.null&order=registry_number.asc.nullslast&limit=500`);
+      // 住所・連絡先が欄にある公式の様式なので、読めないときは空欄で作らない
+      const pv = await huntersMergePrivate(hs);
+      if (!pv.ok) throw new Error('住所・連絡先を読めないため作れません。スタッフキーのある端末で作成してください（' + pv.reason + '）');
       return { columns: ['番号', '登録年月日', '捕獲者氏名', '捕獲見込み場所', '住所', '連絡先', '確認書類', '銃', '備考'],
         rows: hs.map(h => [h.registry_number || '-', h.registered_on || '', h.name, h.trap_area || '', h.address || '', h.phone || '', h.document_type || '', h.has_gun ? '○' : '', h.memo || '']) };
     } },
@@ -14457,7 +14518,8 @@ async function cityCapOpen() {
   document.getElementById('cityCapModal').style.display = 'block';
   if (!cityCapHunters.length) {
     try {
-      cityCapHunters = await sb('GET', 'hunters', null, '?deleted_at=is.null&select=name,phone&order=name.asc&limit=500');
+      cityCapHunters = await sb('GET', 'hunters', null, '?deleted_at=is.null&select=id,name&order=name.asc&limit=500');
+      await huntersMergePrivate(cityCapHunters);   // 電話はスタッフキーの端末だけ（読めなければ空欄・手入力）
       document.getElementById('cc-hunters').innerHTML = cityCapHunters.map(h => `<option value="${esc2(h.name)}">`).join('');
     } catch (e) { /* 捕獲者一覧が取れなくても手入力はできる */ }
   }
