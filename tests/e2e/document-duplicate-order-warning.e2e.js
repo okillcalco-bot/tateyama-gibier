@@ -55,22 +55,26 @@ const path = require('path');
   const results = [];
   const ck = (name, cond, got) => results.push([name, cond, got]);
 
-  // ① 既に請求書が発行済みの注文を選んで「請求書」を押すと確認ダイアログが出る
+  // ① 既に請求書が発行済みの注文を選んで「請求書」を押すと止める（2026-11-08: 確認ではなく止める。
+  //    以前は「続けますか？」で押せば作れ、蔓山の注文に請求書が2枚できた）
   await page.evaluate(() => { document.querySelectorAll('#docOrderList input[type=checkbox]').forEach(cb => cb.checked = true); });
-  confirmAnswer = false; // キャンセルする
+  confirmAnswer = true; // 確認に「はい」と答える人でも作れないこと
   await page.evaluate(() => generateDoc('請求書'));
-  await page.waitForTimeout(200);
-  ck('発行済みの注文を再選択すると確認ダイアログが出る', confirms.some(m => /既に請求書が発行済み/.test(m)), JSON.stringify(confirms));
-  ck('キャンセルするとdocumentsは作られない', postedDocs.length === 0, JSON.stringify(postedDocs));
+  await page.waitForTimeout(300);
+  ck('発行済みの注文で請求書を押すと、2枚目は作れないと知らせる', confirms.some(m => /もう請求書があります/.test(m) && /DIR-X001/.test(m) && /取消/.test(m)), JSON.stringify(confirms));
+  ck('「はい」を押せる確認は出さない・documentsは作られない', postedDocs.length === 0 && !confirms.some(m => /続けますか/.test(m)), JSON.stringify(postedDocs));
 
-  // ② 確認して続行すれば発行される
-  confirms.length = 0; confirmAnswer = true;
-  const [popup] = await Promise.all([
-    page.waitForEvent('popup'),
-    page.evaluate(() => generateDoc('請求書')),
-  ]);
-  await popup.waitForLoadState(); await popup.close();
-  ck('確認して続行すればdocumentsが作られる', postedDocs.length === 1, JSON.stringify(postedDocs));
+  // ② 納品書は今までどおり確認だけ（もう一度出すのは正当な場合がある）
+  existingDocs = [{ order_id: 'ord-x', doc_type: '納品書', status: '発行済' }];
+  confirms.length = 0; postedDocs = [];
+  await page.evaluate(() => loadDocOrders());
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { document.querySelectorAll('#docOrderList input[type=checkbox]').forEach(cb => cb.checked = true); });
+  confirmAnswer = false;
+  await page.evaluate(() => generateDoc('納品書'));
+  await page.waitForTimeout(300);
+  ck('納品書は発行済みでも確認ダイアログ（止めはしない）', confirms.some(m => /既に納品書が発行済み/.test(m)) && postedDocs.length === 0, JSON.stringify(confirms));
+  confirmAnswer = true;
 
   // ③ 取消済みの書類は「発行済」扱いされず、警告が出ない
   // （同じページで2回目のwindow.open()はブラウザにポップアップとして

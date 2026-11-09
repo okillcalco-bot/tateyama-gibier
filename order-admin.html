@@ -2457,14 +2457,50 @@ function orderIsBilledTo(o,custId){
   return !!w && wholesalerTagOf(o)===w;
 }
 
+/* ── 同じ注文に2枚目の請求書を作らない（2026-11-08）──
+   きっかけ: 蔓山の10/22の注文に、請求書（INV-202611-049）があるのに、書類発行タブで同じ注文の請求書
+   （INV-202611-051）がもう1枚できた。以前は「二重請求になる可能性があります。続けますか？」の確認だけで、
+   押せば作れてしまった。請求書は「確認」ではなく止める。直すときは元の請求書を取消してから作る。
+   発行の直前にデータベースで確かめる（一覧を開いた後に別の端末で発行された分も拾う）。
+   確かめられなかったときも発行しない（黙って作らない）。納品書・見積書・領収書は今までどおり確認だけ。 */
+async function invAliveInvoiceConflicts(orderIds,exceptDocId){
+  const ids=[...new Set((orderIds||[]).filter(Boolean))];
+  if(!ids.length) return [];
+  const out=new Map();
+  const direct=await sb('GET','documents','',`?order_id=in.(${ids.join(',')})&doc_type=eq.請求書&status=neq.取消&select=id,order_id,doc_number,doc_type,status`);
+  (direct||[]).forEach(d=>{ if(!ids.includes(d.order_id)) return; if(d.id&&d.id===exceptDocId) return; if(d.doc_type&&d.doc_type!=='請求書') return; if(d.status==='取消') return; out.set(d.order_id,d.doc_number||'番号不明'); });
+  const links=await sb('GET','document_orders','',`?order_id=in.(${ids.join(',')})&select=order_id,document_id,documents(doc_type,status,doc_number)`);
+  (links||[]).forEach(l=>{ const d=l.documents; if(!ids.includes(l.order_id)) return; if(!d||d.doc_type!=='請求書'||d.status==='取消') return; if(exceptDocId&&l.document_id===exceptDocId) return; out.set(l.order_id,d.doc_number||'番号不明'); });
+  return [...out.entries()].map(([order_id,doc_number])=>({order_id,doc_number}));
+}
+function invConflictMessage(conf,codeOf){
+  return `この注文には、もう請求書があります。同じ注文に2枚目の請求書は作れません。\n\n`
+    +conf.map(c=>`・${codeOf(c.order_id)} → ${c.doc_number}`).join('\n')
+    +`\n\n金額などを直すときは、請求書一覧で元の請求書を「取消」してから作り直してください。`;
+}
+// 確かめて止める。発行してよければ true。
+async function invGuardNoDoubleInvoice(orderIds,codeOf,exceptDocId){
+  let conf;
+  try{ conf=await invAliveInvoiceConflicts(orderIds,exceptDocId); }
+  catch(e){ alert('同じ注文の請求書がもう無いかを確かめられなかったため、発行していません。\n通信を確かめて、もう一度押してください。\n\n'+String(e.message||e)); return false; }
+  if(conf.length){ alert(invConflictMessage(conf,codeOf)); return false; }
+  return true;
+}
+
 async function generateDoc(type,forcedOrders){
   const selected=forcedOrders||getSelectedDocOrders();
   if(!selected.length){alert('注文を選択してください');return}
+  // 請求書は、同じ注文に2枚目を作らせない（上の invGuardNoDoubleInvoice）
+  if(type==='請求書'){
+    const codeOf=id=>{ const o=selected.find(x=>x.id===id); return (o&&(o.order_code||o.id))||id; };
+    if(!(await invGuardNoDoubleInvoice(selected.map(o=>o.id),codeOf))) return;
+  }
   // 既にこの種類の書類が発行済みの注文が含まれていないか確認する（二重請求防止）。
   // 一覧にはバッジで表示されるだけで選択自体はブロックされないため、全選択などで
   // 気づかず発行済みの注文をもう一度発行してしまう事故があった（請求書作成タブの
   // invPullApply()には同種のチェックが元からあったが、こちらには無かった）。
-  const dupOrders=selected.filter(o=>(docDocsMap[o.id]||new Set()).has(type));
+  // 2026-11-08: 請求書は上で止めるので、ここで確認するのは納品書・見積書・領収書だけ
+  const dupOrders=type==='請求書'?[]:selected.filter(o=>(docDocsMap[o.id]||new Set()).has(type));
   if(dupOrders.length){
     const names=dupOrders.map(o=>o.order_code||o.id).join('、');
     if(!confirm(`既に${type}が発行済みの注文が${dupOrders.length}件含まれています（${names}）。\n二重発行になる可能性があります。続けますか？`)) return;
@@ -4261,8 +4297,9 @@ async function invPullSearch(){
       const links=await sb('GET','document_orders','',`?order_id=in.(${ids.join(',')})&select=order_id,document_id`);
       if(links.length){
         const docIds=[...new Set(links.map(l=>l.document_id))];
-        const docs=await sb('GET','documents','',`?id=in.(${docIds.join(',')})&select=id,status,doc_number`);
-        const alive=new Map(docs.filter(d=>d.status!=='取消').map(d=>[d.id,d.doc_number]));
+        const docs=await sb('GET','documents','',`?id=in.(${docIds.join(',')})&select=id,status,doc_number,doc_type`);
+        // 請求済み＝取消されていない「請求書」に入っている注文（納品書だけの注文は未請求。月まとめと同じ判定・2026-11-08）
+        const alive=new Map(docs.filter(d=>d.status!=='取消'&&(d.doc_type||'請求書')==='請求書').map(d=>[d.id,d.doc_number]));
         links.forEach(l=>{ if(alive.has(l.document_id)){ billed.add(l.order_id); billedDoc.set(l.order_id,alive.get(l.document_id)); } });
       }
     }
@@ -4288,7 +4325,7 @@ async function invPullSearch(){
     list.innerHTML=invPullOrders.map((o,i)=>{
       const items=(o.order_items||[]).map(t=>`${t.species||''} ${t.part_name||''}`).filter(x=>x.trim()).join('、');
       return `<label style="display:flex;gap:8px;align-items:flex-start;padding:7px 6px;border-bottom:1px solid var(--border);${o._billed?'opacity:.55':''}">
-        <input type="checkbox" class="inv-pull-cb" data-i="${i}" ${o._billed?'':'checked'} style="margin-top:3px;accent-color:var(--gold)">
+        <input type="checkbox" class="inv-pull-cb" data-i="${i}" ${o._billed?'disabled title="請求済みのため取り込めません（元の請求書を取消すと取り込めます）"':'checked'} style="margin-top:3px;accent-color:var(--gold)">
         <span style="flex:1;min-width:0">
           <strong style="font-size:.82rem">${o.delivery_date||o.order_date||''}</strong>
           <span style="color:var(--text2);font-size:.75rem"> ${esc(o.order_code||'')} ・ ${esc(o.status||'')}${o.customer_id!==custId?' ・ 届け先 '+esc(o.customer_name||''):''}</span>
@@ -4316,8 +4353,9 @@ async function invPullApply(){
   const picked=[];
   document.querySelectorAll('.inv-pull-cb:checked').forEach(cb=>{const o=invPullOrders[parseInt(cb.dataset.i,10)];if(o)picked.push(o);});
   if(!picked.length){alert('取り込む注文を選んでください');return}
+  // 2026-11-08: 請求済みは確認ではなく止める（チェック自体も押せない）。直すときは元の請求書を取消してから
   const dup=picked.filter(o=>o._billed);
-  if(dup.length && !confirm(`請求済みの注文が${dup.length}件含まれています。二重請求になる可能性があります。続けますか？`)) return;
+  if(dup.length){ alert(invConflictMessage(dup.map(o=>({order_id:o.id,doc_number:o._doc||'番号不明'})),id=>{ const o=dup.find(x=>x.id===id); return (o&&(o.order_code||o.id))||id; })); return; }
 
   // 明細の等級（肉ランク）は在庫からまとめて引く（グループ分け・自動単価に使う）
   const invIds=[...new Set(picked.flatMap(o=>(o.order_items||[]).map(it=>it.inventory_id).filter(Boolean)))];
@@ -5013,6 +5051,11 @@ async function invNextNumber(type,dateStr){
 // 1枚発行（番号確定・明細・注文の紐付け）。失敗は投げる（握り潰さない）
 async function invIssuePayloadNow(p){
   const c=invCalcLines(p.lines);
+  // 月まとめでも、集計した後に別の画面で請求書が作られていたら、その請求先は発行しない（2026-11-08）
+  if(p.type==='請求書' && p.order_ids && p.order_ids.length){
+    const conf=await invAliveInvoiceConflicts(p.order_ids);
+    if(conf.length) throw new Error(`同じ注文の請求書がもうあります（${[...new Set(conf.map(x=>x.doc_number))].join('・')}）。集計し直してください`);
+  }
   for(let attempt=0;attempt<4;attempt++){
     const number=await invNextNumber(p.type,p.date);
     const header={doc_type:p.type,doc_number:number,customer_id:p.customer_id,issue_date:p.date,due_date:p.due||null,
@@ -5240,6 +5283,10 @@ async function invIssue(){
   const p=invCollect();
   if(!p.name){alert('宛名（請求先名）を入力してください');return}
   if(!p.lines.length){alert('明細を1行以上入力してください');return}
+  // 取り込んだ注文に、もう請求書が無いかをデータベースで確かめる（編集中の請求書そのものは除く・2026-11-08）
+  if(invType==='請求書' && p.order_ids && p.order_ids.length){
+    if(!(await invGuardNoDoubleInvoice(p.order_ids,id=>id,invEditingId||null))) return;
+  }
   const c=invCalcLines(p.lines);
   // 発行前の点検（止めはしないが、確認画面の先頭に出す）
   const warns=[];
