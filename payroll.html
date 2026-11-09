@@ -203,6 +203,18 @@ async function staffKeyEnsure(){
 }
 
 let lines=[], staffList=[], attMap={}, trips=[], tripRates=[], bonuses=[], rates={};
+/* 勤怠に記録した止めさし回数（月合計・人ごと）。2026-11-09: 取込が日数・時間だけで止めさしを入れておらず、
+   10月の今泉さん（勤怠に8回）の明細が空のままだった。読めなかったときは黙らず取込の結果に出す */
+let stopMap={}, stopLoadErr=null;
+async function loadStopkill(month){
+  stopMap={}; stopLoadErr=null;
+  try{
+    const res=await fetch(`${SB_URL}/rest/v1/attendance?work_date=gte.${month}-01&work_date=lte.${month}-${new Date(month.slice(0, 4), month.slice(5, 7), 0).getDate()}&stopkill_count=gt.0&select=staff_name,stopkill_count`,
+      { headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` } });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    (await res.json()).forEach(a=>{ stopMap[a.staff_name]=(stopMap[a.staff_name]||0)+N(a.stopkill_count); });
+  }catch(e){ stopLoadErr=e.message||String(e); }
+}
 const N=v=>(v===''||v==null||isNaN(+v))?0:+v;
 const yen=v=>'¥'+Math.round(v).toLocaleString();
 const msg=(t,ok)=>{ const m=document.getElementById('msg'); m.textContent=t; m.style.color=ok?'var(--green)':'var(--red)'; if(t) setTimeout(()=>{ if(m.textContent===t) m.textContent=''; },4000); };
@@ -257,6 +269,7 @@ async function load(){
     staffList=r.staff||[];
     trips=r.trips||[]; tripRates=r.trip_rates||[]; bonuses=r.bonuses||[]; rates=r.rates||{};
     attMap={}; (r.attendance||[]).forEach(a=>attMap[a.staff_name]=a);
+    await loadStopkill(month);
     const sel=document.getElementById('addSel');
     sel.innerHTML=staffList.filter(s=>!lines.some(l=>l.staff_name===s.name))
       .map(s=>`<option value="${s.id}">${s.name}</option>`).join('')||'<option value="">（全員追加済み）</option>';
@@ -344,6 +357,8 @@ function importAtt(i){
   const att=attMap[lines[i].staff_name]; if(!att) return;
   lines[i].work_days=att.days; lines[i].work_hours=att.hours;
   lines[i].commute_count=att.days;
+  // 止めさし回数も勤怠から（勤怠に記録が無い人は、手で入れた値を消さない）
+  if(stopMap[lines[i].staff_name]) lines[i].stopkill_count=stopMap[lines[i].staff_name];
   // スタッフ台帳の往復km・単価は、明細行を作った後に台帳側だけ更新されることがある
   // （例: 台帳が未設定のまま行だけ先に作られ、後から往復kmを入力）。
   // 取込のたびに台帳の最新値へ同期し直す（台帳が空欄なら明細行の値を残す）
@@ -412,7 +427,10 @@ function importAllAttendance(){
   // 時間が決まったら保険料も計算し直す（雇用保険は総支給にかかるため）
   const errs=[]; lines.forEach((l,i)=>{ const e=applyInsurance(i); if(e) errs.push(l.staff_name+': '+e); });
   render();
-  msg((n?n+'名分を勤怠から取り込み、保険料も計算しました'+(added?`（新規追加 ${added}名を含む）`:'')+'（保存はまだ）':'この月の打刻記録がありません')+(errs.length?'／保険料を計算できない人: '+errs.join('、'):''),n>0&&!errs.length);
+  const stopNames=Object.keys(stopMap).filter(name=>lines.some(l=>l.staff_name===name&&attMap[name]));
+  const stopText=stopLoadErr?'／止めさし回数を勤怠から読めませんでした（'+stopLoadErr+'）。手で入れてください'
+    :(stopNames.length?'／止めさし: '+stopNames.map(name=>name+' '+stopMap[name]+'回').join('、'):'');
+  msg((n?n+'名分を勤怠から取り込み、保険料も計算しました'+(added?`（新規追加 ${added}名を含む）`:'')+'（保存はまだ）':'この月の打刻記録がありません')+stopText+(errs.length?'／保険料を計算できない人: '+errs.join('、'):''),n>0&&!errs.length&&!stopLoadErr);
 }
 
 // 振込作業でLINEに貼って確認しながら振り込めるよう、氏名と差引支給額をテキストでコピーする
