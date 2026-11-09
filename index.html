@@ -5890,6 +5890,11 @@ let pmCompletedParts = [];
    登録が重複エラーで落ちる。ラベルは保存より先に出るため、落ちるとラベルだけ残る。
    （2026-08-28 TGC-08-T282-BA の事故。バラで登録→骨付きに直そうと削除→入れ直しが弾かれた） */
 let pmUsedIdents = new Set();
+/* 使用済みの番号をDBから読めた個体（label_id）。読めていない個体では、ラベルを保存より先に刷らない。
+   2026-11-09 シ019: 前日の続きを再開した日に、使用済みの番号を読めないまま（失敗は黙って握り潰していた）
+   前日と同じ番号でラベルを刷り、保存では番号がずれて、10パックすべてラベルと在庫が食い違った
+   （ラベル TGC-08-SHI019-RO・10007155 ／ 在庫 TGC-08-SHI019-RO-2・10007156）。10/21 シ015 も同じ。 */
+let pmUsedIdentsFor = null;
 let pmOperatorName = '';
 let pmBoneIn = false;
 let pmGrade = '並';
@@ -5953,7 +5958,8 @@ async function pmSwitchOperator(op) {
     pmIndividual = sess.individual;
     pmCompletedParts = [...sess.completedParts];
     // 使った番号はDBが正。別の端末や別セッションで登録／削除された分も拾う
-    try { await pmLoadUsedIdents(pmIndividual.label_id); } catch (e) {}
+    pmEnsureScanCodes(10);   // ラベル用の数字キーも先に確保（pmSelectIndividual と同じ）
+    await pmReloadUsedIdentsOrWarn(pmIndividual.label_id);
     pmSelectedPart = sess.selectedPart;
     pmBoneIn = sess.boneIn;
     pmGrade = sess.grade;
@@ -6076,7 +6082,8 @@ async function pmResumeHeld(index) {
   if (!h) return;
   pmIndividual = h.individual;
   pmCompletedParts = Array.isArray(h.completedParts) ? [...h.completedParts] : [];
-  try { await pmLoadUsedIdents(pmIndividual.label_id); } catch (e) {}
+  pmEnsureScanCodes(10);
+  await pmReloadUsedIdentsOrWarn(pmIndividual.label_id);
   pmSelectedPart = h.selectedPart || null;
   pmBoneIn = h.boneIn || false;
   pmGrade = h.grade || '並';
@@ -6115,7 +6122,8 @@ async function pmResumeSession(op) {
   const sess = pmSessions[op];
   pmIndividual = sess.individual;
   pmCompletedParts = [...sess.completedParts];
-  try { await pmLoadUsedIdents(pmIndividual.label_id); } catch (e) {}
+  pmEnsureScanCodes(10);
+  await pmReloadUsedIdentsOrWarn(pmIndividual.label_id);
   pmSelectedPart = sess.selectedPart;
   pmBoneIn = sess.boneIn;
   pmGrade = sess.grade;
@@ -6514,25 +6522,44 @@ function pmRenderIndList(inds) {
 /* 個体の在庫を読み直して「登録済み」と「使用済みの番号」を作る。
    削除済みも取る（deleted_atで絞らない）のが要点。 */
 async function pmLoadUsedIdents(labelId) {
+  pmUsedIdentsFor = null;
   const rows = await sb('GET', 'inventory', null,
-    `?individual_id=eq.${encodeURIComponent(labelId)}&select=part_name,weight,lot_code,ident_code,deleted_at`);
+    `?individual_id=eq.${encodeURIComponent(labelId)}&select=part_name,weight,lot_code,ident_code,scan_code,grade,processed_at,created_at,deleted_at`);
+  if (!Array.isArray(rows)) throw new Error('在庫を読めませんでした');
   pmUsedIdents = new Set(rows.map(r => r.ident_code).filter(Boolean));
   pmCompletedParts = rows.filter(r => !r.deleted_at).map(e => ({
     part_name: e.part_name,
     weight_kg: parseFloat(e.weight) || 0,
     lot_code: e.lot_code || '',
-    ident_code: e.ident_code || ''
+    ident_code: e.ident_code || '',
+    scan_code: e.scan_code || null,
+    grade: e.grade || undefined,
+    processed_at: e.processed_at || e.created_at || null
   }));
+  pmUsedIdentsFor = labelId;
   return rows;
 }
+/* 再開のときの読み直し。読めなかったら黙らずに知らせる（ラベルは在庫に保存できてから刷る）。 */
+async function pmReloadUsedIdentsOrWarn(labelId) {
+  try { await pmLoadUsedIdents(labelId); return true; }
+  catch (e) {
+    pmUsedIdentsFor = null;
+    toast('この個体の登録済みの番号を読めませんでした（通信）。ラベルは在庫に保存できてから刷ります', 'error');
+    return false;
+  }
+}
 
-/* 空いている識別コードを返す。一度使った番号（消した番号も）は絶対に採り直さない。 */
+/* 空いている識別コードを返す。一度使った番号（消した番号も）は絶対に採り直さない。
+   使用済み台帳に加えて、画面の登録済み一覧（再開したセッションの分も）にある番号も使用済みとして扱う。 */
+function pmIdentTaken(c) {
+  return pmUsedIdents.has(c) || pmCompletedParts.some(p => p && p.ident_code === c);
+}
 function pmNextIdent(barcodeNum) {
   const base = asciiLabel(pmIndividual.label_id) + '-' + barcodeNum;
-  if (!pmUsedIdents.has(base)) return base;
+  if (!pmIdentTaken(base)) return base;
   for (let n = 2; n <= 99; n++) {
     const c = base + '-' + n;
-    if (!pmUsedIdents.has(c)) return c;
+    if (!pmIdentTaken(c)) return c;
   }
   return base + '-' + Date.now();   // まず起きないが、番号が尽きても作業は止めない
 }
@@ -7071,7 +7098,14 @@ function pmRequestRegister(weight_kg) {
   // 番号は1回だけ決める。印刷と保存が別々に採番すると食い違う。
   const plan = pmBuildPlan(weight_kg);
   pmUsedIdents.add(plan.identCode);   // 刷った時点で使用済み（あとで消しても採り直さない）
-  pmDoPrint(plan);                    // ← window.print() はここで呼ばれる（登録操作内）
+  // 使用済みの番号をDBから読めている個体だけ先に刷る。読めていないと前に使った番号で刷ってしまい、
+  // 保存で番号がずれてラベルと在庫が食い違う（2026-11-09 シ019）。読めていないときは保存してから
+  // 確定した番号で刷る（保存後の印刷は下の pmOnWeightReceived 5.5 が必ず行う）。
+  if (pmUsedIdentsFor === pmIndividual.label_id) {
+    pmDoPrint(plan);                  // ← window.print() はここで呼ばれる（登録操作内）
+  } else {
+    pmLastLabelPrinted = false;
+  }
   pmOnWeightReceived(weight_kg, plan); // DB保存（印刷済みフラグにより二重印刷しない）
 }
 
@@ -7151,6 +7185,7 @@ async function pmOnWeightReceived(weight_kg, plan) {
     const lotCode = plan.lotCode, fullPartName = plan.fullPartName, labelWeight = plan.labelWeight;
     let scanCode = plan.scanCode;
     pmLastPrintInfo = { weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode, grade: pmGrade };
+    const printedBeforeSave = !!pmLastLabelPrinted;   // 保存より先にラベルを刷ったか（番号がずれたら刷り直す）
 
     // 3. DB保存
     const record = {
@@ -7227,7 +7262,8 @@ async function pmOnWeightReceived(weight_kg, plan) {
       ident_code: identCode,
       scan_code: scanCode || null,   // 取消のときに「捨てるラベル」の8桁と照合する
       grade: pmGrade,
-      bone_in: pmBoneIn
+      bone_in: pmBoneIn,
+      processed_at: new Date().toISOString()
     });
     pmSaveSession(); // 作業途中もChrome再起動に耐えるよう都度保存
 
@@ -7247,11 +7283,21 @@ async function pmOnWeightReceived(weight_kg, plan) {
     toast(`${fullPartName} ${weight_kg.toFixed(3)}kg → 在庫 ${identCode} 登録完了`);
     playFeedbackSound(true);
 
-    // 番号がずれたときは、刷ったラベルと在庫が食い違う。必ず止めて刷り直してもらう。
+    // 番号がずれたときは、先に刷ったラベルと在庫が食い違う。
+    // 「ラベル再印刷を押して」と頼むだけでは押されずに残った（2026-11-09 シ019で10枚）ので、
+    // 正しい番号のラベルをここで必ず刷り直し、古いラベルを捨ててもらう。
     if (renumberedFrom) {
-      alert(`識別コードが ${renumberedFrom} から ${identCode} に変わりました。\n`
-        + `（${renumberedFrom} は前に使った番号のため）\n\n`
-        + `いま出たラベルは古い番号です。捨てて、下の「ラベル再印刷」を押してください。`);
+      if (printedBeforeSave) {
+        try { pmPrintLabel(weight_kg, lotCode, identCode, fullPartName, labelWeight, scanCode); } catch (e) {}
+        alert(`識別コードが ${renumberedFrom} から ${identCode} に変わりました。\n`
+          + `（${renumberedFrom} は前に使った番号のため）\n\n`
+          + `先に出たラベルは古い番号です。必ず捨ててください。\n`
+          + `正しい番号のラベル（${identCode}${scanOk(scanCode) ? '・' + scanCode : ''}）を刷り直しました。こちらを貼ってください。`);
+      } else {
+        alert(`識別コードが ${renumberedFrom} から ${identCode} に変わりました。\n`
+          + `（${renumberedFrom} は前に使った番号のため）\n\n`
+          + `ラベルは変わった後の番号（${identCode}）で刷っています。`);
+      }
     }
 
     // 7. リセット
@@ -7280,7 +7326,7 @@ async function pmOnWeightReceived(weight_kg, plan) {
     document.getElementById('pmMeasureBtn').onclick = pmStartMeasure;
     refocusScaleInput();
     if (again) {
-      try { if (pmIndividual) await pmLoadUsedIdents(pmIndividual.label_id); } catch (e) {}
+      if (pmIndividual) await pmReloadUsedIdentsOrWarn(pmIndividual.label_id);
       return pmOnWeightReceived(weight_kg);   // 番号を採り直して入れ直す
     }
   }
@@ -7314,6 +7360,7 @@ function pmRenderCompleted() {
       <span class="chip-weight">${c.weight_kg.toFixed(3)}kg</span>
       ${dup ? '<span title="同じ重量が複数あります（二重登録の可能性）" style="color:var(--red);font-size:11px;font-weight:700;">⚠同重量</span>' : ''}
       <span style="font-size:10px;color:var(--text3)">${c.lot_code}</span>
+      ${c.ident_code ? `<button onclick="pmReprintCompleted(${i})" title="このパックのラベルを在庫の番号で刷り直す" style="margin-left:2px;border:none;background:transparent;font-size:14px;line-height:1;cursor:pointer;padding:0 3px;">🖨</button>` : ''}
       <button onclick="pmDeleteCompleted(${i})" title="この登録を取り消す（削除）" style="margin-left:2px;border:none;background:transparent;color:var(--red);font-size:16px;line-height:1;cursor:pointer;padding:0 4px;">✕</button>
     </div>`;
   }).join('');
@@ -7328,6 +7375,40 @@ function pmRenderCompleted() {
   document.getElementById('pmYieldPct').textContent = yieldPct.toFixed(1) + '%';
   document.getElementById('pmYieldSummary').style.display = 'flex';
   document.getElementById('pmFooterYield').textContent = `／ 合計 ${totalParts.toFixed(2)} kg${indWeight > 0 ? `（歩留まり ${yieldPct.toFixed(1)}%）` : ''}`;
+}
+
+// ── 登録済みパックのラベル刷り直し（2026-11-09）──
+// 貼ってあるラベルの番号が在庫と食い違ったパック（シ019・シ015）を、在庫の番号で刷り直せるようにする。
+// 番号・重さ・部位・ランクは必ずDBの在庫行から取る（画面の控えは古いことがある）。
+// 消費期限は刷り直した日ではなく、処理した日（processed_at）から1年。
+async function pmReprintCompleted(index) {
+  const item = pmCompletedParts[index];
+  if (!item || !item.ident_code) return;
+  let row = null;
+  try {
+    const rows = await sb('GET', 'inventory', null,
+      `?ident_code=eq.${encodeURIComponent(item.ident_code)}&deleted_at=is.null&select=ident_code,scan_code,part_name,weight,weight_kg,lot_code,grade,status,processed_at,created_at&limit=1`);
+    row = Array.isArray(rows) ? rows[0] : null;
+  } catch (e) {
+    alert(`在庫を読めなかったため、ラベルを刷っていません。\n理由: ${sbSafeMsg(e)}`);
+    return;
+  }
+  if (!row) { alert(`在庫に ${item.ident_code} が見つからないため、ラベルを刷っていません（取消済みの可能性）。`); return; }
+  if (!/^\d{8}$/.test(String(row.scan_code || ''))) {
+    alert(`${row.ident_code} には8桁の番号が無いため、読めるラベルを刷れません。`);
+    return;
+  }
+  const w = parseFloat(row.weight != null ? row.weight : row.weight_kg) || item.weight_kg || 0;
+  const base = row.processed_at || row.created_at || null;
+  const baseName = String(row.part_name || '').replace(/^骨付き /, '').replace(/ \[[^\]]*\]/g, '');
+  const labelWeight = (/\[小売\]/.test(row.part_name || '') && PM_RETAIL_WEIGHTS[baseName]) ? PM_RETAIL_WEIGHTS[baseName] : w;
+  const baseStr = base ? new Date(base).toLocaleDateString('ja-JP') : '不明';
+  if (!confirm(`${row.part_name} ${w.toFixed(3)}kg のラベルを刷り直します。\n`
+    + `番号: ${row.ident_code}（8桁 ${row.scan_code}）\n`
+    + `消費期限: 処理した日（${baseStr}）から1年\n\n`
+    + `貼ってあるラベルの番号が違うときは、はがしてこのラベルを貼ってください。`)) return;
+  pmPrintLabel(w, row.lot_code || '', row.ident_code, row.part_name, labelWeight, row.scan_code, row.grade || '並', base);
+  toast(`ラベルを刷り直しました: ${row.ident_code}（${row.scan_code}）`);
 }
 
 // ── 登録済み部位の取消（誤登録・部位間違いの削除）──
@@ -9709,7 +9790,7 @@ function pmLabelHtml(d) {
 }
 
 // ── ラベル印刷 ──
-function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight, scanCode, grade) {
+function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight, scanCode, grade, expiryBase) {
   if (!partName) partName = pmSelectedPart.part_name;
   if (grade === undefined) grade = pmGrade;   // 登録時のランク。再印刷は pmLastPrintInfo.grade を渡す
   if (labelWeight === undefined) labelWeight = weight_kg;
@@ -9720,7 +9801,10 @@ function pmPrintLabel(weight_kg, lotCode, identCode, partName, labelWeight, scan
                  (_lid.startsWith('M') ? '南房総産' : '館山産');
   const speciesName = species.includes('イノシシ') ? 'イノシシ肉' :
                       species.includes('鹿')       ? '鹿肉'       : species;
-  const expiryDate  = new Date();
+  // 消費期限は処理した日から1年。登録済みパックの刷り直しでは処理日（expiryBase）を基準にする
+  // （刷り直した日から数えると、前に処理した肉の期限が延びてしまう）。
+  let expiryDate = expiryBase ? new Date(expiryBase) : new Date();
+  if (isNaN(expiryDate.getTime())) expiryDate = new Date();
   expiryDate.setFullYear(expiryDate.getFullYear() + 1);
   const expiryStr   = expiryDate.toLocaleDateString('ja-JP');
 
