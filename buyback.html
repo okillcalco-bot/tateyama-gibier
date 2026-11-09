@@ -276,6 +276,10 @@ function showTab(p){ document.querySelectorAll('.tab').forEach(t=>t.classList.to
 const RULES_DEFAULT = { boar:{ female_rank_unit:{'並':100,'上':200,'極上':300}, male_unit:100, yield_ranks:[{rank:'A',min_pct:30,ratio:1},{rank:'B',min_pct:20,ratio:0.5},{rank:'C',min_pct:10,ratio:0.3},{rank:'D',min_pct:0,ratio:0}], weight_floor:true, min_weight_kg:20 },
   deer:{ unit:100, use_yield:true }, small:{ price:1000, species:['キョン','アライグマ','ハクビシン','タヌキ','ノウサギ'] }, pickup_fee:3000, source:'既定値' };
 let RULES = JSON.parse(JSON.stringify(RULES_DEFAULT)); let rulesFromDb = false;
+/* 2026-11-09 沖: 歩留まりが出ていない個体（精肉待ち等）は A として計算する。ルールの pending_yield_rank で変えられる（空なら従来どおり未確定） */
+function pendingYieldRank(rules){ const k = rules.pending_yield_rank === undefined ? 'A' : rules.pending_yield_rank; if (!k) return null; return (rules.boar.yield_ranks||[]).find(r => r.rank === k) || null; }
+/* 2026-11-09 沖: イノシシの受入の最低体重（20kg）未満は買取なし。ルールの boar.below_min_no_buy=false で従来どおり（注意だけ） */
+function belowMinNoBuy(rules){ return rules.boar.below_min_no_buy === undefined ? true : !!rules.boar.below_min_no_buy; }
 function yieldRank(rules, pct){ if(pct==null||isNaN(pct)) return null; const ranks=(rules.boar.yield_ranks||[]).slice().sort((a,b)=>b.min_pct-a.min_pct); for(const r of ranks){ if(pct>=r.min_pct) return r; } return ranks[ranks.length-1]||null; }
 // 1頭の買取価格。戻り: { price, base, unit, ratio, yield_rank, weight_used, pickup_fee, pending, reason }
 function calcOne(rules, ind, meatKg){
@@ -291,7 +295,11 @@ function calcOne(rules, ind, meatKg){
   }
   if (sp === 'シカ') {
     out.unit = Number(rules.deer.unit)||0; out.base = wUsed * out.unit;
-    if (rules.deer.use_yield) { const yr = yieldRank(rules, yieldPct); if (!yr) { out.pending = true; out.reason = '歩留まり待ち（精肉前）'; return out; } out.ratio = yr.ratio; out.yield_rank = yr.rank; }
+    if (rules.deer.use_yield) {
+      let yr = yieldRank(rules, yieldPct);
+      if (!yr) { yr = pendingYieldRank(rules); if (!yr) { out.pending = true; out.reason = '歩留まり待ち（精肉前）'; return out; } out.yield_assumed = true; out.reason = '歩留まり未確定のため' + yr.rank + 'として計算（精肉前）'; }
+      out.ratio = yr.ratio; out.yield_rank = yr.rank;
+    }
     else out.ratio = 1;
     out.price = Math.max(0, Math.round(out.base * out.ratio) - fee); return out;
   }
@@ -299,11 +307,18 @@ function calcOne(rules, ind, meatKg){
     const rank = ind.meat_rank || '並';
     out.unit = ind.sex === 'メス' ? (Number((rules.boar.female_rank_unit||{})[rank]) || Number(rules.boar.female_rank_unit['並']) || 100) : (Number(rules.boar.male_unit)||100);
     out.rank = rank; out.base = wUsed * out.unit;
-    const yr = yieldRank(rules, yieldPct);
-    if (!yr) { out.pending = true; out.reason = ind.processing_done_at ? '歩留まりが出ていない（精肉重量が未登録）' : '精肉待ち'; return out; }
+    const minW = Number(rules.boar.min_weight_kg)||0;
+    if (w > 0 && w < minW && belowMinNoBuy(rules)) { out.ratio = 0; out.price = 0; out.reason = minW + 'kg未満のため買取なし'; return out; }
+    let yr = yieldRank(rules, yieldPct);
+    if (!yr) {
+      const why = ind.processing_done_at ? '歩留まりが出ていない（精肉重量が未登録）' : '精肉待ち';
+      yr = pendingYieldRank(rules);
+      if (!yr) { out.pending = true; out.reason = why; return out; }
+      out.yield_assumed = true; out.reason = '歩留まり未確定のため' + yr.rank + 'として計算（' + why + '）';
+    }
     out.ratio = yr.ratio; out.yield_rank = yr.rank;
     out.price = Math.max(0, Math.round(out.base * out.ratio) - fee);
-    if (w > 0 && w < (Number(rules.boar.min_weight_kg)||0)) out.reason = (rules.boar.min_weight_kg + 'kg未満');
+    if (w > 0 && w < minW) out.reason = (out.reason ? out.reason + '・' : '') + minW + 'kg未満';
     return out;
   }
   out.base = 0; out.price = 0; out.reason = '買取対象外の獣種'; return out;
@@ -424,23 +439,27 @@ function renderAll(){
   const noAcc = r.payees.filter(p=>p.pay>0 && !(p.bank && p.bank.number));
   const small = r.items.filter(i=>/kg未満/.test(i.reason));
   const noHunter = r.items.filter(i=>i.payee==='（捕獲者未記入）');
+  const assumed = r.items.filter(i=>i.yield_assumed);
+  if (assumed.length) warns.push(`<b>歩留まり未確定 ${assumed.length}頭</b>（${esc(assumed[0].yield_rank)}として計算。精肉が終わると歩留まりで計算し直します）：${assumed.slice(0,12).map(i=>i.label).join('、')}${assumed.length>12?' ほか':''}`);
   if (r.pending) warns.push(`<b>未確定 ${r.pending}頭</b>：${r.items.filter(i=>i.pending).slice(0,12).map(i=>i.label).join('、')}${r.pending>12?' ほか':''}（精肉が終わると金額が入ります）`);
   const rankDiff = r.items.filter(i => i.species==='イノシシ' && i.rank_changed && i.rank_changed.length);
   if (rankDiff.length) warns.push(`<b>精肉時に受入と違うランクが付いた個体 ${rankDiff.length}頭</b>（多数決でランクを決めています。押し間違えなら業務アプリで直してください）：` + rankDiff.slice(0,10).map(i => `${i.label}（受入 ${i.meat_rank||'未設定'} → 計算 ${i.rank}：${i.rank_changed.slice(0,4).map(p=>`${p.part} ${p.grade}${p.by?'／'+p.by:''}${p.at?' '+p.at:''}`).join('、')}${i.rank_changed.length>4?' ほか':''}）`).join('　') + (rankDiff.length>10?' ほか':''));
   if (noRank.length) warns.push(`<b>肉ランク未設定 ${noRank.length}頭</b>（並として計算）：${noRank.slice(0,8).map(i=>i.label).join('、')}${noRank.length>8?' ほか':''}`);
-  if (noAcc.length) warns.push(`<b>口座が無い支払先 ${noAcc.length}人</b>：${noAcc.map(p=>p.payee).join('、')} → 業務アプリの捕獲者台帳で口座を登録してください`);
-  if (small.length) warns.push(`<b>${RULES.boar.min_weight_kg}kg未満 ${small.length}頭</b>：${small.map(i=>i.label).join('、')}（受入条件の確認用。計算式どおりの金額を出しています）`);
+  if (noAcc.length) warns.push(`<b>口座が無い支払先 ${noAcc.length}人</b>：${noAcc.map(p=>esc(p.payee)).join('、')} → 業務アプリの捕獲者台帳で口座を登録してください　<button class="btn btn-secondary btn-sm" onclick="noAccMessages()">✉ 口座を教えてもらう文面を作る</button>`);
+  if (small.length) warns.push(belowMinNoBuy(RULES)
+    ? `<b>${RULES.boar.min_weight_kg}kg未満 ${small.length}頭</b>（買取なし・0円）：${small.map(i=>i.label).join('、')}`
+    : `<b>${RULES.boar.min_weight_kg}kg未満 ${small.length}頭</b>：${small.map(i=>i.label).join('、')}（受入条件の確認用。計算式どおりの金額を出しています）`);
   if (noHunter.length) warns.push(`<b>捕獲者が未記入 ${noHunter.length}頭</b>：${noHunter.map(i=>i.label).join('、')}`);
   const wb = document.getElementById('warnBox'); wb.style.display = warns.length ? 'block' : 'none'; wb.innerHTML = warns.map(w=>'・'+w).join('<br>');
   // 支払先
-  const rk = it => it.yield_rank ? `${it.yield_rank}（${it.yield_pct!=null?it.yield_pct+'%':'—'}）` : (it.pending ? '<span class="tag tag-red">未確定</span>' : '—');
+  const rk = it => it.yield_assumed ? `${it.yield_rank}（歩留まり未確定）` : it.yield_rank ? `${it.yield_rank}（${it.yield_pct!=null?it.yield_pct+'%':'—'}）` : (it.pending ? '<span class="tag tag-red">未確定</span>' : '—');
   document.getElementById('payeeBody').innerHTML = r.payees.length ? r.payees.map((p,idx) => `
     <tr class="payee-row" onclick="toggleDetail(${idx})"><td><b>${esc(p.payee)}</b> <button class="btn btn-secondary btn-sm nv-open" onclick="event.stopPropagation();noticeViewOpen(${idx})" title="提出時（通知書）と同じ表を大きな文字で見る">👁 表で見る</button>${p.items.some(i=>i.hunter && normName(i.hunter)!==normName(p.payee)) ? '<br><span class="muted">捕獲者: '+esc([...new Set(p.items.map(i=>i.hunter).filter(Boolean))].join('・'))+'</span>' : ''}</td>
       <td class="td-num">${p.heads}${p.pending?`<br><span class="tag tag-red">未確定${p.pending}</span>`:''}</td><td class="td-num">${yen(p.boar)}</td><td class="td-num">${yen(p.other)}</td><td class="td-num">${p.pickups||'—'}</td>
       <td class="td-num" onclick="event.stopPropagation()"><input type="number" step="1" value="${p.adjust||0}" style="width:90px;padding:3px 6px" onchange="setAdjust('${esc(p.payee)}', this.value, null)"><br><input type="text" placeholder="メモ" value="${esc(p.adjust_note)}" style="width:120px;padding:3px 6px;font-size:11px;margin-top:3px" onchange="setAdjust('${esc(p.payee)}', null, this.value)"></td>
       <td class="td-num"><b>${yen(p.pay)}</b></td>
       <td>${p.bank && p.bank.number ? `<span class="muted">${esc(p.bank.bank)} ${esc(p.bank.branch)} ${esc(p.bank.number)}</span>` : (p.pay>0 ? '<span class="tag tag-red">口座なし</span>' : '<span class="muted">—</span>')}</td>
-      <td>${p.pending ? '<span class="tag tag-red">精肉待ちあり</span>' : '<span class="tag tag-green">確定可</span>'}</td></tr>
+      <td>${p.pending ? '<span class="tag tag-red">精肉待ちあり</span>' : p.items.some(i=>i.yield_assumed) ? '<span class="tag tag-green">確定可</span><br><span class="muted">歩留まり未確定あり</span>' : '<span class="tag tag-green">確定可</span>'}</td></tr>
     <tr class="detail-row" id="det-${idx}" style="display:none"><td colspan="9"><table><thead><tr><th>個体管理番号</th><th>捕獲日</th><th>種類</th><th>性別</th><th class="td-num">体重</th><th>肉ランク</th><th>歩留まり</th><th class="td-num">単価</th><th class="td-num">引取</th><th class="td-num">買取価格</th><th>備考</th></tr></thead><tbody>
       ${p.items.map(it=>`<tr><td>${esc(it.label)}</td><td>${esc(it.capture_date)}</td><td>${esc(it.species)}</td><td>${esc(it.sex||'')}</td><td class="td-num">${it.weight?it.weight.toFixed(1):'—'}</td><td>${it.species==='イノシシ'?esc(it.rank||''):'—'}</td><td>${rk(it)}</td><td class="td-num">${it.unit!=null?it.unit+'円/kg':(it.species==='イノシシ'||it.species==='シカ'?'—':yen(it.base))}</td><td class="td-num">${it.pickup?'−'+yen(it.pickup_fee):''}</td><td class="td-num">${it.pending?'—':yen(it.price)}</td><td class="muted">${esc(it.reason)}</td></tr>`).join('')}
     </tbody></table></td></tr>`).join('') : '<tr><td colspan="9" class="muted">この期間の個体がありません。</td></tr>';
@@ -508,6 +527,30 @@ async function runDelete(id, key, status){
   try { await sb('buyback_runs', `?id=eq.${id}`, 'DELETE'); runsLoad(); } catch(e) { showStatus('error', '削除できませんでした: ' + (e.message||e)); }
 }
 
+/* 口座が無い支払先へ送る文面（2026-11-09 沖「口座が無い支払先には送れるメッセージが出せるボタンを準備して」）。
+   金額は精肉や調整で変わることがあるので書かない。頭数と期間だけ。コピーしてLINE等で送る */
+function noAccMessageText(p){
+  const period = D.run ? `${reiwa(D.run.fiscal_year)}${D.run.half}` : '';
+  return `${p.payee} 様\n\nいつも捕獲個体の搬入をありがとうございます。館山ジビエセンターです。\n`
+    + `${period}の買取金（${p.heads}頭分）をお振込みしたいのですが、振込先の口座がまだ登録されていません。\n`
+    + `お手数ですが、次の内容を教えてください。\n\n・銀行名\n・支店名\n・口座の種類（普通・当座）\n・口座番号\n・口座名義（カタカナ）\n\nよろしくお願いいたします。`;
+}
+function noAccMessages(){
+  const r = D.result; if (!r) return;
+  const list = r.payees.filter(p=>p.pay>0 && !(p.bank && p.bank.number));
+  let box = document.getElementById('noAccBox');
+  if (!box) { box = document.createElement('div'); box.id = 'noAccBox'; box.className = 'note'; document.getElementById('warnBox').insertAdjacentElement('afterend', box); }
+  box.style.display = 'block';
+  box.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><b>口座を教えてもらう文面（${list.length}人）</b><span><button class="btn btn-secondary btn-sm" onclick="noAccCopyAll()">まとめてコピー</button> <button class="btn btn-secondary btn-sm" onclick="document.getElementById('noAccBox').style.display='none'">閉じる</button></span></div>`
+    + list.map((p,i)=>`<div style="margin-top:8px"><div style="display:flex;justify-content:space-between;align-items:center"><span>${esc(p.payee)}（${p.heads}頭）</span><button class="btn btn-secondary btn-sm" onclick="noAccCopy(${i})">コピー</button></div><textarea class="noacc-msg" data-i="${i}" rows="9" style="width:100%;box-sizing:border-box;font-size:13px">${esc(noAccMessageText(p))}</textarea></div>`).join('');
+}
+async function noAccCopyText(text, label){
+  try { await navigator.clipboard.writeText(text); showStatus('info', label + 'をコピーしました'); }
+  catch (e) { prompt('コピーして送ってください:', text); }
+}
+function noAccCopy(i){ const t = document.querySelector(`#noAccBox textarea[data-i="${i}"]`); if (t) noAccCopyText(t.value, '文面'); }
+function noAccCopyAll(){ const ts = [...document.querySelectorAll('#noAccBox textarea.noacc-msg')].map(t=>t.value); noAccCopyText(ts.join('\n\n――――――――\n\n'), ts.length + '人分の文面'); }
+
 // ───────────── ルール画面 ─────────────
 function rulesRender(){
   const r = RULES; const f = document.getElementById('rulesForm');
@@ -519,7 +562,9 @@ function rulesRender(){
     <label>イノシシ オス 一律（円/kg）<input type="number" id="r_m" value="${r.boar.male_unit}"></label>
     ${(r.boar.yield_ranks||[]).map((y,i)=>`<label>歩留まり ${esc(y.rank)}：${esc(y.min_pct)}%以上 → 割合 <input type="number" step="0.1" id="r_y_${i}" value="${y.ratio}"></label>`).join('')}
     <label>体重は切り捨て <input type="checkbox" id="r_floor" ${r.boar.weight_floor?'checked':''}></label>
-    <label>受入の最低体重（kg・注意表示用）<input type="number" id="r_minw" value="${r.boar.min_weight_kg}"></label>
+    <label>受入の最低体重（kg）<input type="number" id="r_minw" value="${r.boar.min_weight_kg}"></label>
+    <label>最低体重未満のイノシシは買取なし <input type="checkbox" id="r_minw_nobuy" ${belowMinNoBuy(r)?'checked':''}></label>
+    <label>歩留まりが出ていない個体のランク <select id="r_pend">${['A','B','C','D'].map(k=>`<option value="${k}" ${(r.pending_yield_rank===undefined?'A':r.pending_yield_rank)===k?'selected':''}>${k}として計算</option>`).join('')}<option value="" ${r.pending_yield_rank===''?'selected':''}>未確定のまま（0円）</option></select></label>
     <label>シカ 一律（円/kg）<input type="number" id="r_deer" value="${r.deer.unit}"></label>
     <label>シカも歩留まり係数を掛ける <input type="checkbox" id="r_deer_y" ${r.deer.use_yield?'checked':''}></label>
     <label>中型獣（円/頭）<input type="number" id="r_small" value="${r.small.price}"></label>
@@ -532,7 +577,7 @@ function rulesCollect(){
   const n = id => Number(g(id).value)||0;
   const out = JSON.parse(JSON.stringify(RULES));
   out.boar.female_rank_unit = { '並': n('r_f_nami'), '上': n('r_f_jou'), '極上': n('r_f_goku') };
-  out.boar.male_unit = n('r_m'); out.boar.weight_floor = g('r_floor').checked; out.boar.min_weight_kg = n('r_minw');
+  out.boar.male_unit = n('r_m'); out.boar.weight_floor = g('r_floor').checked; out.boar.min_weight_kg = n('r_minw'); out.boar.below_min_no_buy = g('r_minw_nobuy').checked; out.pending_yield_rank = g('r_pend').value;
   out.boar.yield_ranks = (RULES.boar.yield_ranks||[]).map((y,i)=>Object.assign({}, y, { ratio: n('r_y_'+i) }));
   out.deer = { unit: n('r_deer'), use_yield: g('r_deer_y').checked };
   out.small = { price: n('r_small'), species: g('r_small_sp').value.split(/[、,\s]+/).filter(Boolean) };
@@ -629,6 +674,8 @@ function noticeViewOpen(idx){
   const prov = [];
   if (!fixed) prov.push('現時点の計算です（' + (D.run.status === '下書き' ? '下書き' : '未確定') + '）。精肉や調整で金額が変わることがあります。');
   if (p.pending) prov.push(`精肉待ちの個体が ${p.pending}頭あり、その分の金額はまだ入っていません。`);
+  const pAssumed = p.items.filter(i=>i.yield_assumed).length;
+  if (pAssumed) prov.push(`精肉待ち（歩留まりが出ていない）の個体が ${pAssumed}頭あり、歩留まり${esc(p.items.find(i=>i.yield_assumed).yield_rank)}として計算しています。精肉が終わると金額が変わることがあります。`);
   document.getElementById('nvBody').innerHTML = `
     <div class="nv-title">${esc(period)}　捕獲個体の買取内容</div>
     <div class="nv-name">${esc(p.payee)}　様</div>

@@ -5,7 +5,9 @@
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
 
-const RULES = { boar:{ female_rank_unit:{'並':100,'上':200,'極上':300}, male_unit:100, yield_ranks:[{rank:'A',min_pct:30,ratio:1,label:'3割以上'},{rank:'B',min_pct:20,ratio:0.5,label:'2〜3割'},{rank:'C',min_pct:10,ratio:0.3,label:'1〜2割'},{rank:'D',min_pct:0,ratio:0,label:'1割未満'}], weight_floor:true, min_weight_kg:20 }, deer:{unit:100,use_yield:true}, small:{price:1000,species:['キョン','アライグマ','ハクビシン','タヌキ','ノウサギ']}, pickup_fee:3000, source:'テスト' };
+const RULES = { boar:{ female_rank_unit:{'並':100,'上':200,'極上':300}, male_unit:100, yield_ranks:[{rank:'A',min_pct:30,ratio:1,label:'3割以上'},{rank:'B',min_pct:20,ratio:0.5,label:'2〜3割'},{rank:'C',min_pct:10,ratio:0.3,label:'1〜2割'},{rank:'D',min_pct:0,ratio:0,label:'1割未満'}], weight_floor:true, min_weight_kg:20, below_min_no_buy:false }, deer:{unit:100,use_yield:true}, small:{price:1000,species:['キョン','アライグマ','ハクビシン','タヌキ','ノウサギ']}, pickup_fee:3000, source:'テスト', pending_yield_rank:'' };
+// 2026-11-09: 既定は「歩留まり未確定はA」「20kg未満は買取なし」に変わった。このテストは従来の設定（未確定のまま・注意だけ）を
+// ルールで明示して、その設定でも動くことを測る。新しい既定は buyback-rules-1109.e2e.js で測る
 const HUNTERS = [
   { id:'h1', name:'井上　定男', furigana:'いのうえさだお', bank_name:'ＪＡ安房', bank_branch:'館野支店', account_type:'普通', account_number:'4111589', account_holder:null, account_furigana:'ｲﾉｳｴ ｻﾀﾞｵ', payee_no:4, city:'館山市' },
   { id:'h2', name:'山田千代子', furigana:'やまだちよこ', bank_name:null, bank_branch:null, account_type:null, account_number:null, account_holder:null, account_furigana:null, payee_no:11, city:'館山市' },
