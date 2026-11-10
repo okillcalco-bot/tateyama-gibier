@@ -28,9 +28,10 @@ const fs = require('fs'); const path = require('path');
 const { respond, STUBS, measure } = require('./helpers/fake-supabase.js');
 const ROOT = path.resolve(__dirname, '../..');
 
-// 測らない画面: 404 / 外部サービスの戻り先 / お客様用の注文ポータル（ログイン後の画面は別テスト）/ 個人のページ /
+// 測らない画面: 404 / 外部サービスの戻り先 / 個人のページ /
 //   record-list.html（文字化けしたまま残っている古い画面。どこからもリンクされていない。消すかどうかは本人に確認中）
-const SKIP = new Set(['404.html', 'base-callback.html', 'order-portal.html', 'yoshiki2.html', 'manabu.html', 'record-list.html']);
+// order-portal.html（お客様用の注文ポータル）は、ログイン前の画面だけを測る（ログイン後は別のテスト）
+const SKIP = new Set(['404.html', 'base-callback.html', 'yoshiki2.html', 'manabu.html', 'record-list.html']);
 const only = process.argv.slice(2).filter(a => a.endsWith('.html'));
 const PAGES = (only.length ? only : fs.readdirSync(ROOT).filter(f => f.endsWith('.html') && !SKIP.has(f))).sort();
 const VIEWPORTS = { phone: { w: 390, h: 844, touch: true }, tablet: { w: 820, h: 1180, touch: true }, pc: { w: 1366, h: 768, touch: false } };

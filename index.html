@@ -388,6 +388,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .pm-finish-btn:hover{filter:brightness(1.08);}
 .pm-finish-btn:active{transform:scale(.98);}
 @media (max-width:700px){ .pm-finish-btn{min-width:0;flex:1;} .pm-footer-summary{font-size:12.5px;} }
+/* 2026-11-10: スマホ幅（〜520px）では件数の行とボタンが横に並びきらず、ボタンが 56px まで縮んで
+   「✅ 全部位完了」の字が画面の右へ切れていた（実測 390px: ボタン幅60px・字は158px必要）。件数を上、ボタンを下に重ねる */
+@media (max-width:520px){ .pm-footer{flex-wrap:wrap;gap:6px;} .pm-footer-summary{flex:1 1 100%;} .pm-finish-btn{flex:1 1 100%;min-height:50px;padding:10px 16px;} }
 
 /* Print label styles */
 @media print {

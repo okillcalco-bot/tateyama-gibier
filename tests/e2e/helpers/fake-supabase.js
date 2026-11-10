@@ -215,6 +215,12 @@ function measure() {
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   const textEls = [];
   while (walker.nextNode()) { const n = walker.currentNode; if (!n.nodeValue.trim()) continue; const el = n.parentElement; if (!el || seenT.has(el) || /^(SCRIPT|STYLE|OPTION|NOSCRIPT|TEMPLATE)$/.test(el.tagName)) continue; seenT.add(el); if (visible(el)) textEls.push(el); }
+  // 1b. 字そのものが画面の外へ出ている（箱は画面に収まっているのに、中の字だけが箱を突き抜けている場合。
+  //     例: 幅が縮んだボタンの中の、折り返さない字）。箱のはみ出し（1.）で数えたものは除く
+  { const rg = document.createRange(); const counted = new Set();
+    for (const el of textEls) { const er = el.getBoundingClientRect(); if (er.right > vw + 2 || er.left < -2) continue; if (inScroller(el) || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) continue;
+      let clipped = false; for (let p = el; p && p !== document.body; p = p.parentElement) { const cs = getComputedStyle(p); if (/(hidden|clip)/.test(cs.overflowX) && p.getBoundingClientRect().right <= vw + 2) { clipped = true; break; } } if (clipped) continue;
+      for (const n of el.childNodes) { if (n.nodeType !== 3 || !n.nodeValue.trim()) continue; rg.selectNodeContents(n); const r = rg.getBoundingClientRect(); if (r.width > 0 && (r.right > vw + 2 || r.left < -2) && !counted.has(el)) { counted.add(el); res.offN++; if (res.off.length < 6) res.off.push('字 ' + desc(el) + ' →' + Math.round(Math.max(r.right - vw, -r.left)) + 'px'); } } } }
   for (const el of textEls) { const fs = parseFloat(getComputedStyle(el).fontSize); if (fs < 10) { res.tinyN++; if (res.tiny.length < 6) res.tiny.push(desc(el) + ' ' + fs + 'px'); } }
   // 4. 字が切れている（はみ出しを隠していて、…も出していない）
   for (const el of textEls) { const cs = getComputedStyle(el); if (/(hidden|clip)/.test(cs.overflowX) && cs.textOverflow !== 'ellipsis' && el.scrollWidth > el.clientWidth + 2 && el.clientWidth > 0 && !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) { res.clipN++; if (res.clip.length < 6) res.clip.push(desc(el) + ' ' + el.clientWidth + '/' + el.scrollWidth); } }

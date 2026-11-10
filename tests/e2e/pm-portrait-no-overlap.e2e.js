@@ -14,6 +14,7 @@
 //     2. 精肉モードの中身が画面の右へはみ出さない（冷凍庫の名前が長くても）
 //     3. 指で押す端末では、登録済みチップの 🖨 / ✕ が 36px 以上
 //     4. 横持ち（1180×620）は今までどおり2列で、右の列は内側で送れる
+//     5. 「✅ 全部位完了」の字がボタンに収まる（スマホ幅ではボタンが60pxまで縮み、字が画面の右へ切れていた）
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
 
@@ -22,7 +23,7 @@ const path = require('path');
   const results = []; const T = (n, ok, got) => results.push([n, !!ok, got == null ? '' : String(got)]);
   const PARTS = ['モモ', 'ロース', 'バラ', 'ヒレ', 'カタ', '肩ロース', 'スネ', 'ネック', 'ミンチ用', '味肉用'];
 
-  for (const [w, h, label] of [[820, 1180, 'タブレット縦'], [820, 844, 'タブレット縦（低い）'], [768, 1024, 'タブレット縦（小）'], [390, 844, 'スマホ'], [1180, 620, '横持ち']]) {
+  for (const [w, h, label] of [[820, 1180, 'タブレット縦'], [820, 844, 'タブレット縦（低い）'], [768, 1024, 'タブレット縦（小）'], [390, 844, 'スマホ'], [360, 740, 'スマホ（小）'], [1180, 620, '横持ち']]) {
     const ctx = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: true });
     await ctx.addInitScript(() => { try { sessionStorage.setItem('tg_access_v1', 'ok'); } catch (e) {} });
     const page = await ctx.newPage();
@@ -64,7 +65,8 @@ const path = require('path');
       const right = document.querySelector('.pm-right');
       return { parts: parts.length, overlapW, overlapD, hitOk: !!hit && (hit === reg || reg.contains(hit)), hit: hit ? hit.tagName + '.' + hit.className : 'null', regText: reg.textContent.trim(),
         inside, toggles, chipMin: chipBtns.length ? Math.min(...chipBtns) : -1, chipN: chipBtns.length, cols, bodyScroll: body.scrollHeight > body.clientHeight + 2, rightOverflowY: getComputedStyle(right).overflowY,
-        sel: Math.round(rect(document.getElementById('pmLocationSel')).right), coarse: matchMedia('(pointer:coarse)').matches };
+        sel: Math.round(rect(document.getElementById('pmLocationSel')).right), coarse: matchMedia('(pointer:coarse)').matches,
+        fin: (() => { const b = document.getElementById('pmFinishBtn'); const r = rect(b); return { w: Math.round(r.width), h: Math.round(r.height), need: b.scrollWidth, right: Math.round(r.right), fits: b.scrollWidth <= b.clientWidth + 1 && r.right <= vw && r.left >= 0 }; })() };
     });
     const pfx = `${label} ${w}×${h}: `;
     if (label !== '横持ち') {
@@ -81,6 +83,7 @@ const path = require('path');
     T(pfx + '2. 精肉モードの中身が右へはみ出さない', m.inside.length === 0, m.inside.slice(0, 4).join(' ; '));
     T(pfx + '2. 骨付き・小売・骨をまとめる・内臓をまとめる が4つとも画面の中', m.toggles.every(Boolean), JSON.stringify(m.toggles));
     T(pfx + '2. 冷凍庫の選択欄は名前が長くても画面の中', m.sel <= w, m.sel);
+    T(pfx + '5. 「✅ 全部位完了」の字がボタンと画面に収まる（高さ44px以上）', m.fin.fits && m.fin.h >= 44, JSON.stringify(m.fin));
     T(pfx + '3. 登録済みチップの 🖨 / ✕ は 36px 以上（指で押す端末）', m.coarse && m.chipN >= 12 && m.chipMin >= 36, `最小${m.chipMin}px / ${m.chipN}個 / coarse=${m.coarse}`);
     T(pfx + 'ページエラーなし', errors.length === 0, errors.join(' / '));
     await ctx.close();
