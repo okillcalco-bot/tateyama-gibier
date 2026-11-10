@@ -47,7 +47,7 @@ input, select { width: 100%; padding: 11px; border: 1px solid var(--border); bor
 <body>
 <div class="wrap">
   <h1>🏪 道の駅 納品・店頭在庫</h1>
-  <div class="sub">館山ジビエセンター | <a href="index.html" style="color:var(--gold);">業務トップへ</a></div>
+  <div class="sub">館山ジビエセンター | <a href="index.html" style="color:var(--gold);display:inline-block;padding:8px 4px;">業務トップへ</a></div>
 
   <div class="card">
     <h2>📖 使い方（3ステップ）</h2>
@@ -130,7 +130,32 @@ let outlets = [], products = [], stockMap = {}, current = null, formType = '納�
 let storeMode = null; // 納品先セルフ入力モード（?store=トークン）
 const MOVE_LABEL = { '納品': '納品', '完成': '完成', '店頭販売': '販売報告', '期限切れ': '期限切れ・廃棄', '訂正': '訂正' };
 
+/* BASE（ネットショップ）の在庫数を合わせる。失敗したら理由の文字を返す（成功・対象外は ''）（2026-11-10）。
+   以前は結果を見ず、例外も捨てていたので、BASE側の数が古いままでも何も出なかった（無い在庫が売れるおそれ） */
+async function baseStockPush(productId, qty) {
+  try {
+    const pr = await sb('GET', 'products', null, `?id=eq.${productId}&select=base_item_id`);
+    if (!pr.length || !pr[0].base_item_id) return '';
+    const r = await sb('POST', 'rpc/base_update_stock', { p_item_id: pr[0].base_item_id, p_stock: qty });
+    if (r && r.error) return r.error === 'not_connected' ? 'BASEとの接続が切れています' : String(r.error_description || r.error).slice(0, 80);
+    return '';
+  } catch (e) { return '通信'; }
+}
+function baseFailShow(list) {
+  alert('こちらの在庫は記録しましたが、BASE（ネットショップ）の在庫数を更新できませんでした。\n\n・' + list.join('\n・') + '\n\nBASE側は前の数のままです。BASEの管理画面で確かめてください。');
+}
+/* 読み込みに失敗したら黙らず、画面に出して読み直せるようにする（2026-11-10）。
+   以前は失敗すると何も出ず（未処理の例外）、納品先のボタンが空のままだった */
+function loadErrorShow(e) {
+  const el = document.getElementById('chips'); if (!el) return;
+  el.style.display = 'flex';
+  el.innerHTML = '<div role="alert" style="flex:1;padding:12px 14px;border:2px solid #b93d3d;border-radius:8px;background:#fdecea;color:#7a1f16;font-weight:600;line-height:1.6;">⚠ 読み込めませんでした。通信を確かめて、もう一度お試しください。<br><button class="chip" style="margin-top:8px" onclick="load()">🔄 もう一度読み込む</button></div>';
+}
 async function load() {
+  try { await loadInner(); }
+  catch (e) { console.error(e); loadErrorShow(e); toast('読み込みエラー'); }
+}
+async function loadInner() {
   const [o, p, m] = await Promise.all([
     sb('GET', 'retail_outlets', null, '?is_active=eq.true&deleted_at=is.null&select=id,name,delivery_notes&order=sort_order.asc.nullslast,name.asc'),
     sb('GET', 'products', null, '?deleted_at=is.null&category=eq.小売&select=id,name,unit,stock_qty,price&order=name.asc'),
@@ -251,10 +276,8 @@ async function stockEdit(productId, outletName) {
     await sb('POST', 'product_movements', rec);
     if (!outletName) {
       await sb('PATCH', 'products', { stock_qty: next, updated_at: new Date().toISOString() }, `?id=eq.${productId}`);
-      try {
-        const pr = await sb('GET', 'products', null, `?id=eq.${productId}&select=base_item_id`);
-        if (pr.length && pr[0].base_item_id) await sb('POST', 'rpc/base_update_stock', { p_item_id: pr[0].base_item_id, p_stock: next });
-      } catch (e) {}
+      const bf = await baseStockPush(productId, next);
+      if (bf) baseFailShow([p.name + ' → ' + next + '（' + bf + '）']);
     }
     toast(`${p.name}: ${cur} → ${next}`);
     load();
@@ -327,6 +350,7 @@ async function saveForm() {
   const fmtQty = q => (formType === '訂正' && q > 0 ? '+' : '') + q;
   if (!confirm(`${place} / ${date}\n` + rows.map(r => `・${byId[r.pid].name} × ${fmtQty(r.qty)}`).join('\n') + `${note ? '\n理由・メモ: ' + note : ''}\n\nこの内容で${typeLabel}を記録しますか？`)) return;
   const btn = document.getElementById('f-save'); btn.disabled = true;
+  const baseFails = [];   // BASE（ネットショップ）の在庫数を合わせられなかった商品
   try {
     await sb('POST', 'product_movements', rows.map(r => ({
       product_id: r.pid, product_name: byId[r.pid].name, movement_type: formType, qty: r.qty,
@@ -339,13 +363,12 @@ async function saveForm() {
           ? (byId[r.pid].stock_qty || 0) + r.qty
           : Math.max(0, (byId[r.pid].stock_qty || 0) - r.qty);
         await sb('PATCH', 'products', { stock_qty: nq, updated_at: new Date().toISOString() }, `?id=eq.${r.pid}`);
-        // BASE連携（対応付け済み商品のみ・失敗しても止めない）
-        try {
-          const pr = await sb('GET', 'products', null, `?id=eq.${r.pid}&select=base_item_id`);
-          if (pr.length && pr[0].base_item_id) await sb('POST', 'rpc/base_update_stock', { p_item_id: pr[0].base_item_id, p_stock: nq });
-        } catch (e) {}
+        // BASE連携（対応付け済み商品のみ・失敗しても止めないが、失敗は画面に出す）
+        const bf = await baseStockPush(r.pid, nq);
+        if (bf) baseFails.push(byId[r.pid].name + ' → ' + nq + '（' + bf + '）');
       }
     }
+    if (baseFails.length) baseFailShow(baseFails);
     toast(`${typeLabel} ${rows.length}品目を記録しました`);
     document.getElementById('form-area').style.display = 'none';
     load();
@@ -389,9 +412,9 @@ async function toggleHistory() {
     // 担当者は店舗名固定
     window.__storeStaff = storeMode.name + '(店舗入力)';
     await pick(storeMode.name);
-  } catch(e) { toast('読み込みエラー'); }
+  } catch(e) { console.error(e); loadErrorShow(e); toast('読み込みエラー'); }
 })();
-if (!new URLSearchParams(location.search).get('store')) load();
+/* 2026-11-10: ここでもう一度 load() を呼んでいたため、店舗リンクなしで開くと読み込みが2回走っていた（上の即時関数が呼ぶ1回だけにする） */
 </script>
 </body>
 </html>

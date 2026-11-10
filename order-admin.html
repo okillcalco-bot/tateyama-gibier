@@ -12,7 +12,7 @@
 --bg:#f5f6f2;--surface:#ffffff;--surface2:#eff1ea;
 --border:#dfe3d6;--border2:#c7ccba;
 --gold:#8d6a1d;--gold2:#97772a;--gold-light:#6e5314;
---text:#23271c;--text2:#626854;--text3:#9aa08c;
+--text:#23271c;--text2:#626854;--text3:#6c7260;/* 2026-11-10: #9aa08c は白地で 2.7:1 と薄く、小さい注記が読みにくかった → 4.9:1 */
 --red:#b93d3d;--green:#3d7a34;--blue:#2f66b5;
 --radius:8px;
 }
@@ -50,6 +50,17 @@ header{background:var(--surface);border-bottom:1px solid var(--border);padding:1
 .btn-outline{border:1px solid var(--border2);color:var(--text2)}
 .btn-outline:hover{border-color:var(--gold2);color:var(--text)}
 .btn-sm{padding:5px 10px;font-size:.78rem}
+/* 指で押す端末（タブレット・スマホ）では押せる大きさにする
+   （2026-11-10 実測: スマホで高さ 24px 未満のボタン・選択欄が 278 か所。業務アプリは 2026-09-12 に同じ対応済み） */
+@media(pointer:coarse){
+  .btn{min-height:38px}
+  .btn-sm,select.btn-sm{min-height:34px}
+  input[type=checkbox],input[type=radio]{width:18px;height:18px;min-width:18px;flex:0 0 auto}
+  header a{display:inline-block;padding:7px 4px}
+  select{min-height:34px}
+  summary{min-height:32px;padding:4px 0}
+  .cust-kana-inline{min-height:32px}
+}
 .btn-danger{background:rgba(200,80,80,.15);color:var(--red);border:1px solid var(--red)}
 .btn-blue{background:rgba(90,140,216,.15);color:var(--blue);border:1px solid var(--blue)}
 .btn-green{background:rgba(106,158,90,.15);color:var(--green);border:1px solid var(--green)}
@@ -637,10 +648,10 @@ th,td{padding:8px 6px;font-size:.8rem}
         <div class="inv-card">
           <div class="inv-step"><span class="no">3</span>日付・番号・件名</div>
           <div class="form-row3">
-            <div class="form-group"><label>発行日</label><input type="date" id="invDate" onchange="regenInvNumber();invRenderSubjectChips()"></div>
+            <div class="form-group"><label>発行日</label><input type="date" id="invDate" onchange="regenInvNumberUI();invRenderSubjectChips()"></div>
             <div class="form-group"><label id="invDueLabel">お支払期限</label><input type="date" id="invDue"></div>
             <div class="form-group"><label id="invNumberLabel">請求番号（発行時に確定）</label>
-              <div style="display:flex;gap:6px"><input type="text" id="invNumber" readonly style="flex:1;background:var(--surface2)"><button class="btn btn-outline btn-sm" onclick="regenInvNumber()" title="採番し直す">↻</button></div>
+              <div style="display:flex;gap:6px"><input type="text" id="invNumber" readonly style="flex:1;background:var(--surface2)"><button class="btn btn-outline btn-sm" onclick="regenInvNumberUI()" title="採番し直す">↻</button></div>
             </div>
           </div>
           <div class="inv-chips" id="invDuePresets" style="margin:-6px 0 12px"><span style="font-size:.72rem;color:var(--text2);align-self:center">期限をワンタッチで:</span>
@@ -1269,12 +1280,32 @@ async function init(){
     const h=(location.hash||'').replace('#','');
     if(h && document.querySelector('.tab[data-tab="'+h+'"]')) switchTab(h);
     olOpenFromQuery();
-  }catch(e){console.error(e)}
+    loadErrorBanner('');
+    return true;
+  }catch(e){
+    console.error(e);
+    loadErrorBanner('注文・顧客などを読み込めませんでした（'+String(e&&e.message||e).slice(0,120)+'）。いま出ている一覧は最新ではなく、空に見えても「0件」とは限りません。通信を確かめて、もう一度読み込んでください。');
+    return false;
+  }
+}
+/* 最初の読み込みに失敗したら、空の一覧をそのまま見せずに、失敗したことと読み直しボタンを出す（2026-11-10）。
+   以前は console.error だけだったので、通信に失敗しても注文一覧・顧客が空のまま出て、
+   「更新」を押すと失敗していても「データを更新しました」と出ていた */
+function loadErrorBanner(msg){
+  let el=document.getElementById('loadErrBanner');
+  if(!msg){ if(el) el.remove(); return; }
+  if(!el){
+    el=document.createElement('div'); el.id='loadErrBanner'; el.setAttribute('role','alert');
+    el.style.cssText='margin:10px 16px;padding:12px 14px;border:2px solid #b93d3d;border-radius:8px;background:#fdecea;color:#7a1f16;font-weight:600;display:flex;gap:10px;align-items:center;flex-wrap:wrap;line-height:1.6';
+    const anchor=document.querySelector('.tabs');
+    if(anchor&&anchor.parentNode) anchor.parentNode.insertBefore(el,anchor); else document.body.insertBefore(el,document.body.firstChild);
+  }
+  el.innerHTML='<span style="flex:1;min-width:200px">⚠ '+esc(msg)+'</span><button class="btn btn-gold" onclick="refreshAll()">🔄 もう一度読み込む</button>';
 }
 
 async function refreshAll(){
-  await init();
-  alert('データを更新しました');
+  const ok=await init();
+  if(ok) alert('データを更新しました');
 }
 
 // ── Supabase Loaders ──
@@ -2740,7 +2771,7 @@ function renderCustomers(){
     const rankClass={'standard':'rank-standard','local':'rank-premium','startmember':'rank-wholesale'}[c.price_rank]||'rank-standard';
     const st=custStarState(c);
     const starTitle = st.manual ? '手動スター（クリックで解除）' : (st.auto ? '実績スター：発送/請求あり（クリックで手動でも固定）' : 'クリックでスターを付ける');
-    const starCell = `<td style="text-align:center"><span onclick="toggleCustomerStar('${c.id}')" title="${starTitle}" style="cursor:pointer;font-size:16px;color:${st.on?'var(--gold)':'var(--text3)'};opacity:${(st.auto&&!st.manual)?'0.55':'1'}">${st.on?'★':'☆'}</span></td>`;
+    const starCell = `<td style="text-align:center"><span onclick="toggleCustomerStar('${c.id}')" title="${starTitle}" role="button" style="cursor:pointer;display:inline-block;min-width:32px;line-height:32px;font-size:16px;color:${st.on?'var(--gold)':'var(--text3)'};opacity:${(st.auto&&!st.manual)?'0.55':'1'}">${st.on?'★':'☆'}</span></td>`;
     return `<tr>
       ${starCell}
       <td style="font-weight:700">${esc(c.code||'')}</td>
@@ -4130,7 +4161,7 @@ function invSetType(t){
   const due=document.getElementById('invDue');
   if(due) due.value=invDueDefault(t);
   invApplyTypeUI();
-  regenInvNumber();
+  regenInvNumberUI();
 }
 function invSetListType(t){
   if(!INV_DOC_SPEC[t]) return;
@@ -4146,6 +4177,13 @@ function invSetListType(t){
   loadInvoiceList();
 }
 
+/* 画面（タブを開く・日付を変える・↻）から呼ぶ用。採番に失敗したら黙らず番号欄に出す（2026-11-10）。
+   以前は通信に失敗すると何も出ないまま番号欄が古い値／空のままだった。発行のときは invIssue が取り直すので、ここでは投げない */
+async function regenInvNumberUI(){
+  const el=document.getElementById('invNumber');
+  try{ await regenInvNumber(); if(el){ el.placeholder=''; el.style.borderColor=''; } }
+  catch(e){ console.error('採番の取得に失敗',e); if(el){ el.value=''; el.placeholder='番号を取れませんでした（通信）。↻ で取り直してください'; el.style.borderColor='#b93d3d'; } }
+}
 async function regenInvNumber(){
   const el=document.getElementById('invNumber'); if(!el) return;
   const dstr=document.getElementById('invDate').value;
@@ -4176,7 +4214,7 @@ function openInvoiceTab(){
   invApplyTypeUI();
   invRenderSubjectChips();
   invSetListType(invListType);
-  regenInvNumber();
+  regenInvNumberUI();
   // 宛名・日付・備考など、どこを変えてもプレビューに反映する（1回だけ登録）
   const sp=document.getElementById('invSinglePanel');
   if(sp && !sp._invPreviewBound){ sp._invPreviewBound=true; sp.addEventListener('input',invSchedulePreview); sp.addEventListener('change',invSchedulePreview); }
@@ -5494,7 +5532,7 @@ function invConvert(id,toType){
   invUpdateLinkedNote();
   const due=document.getElementById('invDue');
   if(due) due.value=invDueDefault(toType);
-  regenInvNumber();
+  regenInvNumberUI();
   window.scrollTo({top:0,behavior:'smooth'});
   alert(`${r.doc_type||'書類'} ${r.doc_number||''} の内容を ${toType} に引き継ぎました。\n内容を確認して「発行する」を押してください。`);
 }
@@ -5514,7 +5552,7 @@ function invCopy(id){
   invFillFormFrom(r,true);
   invEditingId=null;
   invUpdateEditBanner();
-  regenInvNumber();
+  regenInvNumberUI();
   window.scrollTo({top:0,behavior:'smooth'});
   alert('内容をコピーしました。確認して「発行する」で新しい番号で発行されます。');
 }

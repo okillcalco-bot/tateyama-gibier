@@ -74,6 +74,7 @@ tr:last-child td { border-bottom:none; }
 .ref-row { display:grid; grid-template-columns:minmax(140px,1fr) 80px minmax(200px,2fr) minmax(120px,1fr) minmax(160px,1.5fr) 40px; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); font-size:12px; }
 .ref-row input { width:100%; }
 @media (max-width:800px) { .factor-row, .ref-row { grid-template-columns:1fr 1fr; } }
+@media (pointer:coarse) { .info-btn { width:28px; height:28px; font-size:13px; } .btn { min-height:38px; } summary { min-height:32px; padding:8px 0; } }/* 2026-11-10: 指では 18×18 が押しにくい */
 @media (max-width:1000px) { .kpi-row { grid-template-columns:repeat(2,1fr); } .charts-grid { grid-template-columns:1fr; } .chart-full { grid-column:1; } }
 </style>
 <script src="admin-gate.js"></script>

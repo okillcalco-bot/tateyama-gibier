@@ -87,6 +87,8 @@ tr:last-child td { border-bottom:none; }
 .rule-grid label { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12.5px; color:var(--text2); }
 .rule-grid input { width:110px; }
 @media (max-width:1000px) { .kpi-row { grid-template-columns:repeat(2,1fr); } }
+/* 指で押す端末では押せる大きさにする（2026-11-10 実測: 「保存」44×20・「印刷」61×23・チェック 13px） */
+@media (pointer:coarse) { .btn { min-height:38px; } input[type=checkbox], input[type=radio] { width:24px; height:24px; min-width:24px; flex:0 0 auto; } select { min-height:34px; } }
 </style>
 <script src="admin-gate.js"></script>
 <script>if(!window.adminGate){document.addEventListener("DOMContentLoaded",function(){document.body.innerHTML='<div style="padding:24px;font-family:sans-serif;">管理者確認の部品（admin-gate.js）を読み込めなかったため、このページは開けません。再読み込みしてください。 <a href="index.html">業務アプリへ戻る</a></div>';});}</script>
