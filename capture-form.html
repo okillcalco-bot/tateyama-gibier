@@ -3729,10 +3729,12 @@ function renderList() {
   // その日の到着順（作成時刻→受入時刻で昇順）に、種別関係なく通し番号を振る
   const akey = r => String(r.created_at || '') + '|' + String(r.receive_time || '');
   const dayNo = {};
-  [...todayData].sort((a, b) => akey(a) < akey(b) ? -1 : akey(a) > akey(b) ? 1 : 0)
-    .forEach((r, i) => { dayNo[r.id] = i + 1; });
+  const ordered = [...todayData].sort((a, b) => akey(a) < akey(b) ? -1 : akey(a) > akey(b) ? 1 : 0);
+  ordered.forEach((r, i) => { dayNo[r.id] = i + 1; });
 
-  container.innerHTML = todayData.map(r => {
+  // 一覧も入力した順（1が一番上）に並べる（2026-11-05 沖「入力した順番にして」）。
+  // 以前は受入時刻の新しい順で、受入時刻が同じ（06:00 など）個体が混ざると 3・4・5・2・1 のように番号がばらばらに見えた
+  container.innerHTML = ordered.map(r => {
     const emojiMap = {'イノシシ':'&#x1F417;','シカ':'&#x1F98C;','アライグマ':'&#x1F99D;','ハクビシン':'&#x1F43C;','キョン':'&#x1F98C;','タヌキ':'&#x1F99D;','ノウサギ':'&#x1F430;'};
     const emoji = emojiMap[r.species] || '&#x1F43E;';
     const qClass = r.quality === '良' ? 'q-good' : r.quality === '可' ? 'q-ok' : 'q-bad';
