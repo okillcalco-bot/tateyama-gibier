@@ -14559,6 +14559,9 @@ const HACCP_FACILITY_FIELDS = [
   ['license_date', '許可年月日', ''],
   ['hygiene_manager', '食品衛生責任者', ''],
   ['gibier_manager', '野生鳥獣肉処理衛生管理者', ''],
+  /* 賠償保険（2026-11-04 追加）: 加入者証の内容。回収（別表17 九・十）が起きたときに表紙から辿れるように */
+  ['insurance', '賠償保険（PL・リコール）', '', '（未設定・保険の加入者証を見て入力）'],
+  ['insurance_period', '賠償保険の期間・掛金', '', '（未設定・加入者証の共済期間と掛金）'],
   ['water', '使用水', '水道水（館山市）'],
   ['hokenjo', '管轄保健所', '安房保健所（館山市北条1093-1／0470-22-4511）'],
   ['kachiku', '家畜保健衛生所', '南部家畜保健衛生所（鴨川市八色52／04-7092-2304）'],
@@ -14603,15 +14606,16 @@ async function haccpInit() {
   if (!box) return;
   await haccpLoadFacility();
   if (!box.children.length) {
-    box.innerHTML = HACCP_FACILITY_FIELDS.map(([k, label, def]) => `<div class="form-group" style="margin:0;"><label>${label}</label><input class="form-input" id="hf-${k}" placeholder="${esc2(def || '（未設定・保健所の許可証を見て入力）')}"></div>`).join('');
+    box.innerHTML = HACCP_FACILITY_FIELDS.map(([k, label, def, hint]) => `<div class="form-group" style="margin:0;"><label>${label}</label><input class="form-input" id="hf-${k}" placeholder="${esc2(def || hint || '（未設定・保健所の許可証を見て入力）')}"></div>`).join('');
   }
   HACCP_FACILITY_FIELDS.forEach(([k]) => { const el = document.getElementById('hf-' + k); if (el) el.value = haccpFacilityValue(k); });
   haccpRenderMap();
 }
 async function haccpSaveFacility() {
   if (!requireAdmin('施設情報の保存')) return;
-  const val = {};
-  HACCP_FACILITY_FIELDS.forEach(([k]) => { val[k] = (document.getElementById('hf-' + k).value || '').trim(); });
+  /* 画面に欄の無い項目（古い版の画面で開いた場合など）も消さずに残す */
+  const val = Object.assign({}, haccpFacility || {});
+  HACCP_FACILITY_FIELDS.forEach(([k]) => { const el = document.getElementById('hf-' + k); if (el) val[k] = (el.value || '').trim(); });
   try {
     const rows = await sb('GET', 'app_settings', null, '?key=eq.haccp_facility&select=key');
     if (rows.length) await sb('PATCH', 'app_settings', { value: val, updated_at: new Date().toISOString() }, '?key=eq.haccp_facility');
