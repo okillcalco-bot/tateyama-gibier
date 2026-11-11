@@ -4651,7 +4651,8 @@ async function recordDirectShipment(items, custName, opts) {
   if (customerId) {
     try {
       const cs = await sb('GET', 'customers', null, `?id=eq.${customerId}&select=price_rank,notes`);
-      if (cs[0]) { priceRank = cs[0].price_rank || 'standard'; custNotes = cs[0].notes || ''; }
+      // いま登録の画面で価格を選んだばかりのお客さんは、その選んだ価格を使う。それ以外は台帳のランク
+      if (cs[0]) { priceRank = (createdCustomer && nc.rank) ? nc.rank : (cs[0].price_rank || 'standard'); custNotes = cs[0].notes || ''; }
       else if (!createdCustomer) rankUnknown = staffKeyGet() ? '顧客台帳からこの出荷先を読めませんでした' : 'この端末にスタッフキーが無く、顧客台帳を読めません';
     } catch (e) { if (!createdCustomer) rankUnknown = '通信に失敗しました'; }
   }
