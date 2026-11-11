@@ -25,6 +25,9 @@ const FC = require(path.resolve(__dirname, '../../finance-core.js'));
   const out = []; const ck = (n, c, e) => out.push([n, !!c, e == null ? '' : String(e)]);
   const ctx = await b.newContext({ viewport: { width: 1200, height: 900 } });
   const p = await ctx.newPage();
+  // 2026-11-11: 架空の明細は 2026-10 の日付。画面は「今日から数えた期間」を既定にするので、11月になると 10/1・10/2 の明細が
+  //   期間の外へ出て、このテストだけが落ちるようになっていた（アプリの不具合ではない）。テストの中の今日を 2026-10-20 に固定する
+  await p.clock.setFixedTime(new Date('2026-10-20T03:00:00Z'));
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
   p.on('dialog', d => d.accept());
 

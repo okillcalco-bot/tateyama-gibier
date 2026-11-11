@@ -12,12 +12,14 @@
   --bg: #f5f6f2; --surface: #ffffff; --surface2: #eff1ea;
   --border: #dfe3d6; --border2: #c7ccba;
   --gold: #8d6a1d; --gold2: #97772a; --gold-light: #6e5314;
-  --text: #23271c; --text2: #626854; --text3: #9aa08c;
+  --text: #23271c; --text2: #626854; --text3: #6c7260; /* 2026-11-10: #9aa08c は白地で 2.7:1 と薄く、メニューの見出しや小さい注記が読みにくかった → 4.9:1 */
   --red: #b93d3d; --green: #3d7a34; --blue: #2f66b5;
   --radius: 8px;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.6;}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.6;overflow-wrap:break-word;}
+/* 2026-11-10: 掲示板・現場写真のメモなどに貼った長いURL（切れ目の無い文字列）が枠を突き抜けて、画面全体が横に動いていた。
+   枠に収まらない語だけ途中で折り返す（表の列幅には影響しない） */
 a{color:var(--gold);text-decoration:none;}
 a:hover{color:var(--gold-light);}
 input,select,button,textarea{font-family:inherit;font-size:inherit;}
@@ -66,7 +68,7 @@ a.tab-btn{text-decoration:none;}
 .dash-2col>.section{min-width:0;}
 
 /* Cards */
-.card-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px;}
+.card-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:16px;margin-bottom:24px;}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;}
 .card-label{font-size:12px;color:var(--text2);margin-bottom:4px;}
 .card-value{font-size:28px;font-weight:700;color:var(--gold);}
@@ -139,6 +141,12 @@ tr:hover td{background:var(--surface2);}
   .btn{min-height:38px;}
   .btn-sm{min-height:34px;}
   input[type=checkbox],input[type=radio]{width:18px;height:18px;}
+  /* 2026-11-10 実測: 精肉モード（はかりの横のタブレット）で、高さ21pxのボタンが 30 か所。
+     登録済みの「🖨（刷り直し）」「✕（取消）」は 20×14px と 21×16px で隣り合い、押し分けにくかった */
+  .pm-overlay button{min-height:34px;}
+  .pm-completed-chip button{min-width:36px;min-height:36px;}
+  .pm-completed-chip{gap:8px;}
+  summary{min-height:32px;padding:4px 0;}
 }
 .btn:disabled{opacity:.4;cursor:not-allowed;}
 .btn.active{background:var(--gold2);color:#fff;border-color:var(--gold2);}
@@ -257,8 +265,10 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .pm-overlay{display:none;position:fixed;inset:0;z-index:500;background:var(--bg);overflow:hidden;}
 .pm-overlay.active{display:flex;flex-direction:column;}
 @media (orientation:portrait),(max-width:700px){
-  .pm-body{grid-template-columns:1fr!important;overflow-y:auto!important;}
-  .pm-left,.pm-right{overflow-y:visible!important;min-height:unset!important;}
+  .pm-body{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:auto!important;overflow-y:auto!important;}/* 2026-11-10: 縦持ちでは行の高さを中身に合わせる。横持ち用の minmax(0,1fr) が1行目だけに効き、部位ボタンの列が潰れて下の計量パネルに重なっていた（実測 820×844: 部位ボタン28個が「登録」「ラベル印刷」の上に重なる） */
+  /* 列も 0 まで縮められるようにする。1fr のままだと中身（長い冷凍庫名の選択欄）の幅で列が画面より広がり、右端が切れた → 0 まで縮められる列にする */
+  .pm-left,.pm-right{overflow-y:visible!important;min-height:unset!important;min-width:0;}
+  #pmLocationSel{max-width:100%;min-width:0;}
 }
 
 /* Header */
@@ -287,7 +297,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 
 /* Options row */
 .pm-options-row{display:flex;flex-direction:column;gap:6px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);}
-.pm-options-row .pm-opts-row1,.pm-options-row .pm-opts-row2{display:flex;gap:6px;align-items:center;}
+.pm-options-row .pm-opts-row1,.pm-options-row .pm-opts-row2{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}/* 2026-11-10: スマホ幅で「骨をまとめる」「内臓をまとめる」が画面の外に切れて押せなかった → 折り返す */
 .pm-toggle-btn{padding:8px 16px;border-radius:14px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-size:15px;cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit;}
 .pm-toggle-btn:hover{border-color:var(--gold2);}
 .pm-toggle-btn.bone-on{background:rgba(90,140,216,.15);color:var(--blue);border-color:rgba(90,140,216,.4);font-weight:600;}
@@ -378,6 +388,9 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 .pm-finish-btn:hover{filter:brightness(1.08);}
 .pm-finish-btn:active{transform:scale(.98);}
 @media (max-width:700px){ .pm-finish-btn{min-width:0;flex:1;} .pm-footer-summary{font-size:12.5px;} }
+/* 2026-11-10: スマホ幅（〜520px）では件数の行とボタンが横に並びきらず、ボタンが 56px まで縮んで
+   「✅ 全部位完了」の字が画面の右へ切れていた（実測 390px: ボタン幅60px・字は158px必要）。件数を上、ボタンを下に重ねる */
+@media (max-width:520px){ .pm-footer{flex-wrap:wrap;gap:6px;} .pm-footer-summary{flex:1 1 100%;} .pm-finish-btn{flex:1 1 100%;min-height:50px;padding:10px 16px;} }
 
 /* Print label styles */
 @media print {
@@ -1966,7 +1979,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
     <div class="section">
       <div class="section-title">本日の清掃状況（部屋をタップして記録）</div>
       <div style="font-size:12.5px;color:var(--text2);margin-bottom:12px;">HACCP・国産ジビエ認証ガイドラインに基づく衛生管理記録です。実施したらその場でタップ→実施者を選ぶだけで記録されます。</div>
-      <div id="clean-rooms" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;"></div>
+      <div id="clean-rooms" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(220px,100%),1fr));gap:10px;"></div>
     </div>
     <div class="section">
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
@@ -2234,7 +2247,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;line-height:1.7;">
         千葉県「野生鳥獣肉に係る衛生管理ガイドライン」（令和4年1月）と食品衛生法施行規則 別表17（HACCPの考え方を取り入れた衛生管理）に沿って、<strong>「何を・どこで・どれだけ記録しているか」の対応表</strong>と、対象月の記録一式（上の「HACCP・衛生管理」の帳票）を1つの印刷物にまとめます。赤い行は対象月の記録が0件のところ。表紙の施設情報は下で編集して保存してください（全端末で共有）。
       </div>
-      <div id="haccp-facility" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-bottom:12px;"></div>
+      <div id="haccp-facility" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(220px,100%),1fr));gap:8px;margin-bottom:12px;"></div>
       <div id="haccp-map" style="overflow-x:auto;"></div>
     </div>
     <div class="section">
@@ -2252,7 +2265,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <!-- 打合せ記録簿・収支状況の入力（2026-09-18: Excel上の手作業だった2枚をアプリのデータにする） -->
       <details id="city-inputs" style="margin:0 0 12px;" ontoggle="if(this.open)cityInputsLoad()">
         <summary style="cursor:pointer;font-weight:700;">✍ 打合せ記録簿・収支状況の入力（対象月ぶん）<span id="city-inputs-state" style="font-weight:400;color:var(--text2);margin-left:8px;"></span></summary>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-top:10px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:14px;margin-top:10px;">
           <div style="border:1px solid var(--border);border-radius:var(--radius);padding:10px;">
             <div style="font-weight:700;margin-bottom:6px;">④ 打合せ記録簿（市役所定例ミーティング）</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
@@ -3490,6 +3503,7 @@ async function baseOrderShip(key) {
     });
     const orderId = created[0].id;
     const unmatched = [];
+    const dispatchFail = [];   // BASE側を発送済みにできなかった品目（2026-11-10: 以前は失敗を捨てていて、BASEでは未発送のまま気づけなかった）
     for (const it of items) {
       const p = byBaseId[String(it.item_id)];
       await sb('POST', 'order_items', {
@@ -3511,7 +3525,10 @@ async function baseOrderShip(key) {
       }
       // BASE側を発送済みに（write_orders権限がある場合。送り状番号も一緒に送る）
       if (it.status !== 'dispatched' && it.order_item_id) {
-        try { await sb('POST', 'rpc/base_dispatch', { p_order_item_id: String(it.order_item_id), p_tracking: trackNo || null }); } catch (e) {}
+        try {
+          const dr = await sb('POST', 'rpc/base_dispatch', { p_order_item_id: String(it.order_item_id), p_tracking: trackNo || null });
+          if (dr && dr.error) dispatchFail.push(it.title + '（' + baseErrText(dr) + '）');
+        } catch (e) { dispatchFail.push(it.title + '（通信）'); }
       }
     }
     const baseShipBody = { order_id: orderId, shipment_date: ymdLocal(new Date()), status: '出荷済', notes: 'BASE注文 ' + key + (trackNo ? ' / 送り状番号: ' + trackNo : '') };
@@ -3525,6 +3542,7 @@ async function baseOrderShip(key) {
     await sb('POST', 'shipments', baseShipBody);
     playFeedbackSound(true);
     toast(`BASE注文の発送処理が完了しました（${items.length}品目）` + (unmatched.length ? `\n⚠ 在庫と対応付けなし: ${unmatched.join('・')}（⚙BASE連携で対応付けを確認）` : ''));
+    if (dispatchFail.length) baseSyncWarn(`⚠ こちらの出荷は記録しましたが、BASE側を「発送済み」にできませんでした: ${dispatchFail.join('・')}。BASEの管理画面で発送済みにしてください（お客様に発送の知らせが届いていません）`);
     loadBaseOrders();
   } catch (e) {
     playFeedbackSound(false);
@@ -5174,7 +5192,7 @@ async function fieldPhotosLoad() {
     return;
   }
   const fmtAt = s => { const d = new Date(s); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
-  list.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">` + rows.map(r => `
+  list.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr));gap:10px;">` + rows.map(r => `
     <div class="fp-card" data-id="${r.id}" style="border:1px solid ${r.resolved_at ? 'var(--border)' : 'var(--gold2)'};border-radius:var(--radius);padding:10px;background:var(--surface);display:flex;gap:10px;${r.resolved_at ? 'opacity:.65;' : ''}">
       <a href="${fpUrl(r.photo_path)}" target="_blank" rel="noopener" title="タップで拡大"><img src="${fpUrl(r.photo_path)}" alt="" style="width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block;"></a>
       <div style="flex:1;min-width:0;font-size:13px;line-height:1.6;">
@@ -5261,6 +5279,7 @@ async function loadShipping() {
             <button class="btn btn-primary btn-sm" onclick="shipOrder('${order.id}')" id="ship-btn-${order.id}" disabled>出荷確定</button>
           </div>
         </div>
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><!-- 2026-11-10: スマホ幅で表が画面からはみ出し、ページ全体が横に動いていた。表だけ横に動かす -->
         <table>
           <thead><tr><th>種別</th><th>部位</th><th>重量(kg)</th><th>単価</th><th>小計</th><th>在庫割当</th></tr></thead>
           <tbody>`;
@@ -5288,7 +5307,7 @@ async function loadShipping() {
           }</td>
         </tr>`;
       }
-      html += `</tbody></table></div>`;
+      html += `</tbody></table></div></div>`;
     }
     container.innerHTML = html;
 
@@ -9108,7 +9127,7 @@ function evSheetRender() {
   const box = document.getElementById('ev-sheet-list'); if (!box) return;
   const rows = evCardRows();
   if (!rows.length) { box.innerHTML = '<div class="empty-state">一頭ずつ分かるお肉を先に「＋ 在庫から選ぶ」で入れてください。</div>'; return; }
-  box.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px;">` + rows.map(r => {
+  box.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr));gap:10px;">` + rows.map(r => {
     const i = r.ind || {}; const s = evSheets[r.label] || {};
     const m = evMileageOf(i);
     const photo = s.photo_path ? evSheetPhotoUrl(s.photo_path) : (i.image_url || '');
@@ -10480,7 +10499,7 @@ function indLifeRender() {
     </div>${inner}</div>`;
 
   // ① いのち（生態）
-  const life = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:0 22px;">
+  const life = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(215px,100%),1fr));gap:0 22px;">
     <div>
       ${indLifeField('捕獲日', fmt(i.capture_date))}
       ${indLifeField('時刻', i.capture_time)}
@@ -10505,7 +10524,7 @@ function indLifeRender() {
   </div>${indPhotoStrip(i)}`;
 
   // ② 検査
-  const insp = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:0 22px;">
+  const insp = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(215px,100%),1fr));gap:0 22px;">
     <div>
       ${indLifeField('検査日', fmt(i.radiation_test_date))}
       ${indLifeField('判明日', fmt(i.radiation_result_date))}
@@ -11190,7 +11209,9 @@ async function indSave() {
       await sb('PATCH', 'individuals', payload, '?label_id=eq.' + encodeURIComponent(indEditId));
       if (labelChanged) {
         // 在庫の非正規化コード(individual_code)も新番号へ同期（FK対象外のため）
-        try { await sb('PATCH', 'inventory', { individual_code: label_id }, '?individual_id=eq.' + encodeURIComponent(label_id)); } catch (e) { /* 在庫が無ければ何もしない */ }
+        // 在庫が無ければ0件の更新で終わる（エラーにならない）。ここで失敗するのは通信・権限のときなので黙らない（2026-11-10）
+        try { await sb('PATCH', 'inventory', { individual_code: label_id }, '?individual_id=eq.' + encodeURIComponent(label_id)); }
+        catch (e) { alert('個体の番号は ' + label_id + ' に変わりましたが、在庫に書いてある個体番号（表示用）を合わせられませんでした。\n在庫一覧でこの個体のパックが古い番号のまま出ることがあります。通信を確かめて、もう一度この個体を開いて保存してください。\n' + sbSafeMsg(e)); }
       }
       toast('保存しました');
     } else if (indRestoredLabel === label_id) {
@@ -13606,9 +13627,26 @@ async function baseSyncStock(productId, newStock) {
     const prods = await sb('GET', 'products', null, `?id=eq.${productId}&select=base_item_id,name`);
     if (!prods.length || !prods[0].base_item_id) return;
     const r = await baseRpc('base_update_stock', { p_item_id: prods[0].base_item_id, p_stock: newStock });
-    if (r && r.error) console.warn('BASE同期失敗', r);
+    if (r && r.error) baseSyncWarn(`⚠ BASE（ネットショップ）の在庫数を更新できませんでした: ${prods[0].name} → ${newStock}（${baseErrText(r)}）。BASE側は前の数のままです。BASEの管理画面で確かめてください`);
     else toast(`🛒 BASEの在庫も更新: ${prods[0].name} → ${newStock}`);
-  } catch (e) { console.warn('BASE同期エラー', e); }
+  } catch (e) { baseSyncWarn(`⚠ BASE（ネットショップ）の在庫数を更新できませんでした（通信）。新しい数 ${newStock} がBASEに入っていないかもしれません。BASEの管理画面で確かめてください`); console.warn('BASE同期エラー', e); }
+}
+/* BASE（ネットショップ）への反映に失敗したときの知らせ（2026-11-10）。
+   以前は console.warn だけで、画面には成功のときしか出ていなかった（失敗は何も出ない）。
+   業務は止めないが、BASE側の数が古いまま＝無い在庫が売れるおそれがあるので、すぐ消えない形（12秒）で出す */
+function baseErrText(r) {
+  if (!r || !r.error) return '';
+  if (r.error === 'not_connected') return 'BASEとの接続が切れています。⚙BASE連携でつなぎ直してください';
+  return String(r.error_description || r.error).slice(0, 80);
+}
+function baseSyncWarn(msg) {
+  console.warn(msg);
+  const c = document.getElementById('toasts');
+  if (!c) { alert(msg); return; }
+  const el = document.createElement('div');
+  el.className = 'toast toast-error'; el.setAttribute('role', 'alert'); el.textContent = msg;
+  c.appendChild(el);
+  setTimeout(() => el.remove(), 12000);
 }
 
 async function baseOpen() {
@@ -14290,7 +14328,7 @@ function renderDocsList() {
     defs.filter(d => d.cat === c).map(d => {
       const rec = docRecords[d.key + '|' + period];
       return `<div style="display:flex;gap:10px;align-items:center;padding:9px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:var(--surface);flex-wrap:wrap;">
-        <strong style="min-width:230px;">${d.title}</strong>
+        <strong style="min-width:min(230px,100%);">${d.title}</strong>
         ${docStatusBadge(rec ? rec.status : null)}
         ${rec && rec.approved_by ? `<span style="font-size:11px;color:var(--text2);">承認: ${esc2(rec.approved_by)}</span>` : ''}
         ${rec && rec.status === '差戻し' && rec.reject_note ? `<span style="font-size:11px;color:var(--red);">差戻し理由: ${esc2(rec.reject_note)}</span>` : ''}

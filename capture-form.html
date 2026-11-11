@@ -1655,24 +1655,28 @@ document.addEventListener('DOMContentLoaded', async () => {
   const blC = document.getElementById('blCanvas');
   if (blC) blC.addEventListener('click', blCanvasTap);
   // スタッフリストを読み込む
-  try {
-    const staffRows = await sb('GET', 'staff', null, '?select=name&order=name&is_active=eq.true&deleted_at=is.null');
+  // 2026-11-10: 読めなかったとき（通信が悪い・オフライン）は、昔の固定リスト（5人分・今の名簿と合っていない）を
+  //   黙って出していた。記録者に今いない人の名前が入りうるので、この端末で最後に読めた名簿を使い、
+  //   読めなかったことを画面に出す。名簿が一度も読めていない端末では候補を出さない（未入力のままでも保存はできる）。
+  {
     const sel = document.getElementById('recorder');
-    if (sel && Array.isArray(staffRows)) {
-      staffRows.forEach(function(s){
-        const o = document.createElement('option');
-        o.value = s.name; o.textContent = s.name;
-        sel.appendChild(o);
-      });
+    const addNames = names => { if (sel) names.forEach(function(n){ const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o); }); };
+    try {
+      const staffRows = await sb('GET', 'staff', null, '?select=name&order=name&is_active=eq.true&deleted_at=is.null');
+      if (!Array.isArray(staffRows)) throw new Error('スタッフ名簿の形が違います');
+      const names = staffRows.map(function(s){ return s.name; }).filter(Boolean);
+      addNames(names);
+      try { localStorage.setItem('tgc_staff_names_v1', JSON.stringify({ names: names, at: Date.now() })); } catch (e) {}
+    } catch(e) {
+      let cached = null;
+      try { cached = JSON.parse(localStorage.getItem('tgc_staff_names_v1') || 'null'); } catch (e2) {}
+      if (cached && Array.isArray(cached.names) && cached.names.length) {
+        addNames(cached.names);
+        masterLoadWarn('スタッフ名簿を読み込めませんでした（通信）。記録者は、この端末で前回読めた名簿（' + new Date(cached.at).toLocaleDateString('ja-JP') + '）を出しています。');
+      } else {
+        masterLoadWarn('スタッフ名簿を読み込めませんでした（通信）。記録者の候補が出せません。電波の良い所で開き直してください。');
+      }
     }
-  } catch(e) {
-    // スタッフテーブルなければ固定リストを使用
-    const defaultStaff = ['没次郎','岡田','川崎','山田','山村'];
-    const sel = document.getElementById('recorder');
-    if (sel) defaultStaff.forEach(function(n){
-      const o = document.createElement('option');
-      o.value = n; o.textContent = n; sel.appendChild(o);
-    });
   }
   tgSetAutoDateTime();
   ['captureDate', 'captureTime'].forEach(id => {
@@ -1692,7 +1696,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   syncPending();
   // 捕獲者の電話番号（調査票で使う）を控えておく
   // 電話番号は個人情報のため、表からは読まない。スタッフキーの端末だけ staff_hunters_private で足す（2026-11-08）
-  try { window._huntersCache = await sb('GET', 'hunters', null, '?select=id,name,name_public&deleted_at=is.null&limit=500'); } catch (e) { window._huntersCache = []; }
+  try { window._huntersCache = await sb('GET', 'hunters', null, '?select=id,name,name_public&deleted_at=is.null&limit=500'); } catch (e) { window._huntersCache = []; masterLoadWarn('捕獲者台帳を読み込めませんでした（通信）。名前の公開可否などの確認ができません。'); }
   try {
     if (staffKeyGet() && window._huntersCache.length) {
       const priv = await sb('POST', 'rpc/staff_hunters_private', { p_ids: null });
@@ -3069,7 +3073,9 @@ async function svAfterSave(rec) {
       if (kind === 'extra') { patch.photo_extra = path; uploaded.photo_extra = path; }
     }
   } catch (e) { alert('写真のアップロードに失敗しました。票だけ作ります。\n' + String(e.message || e).slice(0, 120)); }
-  try { await sb('PATCH', 'individuals', patch, '?label_id=eq.' + encodeURIComponent(labelId)); } catch (e) {}
+  // 2026-11-10: 失敗を捨てていた。票は手元の内容で作れるが、記録には残っていないので、後から出し直すと空になる → 画面に出す
+  try { await sb('PATCH', 'individuals', patch, '?label_id=eq.' + encodeURIComponent(labelId)); }
+  catch (e) { alert('調査票の内容（写真の保存場所を含む）を、個体の記録に保存できませんでした。\n票はこのまま作りますが、後から出し直すときは入れ直しになります。通信を確かめて、もう一度保存してください。\n' + String(e.message || e).slice(0, 120)); }
   const merged = Object.assign({}, rec, patch, uploaded, {
     label_id: labelId,
     hunter_tel: (document.getElementById('svHunterTel')?.value || '').trim(),
@@ -3674,6 +3680,20 @@ function resetForm() {
 }
 
 /* ── Today count ── */
+/* 名簿などの読み込み失敗を画面に出す（2026-11-10）。以前は何も出さず、候補が空／古いまま入力できていた。
+   入力中の内容を消さないよう、読み直しは本人が押したときだけ（確認つき） */
+function masterLoadWarn(msg) {
+  let el = document.getElementById('masterWarn');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'masterWarn'; el.setAttribute('role', 'alert');
+    el.style.cssText = 'margin:8px 12px;padding:10px 12px;border:2px solid #b93d3d;border-radius:8px;background:#fdecea;color:#7a1f16;font-weight:600;font-size:14px;line-height:1.6;';
+    const hd = document.querySelector('.header');
+    if (hd && hd.parentNode) hd.parentNode.insertBefore(el, hd.nextSibling); else document.body.insertBefore(el, document.body.firstChild);
+    el.innerHTML = '<div id="masterWarnList"></div><button type="button" style="margin-top:6px;padding:8px 14px;border-radius:6px;border:1px solid #7a1f16;background:#fff;color:#7a1f16;font-weight:700;cursor:pointer;min-height:38px;" onclick="if(confirm(\'画面を読み直します。入力中の内容は消えます。よろしいですか？\'))location.reload()">🔄 読み直す</button>';
+  }
+  const list = document.getElementById('masterWarnList');
+  if (list && ![...list.children].some(c => c.textContent === '⚠ ' + msg)) { const d = document.createElement('div'); d.textContent = '⚠ ' + msg; list.appendChild(d); }
+}
 async function loadTodayCount() {
   try {
     const _t = today();
@@ -3739,8 +3759,8 @@ function renderList() {
     const photoBadge = r.capture_category === '駆除外'
       ? `<span style="font-size:12px;font-weight:700;color:var(--text2,#888);border:1px solid currentColor;border-radius:6px;padding:1px 7px;">駆除外</span>`
       : r.image_url
-      ? `<button type="button" onclick="event.stopPropagation();photoCapture('${r.id}')" style="background:none;border:none;color:#6a9e5a;font-weight:700;font-size:13px;cursor:pointer;padding:2px 4px;">📷済</button>`
-      : `<button type="button" onclick="event.stopPropagation();photoCapture('${r.id}')" style="background:#d0703c;border:none;color:#fff;font-weight:800;font-size:13px;cursor:pointer;padding:3px 9px;border-radius:6px;">📷 撮影</button>`;
+      ? `<button type="button" onclick="event.stopPropagation();photoCapture('${r.id}')" style="background:none;border:none;color:#6a9e5a;font-weight:700;font-size:13px;cursor:pointer;padding:8px 6px;min-height:36px;">📷済</button>`
+      : `<button type="button" onclick="event.stopPropagation();photoCapture('${r.id}')" style="background:#d0703c;border:none;color:#fff;font-weight:800;font-size:13px;cursor:pointer;padding:8px 10px;min-height:36px;border-radius:6px;">📷 撮影</button>`;
     return `<div class="card" onclick='showBoard(${JSON.stringify(r).replace(/'/g, "&#39;")})'>
       <div class="day-no">${dayNo[r.id] || '-'}</div>
       <div class="card-emoji">${emoji}</div>

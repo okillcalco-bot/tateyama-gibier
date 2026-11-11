@@ -9,7 +9,7 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#f5f6f2;--surface:#ffffff;--surface2:#eff1ea;--border:#dfe3d6;--border2:#c7ccba;--gold:#8d6a1d;--gold2:#97772a;--gold-light:#6e5314;
---text:#23271c;--text2:#626854;--text3:#9aa08c;--red:#b93d3d;--green:#3d7a34;--blue:#2f66b5;--radius:8px}
+--text:#23271c;--text2:#626854;--text3:#6c7260;--red:#b93d3d;--green:#3d7a34;--blue:#2f66b5;--radius:8px}
 html{font-size:14px}
 body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
 a{color:var(--gold);text-decoration:none}a:hover{color:var(--gold-light)}
@@ -38,6 +38,14 @@ header{background:var(--surface);border-bottom:1px solid var(--border);padding:1
 .btn-gold:hover{filter:brightness(1.1)}
 .btn-outline{border:1px solid var(--border2);color:var(--text2)}.btn-outline:hover{border-color:var(--gold2);color:var(--text)}
 .btn-sm{padding:4px 9px;font-size:.78rem}
+/* 指で押す端末では押せる大きさにする（2026-11-10 実測: 高さ 24px 未満が 77 か所） */
+@media(pointer:coarse){
+  .btn{min-height:38px}
+  .btn-sm{min-height:34px}
+  select{min-height:34px}
+  input[type=checkbox],input[type=radio]{width:18px;height:18px}
+  header a{display:inline-block;padding:7px 4px}
+}
 .btn-danger{background:rgba(200,80,80,.12);color:var(--red);border:1px solid var(--red)}
 .btn-green{background:rgba(106,158,90,.15);color:var(--green);border:1px solid var(--green)}
 .btn:disabled{opacity:.45;cursor:not-allowed}

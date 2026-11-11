@@ -77,6 +77,7 @@ async function open(browser, { query = '?tab=recipes', failDb = false } = {}) {
 
   // 新規登録 → 検索 → 材料 → 計算
   await page.evaluate(() => rcOpenNew());
+  await page.waitForTimeout(150);   // 開いて50ms後に料理名へフォーカスが移る。その前後に次の欄へ入力すると、字が料理名に入ってしまう（2026-11-11: ときどき落ちていた）
   await page.fill('#rc-f-name', '味付け肉 みそ（テスト）');
   await page.fill('#rc-f-servings', '2');
   await page.fill('#rc-food-q', 'いのしし');

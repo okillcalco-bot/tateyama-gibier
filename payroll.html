@@ -6,7 +6,7 @@
 <title>給与計算 | 館山ジビエセンター</title>
 <style>
 :root{
-  --bg:#f6f4ef; --card:#fff; --border:#ddd6c8; --text:#2b2a26; --text2:#6f6a5d; --text3:#a09a8a;
+  --bg:#f6f4ef; --card:#fff; --border:#ddd6c8; --text:#2b2a26; --text2:#6f6a5d; --text3:#736d5e;
   --gold:#a8873c; --green:#4a7a3d; --red:#b0432f; --blue:#3d5a7a;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -22,6 +22,12 @@ main{padding:14px;max-width:1500px;margin:0 auto;}
 .btn-gold{background:var(--gold);border-color:var(--gold);color:#fff;}
 .btn-gold:hover{background:#93752f;}
 .btn-sm{padding:4px 8px;font-size:12px;}
+/* 指で押す端末では押せる大きさにする（2026-11-10 実測: 明細の入力欄が高さ 23px で 49 か所） */
+@media(pointer:coarse){
+  .btn{min-height:38px;}
+  .btn-sm{min-height:34px;}
+  table input,select{min-height:34px;}
+}
 .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;overflow-x:auto;}
 table{border-collapse:collapse;white-space:nowrap;width:100%;}
 th,td{border-bottom:1px solid #eee8da;padding:5px 6px;text-align:right;font-size:13px;}

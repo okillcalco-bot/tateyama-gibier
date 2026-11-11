@@ -11,7 +11,7 @@
 :root {
   --bg: #f5f6f2; --surface: #ffffff; --surface2: #eff1ea;
   --border: #dfe3d6; --gold: #8d6a1d; --gold2: #97772a;
-  --text: #23271c; --text2: #626854; --text3: #9aa08c;
+  --text: #23271c; --text2: #626854; --text3: #6c7260;/* 2026-11-10: #9aa08c は 2.5:1 と薄く、下の注意書きが読みにくかった → 4.9:1 */
   --red: #b93d3d; --green: #3d7a34; --radius: 12px;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -91,7 +91,7 @@ h1 { text-align: center; font-size: 16px; color: var(--text2); font-weight: 600;
 .footer-note { text-align: center; color: var(--text3); font-size: 12px; margin-top: 26px; line-height: 1.9; }
 .admin-bar { background: #fdf6e3; border: 2px solid var(--gold2); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 14px; font-size: 14px; color: var(--gold); line-height: 1.8; }
 .admin-bar input[type=date], .admin-bar input[type=time] { font-family: inherit; font-size: 16px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; }
-.link-btn { background: none; border: none; color: var(--text3); font-size: 12px; text-decoration: underline; cursor: pointer; font-family: inherit; }
+.link-btn { background: none; border: none; color: var(--text3); font-size: 12px; text-decoration: underline; cursor: pointer; font-family: inherit; min-height: 36px; padding: 6px 10px; }
 /* 施設チェック表（市役所提出用・監査様式） */
 .fc-cycle { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); margin-bottom: 10px; overflow: hidden; }
 .fc-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;

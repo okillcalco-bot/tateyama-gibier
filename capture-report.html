@@ -152,7 +152,7 @@
       display: none;
       z-index: 999;
     }
-    #statusBar.info { background: var(--blue); color: #fff; display: block; }
+    #statusBar.info { background: #1f6fd0; color: #fff; display: block; }/* 2026-11-10: 白字×#4a9eff は 2.8:1 で読みにくかった → 4.9:1 */
     #statusBar.error { background: var(--red); color: #fff; display: block; }
 
     /* ================================================
@@ -294,8 +294,8 @@
   </div>
 
   <div class="toolbar">
-    <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)">
-    <label for="selectAll" style="font-size:12px;cursor:pointer">全選択</label>
+    <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" style="width:24px;height:24px;min-width:24px;flex:0 0 auto;vertical-align:middle">
+    <label for="selectAll" style="font-size:12px;cursor:pointer;display:inline-block;padding:8px 6px">全選択</label>
     <button class="btn btn-print" onclick="printSelected()" id="btnPrint" disabled>
       🖨️ 選択して印刷
     </button>

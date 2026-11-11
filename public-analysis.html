@@ -59,6 +59,7 @@ tr:last-child td { border-bottom:none; }
 .risk { color:var(--red); font-weight:600; }
 .up { color:var(--green); } .down { color:var(--red); }
 @media (max-width:1000px) { .grid2 { grid-template-columns:1fr; } }
+@media (pointer:coarse) { .toc a { display:inline-block; padding:8px 12px; } }/* 2026-11-10: 指では高さ 22px が押しにくい */
 </style>
 <script src="admin-gate.js"></script>
 <script>if(!window.adminGate){document.addEventListener("DOMContentLoaded",function(){document.body.innerHTML='<div style="padding:24px;font-family:sans-serif;">管理者確認の部品（admin-gate.js）を読み込めなかったため、このページは開けません。再読み込みしてください。 <a href="index.html">業務アプリへ戻る</a></div>';});}</script>
