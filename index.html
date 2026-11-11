@@ -3348,7 +3348,11 @@ const BASE_FETCH_LIMIT = 50;   // BASEの注文一覧を新しい順に何件見
 async function baseBacklogFetch() {
   const r = await sb('POST', 'rpc/base_orders', { p_limit: BASE_FETCH_LIMIT });
   if (r && r.error === 'not_connected') return { notConnected: true, list: [], candidates: [] };
-  const list = (r && r.orders) ? r.orders : [];
+  // 2026-11-11: BASE がエラーを返したとき（期限切れ・権限・BASE側の不調）は r.orders が無いので、
+  //   そのまま進むと「注文はありません」と出ていた（未発送の注文があっても気づけない）。失敗として扱う
+  if (r && r.error) throw new Error('BASEがエラーを返しました: ' + baseErrText(r));
+  if (!r || !Array.isArray(r.orders)) throw new Error('BASEからの返事に注文の一覧がありません');
+  const list = r.orders;
   if (!list.length) return { notConnected: false, list, candidates: [] };
   const keys = list.map(o => 'BASE-' + o.unique_key);
   const done = await sb('GET', 'orders', null, `?order_code=in.(${keys.map(k => '"' + k + '"').join(',')})&select=order_code`);
@@ -3636,7 +3640,9 @@ async function shipDirectFreightAuto(force) {
   // 計算中に手入力・条件変更があったら、古い結果で上書きしない
   if (seq !== shipFreightSeq) return;
   if (one == null) {
-    if (note) note.innerHTML = '<span style="color:var(--gold)">この地域・サイズは料金表にありません。送料を直接入力してください。</span>';
+    if (note) note.innerHTML = shipFreightFailed
+      ? '<span style="color:var(--red)">送料を計算できませんでした（通信）。条件を選び直すか、送料を直接入力してください。</span>'
+      : '<span style="color:var(--gold)">この地域・サイズは料金表にありません。送料を直接入力してください。</span>';
     return;
   }
   // 個口数（箱の数）ぶん掛ける。請求書の送料行は「数量＝個口数・単価＝1個の送料」になる（2026-10-09）
@@ -4637,8 +4643,21 @@ async function recordDirectShipment(items, custName, opts) {
   // タブの巡回順に依存させないよう、その場で価格マスタと顧客ランクを取り直す。
   let priceRank = createdCustomer ? (nc.rank || 'standard') : 'standard';
   let custNotes = '';
-  if (customerId && !createdCustomer) {
-    try { const cs = await sb('GET', 'customers', null, `?id=eq.${customerId}&select=price_rank,notes`); if (cs[0]) { priceRank = cs[0].price_rank || 'standard'; custNotes = cs[0].notes || ''; } } catch(e) {}
+  // 2026-11-11: 顧客の価格ランクを読めなかったとき（通信の失敗／この端末にスタッフキーが無く顧客台帳が空で返る）は、
+  //   何も出さずに standard の単価で記録していた（ローカル・スタートメンバーのお客さんが高い単価で請求される）。
+  //   出荷は止めないが、確かめられなかったことを画面と注文の備考に残す。
+  //   「登録した」と返ってきても、もともと台帳にあったお客さんのことがある（照合だけ失敗した場合）ので、ランクは必ず台帳から読む
+  let rankUnknown = '';
+  if (customerId) {
+    try {
+      const cs = await sb('GET', 'customers', null, `?id=eq.${customerId}&select=price_rank,notes`);
+      if (cs[0]) { priceRank = cs[0].price_rank || 'standard'; custNotes = cs[0].notes || ''; }
+      else if (!createdCustomer) rankUnknown = staffKeyGet() ? '顧客台帳からこの出荷先を読めませんでした' : 'この端末にスタッフキーが無く、顧客台帳を読めません';
+    } catch (e) { if (!createdCustomer) rankUnknown = '通信に失敗しました'; }
+  }
+  if (rankUnknown) {
+    opts = Object.assign({}, opts, { memo: [opts.memo, '価格ランク未確認（standardで計算。請求前に単価を確認）'].filter(Boolean).join(' / ') });
+    warnSticky(`⚠ ${custName} の価格ランクを確かめられませんでした（${rankUnknown}）。standard の単価で記録します。ローカル・スタートメンバーなどのお客さんなら、請求前に単価を直してください`);
   }
   // 仲卸業者経由の顧客（顧客マスタの備考にその名前がある）は、注文の備考(memo)にも自動で入れておく。
   // order-admin.htmlの「備考検索」「出荷内訳の自動判定」「請求先の自動判定」がこのmemoを見るため、
@@ -4648,7 +4667,9 @@ async function recordDirectShipment(items, custName, opts) {
   const WHOLESALER_NAMES = ['トレタテ', 'ノブレスオブリージュ', 'エフユーアイジャパン'];
   const wholesalerTag = WHOLESALER_NAMES.find(w => custNotes.includes(w)) || null;
   let pmList = [];
-  try { pmList = await sb('GET', 'price_master', null, '?select=*'); } catch(e) {}
+  // 2026-11-11: 読めなかったときは全部が単価なしになり、「価格マスタに単価が無く0円のまま」と（原因と違う）知らせだけが出ていた
+  try { pmList = await sb('GET', 'price_master', null, '?select=*'); }
+  catch(e) { warnSticky('⚠ 価格マスタを読み込めませんでした（通信）。この出荷は単価なし（0円）で記録されます。請求前に単価を入れてください'); }
 
   const now = new Date();
   const orderCode = 'DIR-' + ymdLocal(now).replace(/-/g,'') + '-' + now.toTimeString().slice(0,8).replace(/:/g,'');
@@ -5636,13 +5657,17 @@ function shipDeliveryOpts() {
   };
 }
 // 住所から運賃（税抜）を計算。住所なし/料金表に無ければ null。
+// 2026-11-11: 通信の失敗でも null を返すので、呼ぶ側は「料金表にありません」と（原因と違う）知らせを出していた。
+//   失敗したかどうかを shipFreightFailed に残して、呼ぶ側で言い分ける
+let shipFreightFailed = false;
 async function shipComputeFreight(address, opts) {
+  shipFreightFailed = false;
   if (!address) return null;
   try {
     const v = await sb('POST', 'rpc/tgc_compute_freight',
       { p_carrier: opts.carrier, p_address: address, p_size: opts.size, p_is_cool: opts.cool });
     return (v === null || v === undefined || v === '') ? null : Number(v);
-  } catch (e) { return null; }
+  } catch (e) { shipFreightFailed = true; console.warn('送料の計算に失敗', e); return null; }
 }
 // 選択中の注文で送料の目安を表示
 async function shipFreightPreview() {
@@ -5654,7 +5679,8 @@ async function shipFreightPreview() {
   if (!addr) { el.innerHTML = '<span style="color:var(--gold)">お届け先住所が無く自動計算できません</span>'; return; }
   el.textContent = '計算中…';
   const f = await shipComputeFreight(addr, opts);
-  if (f == null) el.innerHTML = '<span style="color:var(--gold)">送料 未計算（対象外の地域/サイズ' + (opts.carrier === '佐川' ? '。佐川は60/80/100/140・沖縄別途' : '') + '）</span>';
+  if (f == null && shipFreightFailed) el.innerHTML = '<span style="color:var(--red)">送料を計算できませんでした（通信）。もう一度、業者かサイズを選び直してください</span>';
+  else if (f == null) el.innerHTML = '<span style="color:var(--gold)">送料 未計算（対象外の地域/サイズ' + (opts.carrier === '佐川' ? '。佐川は60/80/100/140・沖縄別途' : '') + '）</span>';
   else el.innerHTML = '→ 送料 <b style="color:var(--gold)">¥' + f.toLocaleString() + '</b>（税抜）';
 }
 
@@ -5683,6 +5709,8 @@ async function shipOrderConfirmed(orderId, dropdownAssignments) {
     if (order.length) {
       const dopts = shipDeliveryOpts();
       const freight = await shipComputeFreight(order[0].delivery_address || '', dopts);
+      // 2026-11-11: 送料が入らないまま出荷が記録されても、何も出ていなかった（請求書に送料が載らない）
+      if (freight == null) warnSticky('⚠ この出荷は送料が入っていません（' + (shipFreightFailed ? '通信で計算できませんでした' : (order[0].delivery_address ? '料金表に無い地域・サイズです' : 'お届け先の住所がありません')) + '）。請求書に送料が載りません。請求前に送料を確認してください');
       await sb('POST', 'shipments', [{
         order_id: orderId,
         customer_id: order[0].customer_id,
@@ -13639,7 +13667,9 @@ function baseErrText(r) {
   if (r.error === 'not_connected') return 'BASEとの接続が切れています。⚙BASE連携でつなぎ直してください';
   return String(r.error_description || r.error).slice(0, 80);
 }
-function baseSyncWarn(msg) {
+function baseSyncWarn(msg) { warnSticky(msg); }
+/* すぐ消えない知らせ（12秒）。あとで手当てが要る失敗（お金・外部の反映）に使う。ふつうの toast は4秒で消える */
+function warnSticky(msg) {
   console.warn(msg);
   const c = document.getElementById('toasts');
   if (!c) { alert(msg); return; }
@@ -13654,9 +13684,12 @@ async function baseOpen() {
   document.getElementById('baseModal').style.display = 'block';
   const st = document.getElementById('base-status');
   st.innerHTML = '確認中...';
-  let connected = false;
-  try { const r = await baseRpc('base_status'); connected = !!(r && r.connected); } catch (e) {}
-  st.innerHTML = connected
+  let connected = false, statusFailed = false;
+  try { const r = await baseRpc('base_status'); connected = !!(r && r.connected); } catch (e) { statusFailed = true; }
+  // 2026-11-11: 確認そのものに失敗したときも「未接続です」と出していた（つながっているのに、つなぎ直しを促してしまう）
+  st.innerHTML = statusFailed
+    ? '⚠ 接続の状況を確認できませんでした（通信）。少し待って、もう一度開いてください'
+    : connected
     ? '✅ <strong>BASEと接続済み</strong>（在庫の自動更新が有効です）'
     : `❌ 未接続です → <a href="${BASE_AUTH_URL}" style="font-weight:700;">BASEにログインして「許可」を押す</a>（1回だけ）`;
   const box = document.getElementById('base-mapping');
@@ -13667,6 +13700,8 @@ async function baseOpen() {
       baseRpc('base_items'),
       sb('GET', 'products', null, '?deleted_at=is.null&select=id,name,base_item_id&order=name.asc')
     ]);
+    // 2026-11-11: BASE がエラーを返したときも「BASE側に商品がありません」と出ていた → 失敗として出す
+    if (r && r.error) throw new Error('BASEがエラーを返しました: ' + baseErrText(r));
     baseItemsCache = (r && r.items) ? r.items : [];
     if (!baseItemsCache.length) { box.innerHTML = '<div class="empty-state">BASE側に商品がありません</div>'; return; }
     const norm = s => String(s || '').replace(/[\s()（）ｇg]/g, '');
@@ -16342,6 +16377,9 @@ async function loadTodayTodos() {
   const box = document.getElementById('today-todos');
   if (!box) return;
   const items = [];
+  // 2026-11-11: どの確認も失敗を捨てていたので、通信できないときも「✅ 本日の要対応はありません」と出ていた。
+  //   確認できなかった項目を覚えておき、緑の「ありません」は全部を確認できたときだけ出す
+  const failed = [];
   const add = (n, label, tab, warn) => { if (n > 0) items.push({ n, label, tab, warn }); };
   try {
     // 熟成管理タブは休止中のため、精肉がまだの個体をまとめて精肉入力へ誘導（直近2週間の搬入のみ）
@@ -16353,17 +16391,17 @@ async function loadTodayTodos() {
       if (st !== '精肉済' && (i.capture_date || '') >= cutoff) wait++;
     });
     add(wait, '精肉がまだの個体（直近2週間）', 'processing', false);
-  } catch (e) {}
+  } catch (e) { failed.push('精肉がまだの個体'); }
   try {
     const o = await sb('GET', 'orders', null, '?status=in.(受注,確認済)&select=id,status');
     add(o.filter(x => x.status === '受注').length, '🆕 新しい注文（受付して発送へ）', 'shipping', true);
     add(o.filter(x => x.status === '確認済').length, '出荷待ちの注文', 'shipping', false);
-  } catch (e) {}
+  } catch (e) { failed.push('新しい注文・出荷待ちの注文'); }
   try {
     // 出荷タブの一覧と同じ数え方（新しい50件まで・未対応かつアプリ未処理）
     const { list, candidates } = await baseBacklogFetch();
     if (list.length) add(candidates.length, '🛒 BASEの注文（発送処理へ）', 'shipping', true);
-  } catch (e) {}
+  } catch (e) { failed.push('BASEの注文'); }
   try {
     const today = ymdLocal(new Date());
     const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${jstTs(today, '00:00:00')}&select=room`);
@@ -16371,14 +16409,17 @@ async function loadTodayTodos() {
     add(CLEAN_ROOMS.length - done.size, '未清掃のエリア（本日）', 'cleaning', true);
     const tempDone = logs.some(l => l.room === '冷蔵・冷凍庫');
     if (!tempDone) items.push({ n: 1, label: '冷蔵・冷凍庫の温度が未記録（本日）', tab: 'cleaning', warn: true });
-  } catch (e) {}
-  try { const s = await sb('GET', 'supplies', null, '?select=stock_qty,min_qty&deleted_at=is.null'); add(s.filter(supplyIsLow).length, '資材が発注点割れ', 'supplies', true); } catch (e) {}
-  try { const r = await sb('GET', 'report_docs', null, '?status=in.(確認待ち,差戻し)&select=id'); add(r.length, '書類が確認待ち・差戻し', 'docs', false); } catch (e) {}
+  } catch (e) { failed.push('清掃・温度の記録'); }
+  try { const s = await sb('GET', 'supplies', null, '?select=stock_qty,min_qty&deleted_at=is.null'); add(s.filter(supplyIsLow).length, '資材が発注点割れ', 'supplies', true); } catch (e) { failed.push('資材の在庫'); }
+  try { const r = await sb('GET', 'report_docs', null, '?status=in.(確認待ち,差戻し)&select=id'); add(r.length, '書類が確認待ち・差戻し', 'docs', false); } catch (e) { failed.push('書類の確認待ち'); }
+  const failedHtml = failed.length
+    ? `<div role="alert" id="today-todos-failed" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 14px;border:1px solid rgba(200,80,80,.45);border-radius:var(--radius);background:rgba(200,80,80,.06);color:var(--red);font-size:14px;"><span style="flex:1;min-width:200px;">⚠ 確認できなかった項目があります（${[...new Set(failed)].join('・')}）。要対応が無いとは限りません</span><button class="btn btn-sm" onclick="loadTodayTodos()">🔄 もう一度確認</button></div>`
+    : '';
   if (!items.length) {
-    box.innerHTML = '<div style="padding:12px 14px;border:1px solid rgba(106,158,90,.4);border-radius:var(--radius);color:var(--green);">✅ 本日の要対応はありません</div>';
+    box.innerHTML = failedHtml || '<div style="padding:12px 14px;border:1px solid rgba(106,158,90,.4);border-radius:var(--radius);color:var(--green);">✅ 本日の要対応はありません</div>';
     return;
   }
-  box.innerHTML = items.map(i => `
+  box.innerHTML = failedHtml + items.map(i => `
     <button onclick="document.querySelector('[data-tab=${i.tab}]').click()" style="display:flex;gap:10px;align-items:center;padding:12px 14px;border:1px solid ${i.warn ? 'rgba(200,80,80,.45)' : 'var(--border)'};border-radius:var(--radius);background:${i.warn ? 'rgba(200,80,80,.06)' : 'var(--surface)'};cursor:pointer;text-align:left;width:100%;color:var(--text);">
       <span style="font-size:20px;font-weight:700;color:${i.warn ? 'var(--red)' : 'var(--gold)'};min-width:34px;text-align:center;">${i.n}</span>
       <span style="font-size:14px;">${i.label}</span>
