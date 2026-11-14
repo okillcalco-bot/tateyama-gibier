@@ -281,17 +281,24 @@ let RULES = JSON.parse(JSON.stringify(RULES_DEFAULT)); let rulesFromDb = false;
 /* 2026-11-09 沖: 歩留まりが出ていない個体（精肉待ち等）は A として計算する。ルールの pending_yield_rank で変えられる（空なら従来どおり未確定） */
 function pendingYieldRank(rules){ const k = rules.pending_yield_rank === undefined ? 'A' : rules.pending_yield_rank; if (!k) return null; return (rules.boar.yield_ranks||[]).find(r => r.rank === k) || null; }
 /* 2026-11-09 沖: イノシシの受入の最低体重（20kg）未満は買取なし。ルールの boar.below_min_no_buy=false で従来どおり（注意だけ） */
+/* 2026-11-14 沖: 人と期間を決めて、現場引取の料金をかけない（例: 令和8年度下半期の山川弘恭さん）。
+   rules.pickup_free = [{ name, from, to, note }]。捕獲者（支払先があれば支払先）と捕獲日で当てる */
+function pickupFreeRule(rules, ind){
+  const nm = normName(ind.purchase_payee || ind.hunter_name), hn = normName(ind.hunter_name), d = ind.capture_date || '';
+  return (rules.pickup_free || []).find(x => x && x.name && (normName(x.name) === nm || normName(x.name) === hn) && (!x.from || d >= x.from) && (!x.to || d <= x.to)) || null;
+}
 function belowMinNoBuy(rules){ return rules.boar.below_min_no_buy === undefined ? true : !!rules.boar.below_min_no_buy; }
 function yieldRank(rules, pct){ if(pct==null||isNaN(pct)) return null; const ranks=(rules.boar.yield_ranks||[]).slice().sort((a,b)=>b.min_pct-a.min_pct); for(const r of ranks){ if(pct>=r.min_pct) return r; } return ranks[ranks.length-1]||null; }
 // 1頭の買取価格。戻り: { price, base, unit, ratio, yield_rank, weight_used, pickup_fee, pending, reason }
 function calcOne(rules, ind, meatKg){
   const sp = ind.species || 'イノシシ';
   const pickup = !!(ind.stopkill_pickup || ind.intake_method === '引取');
-  const fee = pickup ? (Number(rules.pickup_fee)||0) : 0;
+  const free = pickup ? pickupFreeRule(rules, ind) : null;
+  const fee = pickup && !free ? (Number(rules.pickup_fee)||0) : 0;
   const w = Number(ind.weight_total)||0;
   const wUsed = rules.boar.weight_floor ? Math.floor(w) : w;
   let yieldPct = (meatKg>0 && w>0) ? Math.round(meatKg/w*1000)/10 : (ind.yield_rate!=null && Number(ind.yield_rate)>0 && Number(ind.yield_rate)<=100 ? Number(ind.yield_rate) : null);
-  const out = { species:sp, pickup, pickup_fee:fee, weight:w, weight_used:wUsed, meat_kg:meatKg||0, yield_pct:yieldPct, unit:null, ratio:null, yield_rank:null, base:null, price:null, pending:false, reason:'' };
+  const out = { species:sp, pickup, pickup_fee:fee, pickup_free: free ? (free.note || '引取料金なし') : '', weight:w, weight_used:wUsed, meat_kg:meatKg||0, yield_pct:yieldPct, unit:null, ratio:null, yield_rank:null, base:null, price:null, pending:false, reason:'' };
   if ((rules.small.species||[]).includes(sp)) {
     out.base = Number(rules.small.price)||0; out.ratio = 1; out.price = Math.max(0, out.base - fee); out.reason = '中型獣 1頭 ' + yen(out.base); return out;
   }
@@ -463,7 +470,7 @@ function renderAll(){
       <td>${p.bank && p.bank.number ? `<span class="muted">${esc(p.bank.bank)} ${esc(p.bank.branch)} ${esc(p.bank.number)}</span>` : (p.pay>0 ? '<span class="tag tag-red">口座なし</span>' : '<span class="muted">—</span>')}</td>
       <td>${p.pending ? '<span class="tag tag-red">精肉待ちあり</span>' : p.items.some(i=>i.yield_assumed) ? '<span class="tag tag-green">確定可</span><br><span class="muted">歩留まり未確定あり</span>' : '<span class="tag tag-green">確定可</span>'}</td></tr>
     <tr class="detail-row" id="det-${idx}" style="display:none"><td colspan="9"><table><thead><tr><th>個体管理番号</th><th>捕獲日</th><th>種類</th><th>性別</th><th class="td-num">体重</th><th>肉ランク</th><th>歩留まり</th><th class="td-num">単価</th><th class="td-num">引取</th><th class="td-num">買取価格</th><th>備考</th></tr></thead><tbody>
-      ${p.items.map(it=>`<tr><td>${esc(it.label)}</td><td>${esc(it.capture_date)}</td><td>${esc(it.species)}</td><td>${esc(it.sex||'')}</td><td class="td-num">${it.weight?it.weight.toFixed(1):'—'}</td><td>${it.species==='イノシシ'?esc(it.rank||''):'—'}</td><td>${rk(it)}</td><td class="td-num">${it.unit!=null?it.unit+'円/kg':(it.species==='イノシシ'||it.species==='シカ'?'—':yen(it.base))}</td><td class="td-num">${it.pickup?'−'+yen(it.pickup_fee):''}</td><td class="td-num">${it.pending?'—':yen(it.price)}</td><td class="muted">${esc(it.reason)}</td></tr>`).join('')}
+      ${p.items.map(it=>`<tr><td>${esc(it.label)}</td><td>${esc(it.capture_date)}</td><td>${esc(it.species)}</td><td>${esc(it.sex||'')}</td><td class="td-num">${it.weight?it.weight.toFixed(1):'—'}</td><td>${it.species==='イノシシ'?esc(it.rank||''):'—'}</td><td>${rk(it)}</td><td class="td-num">${it.unit!=null?it.unit+'円/kg':(it.species==='イノシシ'||it.species==='シカ'?'—':yen(it.base))}</td><td class="td-num">${it.pickup?(it.pickup_free?'0（'+esc(it.pickup_free)+'）':'−'+yen(it.pickup_fee)):''}</td><td class="td-num">${it.pending?'—':yen(it.price)}</td><td class="muted">${esc(it.reason)}</td></tr>`).join('')}
     </tbody></table></td></tr>`).join('') : '<tr><td colspan="9" class="muted">この期間の個体がありません。</td></tr>';
   // 集計
   const cities = [...new Set(Object.keys(r.summary.byCity).map(k=>k.split('|')[1]))].sort();
@@ -572,6 +579,7 @@ function rulesRender(){
     <label>中型獣（円/頭）<input type="number" id="r_small" value="${r.small.price}"></label>
     <label>中型獣の獣種（読点区切り）<input type="text" id="r_small_sp" value="${esc((r.small.species||[]).join('、'))}" style="width:220px"></label>
     <label>現場引取（円/回・天引き）<input type="number" id="r_fee" value="${r.pickup_fee}"></label>
+    <label style="flex-basis:100%">現場引取の料金をかけない人（1行に「名前,開始日,終了日,理由」）<textarea id="r_free" rows="3" style="width:100%;font-family:inherit">${esc((r.pickup_free||[]).map(x=>[x.name,x.from||'',x.to||'',x.note||''].join(',')).join('\n'))}</textarea></label>
     <label>出典・メモ <input type="text" id="r_src" value="${esc(r.source||'')}" style="width:260px"></label>`;
 }
 function rulesCollect(){
@@ -583,7 +591,9 @@ function rulesCollect(){
   out.boar.yield_ranks = (RULES.boar.yield_ranks||[]).map((y,i)=>Object.assign({}, y, { ratio: n('r_y_'+i) }));
   out.deer = { unit: n('r_deer'), use_yield: g('r_deer_y').checked };
   out.small = { price: n('r_small'), species: g('r_small_sp').value.split(/[、,\s]+/).filter(Boolean) };
-  out.pickup_fee = n('r_fee'); out.source = g('r_src').value; out.updated_at = new Date().toISOString().slice(0,10);
+  out.pickup_fee = n('r_fee');
+  out.pickup_free = g('r_free') ? g('r_free').value.split('\n').map(l => l.split(/[,，]/).map(x => x.trim())).filter(a => a[0]).map(a => ({ name:a[0], from:a[1]||'', to:a[2]||'', note:a.slice(3).join(',') })) : (RULES.pickup_free || []);
+  out.source = g('r_src').value; out.updated_at = new Date().toISOString().slice(0,10);
   return out;
 }
 async function rulesSave(){
@@ -621,7 +631,7 @@ const NOTICE_CSS = `@page{size:A4;margin:10mm} html,body{margin:0;padding:0} bod
 const NOTICE_INLINE_MAX = 5;    // この頭数までは通知書の本文に明細表を入れる（超えたら別紙）
 const NOTICE_ROWS_PER_SHEET = 22; // 別紙1枚あたりの明細行数（13pt/11pt で A4 に収まる実測値）
 function noticeRows(items){
-  return items.map(i=>`<tr><td>${esc(i.label)}</td><td>${esc(i.capture_date)}</td><td>${esc(i.species)}</td><td>${esc(i.sex||'')}</td><td class="n">${i.weight?i.weight.toFixed(1):''}</td><td>${i.species==='イノシシ'?esc(i.rank||''):''}</td><td>${i.yield_rank?esc(i.yield_rank):(i.pending?'未確定':'')}</td><td class="n">${i.pickup?'−'+Number(i.pickup_fee).toLocaleString():''}</td><td class="n">${i.pending?'—':Number(i.price).toLocaleString()}</td></tr>`).join('');
+  return items.map(i=>`<tr><td>${esc(i.label)}</td><td>${esc(i.capture_date)}</td><td>${esc(i.species)}</td><td>${esc(i.sex||'')}</td><td class="n">${i.weight?i.weight.toFixed(1):''}</td><td>${i.species==='イノシシ'?esc(i.rank||''):''}</td><td>${i.yield_rank?esc(i.yield_rank):(i.pending?'未確定':'')}</td><td class="n">${i.pickup?(i.pickup_free?'0（引取料金なし）':'−'+Number(i.pickup_fee).toLocaleString()):''}</td><td class="n">${i.pending?'—':Number(i.price).toLocaleString()}</td></tr>`).join('');
 }
 const NOTICE_THEAD = `<thead><tr><th>個体番号</th><th>捕獲日</th><th>種類</th><th>性別</th><th class="n">体重kg</th><th>肉ランク</th><th>歩留まり</th><th class="n">引取</th><th class="n">買取価格</th></tr></thead>`;
 const NOTICE_SUB = `<div class="sub">歩留まりランク A：3割以上（10割）／B：2割以上〜3割未満（5割）／C：1割以上〜2割未満（3割）／D：1割未満（買取不可）。現場引取は1回3,000円を個体ごとに天引き（0円が下限）。</div>`;
