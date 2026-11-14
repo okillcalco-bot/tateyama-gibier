@@ -57,7 +57,7 @@ const path = require('path');
   await page.route('**/auth/**', rt => rt.fulfill({ contentType: 'application/json', body: '{}' }));
   await page.goto('file://' + path.resolve(__dirname, '../../order-admin.html'));
   await page.waitForTimeout(700);
-  await page.evaluate(() => { window.__alerts = []; window.alert = m => window.__alerts.push(String(m)); window.confirm = () => true; window.open = () => null; });
+  await page.evaluate(() => { window.__alerts = []; window.alert = m => window.__alerts.push(String(m)); window.__confirms = []; window.confirm = m => { window.__confirms.push(String(m)); return !/出し直しますか/.test(String(m)); }; window.open = () => null; });   // 出し直し（2026-11-14〜）は断る＝従来どおり止まることを測る
   const results = []; const T = (n, ok, got) => results.push([n, !!ok, got == null ? '' : String(got)]);
 
   // 1. 数え方
@@ -107,7 +107,7 @@ const path = require('path');
     window.invCollect = () => ({ name: '架空食堂', honorific: '様', date: '2026-11-08', due: '2026-12-31', customer_id: 'cust-a', order_ids: ['o2', 'o3'], lines: [{ name: 'レバー', qty: 2, unit: 'kg', price: 463, tax: 8 }], type: '請求書' });
     invType = '請求書'; invEditingId = null;
     try { await invIssue(); } finally { window.invCollect = orig; }
-    return window.__alerts;
+    return window.__alerts.concat(window.__confirms);   // 2026-11-14〜: 止めるときは「出し直しますか？」で元の番号を見せる（断れば保存しない）
   });
   T('4. 取り込んだ注文にもう請求書があれば、請求書を保存しない', !net.posts.includes('documents') && iss.some(a => /INV-TEST-002/.test(a)), JSON.stringify([net.posts, iss]));
 
