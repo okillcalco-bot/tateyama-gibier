@@ -3098,11 +3098,14 @@ async function svCleanupOldPhotos() {
       const paths = [r.photo_tail_before, r.photo_tail_after, r.photo_extra].filter(Boolean);
       if (!paths.length) continue;
       try {
-        await fetch(`${SB_URL}/storage/v1/object/${SV_BUCKET}`, {
+        // 2026-11-11: 削除の結果を見ていなかった。消せていないのに記録の写真の場所だけ空にすると、
+        //   写真は保管庫に残ったまま、どの個体の写真か辿れなくなる → 消せたときだけ記録を空にする（消せなければ次回もう一度）
+        const delRes = await fetch(`${SB_URL}/storage/v1/object/${SV_BUCKET}`, {
           method: 'DELETE',
           headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ prefixes: paths }),
         });
+        if (!delRes.ok) throw new Error('写真を消せませんでした: ' + delRes.status);
         await sb('PATCH', 'individuals', { photo_tail_before: null, photo_tail_after: null, photo_extra: null },
           '?label_id=eq.' + encodeURIComponent(r.label_id));
       } catch (e) { /* 1件失敗しても他を続ける */ }
