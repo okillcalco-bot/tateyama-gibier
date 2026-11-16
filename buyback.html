@@ -290,7 +290,20 @@ function pickupFreeRule(rules, ind){
 function belowMinNoBuy(rules){ return rules.boar.below_min_no_buy === undefined ? true : !!rules.boar.below_min_no_buy; }
 function yieldRank(rules, pct){ if(pct==null||isNaN(pct)) return null; const ranks=(rules.boar.yield_ranks||[]).slice().sort((a,b)=>b.min_pct-a.min_pct); for(const r of ranks){ if(pct>=r.min_pct) return r; } return ranks[ranks.length-1]||null; }
 // 1頭の買取価格。戻り: { price, base, unit, ratio, yield_rank, weight_used, pickup_fee, pending, reason }
+/* 2026-11-16 沖: 譲受の個体は買取料金0円（例: 石渡裕・佐野徳幸のキョン、鈴木政孝は全部）。
+   rules.no_buy = [{ name, species, from, to, note }]。species が空なら全獣種。捕獲者（支払先があれば支払先）・獣種・捕獲日で当てる */
+function noBuyRule(rules, ind){
+  const nm = normName(ind.purchase_payee || ind.hunter_name), hn = normName(ind.hunter_name), d = ind.capture_date || '', sp = ind.species || 'イノシシ';
+  return (rules.no_buy || []).find(x => x && x.name && (normName(x.name) === nm || normName(x.name) === hn)
+    && (!x.species || String(x.species).split(/[、,・\s]+/).filter(Boolean).includes(sp)) && (!x.from || d >= x.from) && (!x.to || d <= x.to)) || null;
+}
 function calcOne(rules, ind, meatKg){
+  const out = calcOneBase(rules, ind, meatKg);
+  const nb = noBuyRule(rules, ind);
+  if (nb) { out.price = 0; out.pending = false; out.pickup_fee = 0; out.no_buy = nb.note || '譲受'; out.reason = (nb.note || '譲受') + 'のため買取料金0円'; }
+  return out;
+}
+function calcOneBase(rules, ind, meatKg){
   const sp = ind.species || 'イノシシ';
   const pickup = !!(ind.stopkill_pickup || ind.intake_method === '引取');
   const free = pickup ? pickupFreeRule(rules, ind) : null;
@@ -579,6 +592,7 @@ function rulesRender(){
     <label>中型獣（円/頭）<input type="number" id="r_small" value="${r.small.price}"></label>
     <label>中型獣の獣種（読点区切り）<input type="text" id="r_small_sp" value="${esc((r.small.species||[]).join('、'))}" style="width:220px"></label>
     <label>現場引取（円/回・天引き）<input type="number" id="r_fee" value="${r.pickup_fee}"></label>
+    <label style="flex-basis:100%">譲受で買取料金0円の人（1行に「名前,獣種（空なら全部）,開始日,終了日,理由」）<textarea id="r_nobuy" rows="3" style="width:100%;font-family:inherit">${esc((r.no_buy||[]).map(x=>[x.name,x.species||'',x.from||'',x.to||'',x.note||''].join(',')).join('\n'))}</textarea></label>
     <label style="flex-basis:100%">現場引取の料金をかけない人（1行に「名前,開始日,終了日,理由」）<textarea id="r_free" rows="3" style="width:100%;font-family:inherit">${esc((r.pickup_free||[]).map(x=>[x.name,x.from||'',x.to||'',x.note||''].join(',')).join('\n'))}</textarea></label>
     <label>出典・メモ <input type="text" id="r_src" value="${esc(r.source||'')}" style="width:260px"></label>`;
 }
@@ -592,6 +606,7 @@ function rulesCollect(){
   out.deer = { unit: n('r_deer'), use_yield: g('r_deer_y').checked };
   out.small = { price: n('r_small'), species: g('r_small_sp').value.split(/[、,\s]+/).filter(Boolean) };
   out.pickup_fee = n('r_fee');
+  out.no_buy = g('r_nobuy') ? g('r_nobuy').value.split('\n').map(l => l.split(/[,，]/).map(x => x.trim())).filter(a => a[0]).map(a => ({ name:a[0], species:a[1]||'', from:a[2]||'', to:a[3]||'', note:a.slice(4).join(',') })) : (RULES.no_buy || []);
   out.pickup_free = g('r_free') ? g('r_free').value.split('\n').map(l => l.split(/[,，]/).map(x => x.trim())).filter(a => a[0]).map(a => ({ name:a[0], from:a[1]||'', to:a[2]||'', note:a.slice(3).join(',') })) : (RULES.pickup_free || []);
   out.source = g('r_src').value; out.updated_at = new Date().toISOString().slice(0,10);
   return out;
