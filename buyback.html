@@ -642,23 +642,43 @@ function printDoc(title, css, body){
    .pg の padding が残るので紙の端に文字が張り付かない（納品書 #309 と同じ考え方）。
    文字は本文13pt・表10.5pt（以前は11.5pt・9.5pt。表は9列を1行に収めるため折り返し禁止）。別紙は22行ごとに手で改ページしているので、
    ページの途中で表が割れて余白ゼロの行が出ることもない。 */
-const NOTICE_CSS = `@page{size:A4;margin:10mm} html,body{margin:0;padding:0} body{font-family:"Noto Serif JP","Yu Mincho","Hiragino Mincho ProN",serif;font-size:13pt;color:#000;line-height:1.75} .pg{box-sizing:border-box;padding:12mm 10mm 12mm;page-break-after:always} .pg:last-child{page-break-after:auto} h1{font-size:17pt;text-align:center;margin:0 0 12pt;letter-spacing:.1em} .r{text-align:right} .c{text-align:center} .greet{margin:8pt 0} .kiki{margin:12pt 0 6pt} .item{margin:4pt 0 4pt 2em} .name{margin:8pt 0 4pt;font-size:15pt} table{border-collapse:collapse;width:100%;font-size:10.5pt;line-height:1.4;margin-top:6pt;font-family:"Noto Sans JP","Yu Gothic",sans-serif;page-break-inside:avoid} th,td{border:1px solid #333;padding:4pt 5pt;white-space:nowrap} th{background:#eee;font-weight:600} .n{text-align:right} .tot td{font-weight:700;background:#f6f6f6} .sub{font-size:10pt;color:#333;line-height:1.6;margin-top:6pt}`;
-const NOTICE_INLINE_MAX = 5;    // この頭数までは通知書の本文に明細表を入れる（超えたら別紙）
-const NOTICE_ROWS_PER_SHEET = 22; // 別紙1枚あたりの明細行数（13pt/11pt で A4 に収まる実測値）
+const NOTICE_CSS = `@page{size:A4;margin:10mm} html,body{margin:0;padding:0} body{font-family:"Noto Serif JP","Yu Mincho","Hiragino Mincho ProN",serif;font-size:13pt;color:#000;line-height:1.75} .pg{box-sizing:border-box;padding:12mm 10mm 12mm;page-break-after:always} .pg:last-child{page-break-after:auto} h1{font-size:17pt;text-align:center;margin:0 0 12pt;letter-spacing:.1em} .r{text-align:right} .c{text-align:center} .greet{margin:8pt 0} .kiki{margin:12pt 0 6pt} .item{margin:4pt 0 4pt 2em} .name{margin:8pt 0 4pt;font-size:15pt} table{border-collapse:collapse;width:100%;font-size:10.5pt;line-height:1.4;margin-top:6pt;font-family:"Noto Sans JP","Yu Gothic",sans-serif;page-break-inside:avoid} th,td{border:1px solid #333;padding:4pt 5pt;white-space:nowrap} th{background:#eee;font-weight:600} .n{text-align:right} .c{text-align:center} .tight{line-height:1.5;padding-top:10mm;padding-bottom:8mm} .tight h1{margin-bottom:6pt} .tight .name{margin:4pt 0 2pt} .tight .greet{margin:5pt 0} .tight .kiki{margin:6pt 0 3pt} .tight .item{margin:2pt 0 2pt 2em} .tight table{font-size:10pt} .tight th,.tight td{padding:2.2pt 4pt} h1.bh{font-size:13pt;margin:0 0 6pt} .pg table.t1 th,.pg table.t1 td{padding:2.4pt 5pt} .legend{font-size:8.5pt;line-height:1.4;margin:0 0 4pt;font-family:"Noto Sans JP","Yu Gothic",sans-serif} .two{display:flex;gap:3mm;align-items:flex-start;max-width:100%} .two table{width:auto;flex:1;margin-top:0} table.t2{font-size:9pt;line-height:1.2;page-break-inside:auto} table.t2 th,table.t2 td{padding:0.6pt 1.6pt} table.tot2{margin-top:4pt} table.tot2 td{font-size:10pt} .tot td{font-weight:700;background:#f6f6f6} .sub{font-size:10pt;color:#333;line-height:1.6;margin-top:6pt}`;
+/* 2026-11-17 沖: 通知書は可能な限り1枚、多数捕獲している人でも2枚に収める。
+   頭数で組み方を変える（実際にPDFにして測った値）:
+     〜12頭 … 通知書の本文に明細表を入れて1枚
+     13〜30頭 … 通知書1枚＋別紙1枚（1段の表）
+     31〜90頭 … 通知書1枚＋別紙1枚（2段組み。番号は TGC-08- を省き、種類・性別は1文字に）
+     91頭〜 … 別紙を90頭ごとに増やす（今季の最多は79頭なので、通常は出ない） */
+const NOTICE_INLINE_MAX = 12;
+const NOTICE_SINGLE_MAX = 30;
+const NOTICE_TWOCOL_MAX = 90;
 function noticeRows(items){
-  return items.map(i=>`<tr><td>${esc(i.label)}</td><td>${esc(i.capture_date)}</td><td>${esc(i.species)}</td><td>${esc(i.sex||'')}</td><td class="n">${i.weight?i.weight.toFixed(1):''}</td><td>${i.species==='イノシシ'?esc(i.rank||''):''}</td><td>${i.yield_rank?esc(i.yield_rank):(i.pending?'未確定':'')}</td><td class="n">${i.pickup?(i.pickup_free?'0（引取料金なし）':'−'+Number(i.pickup_fee).toLocaleString()):''}</td><td class="n">${i.pending?'—':Number(i.price).toLocaleString()}</td></tr>`).join('');
+  return items.map(i=>`<tr><td>${esc(i.label)}</td><td>${esc(i.capture_date)}</td><td>${esc(i.species)}</td><td>${esc(i.sex||'')}</td><td class="n">${i.weight?i.weight.toFixed(1):''}</td><td>${i.species==='イノシシ'?esc(i.rank||''):''}</td><td>${i.yield_rank?esc(i.yield_rank):(i.pending?'未確定':'')}</td><td class="n">${noticePickup(i)}</td><td class="n">${i.pending?'—':Number(i.price).toLocaleString()}</td></tr>`).join('');
 }
+function noticePickup(i, short){ if (!i.pickup || i.no_buy) return ''; return i.pickup_free ? (short ? '0' : '0（引取料金なし）') : '−' + Number(i.pickup_fee).toLocaleString(); }
 const NOTICE_THEAD = `<thead><tr><th>個体番号</th><th>捕獲日</th><th>種類</th><th>性別</th><th class="n">体重kg</th><th>肉ランク</th><th>歩留まり</th><th class="n">引取</th><th class="n">買取価格</th></tr></thead>`;
-const NOTICE_SUB = `<div class="sub">歩留まりランク A：3割以上（10割）／B：2割以上〜3割未満（5割）／C：1割以上〜2割未満（3割）／D：1割未満（買取不可）。現場引取は1回3,000円を個体ごとに天引き（0円が下限）。</div>`;
-function noticeTotalRows(p){
-  return `${p.adjust?`<tr><td colspan="8">調整 ${esc(p.adjust_note||'')}</td><td class="n">${p.adjust>0?'+':''}${Number(p.adjust).toLocaleString()}</td></tr>`:''}
-    <tr class="tot"><td colspan="8">合計（${p.items.length}頭）</td><td class="n">${Number(p.pay).toLocaleString()}</td></tr>`;
+// 2段組み用の短い表（1段の幅を半分にするため）
+const SP1 = { 'イノシシ':'イ', 'シカ':'シ', 'キョン':'キ', 'アライグマ':'ア', 'ハクビシン':'ハ', 'タヌキ':'タ', 'ノウサギ':'ウ' };
+function noticeRowsShort(items){
+  return items.map(i=>`<tr><td>${esc(String(i.label||'').replace(/^TGC-\d+-/,''))}</td><td>${esc(String(i.capture_date||'').slice(5).replace(/^0/,'').replace('-0','/').replace('-','/'))}</td><td class="c">${esc(SP1[i.species]||String(i.species||'').slice(0,1))}</td><td class="c">${esc(String(i.sex||'').slice(0,1))}</td><td class="n">${i.weight?i.weight.toFixed(1):''}</td><td class="c">${i.species==='イノシシ'?esc(i.rank||''):''}</td><td class="c">${i.yield_rank?esc(i.yield_rank):(i.pending?'未':'')}</td><td class="n">${noticePickup(i, true)}</td><td class="n">${i.pending?'—':Number(i.price).toLocaleString()}</td></tr>`).join('');
+}
+const NOTICE_THEAD_SHORT = `<thead><tr><th>番号</th><th>捕獲日</th><th>種</th><th>性</th><th class="n">kg</th><th>ランク</th><th>歩留</th><th class="n">引取</th><th class="n">買取価格</th></tr></thead>`;
+function noticeSub(items){
+  const extra = (items||[]).some(i=>i.no_buy) ? '譲受の個体は買取料金0円。' : '';
+  const free = (items||[]).some(i=>i.pickup_free) ? '引取欄の「0」は引取料金なし。' : '';
+  return `<div class="sub">歩留まりランク A：3割以上（10割）／B：2割以上〜3割未満（5割）／C：1割以上〜2割未満（3割）／D：1割未満（買取不可）。現場引取は1回3,000円を個体ごとに天引き（0円が下限）。${free}${extra}</div>`;
+}
+const NOTICE_SUB = noticeSub([]);
+function noticeTotalRows(p, cols){
+  const c = cols || 8;
+  return `${p.adjust?`<tr><td colspan="${c}">調整 ${esc(p.adjust_note||'')}</td><td class="n">${p.adjust>0?'+':''}${Number(p.adjust).toLocaleString()}</td></tr>`:''}
+    <tr class="tot"><td colspan="${c}">合計（${p.items.length}頭）</td><td class="n">${Number(p.pay).toLocaleString()}</td></tr>`;
 }
 function noticeHtml(p, opts){
   const period = `${reiwa(D.run.fiscal_year)}${D.run.half}`;
   const items = p.items;
   const inline = items.length <= NOTICE_INLINE_MAX;
-  const letter = `<div class="pg">
+  const letter = `<div class="pg${inline ? ' tight' : ''}">
     <h1>${esc(period)}捕獲個体買取金のご通知</h1>
     <div class="r">${esc(opts.date)}</div>
     <div class="name">${esc(p.payee)}　様</div>
@@ -670,14 +690,24 @@ function noticeHtml(p, opts){
     <div class="c kiki">記</div>
     <div class="item">１．${esc(period)}イノシシ等買取合計金額　　<b>${Number(p.pay).toLocaleString()}　円</b></div>
     <div class="item">２．買取内容${inline ? '' : '　　別紙のとおり'}</div>
-    ${inline ? `<table>${NOTICE_THEAD}<tbody>${noticeRows(items)}${noticeTotalRows(p)}</tbody></table>${NOTICE_SUB}` : ''}
+    ${inline ? `<table class="t1">${NOTICE_THEAD}<tbody>${noticeRows(items)}${noticeTotalRows(p)}</tbody></table>${noticeSub(items)}` : ''}
     <div class="item">３．お問い合わせ先　　${esc(opts.tel)}</div>
-    <div class="r" style="margin-top:12pt">以上</div>
+    <div class="r" style="margin-top:8pt">以上</div>
   </div>`;
   if (inline) return letter;
-  // 別紙: 22行ごとに1枚。合計行と注記は最後の1枚だけ
-  const sheets = []; for (let i = 0; i < items.length; i += NOTICE_ROWS_PER_SHEET) sheets.push(items.slice(i, i + NOTICE_ROWS_PER_SHEET));
-  return letter + sheets.map((rows, k) => { const last = k === sheets.length - 1; return `<div class="pg"><h1 style="font-size:14pt">別紙　${esc(p.payee)}　様　買取内容（${esc(period)}）${sheets.length > 1 ? `　${k+1}／${sheets.length}` : ''}</h1><table>${NOTICE_THEAD}<tbody>${noticeRows(rows)}${last ? noticeTotalRows(p) : ''}</tbody></table>${last ? NOTICE_SUB : ''}</div>`; }).join('');
+  const head = (k, n) => `<h1 class="bh">別紙　${esc(p.payee)}　様　買取内容（${esc(period)}）${n > 1 ? `　${k+1}／${n}` : ''}</h1>`;
+  if (items.length <= NOTICE_SINGLE_MAX) {
+    return letter + `<div class="pg">${head(0,1)}<table class="t1">${NOTICE_THEAD}<tbody>${noticeRows(items)}${noticeTotalRows(p)}</tbody></table>${noticeSub(items)}</div>`;
+  }
+  // 2段組み: 1枚に90頭まで（左右に半分ずつ）。合計行と注記は最後の1枚の下
+  const sheets = []; for (let i = 0; i < items.length; i += NOTICE_TWOCOL_MAX) sheets.push(items.slice(i, i + NOTICE_TWOCOL_MAX));
+  return letter + sheets.map((rows, k) => {
+    const last = k === sheets.length - 1; const half = Math.ceil(rows.length / 2);
+    const col = rs => `<table class="t2">${NOTICE_THEAD_SHORT}<tbody>${noticeRowsShort(rs)}</tbody></table>`;
+    return `<div class="pg">${head(k, sheets.length)}<div class="legend">番号は「TGC-08-」を省略。種：イ＝イノシシ・シ＝シカ・キ＝キョン・ア＝アライグマ・ハ＝ハクビシン・タ＝タヌキ　性：オ＝オス・メ＝メス</div>
+      <div class="two">${col(rows.slice(0, half))}${col(rows.slice(half))}</div>
+      ${last ? `<table class="t2 tot2"><tbody>${noticeTotalRows(p, 1).replace(/colspan="1"/g,'')}</tbody></table>${noticeSub(items)}` : ''}</div>`;
+  }).join('');
 }
 function printNotices(){
   const r = D.result; if (!r) { showStatus('error','先に計算してください'); return; }
