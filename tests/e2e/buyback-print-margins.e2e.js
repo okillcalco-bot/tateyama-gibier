@@ -8,7 +8,8 @@
 //
 //   ここで測ること（実際にPDFにして文字の位置をmmで測る）
 //     1. 通知書: 既定（@page）で印刷 → 全ページで余白 18mm 以上。余白「なし」でも 9mm 以上。
-//     2. 通知書: 5頭の人は1枚、50頭の人は 通知1枚＋別紙3枚（22行×2＋6行）。表の文字が 10.5pt 以上、本文 13pt 以上。
+//     2. 通知書: 5頭の人は1枚、50頭の人は 通知1枚＋別紙1枚（2段組み）。表の文字が 9pt 以上（1枚に入れる表は 9.5pt 以上）、本文 13pt 以上。
+//        （2026-11-17 沖「可能な限り1枚、多数捕獲している人でも2枚に収める」で、22行ごとの別紙をやめた。頭数ごとの枚数は buyback-notice-pages で測る）
 //     3. 告知文: どちらの印刷でも余白 10mm 以上、右端がはみ出さない。
 //     4. 宛名ラベル: 余白「なし」で印刷したとき、各ラベルの文字がそのラベルの枠（70×33.9mm、上余白12.9mm）に収まる。
 //        開始位置3枚目なら 1・2枚目は空。25人なら2枚。
@@ -91,17 +92,17 @@ print(json.dumps(out))
 
   // ── 通知書 ──
   const notice = await capture(`document.getElementById('nZero').checked = true; printNotices();`);
-  T('通知書HTML: 井上（5頭・本文に表）と山田（50頭・別紙）', /井上定男　様/.test(notice) && /山田千代子　様/.test(notice) && /別紙のとおり/.test(notice) && (notice.match(/別紙　山田千代子　様/g)||[]).length === 3, (notice.match(/別紙　/g)||[]).length);
+  T('通知書HTML: 井上（5頭・本文に表）と山田（50頭・別紙）', /井上定男　様/.test(notice) && /山田千代子　様/.test(notice) && /別紙のとおり/.test(notice) && (notice.match(/別紙　山田千代子　様/g)||[]).length === 1, (notice.match(/別紙　/g)||[]).length);
   const n = await render('buyback-notice', notice);
-  T('通知書: 既定の印刷で 1＋(1＋3)＝5ページ', n.css.length === 5, n.css.length);
-  T('通知書: 余白「なし」でも 5ページ（別紙が途中で割れない）', n.none.length === 5, n.none.length);
+  T('通知書: 既定の印刷で 1＋(1＋1)＝3ページ', n.css.length === 3, n.css.length);
+  T('通知書: 余白「なし」でも 3ページ（別紙が途中で割れない）', n.none.length === 3, n.none.length);
   T('通知書: 既定の印刷は全ページ余白 18mm 以上', minMargin(n.css) >= 18, fmtAll(n.css));
   T('通知書: 余白「なし」でも全ページ余白 9mm 以上', minMargin(n.none) >= 9, fmtAll(n.none));
   T('通知書: 右端がはみ出さない（≤ 200mm）', n.none.every(m => m.maxx <= 200), n.none.map(m => m.maxx.toFixed(1)).join(','));
-  const allSpans = n.none.flatMap(m => m.spans); const body = allSpans.find(s => /拝啓/.test(s.text)); const tbl = allSpans.find(s => /TGC-08-T001/.test(s.text)); const h1 = allSpans.find(s => /買取金のご通知/.test(s.text));
-  T('通知書: 本文 13pt 以上・表 10.5pt 以上・題 17pt 以上', body && body.size >= 12.9 && tbl && tbl.size >= 10.4 && h1 && h1.size >= 16.9, JSON.stringify({ body: body && body.size, tbl: tbl && tbl.size, h1: h1 && h1.size }));
-  const rowsPer = n.none.map(m => m.spans.filter(s => /TGC-08-T1\d\d/.test(s.text)).length);
-  T('別紙は 22・22・6 行、最後の別紙に合計行', rowsPer.filter(x => x > 0).join(',') === '22,22,6' && n.none.some(m => m.spans.some(s => /合計（50頭）/.test(s.text))), rowsPer.join(','));
+  const allSpans = n.none.flatMap(m => m.spans); const body = allSpans.find(s => /拝啓/.test(s.text)); const tbl = allSpans.find(s => /TGC-08-T001/.test(s.text)); const tbl2 = allSpans.filter(s => /^T1\d\d\s?\d{1,2}\/\d{1,2}/.test(s.text)); const h1 = allSpans.find(s => /買取金のご通知/.test(s.text));
+  T('通知書: 本文 13pt 以上・1枚の表 9.5pt 以上・2段組みの表 9pt 以上・題 17pt 以上', body && body.size >= 12.9 && tbl && tbl.size >= 9.4 && tbl2.length === 50 && Math.min(...tbl2.map(x => x.size)) >= 8.9 && h1 && h1.size >= 16.9, JSON.stringify({ body: body && body.size, tbl: tbl && tbl.size, tbl2: tbl2.length && Math.min(...tbl2.map(x => x.size)), n2: tbl2.length, h1: h1 && h1.size }));
+  const rowsPer = n.none.map(m => m.spans.filter(s => /^T1\d\d\s?\d{1,2}\/\d{1,2}/.test(s.text)).length);
+  T('別紙は1枚に50行（2段組み）、同じ別紙に合計行', rowsPer.filter(x => x > 0).join(',') === '50' && n.none.some(m => m.spans.some(s => /合計（50頭）/.test(s.text))), rowsPer.join(','));
 
   // ── 告知文 ──
   const ann = await capture(`printAnnouncement();`);
