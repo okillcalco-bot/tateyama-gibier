@@ -5266,7 +5266,29 @@ function invPrintHtml(p,number,opts){
   .noprint{text-align:center;margin:18px 0}
   .noprint button{font-size:14px;padding:10px 22px;margin:0 6px;cursor:pointer;border:1px solid #888;border-radius:6px;background:#f7f7f2}
   @media print{.noprint{display:none}body{padding:0}.sheet{max-width:none;padding:10mm 8mm}}
-</style></head><body>
+  /* 1枚に収める（2026-11-18）: まるい向け納品書（明細1行）で、合計（税込）だけが2ページ目に送られた。
+     パソコンによって文字の高さが違い、行が高くなると A4 1枚を超えるため。
+     ・合計の表・明細の行は途中で切らない
+     ・印刷の前に紙面の高さを測り、A4 1枚（上下余白を除く 273mm）を超える分だけ全体を縮める（最小 0.6 倍）
+       それでも収まらないほど明細が多いときは、縮めすぎずに次のページへ送る（合計の表は分けない） */
+  tr{break-inside:avoid}
+  .sums,.totalbox,.bank{break-inside:avoid}
+</style>
+<script>
+(function(){
+  var MM=96/25.4, AVAIL=(297-24)*MM*0.96, MIN=0.6;
+  function fit(){
+    var s=document.querySelector('.sheet'); if(!s) return;
+    s.style.zoom='';
+    var h=s.getBoundingClientRect().height;
+    var z=h>AVAIL?Math.max(MIN,AVAIL/h):1;
+    if(z<1) s.style.zoom=String(Math.floor(z*1000)/1000);
+  }
+  window.__docFit=fit;
+  window.addEventListener('load',fit);
+  window.addEventListener('beforeprint',fit);
+})();
+<\/script></head><body>
 <div class="sheet">
   ${opts.voided?'<div class="void">取消</div>':''}
   <h1>${spec.title}</h1>
