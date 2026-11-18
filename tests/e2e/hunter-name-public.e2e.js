@@ -7,6 +7,10 @@
 //   3. 看板つきカメラの看板: hunter_name_public=false の個体は「捕獲者」行を入れない（true/未設定は入れる）
 //   4. 編集で開くと登録済みの値（true→出してよい、false/未確認→出さない）
 //   5. 画面上にこの質問のUI（トグル・ラベル）が無いこと
+//   2026-11-18 改め（石渡裕・池田和博の看板に捕獲者名が出なくなった件）
+//     ・前に選んだ人の「出さない」が、次に選んだ未確認の人へ持ち越されていた → 未確認の人は「出してよい」に戻す
+//     ・編集で未確認（null）を「出さない」として読み込み、保存で false に書き換えていた → null のまま保存
+//     ・捕獲票の保存のたびに捕獲者マスタへ書き戻し、誤りがその人の以後の個体すべてに広がっていた → 捕獲票からは書かない
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
 
@@ -51,7 +55,8 @@ const HUNTERS = [
   await page.evaluate(() => pickHunterSuggest('塩倉千春')); await page.waitForTimeout(300);
   await page.evaluate(() => pickHunterSuggest('加藤茂')); await page.waitForTimeout(300);
   const t3 = await toggle();
-  T('未確認の人（加藤）を選んでも直前の選択のまま（勝手に変えない）', t3.st === '出さない', JSON.stringify(t3));
+  T('「出さない」の人（塩倉）の次に未確認の人（加藤）を選ぶと「出してよい」に戻る（持ち越さない）', t3.st === '出す', JSON.stringify(t3));
+  await page.evaluate(() => pickHunterSuggest('塩倉千春')); await page.waitForTimeout(300);
 
   // 5) 画面にこの質問のUIが無い（2026-09-25 撤去）
   const uiGone = await page.evaluate(() => ({
@@ -61,13 +66,13 @@ const HUNTERS = [
   }));
   T('画面上にトグルUIが無い', !uiGone.row && !uiGone.toggleGroup && !uiGone.label, JSON.stringify({ row: !!uiGone.row, toggleGroup: !!uiGone.toggleGroup, label: uiGone.label }));
 
-  // 2) 登録: 出さない → hunter_name_public=false、マスタへ PATCH
+  // 2) 登録: 出さない人（塩倉）→ hunter_name_public=false。捕獲者マスタへは書かない
   await page.evaluate(() => { document.querySelector('[data-field="species"] .toggle-btn[data-val="キョン"]').click(); document.querySelector('[data-field="sex"] .toggle-btn[data-val="オス"]').click(); });
   await page.fill('#weight', '8'); await page.waitForTimeout(300);
   await page.evaluate(() => handleSubmit()); await page.waitForTimeout(900);
   const ind = writes.find(w => w.t === 'individuals'), hp = writes.find(w => w.t === 'hunters');
-  T('登録の POST に hunter_name_public=false が入る', ind && ind.body.hunter_name_public === false && ind.body.hunter_name === '加藤茂', JSON.stringify(ind && { n: ind.body.hunter_name, p: ind.body.hunter_name_public }));
-  T('保存後に捕獲者マスタ（加藤茂）へ name_public=false を PATCH', hp && /name=eq\.加藤茂/.test(hp.u) && hp.body.name_public === false, JSON.stringify(hp && { u: hp.u.slice(-40), b: hp.body }));
+  T('登録の POST に hunter_name_public=false が入る（塩倉）', ind && ind.body.hunter_name_public === false && ind.body.hunter_name === '塩倉千春', JSON.stringify(ind && { n: ind.body.hunter_name, p: ind.body.hunter_name_public }));
+  T('捕獲票の保存では捕獲者マスタを書き換えない（PATCH なし）', !hp, JSON.stringify(hp && { u: hp.u.slice(-40), b: hp.body }));
   T('登録後（resetForm）は「出してよい」に戻る', (await toggle()).st === '出す', '');
 
   // 3) 看板: false は捕獲者行なし、true/未設定はあり
@@ -79,15 +84,18 @@ const HUNTERS = [
   T('看板: 出さない人は「捕獲者」行が無い', !board.no.includes('捕獲者') && board.no.includes('通し番号') && board.no.includes('捕獲場所'), board.no.join());
   T('看板: 出してよい・未設定は「捕獲者」行あり', board.yes.includes('捕獲者') && board.unset.includes('捕獲者'), board.yes.join() + ' / ' + board.unset.join());
 
-  // 4) 編集で開くと登録済みの値
+  // 4) 編集で開くと登録済みの値のまま（本物の loadForEdit を通す）。保存し直す値も同じ
   const ed = await page.evaluate(() => {
     const out = {};
-    setHunterPublicToggle('出す'); editRecordId = null;
-    // 編集の fill と同じ規則（true→出す、false/null→出さない）
-    [true, false, null].forEach(v => { setHunterPublicToggle(v === true ? '出す' : '出さない'); out[String(v)] = state.hunter_name_public; });
+    [true, false, null].forEach(v => {
+      try { loadForEdit({ id: 'e-' + v, label_id: 'TGC-08-T900', species: 'イノシシ', hunter_name: '加藤茂', hunter_name_public: v, capture_date: '2026-09-04', capture_city: '館山市' }); } catch (e) { out.err = e.message; }
+      out[String(v)] = state.hunter_name_public; out['save_' + v] = hunterPublicValue(state.hunter_name_public);
+    });
+    try { cancelEdit && cancelEdit(); } catch (e) {}
     return out;
   });
-  T('編集: true→出す、false→出さない、未確認(null)→出さない', ed['true'] === '出す' && ed['false'] === '出さない' && ed['null'] === '出さない', JSON.stringify(ed));
+  T('編集: true→出す、false→出さない、未確認(null)→未確認のまま', ed['true'] === '出す' && ed['false'] === '出さない' && ed['null'] === '未確認', JSON.stringify(ed));
+  T('編集の保存値: true→true、false→false、未確認→null（false に書き換えない）', ed.save_true === true && ed.save_false === false && ed.save_null === null, JSON.stringify(ed));
   T('pageerrorなし', errors.length === 0, errors.join(' / '));
 
   let pass = 0;

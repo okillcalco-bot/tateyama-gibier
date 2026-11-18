@@ -2341,11 +2341,14 @@ function setHunterPublicToggle(val) {
   state.hunter_name_public = val;
   document.querySelectorAll('[data-field="hunter_name_public"] .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.val === val));
 }
+/* 2026-11-18: 前に選んだ人の「出さない」が、次に選んだ未確認の人へ持ち越され、そのまま保存されて
+   その人の捕獲者マスタまで「出さない」に書き換わっていた（画面に質問が無いので誰も気づけない）。
+   未確認・台帳に無い人は既定（出してよい）に戻す。 */
+function hunterPublicValue(st) { return st === '出さない' ? false : st === '未確認' ? null : true; }
 function applyHunterPublicDefault(name) {
-  if (!name || editRecordId) return;   // 編集中は登録済みの値のまま
-  const h = (window._huntersCache || []).find(x => x && x.name === name);
-  if (!h || h.name_public == null) return;
-  setHunterPublicToggle(h.name_public === false ? '出さない' : '出す');
+  if (editRecordId) return;   // 編集中は登録済みの値のまま
+  const h = name ? (window._huntersCache || []).find(x => x && x.name === name) : null;
+  setHunterPublicToggle(h && h.name_public === false ? '出さない' : '出す');
 }
 
 /* ── いつもの（捕獲者の過去データから頻度順に候補を出す） ── */
@@ -2688,8 +2691,10 @@ function loadForEdit(rec) {
     document.getElementById('areaPickedRow').style.display = '';
   }
   sv('hunterName', rec.hunter_name);
-  // 公開ページに名前を出すか: 登録済みの値（未確認＝null は「出さない」として表示）
-  setHunterPublicToggle(rec.hunter_name_public === true ? '出す' : '出さない');
+  // 公開ページに名前を出すか: 登録済みの値のまま保存し直す（2026-11-18）。
+  // 以前は未確認（null）を「出さない」として読み込み、修正の保存で false に書き換えていた。
+  // さらにその false が捕獲者マスタへ写り、その人の以後の個体がすべて「出さない」になっていた。
+  setHunterPublicToggle(rec.hunter_name_public === true ? '出す' : rec.hunter_name_public === false ? '出さない' : '未確認');
   sv('bleedTime', rec.bleed_time);
   sv('receiveTime', rec.receive_time);
   sv('transportStart', rec.transport_start);
@@ -3306,7 +3311,7 @@ async function handleSubmit() {
       capture_category: isKujoGai() ? '駆除外' : null,
       capture_area: document.getElementById('captureArea').value,
       hunter_name: document.getElementById('hunterName').value,
-      hunter_name_public: state.hunter_name_public !== '出さない',   // 「この肉の物語」に捕獲者名を出してよいか
+      hunter_name_public: hunterPublicValue(state.hunter_name_public),   // 「この肉の物語」に捕獲者名を出してよいか（未確認は null のまま）
       capture_method: state.capture_method,
       finishing_method: state.finishing_method,
       trap_part: state.trap_part || null,
@@ -3414,14 +3419,9 @@ async function handleSubmit() {
       }
     }
 
-    // 捕獲者マスタに「名前を出してよいか」の今回の選択を覚える（次回の既定）。失敗しても登録は済んでいるので流す
-    try {
-      const _hn = (record.hunter_name || '').trim();
-      if (_hn && typeof record.hunter_name_public === 'boolean') {
-        sb('PATCH', 'hunters', { name_public: record.hunter_name_public }, `?name=eq.${encodeURIComponent(_hn)}&deleted_at=is.null&select=id`).catch(() => {});
-        (window._huntersCache || []).forEach(h => { if (h && h.name === _hn) h.name_public = record.hunter_name_public; });
-      }
-    } catch (e) {}
+    // 捕獲者マスタの「名前を出してよいか」は、捕獲票からは書き換えない（2026-11-18）。
+    // 捕獲票には質問が無く（2026-09-25 撤去）、ここで書くと持ち越し・読み込みの誤りがマスタに写って
+    // その人の以後の個体すべてに広がっていた（石渡裕・池田和博）。マスタは捕獲者台帳（index.html）で決める。
     // 登録後はカメラを強制しない。搬入一覧に溜めて、看板写真は一覧から後でまとめて撮る。
     loadTodayCount();
     resetForm();
@@ -4074,7 +4074,7 @@ function currentFormRec() {
   return {
     capture_date: g('captureDate') || (typeof today === 'function' ? today() : ''),
     hunter_name: g('hunterName'),
-    hunter_name_public: state.hunter_name_public !== '出さない',
+    hunter_name_public: hunterPublicValue(state.hunter_name_public),
     capture_city: state.capture_city || '',
     capture_area: g('captureArea'),
     intake_method: state.intake_method || '',
