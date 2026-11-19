@@ -2688,6 +2688,16 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div id="base-orders"><div class="empty-state" style="font-size:13px;">読み込み中...</div></div>
     </div>
 
+    <!-- 通販（さとふる・まいぷれ・AWAWA）の注文（2026-11-19）: Gmail の注文メールから自動で載る。出荷すると加工品の棚の在庫から引く -->
+    <div class="section" id="ship-mp">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>🛍 通販の注文（さとふる・まいぷれ・AWAWA）</span>
+        <button class="btn btn-sm" onclick="mpLoad()">🔄 更新</button>
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:8px;">注文メールから自動で載ります（届け先の名前・住所は載せません）。「出荷した」を押すと、加工品の棚の在庫から引きます。</div>
+      <div id="mp-orders"><div class="empty-state" style="font-size:13px;">読み込み中...</div></div>
+    </div>
+
     <div class="section">
       <div class="section-title">出荷待ち注文一覧</div>
       <div id="ship-orders"><div class="loading"><span class="spin"></span>読み込み中...</div></div>
@@ -3244,7 +3254,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'inventory') loadInventory();
     if (btn.dataset.tab === 'individuals') indLoad();
     if (btn.dataset.tab === 'processing') loadProcessingSetup();
-    if (btn.dataset.tab === 'shipping') { loadShipping(); loadBaseOrders(); shipPausedRender(); shipActiveRestore(); fieldPhotosLoad(); setTimeout(maintainShippingScannerFocus, 50); }
+    if (btn.dataset.tab === 'shipping') { loadShipping(); loadBaseOrders(); mpLoad();shipPausedRender(); shipActiveRestore(); fieldPhotosLoad(); setTimeout(maintainShippingScannerFocus, 50); }
     if (btn.dataset.tab === 'punch') loadPunch();
     if (btn.dataset.tab === 'products') loadProducts();
     if (btn.dataset.tab === 'recipes') loadRecipes();
@@ -3552,6 +3562,166 @@ async function baseOrderShip(key) {
     playFeedbackSound(false);
     toast('発送処理に失敗しました: ' + sbSafeMsg(e), 'error');
   }
+}
+
+/* ── 通販（さとふる・まいぷれ・AWAWA）の注文（2026-11-19 沖）──
+   Gmail の注文メールを Apps Script（integrations/marketplace-gmail/Code.gs）が読み、marketplace_orders に入れる。
+   ここでは未出荷の一覧を出し、「出荷した」で加工品の棚（products）の在庫を
+   「注文の数 × 対応の数（marketplace_item_map）」だけ引く（BASE と同じやり方）。
+   届け先の名前・住所は取り込んでいない（認可の移行が終わるまで新しい注文個人情報は持たない）。 */
+const MP_LABEL = { 'さとふる': 'さとふる（ふるさと納税）', 'まいぷれ': 'まいぷれのご当地ギフト', 'AWAWA': 'AWAWA! FOOD' };
+const MP_CODE = { 'さとふる': 'SF', 'まいぷれ': 'MY', 'AWAWA': 'AW' };
+let mpCache = { orders: [], maps: [], prods: [] };
+function mpMapsFor(o) { return mpCache.maps.filter(m => m.platform === o.platform && m.item_code === o.item_code); }
+function mpProd(id) { return mpCache.prods.find(p => p.id === id); }
+async function mpLoad() {
+  const box = document.getElementById('mp-orders');
+  if (!box) return;
+  box.innerHTML = '<div class="loading"><span class="spin"></span>読み込み中...</div>';
+  try {
+    const [orders, maps, prods] = await Promise.all([
+      sb('GET', 'marketplace_orders', null, '?deleted_at=is.null&status=eq.' + encodeURIComponent('未出荷') + '&order=pickup_date.asc.nullslast,received_at.asc&limit=200'),
+      sb('GET', 'marketplace_item_map', null, '?deleted_at=is.null&select=id,platform,item_code,item_name,product_id,qty'),
+      sb('GET', 'products', null, '?deleted_at=is.null&select=id,name,stock_qty&order=name')
+    ]);
+    mpCache = { orders: orders || [], maps: maps || [], prods: prods || [] };
+    mpRender();
+  } catch (e) {
+    // 読めなかったのを「注文0件」に見せない
+    box.innerHTML = `<div role="alert" style="border:1px solid #e0a0a0;background:#fff4f4;color:#8a1c1c;border-radius:8px;padding:10px;font-size:13px;">通販の注文を読み込めませんでした（${esc2(sbSafeMsg(e))}）。空に見えても「注文が0件」とは限りません。 <button class="btn btn-sm" onclick="mpLoad()">もう一度読み込む</button></div>`;
+  }
+}
+function mpRender() {
+  const box = document.getElementById('mp-orders');
+  if (!box) return;
+  const list = mpCache.orders;
+  if (!list.length) { box.innerHTML = '<div class="empty-state">未出荷の通販の注文はありません 🎉</div>'; return; }
+  const today = ymdLocal(new Date());
+  box.innerHTML = list.map(o => {
+    const maps = mpMapsFor(o);
+    const late = o.pickup_date && o.pickup_date <= today;
+    const use = maps.map(m => {
+      const p = mpProd(m.product_id); const need = m.qty * o.qty; const short = p && (p.stock_qty || 0) < need;
+      return `<span style="${short ? 'color:#b3261e;font-weight:700;' : ''}">${esc2(p ? p.name : '（棚に無い商品）')} ×${need}${p ? `（棚 ${p.stock_qty || 0}）` : ''}${short ? ' ⚠足りない' : ''}</span>`;
+    }).join('、');
+    return `<div class="card" style="padding:10px 12px;margin-bottom:8px;" data-mp="${esc2(o.id)}">
+      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline;">
+        <div style="min-width:0;flex:1 1 220px;"><span style="font-size:11.5px;background:#eef2e6;border-radius:4px;padding:1px 6px;margin-right:6px;">${esc2(o.platform)}</span>
+          <b style="overflow-wrap:anywhere;">${esc2(o.item_name)}</b> × <b>${o.qty}</b>${o.amount != null ? ` <span style="color:var(--text2);font-size:12.5px;">¥${Number(o.amount).toLocaleString()}</span>` : ''}</div>
+        <div style="font-size:13px;${late ? 'color:#b3261e;font-weight:700;' : 'color:var(--text2);'}">${o.pickup_date ? '集荷 ' + esc2(o.pickup_date.slice(5).replace('-', '/')) + (late ? '（今日まで）' : '') : '集荷日 未定'}</div>
+      </div>
+      ${o.item_detail ? `<div style="font-size:12.5px;color:var(--text2);overflow-wrap:anywhere;">${esc2(o.item_detail)}</div>` : ''}
+      ${o.note ? `<div role="alert" style="font-size:12.5px;color:#8a1c1c;overflow-wrap:anywhere;">⚠ ${esc2(o.note)}</div>` : ''}
+      <div style="font-size:12.5px;margin-top:4px;overflow-wrap:anywhere;">在庫から: ${maps.length ? use : '<span style="color:#b3261e;font-weight:700;">⚠ 在庫との対応が未設定（「在庫の対応」で決めると、出荷のときに自動で引きます）</span>'}</div>
+      ${o.tracking_nos ? `<div style="font-size:12px;color:var(--text2);overflow-wrap:anywhere;">伝票番号: ${esc2(o.tracking_nos)}</div>` : ''}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+        <button class="btn btn-primary btn-sm" onclick="mpShip('${esc2(o.id)}')">📦 出荷した</button>
+        <button class="btn btn-sm" onclick="mpEditMap('${esc2(o.id)}')">🔗 在庫の対応</button>
+        <button class="btn btn-sm" onclick="mpCancel('${esc2(o.id)}')">取消</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function mpShip(id) {
+  const o = mpCache.orders.find(x => x.id === id);
+  if (!o) { toast('注文が見つかりません。🔄 更新を押してください', 'error'); return; }
+  const maps = mpMapsFor(o);
+  if (!maps.length && !confirm(`「${o.item_name}」は在庫との対応が決まっていません。\n\n在庫は引かずに出荷済にしますか？\n（先に「🔗 在庫の対応」を決めるなら「キャンセル」）`)) return;
+  const lines = maps.map(m => ({ m, p: mpProd(m.product_id), need: m.qty * o.qty }));
+  const short = lines.filter(l => l.p && (l.p.stock_qty || 0) < l.need);
+  const what = lines.map(l => `・${l.p ? l.p.name : '（棚に無い商品）'} ×${l.need}`).join('\n');
+  if (!confirm(`${o.platform}「${o.item_name}」×${o.qty} を出荷済にします。\n\n在庫から引くもの:\n${what || '（なし）'}${short.length ? '\n\n⚠ 棚の数が足りないものがあります: ' + short.map(l => l.p.name).join('・') + '（0より下にはしません。棚卸で数を確かめてください）' : ''}`)) return;
+  const now = new Date().toISOString();
+  let claimed;
+  try {
+    // 二重に出荷しない: 未出荷のときだけ出荷済にする（別の端末で先に押されていたら何もしない）
+    claimed = await sb('PATCH', 'marketplace_orders', { status: '出荷済', shipped_at: now, updated_at: now }, `?id=eq.${id}&status=eq.${encodeURIComponent('未出荷')}`);
+  } catch (e) { playFeedbackSound(false); toast('出荷済にできませんでした: ' + sbSafeMsg(e), 'error'); return; }
+  if (!Array.isArray(claimed) || !claimed.length) { toast('この注文はすでに出荷済みか取消になっています。一覧を更新します', 'error'); mpLoad(); return; }
+  const fails = [];
+  const label = MP_LABEL[o.platform] || o.platform;
+  const today = ymdLocal(new Date());
+  let orderId = null;
+  try {
+    const created = await sb('POST', 'orders', {
+      order_code: `MP-${MP_CODE[o.platform] || 'X'}-${String(o.source_message_id).slice(-10)}-${o.line_no}`,
+      customer_name: label, order_date: today, delivery_date: today, status: '発送済', channel: label,
+      total_amount: o.amount != null ? o.amount : null,
+      notes: [o.external_order_no ? '受付番号: ' + o.external_order_no : '', o.tracking_nos ? '伝票番号: ' + o.tracking_nos : ''].filter(Boolean).join(' / ') || null
+    });
+    orderId = created && created[0] && created[0].id;
+    if (orderId) await sb('POST', 'order_items', { order_id: orderId, part_name: o.item_name, unit_price: o.amount != null ? Math.round(o.amount / o.qty) : null, amount: o.amount || 0, product_id: lines.length === 1 && lines[0].p ? lines[0].p.id : null });
+  } catch (e) { fails.push('売上の記録（' + sbSafeMsg(e) + '）'); }
+  // 在庫を引く（その場で棚の数を読み直してから）
+  for (const l of lines) {
+    if (!l.p) { fails.push('棚に無い商品の対応（在庫は引いていません）'); continue; }
+    try {
+      const cur = await sb('GET', 'products', null, `?id=eq.${l.p.id}&select=id,name,stock_qty`);
+      const stock = cur && cur[0] ? (cur[0].stock_qty || 0) : (l.p.stock_qty || 0);
+      const nq = Math.max(0, stock - l.need);
+      await sb('POST', 'product_movements', { product_id: l.p.id, product_name: l.p.name, movement_type: '出荷', qty: l.need, staff_name: '通販連携', destination: label, note: `${o.platform}「${o.item_name}」×${o.qty}` });
+      await sb('PATCH', 'products', { stock_qty: nq, updated_at: new Date().toISOString() }, `?id=eq.${l.p.id}`);
+      l.p.stock_qty = nq;
+      if (typeof baseSyncStock === 'function') baseSyncStock(l.p.id, nq);
+    } catch (e) { fails.push(`${l.p.name} の在庫を引けませんでした（${sbSafeMsg(e)}）`); }
+  }
+  if (orderId) { try { await sb('PATCH', 'marketplace_orders', { order_id: orderId, updated_at: new Date().toISOString() }, `?id=eq.${id}`); } catch (e) { /* 紐づけだけなので出荷は済んでいる */ } }
+  if (fails.length) { playFeedbackSound(false); warnSticky(`⚠ 出荷済にしましたが、うまくいかなかったものがあります: ${fails.join('・')}。在庫の画面で数を確かめてください`); }
+  else { playFeedbackSound(true); toast(`出荷済にしました（${o.platform} ${o.item_name} ×${o.qty}）` + (lines.length ? ' 在庫から引きました' : '')); }
+  mpLoad();
+}
+async function mpCancel(id) {
+  const o = mpCache.orders.find(x => x.id === id);
+  if (!o) return;
+  const why = prompt(`${o.platform}「${o.item_name}」×${o.qty} を取消にします（在庫は動きません）。\n理由を入れてください（例: 寄付者のキャンセル、二重の通知）`, '');
+  if (why === null) return;
+  try {
+    const r = await sb('PATCH', 'marketplace_orders', { status: '取消', note: [o.note, '取消: ' + (why || '理由なし')].filter(Boolean).join(' / '), updated_at: new Date().toISOString() }, `?id=eq.${id}&status=eq.${encodeURIComponent('未出荷')}`);
+    if (!Array.isArray(r) || !r.length) toast('すでに出荷済みか取消になっていました', 'error'); else toast('取消にしました');
+  } catch (e) { toast('取消できませんでした: ' + sbSafeMsg(e), 'error'); }
+  mpLoad();
+}
+/* 在庫の対応: 通販の商品1つに、加工品の棚の商品と袋数を何行でも（セットの中身） */
+function mpEditMap(id) {
+  const o = mpCache.orders.find(x => x.id === id);
+  if (!o) return;
+  if (!o.item_code) { alert('この行は商品が読み取れていないため、対応を決められません。メールを確かめてください。'); return; }
+  const cur = mpMapsFor(o);
+  const opts = sel => '<option value="">（選ぶ）</option>' + mpCache.prods.map(p => `<option value="${esc2(p.id)}"${p.id === sel ? ' selected' : ''}>${esc2(p.name)}（棚 ${p.stock_qty || 0}）</option>`).join('');
+  const row = (pid, q) => `<div class="mp-map-row" style="display:flex;gap:6px;margin-bottom:6px;"><select class="form-input" style="flex:1;min-width:0;">${opts(pid)}</select><input class="form-input" type="number" min="1" value="${q || 1}" style="width:70px;"><span style="align-self:center;">袋</span></div>`;
+  let ov = document.getElementById('mp-map-ov');
+  if (ov) ov.remove();
+  ov = document.createElement('div');
+  ov.id = 'mp-map-ov';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:3000;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML = `<div role="dialog" aria-label="在庫の対応" style="background:#fff;border-radius:12px;padding:16px;width:100%;max-width:480px;max-height:90vh;overflow:auto;box-sizing:border-box;">
+    <div style="font-weight:700;margin-bottom:4px;">🔗 在庫の対応</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:10px;overflow-wrap:anywhere;">${esc2(o.platform)}「${esc2(o.item_name)}」1つあたり、棚から引くもの${o.item_detail ? '<br>内容: ' + esc2(o.item_detail) : ''}</div>
+    <div id="mp-map-rows">${(cur.length ? cur : [{}]).map(m => row(m.product_id, m.qty)).join('')}</div>
+    <button class="btn btn-sm" type="button" onclick="mpAddMapRow()">＋ 行を足す</button>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="btn" type="button" onclick="document.getElementById('mp-map-ov').remove()">やめる</button>
+      <button class="btn btn-primary" type="button" onclick="mpSaveMap('${esc2(o.id)}')">保存</button>
+    </div></div>`;
+  mpAddMapRow._html = row('', 1);
+  document.body.appendChild(ov);
+}
+function mpAddMapRow() { const box = document.getElementById('mp-map-rows'); if (box && mpAddMapRow._html) box.insertAdjacentHTML('beforeend', mpAddMapRow._html); }
+async function mpSaveMap(id) {
+  const o = mpCache.orders.find(x => x.id === id);
+  if (!o) return;
+  const rows = [...document.querySelectorAll('#mp-map-rows .mp-map-row')].map(r => ({ product_id: r.querySelector('select').value, qty: parseInt(r.querySelector('input').value, 10) })).filter(r => r.product_id);
+  if (rows.some(r => !(r.qty > 0))) { alert('袋の数は1以上にしてください'); return; }
+  const now = new Date().toISOString();
+  try {
+    // 前の対応は消さずに「外した印」を付けてから入れ直す（いつ何に変えたかが残る）
+    const old = mpMapsFor(o);
+    if (old.length) await sb('PATCH', 'marketplace_item_map', { deleted_at: now }, `?id=in.(${old.map(m => m.id).join(',')})`);
+    if (rows.length) await sb('POST', 'marketplace_item_map', rows.map(r => ({ platform: o.platform, item_code: o.item_code, item_name: o.item_name, product_id: r.product_id, qty: r.qty })));
+    document.getElementById('mp-map-ov').remove();
+    toast(rows.length ? '在庫の対応を保存しました（同じ商品の注文すべてに使われます）' : '在庫の対応を外しました');
+    mpLoad();
+  } catch (e) { alert('保存できませんでした: ' + sbSafeMsg(e) + '\n（前の対応が外れている場合があります。もう一度開いて確かめてください）'); mpLoad(); }
 }
 
 /* ── 注文なし出荷（直販・突然の来店） ── */
