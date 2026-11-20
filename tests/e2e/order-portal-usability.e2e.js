@@ -10,7 +10,7 @@
 //     4. 進行中の注文が一覧のいちばん上に出る（受付・確認済み・発送済み。完了とキャンセルは出さない）
 //     5. 履歴の「もう一度注文」でカートに入り、一覧へ戻る。入らなかった商品は知らせる
 //     6. 履歴にセンターの社内メモを出さない（伝票番号だけ出す）
-//     7. 使い方・お店の案内が開ける。電話番号が未設定なら番号を出さない（うその番号を出さない）
+//     7. 使い方・お店の案内が開ける。電話番号は押せば電話できる。番号を空にしたら出さない（うその番号を出さない）
 //     8. 読み込みに失敗したら消えない知らせと「もう一度読み込む」が出て、押すと直る
 //     9. 確定ボタンの名前が、押す前・失敗の知らせ・押したあとで同じ
 //    10. スマホの幅で横にはみ出さない／ページエラーなし
@@ -58,8 +58,12 @@ const ORDERS = [
   await page.waitForTimeout(300);
 
   // 7. ログイン画面: 電話番号が未設定なら出さない
-  const lg = await page.evaluate(() => ({ tel: document.getElementById('lg-tel').innerText, hasTelLink: !!document.querySelector('#scr-login a[href^="tel:"]') }));
-  T('7. 電話番号が未設定のうちは、ログイン画面に番号を出さない', lg.tel === '' && !lg.hasTelLink, JSON.stringify(lg));
+  const lg = await page.evaluate(() => { const a = document.querySelector('#scr-login a[href^="tel:"]'); const r = a ? a.getBoundingClientRect() : { height: 0 }; const on = { text: document.getElementById('lg-tel').innerText.trim(), href: a && a.getAttribute('href'), h: r.height };
+    const keep = SHOP_INFO.tel; SHOP_INFO.tel = ''; renderShopInfo();
+    const off = { text: document.getElementById('lg-tel').innerText, link: !!document.querySelector('#scr-login a[href^="tel:"]'), guide: document.getElementById('shop-info').innerText };
+    SHOP_INFO.tel = keep; renderShopInfo(); return { on, off }; });
+  T('7. ログイン画面の「お電話ください」に、押せば電話できる番号が出る', lg.on.text === '0470-29-3919' && lg.on.href === 'tel:0470293919' && lg.on.h > 10, JSON.stringify(lg.on));
+  T('7. 番号を空にしたら、番号を出さず案内の書面を見るよう伝える（うその番号を出さない）', lg.off.text === '' && !lg.off.link && /案内をご覧ください/.test(lg.off.guide), JSON.stringify(lg.off));
 
   await page.fill('#lg-id', 'C9999'); await page.fill('#lg-pw', 'password'); await page.click('#lg-btn');
   await page.waitForTimeout(600);
@@ -99,9 +103,7 @@ const ORDERS = [
   await page.click('#guideBox summary'); await page.waitForTimeout(150);
   const guide = await page.evaluate(() => { const g = document.getElementById('guideBox'); return { open: g.open, text: g.innerText.replace(/\s+/g, ' '), tel: !!g.querySelector('a[href^="tel:"]') }; });
   T('7. 使い方（注文の流れ・前回と同じ注文・予約）が読める', guide.open && /ご注文の流れ/.test(guide.text) && /この内容で注文する/.test(guide.text) && /もう一度注文/.test(guide.text) && /予約/.test(guide.text), guide.text.slice(0, 120));
-  T('7. お店の名前と場所が出る。未設定の電話番号は出さない', /館山ジビエセンター/.test(guide.text) && /館山市/.test(guide.text) && !guide.tel && !/電話 0/.test(guide.text), guide.text.slice(-160));
-  const guideTel = await page.evaluate(() => { SHOP_INFO.tel = '000-0000-0000'; renderShopInfo(); const a = document.querySelector('#shop-info a[href^="tel:"]'); const r = a && a.getAttribute('href'); SHOP_INFO.tel = ''; renderShopInfo(); return r; });
-  T('7. 電話番号を設定すると、押せば電話できる形で出る', guideTel === 'tel:00000000000', guideTel);
+  T('7. お店の名前・場所・電話番号（押せば電話できる）が出る', /館山ジビエセンター/.test(guide.text) && /館山市/.test(guide.text) && guide.tel && /電話 0470-29-3919/.test(guide.text), guide.text.slice(-160));
   await page.click('#guideBox summary');
 
   // 6. 履歴に社内メモを出さない

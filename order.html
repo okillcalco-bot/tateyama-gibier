@@ -1610,8 +1610,8 @@ function resetToList() { enterList(); }
 /* ══════════ 起動 ══════════
    ログインは「ログインID＋パスワード」に一本化した。URLトークン（#t=）による自動ログインは廃止。
    URLに残った #t= はセッションに保存せず無視する（URLトークンでの認証迂回を残さないため）。 */
-/* お店のご案内。電話番号は、載せる番号が決まるまで出さない（空のままなら「ご案内の書面をご覧ください」） */
-const SHOP_INFO = { name: '館山ジビエセンター（合同会社アルコ）', address: '千葉県館山市西長田1163-5', tel: '', hours: '' };
+/* お店のご案内。電話番号はセンターの番号（2026-11-20 沖「0470の方で」）。空にすると番号を出さず「ご案内の書面をご覧ください」になる */
+const SHOP_INFO = { name: '館山ジビエセンター（合同会社アルコ）', address: '千葉県館山市西長田1163-5', tel: '0470-29-3919', hours: '' };
 function renderShopInfo() {
   const el = $('shop-info'); if (!el) return;
   const telLink = SHOP_INFO.tel ? `<a href="tel:${esc(SHOP_INFO.tel.replace(/[^0-9+]/g, ''))}" style="color:var(--gold);font-weight:700">${esc(SHOP_INFO.tel)}</a>` : '';
