@@ -940,7 +940,7 @@ function renderHistory() {
       ship = ships.map(s => {
         const cs = [s.carrier, s.size_code ? s.size_code + 'サイズ' : '', s.is_cool ? 'クール' : ''].filter(Boolean).join('・');
         // 出荷の備考はセンターの社内メモ。お客様には出さず、伝票番号（追跡番号）だけを出す
-        const tn = shipTrackingNo(s.notes);
+        const tn = s.tracking_no || shipTrackingNo(s.notes);   // 新しい版は伝票番号だけが届く（社内メモは通信にも載らない）
         return `<div class="hship">🚚 発送 ${jdate(s.shipment_date)}${cs ? '　' + esc(cs) : ''}${tn ? '　伝票番号 ' + esc(tn) : ''}</div>`;
       }).join('');
     } else if (o.status === '発送済' || o.status === '納品完了') {
@@ -966,12 +966,11 @@ function renderHistory() {
   }).join('');
 }
 
-/* 出荷の備考から伝票番号だけを取り出す（10〜14桁の数字。ハイフン区切りも可）。それ以外の文は社内メモなので出さない */
+/* 出荷の備考から伝票番号だけを取り出す（12桁の数字。4桁ごとのハイフン区切りも可）。それ以外の文は社内メモなので出さない。
+   12桁ちょうどに限る（11桁の携帯番号などを伝票番号と取り違えて出さないため） */
 function shipTrackingNo(notes) {
-  const m = String(notes || '').match(/(?:^|[^\d-])(\d{4}-?\d{4}-?\d{2,6})(?![\d-])/);
-  if (!m) return '';
-  const digits = m[1].replace(/-/g, '');
-  return (digits.length >= 10 && digits.length <= 14) ? m[1] : '';
+  const m = String(notes || '').match(/(?:^|[^\d-])(\d{4}-?\d{4}-?\d{4})(?![\d-])/);
+  return m ? m[1] : '';
 }
 
 async function issuePortalDoc(orderId, docType) {

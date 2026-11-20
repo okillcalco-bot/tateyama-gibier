@@ -1,0 +1,12 @@
+-- 注文・出荷・在庫・商品・価格の表から、公開キーでの「行の削除」を外す（2026-11-20 セキュリティ見直し 第1段）
+--
+-- 実測: これらの表はアプリに埋め込まれた公開キーで読み書きでき、inventory / products / shipments /
+--   product_movements / price_master / customer_prices は削除もできる状態だった（orders / order_items は
+--   RLS に削除のポリシーが無く、すでに削除不可）。
+-- 画面（リポジトリの全 HTML）がこれらの表に DELETE を出す箇所は 0（消すのは customers・documents・
+--   document_items・document_orders・shifts・sale_event_items・pest_control_logs・recipe_items だけ）。
+-- DB 関数で消すのは mail_import_outlet_day（product_movements）のみで、SECURITY DEFINER なので影響なし。
+-- → 既存の画面の動きは変わらない。読む・足す・直すはこれまでどおり。表・データは変更しない。
+--
+-- 戻すとき: grant delete on <表> to anon, authenticated;
+revoke delete, truncate on orders, order_items, shipments, inventory, products, product_movements, price_master, customer_prices from anon, authenticated;
