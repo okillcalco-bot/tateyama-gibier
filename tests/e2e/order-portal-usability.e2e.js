@@ -28,7 +28,7 @@ const CATALOG = [
 const ORDERS = [
   { id: 'o1', order_code: 'ORD-TEST-1', status: '受注', order_date: '2026-11-19', delivery_date: '2026-11-25', total_amount: 5000, can_doc: false, items: [{ name: 'イノシシ ロース ブロック', kg: 1 }], shipments: [] },
   { id: 'o2', order_code: 'ORD-TEST-2', status: '発送済', order_date: '2026-11-10', delivery_date: '2026-11-12', total_amount: 9000, can_doc: true, items: [{ name: 'シカ ロース ブロック', kg: 2 }], shipments: [{ shipment_date: '2026-11-11', carrier: 'ヤマト', size_code: 80, is_cool: true, notes: 'ヤマト 123456789012。本人の明細から追記起票（架空の社内メモ）' }] },
-  { id: 'o3', order_code: 'ORD-TEST-3', status: '納品完了', order_date: '2026-10-01', delivery_date: '2026-10-03', total_amount: 3000, can_doc: true, items: [{ name: 'イノシシ ミンチ', kg: 1 }], shipments: [{ shipment_date: '2026-10-02', notes: '2026-10-02 架空商店宛 手書きメモより起票' }] },
+  { id: 'o3', order_code: 'ORD-TEST-3', status: '納品完了', order_date: '2026-10-01', delivery_date: '2026-10-03', total_amount: 3000, can_doc: true, items: [{ name: 'イノシシ ミンチ', kg: 1 }], shipments: [{ shipment_date: '2026-10-02', notes: '2026-10-02 架空商店宛 手書きメモより起票' }, { shipment_date: '2026-10-03', tracking_no: '9876-5432-1098' }] },
   { id: 'o4', order_code: 'ORD-TEST-4', status: 'キャンセル', order_date: '2026-09-01', total_amount: 0, can_doc: false, items: [{ name: 'イノシシ ばら肉', kg: 1 }], shipments: [] },
 ];
 
@@ -51,7 +51,7 @@ const ORDERS = [
     if (fn === 'portal_bulletins') return J([{ id: 'b1', product_id: 'p5', title: '今週のいちおし', body: '脂がのっています', badge: 'いちおし', sort_order: 1, created_at: new Date(Date.now() - 2 * 86400000).toISOString(), image_url: '' }]);
     if (fn === 'portal_my_orders') return J(ORDERS);
     if (fn === 'portal_rebuild_cart') { net.rebuilt.push(body); return J([{ status: 'ok', product_id: 'p4', name: 'シカ ロース ブロック', old_kg: 2, suggest_kg: 2, unit_price: 4500 }, { status: 'out_of_stock', product_id: 'p3', name: 'イノシシ ミンチ', reason: '在庫がありません' }]); }
-    if (fn === 'portal_place_order') return net.placeFail ? rt.abort() : J({ order_code: 'ORD-TEST-9', items: [], total_amount: 0 });
+    if (fn === 'portal_place_order' || fn === 'portal_place_order_v2') return net.placeFail ? rt.abort() : J({ order_code: 'ORD-TEST-9', items: [], total_amount: 0 });
     return J([]);
   });
   await page.goto('file://' + path.resolve(__dirname, '../../order.html'));
@@ -110,6 +110,9 @@ const ORDERS = [
   await page.click('button:has-text("注文履歴")'); await page.waitForTimeout(400);
   const hist = await page.evaluate(() => document.getElementById('hist-rows').innerText.replace(/\s+/g, ' '));
   T('6. 履歴に伝票番号は出る', /伝票番号 123456789012/.test(hist), hist.slice(0, 200));
+  T('6. 伝票番号だけが届く新しい形（tracking_no）でも出る', /伝票番号 9876-5432-1098/.test(hist), hist.slice(-200));
+  const tnCases = await page.evaluate(() => ['ヤマト 123456789012。追記', '送り状 1234-5678-9012（冷蔵）', '電話 09012345678 に連絡', '2026-11-20 ラベル写真から登録', '0470-29-3919', '1234567890123456', ''].map(shipTrackingNo));
+  T('6. 伝票番号は12桁だけ拾う（電話番号・日付・長い番号は拾わない）', JSON.stringify(tnCases) === JSON.stringify(['123456789012', '1234-5678-9012', '', '', '', '', '']), JSON.stringify(tnCases));
   T('6. 履歴にセンターの社内メモは出さない', !/追記起票|手書きメモ|社内メモ|架空商店宛/.test(hist), hist);
   const againN = await page.evaluate(() => [...document.querySelectorAll('#hist-rows .hcard')].map(c => !!c.querySelector('button[onclick^="reorderFrom"]')));
   T('5. 「もう一度注文」はキャンセル以外の注文に出る', againN.join() === 'true,true,true,false', againN.join());

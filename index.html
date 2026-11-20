@@ -3207,6 +3207,13 @@ function dueBadgeHtml(dateStr) {
   const st = { over: 'background:#c0392b;color:#fff', today: 'background:#c0392b;color:#fff', soon: 'background:#d98a00;color:#fff', near: 'background:rgba(217,138,0,.18);color:#d98a00;border:1px solid #d98a00', later: 'background:rgba(127,127,127,.14);color:inherit;border:1px solid rgba(127,127,127,.4)', none: 'background:rgba(127,127,127,.14);color:inherit;border:1px dashed rgba(127,127,127,.6)' }[d.level];
   return '<span data-due="' + d.level + '" style="display:inline-block;font-size:12px;font-weight:800;border-radius:6px;padding:2px 8px;max-width:100%;overflow-wrap:anywhere;' + st + '">' + d.label + '</span>';
 }
+/* 冷蔵で送る注文の印（2026-11-20 仲卸用の注文・冷蔵の指定）。いつもは冷凍なので、冷蔵のときだけ目立たせる */
+function tempBadgeHtml(o) {
+  const t = o && (o.temp_zone || (/【冷蔵希望】/.test(o.memo || '') ? '冷蔵' : ''));
+  return t === '冷蔵' ? ' <span data-temp="冷蔵" style="display:inline-block;font-size:12px;font-weight:800;border-radius:6px;padding:2px 8px;background:#1f6fb2;color:#fff;white-space:nowrap">❄ 冷蔵で発送</span>' : '';
+}
+/* 仲卸が注文ページから頼んだ注文（お店の名義で入り、頼んだ人が別） */
+function orderedByWholesaler(o) { return !!(o && o.ordered_by_customer_id && o.ordered_by_customer_id !== o.customer_id); }
 function dueEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function fmt(d) {
   if (!d) return '-';
@@ -5484,7 +5491,7 @@ async function loadShipping() {
         <div class="order-card-header">
           <div>
             <div class="order-code">🏪 ${order.customer_name || '出荷先未設定'} <span style="font-size:12px;color:var(--text2);font-weight:400;">${shipOrderLabel(order)}</span></div>
-            <div class="order-meta" style="margin-top:3px;">${dueBadgeHtml(order.delivery_date)}${order.delivery_time_zone ? ` <strong>${dueEsc(order.delivery_time_zone)}</strong>` : ''} / ${dueEsc(order.channel || '-')}</div>
+            <div class="order-meta" style="margin-top:3px;">${dueBadgeHtml(order.delivery_date)}${order.delivery_time_zone ? ` <strong>${dueEsc(order.delivery_time_zone)}</strong>` : ''}${tempBadgeHtml(order)} / ${dueEsc(order.channel || '-')}${orderedByWholesaler(order) ? '（仲卸からの注文）' : ''}</div>
             ${order.memo ? `<div class="order-meta" data-order-memo style="margin-top:3px;white-space:pre-wrap;overflow-wrap:anywhere;">📝 ${dueEsc(order.memo)}</div>` : ''}
             <div class="order-meta" style="margin-top:4px;">割当 <strong>${assignedCount} / ${items.length}行</strong> ・ 割当済 <strong>${assignedWeight.toFixed(2)}kg</strong> / 必要重量合計 <strong>${totalWeight.toFixed(1)}kg</strong> ${statusHtml}</div>
           </div>
@@ -16816,6 +16823,7 @@ function waybillOpenWith(v) {
   document.getElementById('wb-name').value = v.name || '';
   document.getElementById('wb-honorific').value = v.honorific || '様';
   document.getElementById('wb-code').value = v.code || '';
+  if (v.cool) document.getElementById('wb-cool').value = v.cool;   // 冷蔵の指定がある注文は冷蔵にしておく
   document.getElementById('wb-ship-date').value = ymdLocal(new Date());
   document.getElementById('wb-delivery-date').value = v.deliveryDate || '';
   document.getElementById('wb-time').value = v.time || '';
@@ -16823,16 +16831,27 @@ function waybillOpenWith(v) {
   document.getElementById('waybillModal').style.display = 'block';
 }
 
-function waybillOpenFromOrder(orderId) {
+async function waybillOpenFromOrder(orderId) {
   const cached = shipOrdersCache[orderId];
   if (!cached) { toast('注文情報を再読込してください', 'error'); return; }
   const o = cached.order;
-  waybillOpenWith({
+  const v = {
     postal: o.delivery_postal, phone: o.delivery_phone, address: o.delivery_address,
     building: o.delivery_building, name: o.delivery_name || o.customer_name,
     code: o.order_code, deliveryDate: o.delivery_date,
     time: o.delivery_time_zone && o.delivery_time_zone !== '0000' ? o.delivery_time_zone : '',
-  });
+    cool: (o.temp_zone === '冷蔵' || /【冷蔵希望】/.test(o.memo || '')) ? '冷蔵' : '',
+  };
+  // 仲卸が頼んだ注文は、お店の住所・電話を注文に写していない。顧客台帳から引く。
+  // 引けなかったら空のまま開いて、そのことを知らせる（別の住所を入れない）
+  if (!v.address && o.customer_id) {
+    try {
+      const c = (await sb('GET', 'customers', null, `?id=eq.${o.customer_id}&select=name,honorific,phone,address,building`) || [])[0];
+      if (c) { v.address = c.address || ''; v.building = c.building || ''; v.phone = c.phone || ''; v.name = v.name || c.name; v.honorific = c.honorific; }
+      if (!c || !c.address) toast('顧客台帳にこのお店の住所がありません。送り状の住所を手で入れてください', 'error');
+    } catch (e) { toast('お店の住所を顧客台帳から読めませんでした。送り状の住所を手で入れてください: ' + (e.message || e), 'error'); }
+  }
+  waybillOpenWith(v);
 }
 
 function waybillOpenFromCustomer(id) {

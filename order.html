@@ -236,6 +236,14 @@ body.kb .bar{display:none}
 .guide h4{font-size:12.5px;color:var(--gold);margin:10px 0 2px}
 .guide p{font-size:12.5px;color:var(--text2);line-height:1.8}
 .toast{cursor:pointer}
+.wsbadge{display:inline-block;font-size:10.5px;font-weight:800;color:#fff;background:var(--gold);border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:1px}
+.tempsel{display:flex;gap:8px}
+.tempsel label{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;min-height:48px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-weight:700;color:var(--text);cursor:pointer}
+.tempsel input{width:18px;height:18px}
+.tempsel label:has(input:checked){border-color:var(--gold);background:rgba(200,164,90,.12)}
+#c-shipto-box select{width:100%;min-height:48px}
+#c-shipto-box input{width:100%;height:44px;margin-bottom:6px}
+.shipto-tag{display:inline-block;font-size:11.5px;font-weight:700;color:var(--gold);border:1px solid var(--gold);border-radius:4px;padding:0 6px;margin-right:4px}
 .hbtns button{min-height:40px;padding:0 14px;border:1px solid var(--gold);background:transparent;color:var(--gold);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
 </style>
 </head>
@@ -407,10 +415,21 @@ body.kb .bar{display:none}
       <option value="1416">14:00〜16:00</option><option value="1618">16:00〜18:00</option>
       <option value="1820">18:00〜20:00</option><option value="1921">19:00〜21:00</option>
     </select></div>
-  <div class="fgrp"><label>お届け先</label>
+  <!-- 仲卸のお客様: お届け先のお店を選ぶ（2026-11-20 仲卸用の注文） -->
+  <div class="fgrp hidden" id="c-shipto-box"><label>お届け先のお店（必須）</label>
+    <input type="search" id="c-shipto-q" placeholder="🔍 お店の名前でさがす" oninput="renderShipToOptions()" autocomplete="off" aria-label="お届け先のお店をさがす">
+    <select id="c-shipto" onchange="onShipToChange()" aria-label="お届け先のお店"></select>
+    <div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.7" id="c-shipto-hint"></div></div>
+  <div class="loaderr hidden" id="c-shipto-err" role="alert" style="margin:0 0 12px"></div>
+  <div class="fgrp" id="c-addr-box"><label>お届け先</label>
     <div style="font-size:13px;color:var(--text2);line-height:1.7" id="c-addr"></div>
     <div style="font-size:11px;color:var(--text3);margin-top:4px">変更が必要なときは備考にお書きください</div></div>
-  <div class="fgrp"><label>備考（500文字まで）</label><textarea id="c-memo" maxlength="500"></textarea></div>
+  <div class="fgrp"><label>配送の温度</label>
+    <div class="tempsel" role="radiogroup" aria-label="配送の温度">
+      <label><input type="radio" name="c-temp" value="冷凍" checked> 🧊 冷凍</label>
+      <label><input type="radio" name="c-temp" value="冷蔵"> ❄ 冷蔵</label>
+    </div></div>
+  <div class="fgrp"><label>備考（500文字まで）</label><textarea id="c-memo" maxlength="500" placeholder="納品の注意・ご希望などがあればご記入ください"></textarea></div>
   <!-- ご注文は「希望」として承り、在庫確保・確定はセンターが行う（自動確保はしない） -->
   <div class="notice" id="c-consent">
     ご注文は<strong>「ご希望」として承ります</strong>。商品は現物パック単位のため、
@@ -537,6 +556,11 @@ const api = (() => {
     placeOrder: (items, date, time, memo, reqId) => rpc('portal_place_order', {
       p_token: tok(), p_items: items, p_delivery_date: date,
       p_time_zone: time, p_memo: memo, p_request_id: reqId }),
+    // 冷凍・冷蔵と、仲卸のときのお届け先のお店つき（2026-11-20）
+    placeOrderV2: (items, date, time, memo, reqId, temp, shipTo) => rpc('portal_place_order_v2', {
+      p_token: tok(), p_items: items, p_delivery_date: date,
+      p_time_zone: time, p_memo: memo, p_request_id: reqId, p_temp: temp, p_ship_to: shipTo }),
+    shipToList: () => rpc('portal_ship_to_list', { p_token: tok() }),
     // 予約（在庫なし商品）と掲示板
     reservationMarks: () => rpc('portal_reservation_marks', { p_token: tok() }),
     myReservations: () => rpc('portal_my_reservations', { p_token: tok() }),
@@ -586,6 +610,7 @@ let qtyState = {};           // product_id → 選択中のkg
 let sliceState = {};         // product_id → スライス加工希望（+¥1000/kg）
 let orderRequestId = null;   // 確認画面へ進んだ時点で発行（再送しても二重注文しない）
 let placing = false;         // 確定ボタンの連打ガード
+let wsInfo = { is_wholesaler: false, shops: [] };   // 仲卸のお客様か・お届け先のお店の一覧
 let pendingChangeToken = null; // 初回パスワード設定用の短命トークン。メモリのみ・永続化しない（P1-5）
 
 // カートは sessionStorage に置く（戻る・再読込で消えない）
@@ -758,6 +783,7 @@ async function enterList() {
   }
   $('list-err').classList.add('hidden'); $('list-err').innerHTML = '';
   loadActiveOrders();   // 待たない（履歴が読めなくても注文はできる）
+  await loadShipTo();
   const speciesList = [...new Set(catalog.filter(p => p.mark !== '×').map(p => p.species))];
   if (!currentSpecies || !speciesList.includes(currentSpecies)) currentSpecies = speciesList[0] || '';
   $('last-warn').innerHTML = ''; $('reorder-warn').innerHTML = '';   // 一覧の読み直しでだけ警告を消す
@@ -787,10 +813,47 @@ function renderActiveOrders() {
     const what = names.slice(0, 2).join('・') + (names.length > 2 ? ' ほか' + (names.length - 2) + '点' : '');
     return `<button type="button" class="act" onclick="openHistory()">
       <span class="as">${esc(st[0])}</span>
-      <span class="ab">${esc(what || 'ご注文')}<small>${o.delivery_date ? '納品希望 ' + esc(jdate(o.delivery_date)) + '　' : ''}${esc(st[1])}</small></span>
+      <span class="ab">${o.ship_to_name ? '<span class="shipto-tag">' + esc(o.ship_to_name) + ' あて</span>' : ''}${esc(what || 'ご注文')}${o.temp_zone === '冷蔵' ? ' ❄冷蔵' : ''}<small>${o.delivery_date ? '納品希望 ' + esc(jdate(o.delivery_date)) + '　' : ''}${esc(st[1])}</small></span>
       <span style="color:var(--text3)">›</span></button>`;
   }).join('');
 }
+
+/* ══════════ 仲卸のお客様: お届け先のお店 ══════════
+   仲卸のお客様は、自分のお店ではなく取引先の飲食店あてに頼むのが主。確認の画面でお届け先のお店を選べるようにする。
+   一覧に出すのは、センターの顧客台帳でその仲卸の取引先として登録されているお店だけ（名前と市区町村まで）。 */
+let shipToFailed = false;
+async function loadShipTo() {
+  shipToFailed = false;
+  try {
+    const r = await api.shipToList();
+    wsInfo = (r && r.is_wholesaler) ? { is_wholesaler: true, shops: r.shops || [] } : { is_wholesaler: false, shops: [] };
+  } catch (e) {
+    if (sessionExpired(e)) { forceRelogin(); return; }
+    // 関数がまだ無い（404）ときは仲卸の機能なしで動かす。それ以外の失敗は、仲卸のお客様が気づけるように覚えておく
+    if (e.status !== 404) shipToFailed = true;
+    wsInfo = { is_wholesaler: false, shops: [] };
+  }
+  $('h-name').innerHTML = esc((customer.name || '') + ' ' + (customer.honorific || '様')) + (wsInfo.is_wholesaler ? '<span class="wsbadge">仲卸用</span>' : '');
+}
+function renderShipToOptions() {
+  const sel = $('c-shipto'); if (!sel) return;
+  const cur = sel.value;
+  const q = searchNorm($('c-shipto-q').value);
+  const hit = wsInfo.shops.filter(sh => !q || searchNorm((sh.name || '') + ' ' + (sh.kana || '')).includes(q) || sh.id === cur);
+  sel.innerHTML = '<option value="">— お店を選んでください —</option>' +
+    hit.map(sh => `<option value="${esc(sh.id)}">${esc(sh.name)}${sh.area ? '（' + esc(sh.area) + '）' : ''}</option>`).join('') +
+    '<option value="__self">自社あて（' + esc(customer.name || '') + '）</option>';
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
+  $('c-shipto-hint').innerHTML = (q ? `「${esc($('c-shipto-q').value)}」で ${hit.length}件。` : `お届け先のお店 ${wsInfo.shops.length}件。`) +
+    '一覧に無いお店は、商品一覧の「💬 その他のご相談・お問い合わせ」から店名とご住所をお知らせください（センターで登録すると一覧に出ます）。';
+}
+function onShipToChange() {
+  const v = $('c-shipto').value;
+  $('c-addr-box').classList.toggle('hidden', v !== '__self');
+}
+async function retryShipTo() { await loadShipTo(); renderConfirm(); if (shipToFailed) toast('まだ読み込めません。電波の良い場所でもう一度お試しください', 'error'); }
+function shipToName(v) { const sh = wsInfo.shops.find(x => x.id === v); return sh ? sh.name : ''; }
+function tempChosen() { const r = document.querySelector('input[name="c-temp"]:checked'); return r ? r.value : '冷凍'; }
 
 /* ══════════ 料理ギャラリーへの投稿 ══════════ */
 let dishData = null;
@@ -940,7 +1003,7 @@ function renderHistory() {
       ship = ships.map(s => {
         const cs = [s.carrier, s.size_code ? s.size_code + 'サイズ' : '', s.is_cool ? 'クール' : ''].filter(Boolean).join('・');
         // 出荷の備考はセンターの社内メモ。お客様には出さず、伝票番号（追跡番号）だけを出す
-        const tn = shipTrackingNo(s.notes);
+        const tn = s.tracking_no || shipTrackingNo(s.notes);   // 新しい版は伝票番号だけが届く（社内メモは通信にも載らない）
         return `<div class="hship">🚚 発送 ${jdate(s.shipment_date)}${cs ? '　' + esc(cs) : ''}${tn ? '　伝票番号 ' + esc(tn) : ''}</div>`;
       }).join('');
     } else if (o.status === '発送済' || o.status === '納品完了') {
@@ -957,6 +1020,7 @@ function renderHistory() {
       <div class="htop"><span class="hstatus s-${esc(o.status || '')}">${esc(HIST_STATUS_LABEL[o.status] || o.status || '')}</span>
         <span class="hcode">${esc(o.order_code || '')}</span></div>
       <div class="hmeta">ご注文日: ${jdate(o.order_date || o.created_at)}${o.delivery_date ? '　／　納品希望: ' + jdate(o.delivery_date) : ''}</div>
+      ${(o.ship_to_name || o.temp_zone === '冷蔵') ? `<div class="hmeta">${o.ship_to_name ? '🏪 お届け先: <strong>' + esc(o.ship_to_name) + '</strong>' : ''}${o.ship_to_name && o.temp_zone === '冷蔵' ? '　／　' : ''}${o.temp_zone === '冷蔵' ? '❄ 冷蔵でお届け' : ''}</div>` : ''}
       ${itemsHtml}
       ${o.total_amount ? `<div class="htotal">合計 ${yen(o.total_amount)}<small>（税込）</small></div>` : ''}
       ${ship}
@@ -966,12 +1030,11 @@ function renderHistory() {
   }).join('');
 }
 
-/* 出荷の備考から伝票番号だけを取り出す（10〜14桁の数字。ハイフン区切りも可）。それ以外の文は社内メモなので出さない */
+/* 出荷の備考から伝票番号だけを取り出す（12桁の数字。4桁ごとのハイフン区切りも可）。それ以外の文は社内メモなので出さない。
+   12桁ちょうどに限る（11桁の携帯番号などを伝票番号と取り違えて出さないため） */
 function shipTrackingNo(notes) {
-  const m = String(notes || '').match(/(?:^|[^\d-])(\d{4}-?\d{4}-?\d{2,6})(?![\d-])/);
-  if (!m) return '';
-  const digits = m[1].replace(/-/g, '');
-  return (digits.length >= 10 && digits.length <= 14) ? m[1] : '';
+  const m = String(notes || '').match(/(?:^|[^\d-])(\d{4}-?\d{4}-?\d{4})(?![\d-])/);
+  return m ? m[1] : '';
 }
 
 async function issuePortalDoc(orderId, docType) {
@@ -1556,6 +1619,12 @@ function renderConfirm() {
   const f = x => x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
   if (!d.value) d.value = f(t);
   d.min = f(new Date()); d.max = f(max);
+  $('c-shipto-box').classList.toggle('hidden', !wsInfo.is_wholesaler);
+  // お届け先のお店の一覧を確かめられなかったときは黙らない（仲卸の方が自社あてのまま注文してしまわないように）
+  $('c-shipto-err').classList.toggle('hidden', !shipToFailed);
+  $('c-shipto-err').innerHTML = shipToFailed ? '取引先のお店あてに注文する方へ：お届け先のお店の一覧を読み込めませんでした。このまま注文すると、ご登録の住所あてになります。<button type="button" onclick="retryShipTo()">🔄 一覧を読み直す</button>' : '';
+  if (wsInfo.is_wholesaler) { renderShipToOptions(); onShipToChange(); }
+  else $('c-addr-box').classList.remove('hidden');
   if (customer) {
     $('c-addr').textContent = [(customer.address || ''), (customer.building || '')].filter(Boolean).join(' ') || '（登録のご住所へお届けします）';
     if (customer.default_time_zone) $('c-time').value = customer.default_time_zone;
@@ -1568,14 +1637,30 @@ async function placeOrder() {
   const cart = cartGet();
   if (!cart.length) return;
   if (!$('c-date').value) { toast('納品希望日を選んでください', 'error'); return; }
+  const shipSel = wsInfo.is_wholesaler ? $('c-shipto').value : '';
+  if (wsInfo.is_wholesaler && !shipSel) {
+    toast('お届け先のお店を選んでください', 'error');
+    $('c-shipto-box').scrollIntoView({ block: 'center' }); $('c-shipto').focus(); return;
+  }
+  const shipTo = (shipSel && shipSel !== '__self') ? shipSel : null;
+  const temp = tempChosen();
   placing = true;                      // 連打ガード②（ボタンも無効化）
   const btn = $('c-go');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 注文を送信しています…';
   try {
-    const res = await api.placeOrder(
-      cart.map(c => ({ product_id: c.product_id, kg: c.kg, slice: !!c.slice })),
-      $('c-date').value, $('c-time').value, $('c-memo').value.trim() || null,
-      orderRequestId);                 // 再送しても同じIDなので二重注文にならない
+    const items = cart.map(c => ({ product_id: c.product_id, kg: c.kg, slice: !!c.slice }));
+    const memo = $('c-memo').value.trim() || null;
+    let res;
+    try {
+      res = await api.placeOrderV2(items, $('c-date').value, $('c-time').value, memo, orderRequestId, temp, shipTo);
+    } catch (e) {
+      // 新しい注文の関数がまだ無い（404）ときだけ、今までの関数で注文する。冷蔵のご希望は備考の先頭に書いて必ず伝える。
+      // お届け先のお店つきの注文は今までの関数では表せないので、送らずに知らせる（別のお店あてに化けさせない）
+      if (e.status !== 404) throw e;
+      if (shipTo) { const err = new Error('お届け先のお店を指定した注文を、いま受け付けられません。お手数ですがセンターへお電話ください'); err.status = 409; throw err; }
+      const memo2 = temp === '冷蔵' ? ('【冷蔵希望】' + (memo ? '\n' + memo : '')).slice(0, 500) : memo;
+      res = await api.placeOrder(items, $('c-date').value, $('c-time').value, memo2, orderRequestId);
+    }
     // 完了画面: ご希望量と概算金額（在庫確保・確定はセンターで行う）
     $('d-code').textContent = 'ご注文番号 ' + (res.order_code || '');
     $('d-lines').innerHTML = (res.items || []).map(i => `
@@ -1584,10 +1669,13 @@ async function placeOrder() {
         <span>${yen(i.amount)}</span>
       </div>`).join('');
     $('d-total').textContent = yen(res.total_amount);
-    $('d-delivery').innerHTML = esc('納品希望日: ' + $('c-date').value +
-      '（在庫の確保後、確定の重量・金額をセンターからご連絡します）');
+    $('d-delivery').innerHTML = (shipTo ? '🏪 お届け先: <strong>' + esc(shipToName(shipTo)) + '</strong><br>' : '') +
+      '配送の温度: <strong>' + esc(temp) + '</strong><br>' +
+      esc('納品希望日: ' + $('c-date').value + '（在庫の確保後、確定の重量・金額をセンターからご連絡します）');
     cartSet([]); qtyState = {}; orderRequestId = null;
     $('c-memo').value = ''; $('c-date').value = '';
+    if ($('c-shipto')) { $('c-shipto').value = ''; $('c-shipto-q').value = ''; }
+    document.querySelector('input[name="c-temp"][value="冷凍"]').checked = true;
     showScreen('done');
   } catch (e) {
     if (sessionExpired(e)) { forceRelogin(); }
