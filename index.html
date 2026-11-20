@@ -2563,6 +2563,8 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 
   <!-- Shipping -->
   <div class="tab-panel" id="panel-shipping">
+    <!-- 出荷待ちの注文の一覧（2026-11-20 沖「注文入ってるかどうかわかりづらい」）: 注文ポータル・BASE・通販の数を、タブを開いた一番上にまとめて出す -->
+    <div id="ship-summary" class="section" style="margin-bottom:12px;"></div>
     <!-- 📷 現場からの写真（共用スマホの打刻ページ「写真を送る」から届く。読めなかったラベル・重量物） -->
     <div class="section" id="field-photo-box">
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -2698,7 +2700,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       <div id="mp-orders"><div class="empty-state" style="font-size:13px;">読み込み中...</div></div>
     </div>
 
-    <div class="section">
+    <div class="section" id="ship-portal">
       <div class="section-title">出荷待ち注文一覧</div>
       <div id="ship-orders"><div class="loading"><span class="spin"></span>読み込み中...</div></div>
     </div>
@@ -3254,7 +3256,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'inventory') loadInventory();
     if (btn.dataset.tab === 'individuals') indLoad();
     if (btn.dataset.tab === 'processing') loadProcessingSetup();
-    if (btn.dataset.tab === 'shipping') { loadShipping(); loadBaseOrders(); mpLoad();shipPausedRender(); shipActiveRestore(); fieldPhotosLoad(); setTimeout(maintainShippingScannerFocus, 50); }
+    if (btn.dataset.tab === 'shipping') { loadShipping(); loadBaseOrders(); mpLoad(); shipSummaryRefresh().catch(() => {}); shipPausedRender(); shipActiveRestore(); fieldPhotosLoad(); setTimeout(maintainShippingScannerFocus, 50); }
     if (btn.dataset.tab === 'punch') loadPunch();
     if (btn.dataset.tab === 'products') loadProducts();
     if (btn.dataset.tab === 'recipes') loadRecipes();
@@ -3557,7 +3559,7 @@ async function baseOrderShip(key) {
     playFeedbackSound(true);
     toast(`BASE注文の発送処理が完了しました（${items.length}品目）` + (unmatched.length ? `\n⚠ 在庫と対応付けなし: ${unmatched.join('・')}（⚙BASE連携で対応付けを確認）` : ''));
     if (dispatchFail.length) baseSyncWarn(`⚠ こちらの出荷は記録しましたが、BASE側を「発送済み」にできませんでした: ${dispatchFail.join('・')}。BASEの管理画面で発送済みにしてください（お客様に発送の知らせが届いていません）`);
-    loadBaseOrders();
+    loadBaseOrders(); shipSummaryRefresh().catch(() => {});
   } catch (e) {
     playFeedbackSound(false);
     toast('発送処理に失敗しました: ' + sbSafeMsg(e), 'error');
@@ -3668,7 +3670,7 @@ async function mpShip(id) {
   if (orderId) { try { await sb('PATCH', 'marketplace_orders', { order_id: orderId, updated_at: new Date().toISOString() }, `?id=eq.${id}`); } catch (e) { /* 紐づけだけなので出荷は済んでいる */ } }
   if (fails.length) { playFeedbackSound(false); warnSticky(`⚠ 出荷済にしましたが、うまくいかなかったものがあります: ${fails.join('・')}。在庫の画面で数を確かめてください`); }
   else { playFeedbackSound(true); toast(`出荷済にしました（${o.platform} ${o.item_name} ×${o.qty}）` + (lines.length ? ' 在庫から引きました' : '')); }
-  mpLoad();
+  mpLoad(); shipSummaryRefresh().catch(() => {});
 }
 async function mpCancel(id) {
   const o = mpCache.orders.find(x => x.id === id);
@@ -3679,7 +3681,7 @@ async function mpCancel(id) {
     const r = await sb('PATCH', 'marketplace_orders', { status: '取消', note: [o.note, '取消: ' + (why || '理由なし')].filter(Boolean).join(' / '), updated_at: new Date().toISOString() }, `?id=eq.${id}&status=eq.${encodeURIComponent('未出荷')}`);
     if (!Array.isArray(r) || !r.length) toast('すでに出荷済みか取消になっていました', 'error'); else toast('取消にしました');
   } catch (e) { toast('取消できませんでした: ' + sbSafeMsg(e), 'error'); }
-  mpLoad();
+  mpLoad(); shipSummaryRefresh().catch(() => {});
 }
 /* 在庫の対応: 通販の商品1つに、加工品の棚の商品と袋数を何行でも（セットの中身） */
 function mpEditMap(id) {
@@ -16574,6 +16576,13 @@ async function loadTodayTodos() {
     if (list.length) add(candidates.length, '🛒 BASEの注文（発送処理へ）', 'shipping', true);
   } catch (e) { failed.push('BASEの注文'); }
   try {
+    const today0 = ymdLocal(new Date());
+    const m = await sb('GET', 'marketplace_orders', null, '?deleted_at=is.null&status=eq.' + encodeURIComponent('未出荷') + '&select=id,pickup_date');
+    const due = m.filter(x => x.pickup_date && x.pickup_date <= today0).length;
+    add(due, '⏰ 通販の注文（今日までに集荷）', 'shipping', true);
+    add(m.length - due, '🛍 通販の注文（さとふる・まいぷれ・AWAWA）', 'shipping', false);
+  } catch (e) { failed.push('通販の注文'); }
+  try {
     const today = ymdLocal(new Date());
     const logs = await sb('GET', 'cleaning_logs', null, `?cleaned_at=gte.${jstTs(today, '00:00:00')}&select=room`);
     const done = new Set(logs.map(l => l.room));
@@ -16906,6 +16915,72 @@ function pmGetLocationCode() {
   return sel && sel.value ? sel.value : null;
 }
 
+/* ───────── 出荷待ちの注文の数（注文ポータル・BASE・通販）──
+   2026-11-20 沖「注文入ってるかどうかわかりづらい」。これまでは出荷タブの印（バッジ）が注文ポータルの数だけで、
+   BASE・通販（さとふる・まいぷれ・AWAWA）はタブの下のほうまで開かないと分からなかった。
+   ここで3つを数え、①メニューの印 ②出荷タブの一番上 ③ダッシュボードの「今日やること」に同じ数を出す。
+   確かめられなかった所は「0件」に見せない（数えられなかったと出す）。 */
+async function shipPendingCounts() {
+  const c = { portalNew: 0, portalReady: 0, base: 0, baseConnected: true, mp: 0, mpDue: 0, mpUnread: 0, failed: [] };
+  const today = ymdLocal(new Date());
+  await Promise.all([
+    sb('GET', 'orders', null, '?status=in.(受注,確認済)&select=id,status').then(o => {
+      c.portalNew = o.filter(x => x.status === '受注').length; c.portalReady = o.filter(x => x.status === '確認済').length;
+    }).catch(() => c.failed.push('注文ポータル')),
+    baseBacklogFetch().then(r => { if (r.notConnected) c.baseConnected = false; c.base = r.candidates.length; }).catch(() => c.failed.push('BASE')),
+    sb('GET', 'marketplace_orders', null, '?deleted_at=is.null&status=eq.' + encodeURIComponent('未出荷') + '&select=id,pickup_date,item_code').then(m => {
+      c.mp = m.length; c.mpDue = m.filter(x => x.pickup_date && x.pickup_date <= today).length; c.mpUnread = m.filter(x => !x.item_code).length;
+    }).catch(() => c.failed.push('通販（さとふる・まいぷれ・AWAWA）')),
+  ]);
+  c.total = c.portalNew + c.portalReady + c.base + c.mp;
+  c.urgent = c.portalNew + c.base + c.mpDue;   // 赤で出すもの（新しい注文・BASE・今日までの集荷）
+  return c;
+}
+let shipLastCounts = null;
+function shipSummaryRender(c) {
+  const box = document.getElementById('ship-summary');
+  if (!box) return;
+  // 確かめられなかった所は「0件・なし」と出さない（? と「確かめられません」）
+  const chip = (n, label, sub, target, red, ng) => ng ? `<button type="button" data-ship-chip="${target}" onclick="shipSummaryJump('${target}')" style="flex:1 1 150px;min-width:0;display:flex;flex-direction:column;gap:2px;align-items:flex-start;padding:10px 12px;border-radius:var(--radius);cursor:pointer;text-align:left;border:1px solid rgba(200,80,80,.5);background:rgba(200,80,80,.07);color:var(--text);"><span style="font-size:13px;color:var(--text2);overflow-wrap:anywhere;">${label}</span><span style="font-size:26px;font-weight:700;line-height:1.1;color:var(--red);">?</span><span style="font-size:12px;color:var(--red);">確かめられません</span></button>` : `<button type="button" data-ship-chip="${target}" onclick="shipSummaryJump('${target}')" style="flex:1 1 150px;min-width:0;display:flex;flex-direction:column;gap:2px;align-items:flex-start;padding:10px 12px;border-radius:var(--radius);cursor:pointer;text-align:left;border:1px solid ${red ? 'rgba(200,80,80,.5)' : 'var(--border)'};background:${red ? 'rgba(200,80,80,.07)' : 'var(--surface)'};color:var(--text);">
+      <span style="font-size:13px;color:var(--text2);overflow-wrap:anywhere;">${label}</span>
+      <span style="font-size:26px;font-weight:700;line-height:1.1;color:${n > 0 ? (red ? 'var(--red)' : 'var(--gold)') : 'var(--text3)'};">${n}<span style="font-size:13px;font-weight:400;margin-left:2px;">件</span></span>
+      <span style="font-size:12px;color:${red ? 'var(--red)' : 'var(--text3)'};overflow-wrap:anywhere;">${sub}</span></button>`;
+  const head = c.total > 0
+    ? `<div style="font-size:15px;font-weight:700;margin-bottom:8px;">📦 出荷待ちの注文 <span style="color:${c.urgent > 0 ? 'var(--red)' : 'var(--gold)'};">${c.total}件</span>${c.urgent > 0 ? ' <span style="font-size:13px;color:var(--red);">（急ぎ ' + c.urgent + '件）</span>' : ''}</div>`
+    : (c.failed.length ? '' : '<div style="font-size:15px;font-weight:700;margin-bottom:8px;color:var(--green);">✅ 出荷待ちの注文はありません</div>');
+  const failed = c.failed.length ? `<div role="alert" style="margin-top:8px;padding:8px 10px;border:1px solid rgba(200,80,80,.45);border-radius:var(--radius);background:rgba(200,80,80,.06);color:var(--red);font-size:13px;">⚠ ${c.failed.join('・')} を確かめられませんでした。注文が無いとは限りません <button class="btn btn-sm" onclick="shipSummaryRefresh()">🔄 もう一度</button></div>` : '';
+  box.innerHTML = head + `<div style="display:flex;gap:8px;flex-wrap:wrap;">
+      ${chip(c.portalNew + c.portalReady, '注文ポータル・電話など', c.portalNew ? '🆕 新しい注文 ' + c.portalNew + '件' : (c.portalReady ? '受付済み・出荷待ち' : 'なし'), 'ship-portal', c.portalNew > 0, c.failed.includes('注文ポータル'))}
+      ${chip(c.base, 'BASEネットショップ', c.baseConnected ? (c.base ? '未発送' : 'なし') : 'BASE未接続', 'ship-base', c.base > 0, c.failed.includes('BASE'))}
+      ${chip(c.mp, '通販（さとふる・まいぷれ・AWAWA）', c.mpDue ? '⏰ 今日までに集荷 ' + c.mpDue + '件' : (c.mpUnread ? '⚠ 読み取れない注文 ' + c.mpUnread + '件' : (c.mp ? '未出荷' : 'なし')), 'ship-mp', c.mpDue > 0 || c.mpUnread > 0, c.failed.some(f => /^通販/.test(f)))}
+    </div>` + failed;
+}
+function shipSummaryJump(id) { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+function shipBadgeApply(c) {
+  const el = document.getElementById('nav-badge-shipping');
+  if (el) { el.textContent = c.total > 0 ? c.total : (c.failed.length ? '?' : ''); el.classList.toggle('warn', c.urgent > 0 || (c.failed.length > 0 && c.total === 0)); }
+  const ob = document.getElementById('nav-badge-orders');
+  if (ob) { ob.textContent = c.portalNew > 0 ? c.portalNew : ''; ob.classList.toggle('warn', c.portalNew > 0); }
+  // 前回より注文が増えたら知らせる（開きっぱなしの画面でも気づけるように）
+  if (shipLastCounts) {
+    const more = [];
+    if (c.portalNew > shipLastCounts.portalNew) more.push('注文ポータル ' + (c.portalNew - shipLastCounts.portalNew) + '件');
+    if (c.base > shipLastCounts.base) more.push('BASE ' + (c.base - shipLastCounts.base) + '件');
+    if (c.mp > shipLastCounts.mp) more.push('通販 ' + (c.mp - shipLastCounts.mp) + '件');
+    if (more.length) { toast('🆕 新しい注文が入りました: ' + more.join('・') + '（出荷処理タブ）'); try { playFeedbackSound(true); } catch (e) {} }
+  }
+  shipLastCounts = c;
+}
+async function shipSummaryRefresh() {
+  const c = await shipPendingCounts();
+  shipSummaryRender(c);
+  shipBadgeApply(c);
+  return c;
+}
+// 5分ごと、画面に戻ってきたときにも数え直す（見ていないときは問い合わせない）
+setInterval(() => { if (document.visibilityState === 'visible') shipSummaryRefresh().catch(() => {}); }, 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') shipSummaryRefresh().catch(() => {}); });
+
 /* ───────── ナビバッジ / ダッシュボード追加カード ───────── */
 async function refreshNavBadges() {
   const setBadge = (id, n, warn) => {
@@ -16935,12 +17010,8 @@ async function refreshNavBadges() {
     const v = await sb('POST', 'rpc/staff_voices_list', { p_status: 'pending', p_limit: 1000 });
     setBadge('nav-badge-voices', (v || []).length, true);
   } catch (e) {}
-  // 出荷待ち注文（新規＋確認済）／新規注文は受発注管理にも出す
-  try {
-    const orders = await sb('GET', 'orders', null, '?status=in.(受注,確認済)&select=id,status');
-    setBadge('nav-badge-shipping', orders.length);
-    setBadge('nav-badge-orders', orders.filter(o => o.status === '受注').length, true);
-  } catch (e) {}
+  // 出荷待ちの注文（注文ポータル・BASE・通販の合計）／新規注文は受発注管理にも出す
+  try { await shipSummaryRefresh(); } catch (e) {}
   // 資材の発注点割れ
   try {
     const sup = await sb('GET', 'supplies', null, '?select=stock_qty,min_qty&deleted_at=is.null');
