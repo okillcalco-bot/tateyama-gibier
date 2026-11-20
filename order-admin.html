@@ -2004,7 +2004,7 @@ function renderOrders(){
     return `<tr>
       <td style="font-weight:700;color:var(--gold)">${esc(o.order_code||'--')}</td>
       <td>${esc(o.customer_name||'--')}</td>
-      <td>${['受注','確認済'].includes(o.status)?dueBadgeHtml(o.delivery_date)+(o.delivery_time_zone?'<div style="font-size:.72rem;margin-top:2px">'+esc(o.delivery_time_zone)+'</div>':''):(o.delivery_date||'--')}</td>
+      <td>${['受注','確認済'].includes(o.status)?dueBadgeHtml(o.delivery_date)+tempBadgeHtml(o)+(o.delivery_time_zone?'<div style="font-size:.72rem;margin-top:2px">'+esc(o.delivery_time_zone)+'</div>':''):(o.delivery_date||'--')}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(summary||'--')}</td>
       <td>${amt}</td>
       <td><span class="badge badge-${o.status||''}">${o.status||'--'}</span>${olBadge(o.id)}</td>
@@ -2164,7 +2164,7 @@ function showOrderDetail(id){
       <div><strong>顧客:</strong> ${esc(o.customer_name||'--')}</div>
       <div><strong>チャネル:</strong> ${esc(o.channel||'--')}</div>
       <div><strong>注文日:</strong> ${o.order_date||'--'}</div>
-      <div><strong>納品希望日:</strong> ${o.delivery_date||'--'} ${o.delivery_time_zone||''}</div>
+      <div><strong>納品希望日:</strong> ${o.delivery_date||'--'} ${o.delivery_time_zone||''}${tempBadgeHtml(o)}</div>
       <div><strong>配送先:</strong> ${esc(o.delivery_address||'')} ${esc(o.delivery_building||'')}</div>
       <div><strong>配送先名:</strong> ${esc(o.delivery_name||'--')}</div>
       <div><strong>電話:</strong> ${esc(o.delivery_phone||'--')}</div>
@@ -2248,7 +2248,7 @@ function renderShipping(){
         <span class="ship-card-title">${esc(o.order_code||'')}</span>
         <span class="badge badge-${o.status}">${o.status}</span>
       </div>
-      <div class="ship-card-info">${esc(o.customer_name||'')} | ${dueBadgeHtml(o.delivery_date)}${o.delivery_time_zone?' <strong>'+esc(o.delivery_time_zone)+'</strong>':''} | ${esc(o.delivery_address||'')}</div>
+      <div class="ship-card-info">${esc(o.customer_name||'')} | ${dueBadgeHtml(o.delivery_date)}${o.delivery_time_zone?' <strong>'+esc(o.delivery_time_zone)+'</strong>':''}${tempBadgeHtml(o)} | ${esc(o.delivery_address||'')}</div>
       ${o.memo?`<div class="ship-card-info" data-order-memo style="white-space:pre-wrap;overflow-wrap:anywhere">&#x1F4DD; ${esc(o.memo)}</div>`:''}
       <div class="ship-card-items">${esc(summary)}</div>
       <div class="ship-actions">
@@ -2897,6 +2897,13 @@ function dueBadgeHtml(dateStr) {
   const st = { over: 'background:#c0392b;color:#fff', today: 'background:#c0392b;color:#fff', soon: 'background:#d98a00;color:#fff', near: 'background:rgba(217,138,0,.18);color:#d98a00;border:1px solid #d98a00', later: 'background:rgba(127,127,127,.14);color:inherit;border:1px solid rgba(127,127,127,.4)', none: 'background:rgba(127,127,127,.14);color:inherit;border:1px dashed rgba(127,127,127,.6)' }[d.level];
   return '<span data-due="' + d.level + '" style="display:inline-block;font-size:12px;font-weight:800;border-radius:6px;padding:2px 8px;max-width:100%;overflow-wrap:anywhere;' + st + '">' + d.label + '</span>';
 }
+/* 冷蔵で送る注文の印（2026-11-20 仲卸用の注文・冷蔵の指定）。いつもは冷凍なので、冷蔵のときだけ目立たせる */
+function tempBadgeHtml(o) {
+  const t = o && (o.temp_zone || (/【冷蔵希望】/.test(o.memo || '') ? '冷蔵' : ''));
+  return t === '冷蔵' ? ' <span data-temp="冷蔵" style="display:inline-block;font-size:12px;font-weight:800;border-radius:6px;padding:2px 8px;background:#1f6fb2;color:#fff;white-space:nowrap">❄ 冷蔵で発送</span>' : '';
+}
+/* 仲卸が注文ページから頼んだ注文（お店の名義で入り、頼んだ人が別） */
+function orderedByWholesaler(o) { return !!(o && o.ordered_by_customer_id && o.ordered_by_customer_id !== o.customer_id); }
 function dueEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 let orgInfo={name:'館山ジビエセンター',address:'千葉県館山市西長田1163-5',phone:'',email:''};
 let custFiltered=[];

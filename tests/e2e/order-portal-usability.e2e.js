@@ -51,7 +51,7 @@ const ORDERS = [
     if (fn === 'portal_bulletins') return J([{ id: 'b1', product_id: 'p5', title: '今週のいちおし', body: '脂がのっています', badge: 'いちおし', sort_order: 1, created_at: new Date(Date.now() - 2 * 86400000).toISOString(), image_url: '' }]);
     if (fn === 'portal_my_orders') return J(ORDERS);
     if (fn === 'portal_rebuild_cart') { net.rebuilt.push(body); return J([{ status: 'ok', product_id: 'p4', name: 'シカ ロース ブロック', old_kg: 2, suggest_kg: 2, unit_price: 4500 }, { status: 'out_of_stock', product_id: 'p3', name: 'イノシシ ミンチ', reason: '在庫がありません' }]); }
-    if (fn === 'portal_place_order') return net.placeFail ? rt.abort() : J({ order_code: 'ORD-TEST-9', items: [], total_amount: 0 });
+    if (fn === 'portal_place_order' || fn === 'portal_place_order_v2') return net.placeFail ? rt.abort() : J({ order_code: 'ORD-TEST-9', items: [], total_amount: 0 });
     return J([]);
   });
   await page.goto('file://' + path.resolve(__dirname, '../../order.html'));
