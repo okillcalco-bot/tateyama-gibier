@@ -218,6 +218,24 @@ body.kb .bar{display:none}
 .dst.s-公開{color:var(--green);border-color:var(--green)}
 .dst.s-確認待ち{color:var(--amber);border-color:var(--amber)}
 .dmine .wd{margin-top:4px;min-height:36px;padding:0 12px;border:1px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text2)}
+.legend{margin:8px 14px 0;font-size:12px;color:var(--text2);line-height:1.9}
+.legend b{display:inline-block;min-width:1.4em;text-align:center;font-weight:800}
+.legend .o{color:var(--green)}.legend .t{color:var(--amber)}.legend .x{color:var(--text3)}
+.psearch{margin:8px 14px 0;position:relative}
+.psearch input{width:100%;height:46px;padding:0 40px 0 14px}
+.psearch button{position:absolute;right:4px;top:3px;width:40px;height:40px;font-size:18px;color:var(--text3)}
+.pick{display:inline-block;font-size:10px;font-weight:800;color:#fff;background:#d64545;border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:1px}
+#myactive{margin:10px 14px 0}
+.act{display:flex;gap:10px;align-items:center;width:100%;text-align:left;padding:11px 12px;margin-bottom:6px;border:1px solid var(--green);border-radius:10px;background:rgba(63,138,63,.07);cursor:pointer}
+.act .as{font-size:12px;font-weight:800;color:var(--green);white-space:nowrap}
+.act .ab{flex:1;min-width:0;font-size:13px;color:var(--text);overflow-wrap:anywhere}
+.act .ab small{display:block;color:var(--text2);font-size:11.5px}
+.loaderr{margin:14px;padding:14px;border:1px solid var(--red);border-radius:10px;background:rgba(192,57,43,.06);color:var(--red);font-size:13.5px;line-height:1.7}
+.loaderr button{display:block;margin-top:10px;min-height:46px;padding:0 20px;border:1px solid var(--red);border-radius:8px;color:var(--red);font-weight:700}
+.guide ol{margin:0 0 8px 1.3em;font-size:13px;line-height:1.9;color:var(--text)}
+.guide h4{font-size:12.5px;color:var(--gold);margin:10px 0 2px}
+.guide p{font-size:12.5px;color:var(--text2);line-height:1.8}
+.toast{cursor:pointer}
 .hbtns button{min-height:40px;padding:0 14px;border:1px solid var(--gold);background:transparent;color:var(--gold);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
 </style>
 </head>
@@ -235,7 +253,7 @@ body.kb .bar{display:none}
   <button class="btn-main" id="lg-btn" onclick="doLogin()">ログイン</button>
   <div class="err" id="lg-err"></div>
   <div class="note" style="text-align:center;margin-top:8px">
-    ログイン情報はセンターからお送りした案内をご覧ください。<br>お困りのときはお電話ください。</div>
+    ログイン情報はセンターからお送りした案内をご覧ください。<br>お困りのときはお電話ください。<span id="lg-tel"></span></div>
 </div>
 
 <!-- ══════════ 初回パスワード設定 ══════════ -->
@@ -261,8 +279,39 @@ body.kb .bar{display:none}
 <div id="scr-list" class="hidden">
   <div class="hdr"><b id="h-name"></b><div style="display:flex;gap:6px"><button onclick="openDish()">🍽 料理</button><button onclick="openHistory()">🧾 注文履歴</button><button onclick="doLogout()">ログアウト</button></div></div>
 
+  <!-- 読み込みに失敗したとき（消えない。もう一度読み込める）（2026-11-20） -->
+  <div id="list-err" class="loaderr hidden" role="alert"></div>
+
+  <!-- 進行中のご注文（注文が届いているか・いまどうなっているかが、開いてすぐ分かる）（2026-11-20） -->
+  <div id="myactive" class="hidden"></div>
+  <!-- 履歴の「もう一度注文」で、カートに入らなかった商品の知らせ -->
+  <div id="reorder-warn" style="margin:0 14px"></div>
+
   <!-- おすすめ掲示板（センターが選んだ売れ筋・おすすめ） -->
   <div id="bulletins" class="hidden"></div>
+
+  <!-- 使い方・お店のご案内（2026-11-20） -->
+  <details class="consult guide" id="guideBox">
+    <summary>📖 使い方・お店のご案内</summary>
+    <div class="cin">
+      <h4>ご注文の流れ</h4>
+      <ol>
+        <li>商品の「＋ −」で量（kg）を決めて<strong>「追加」</strong>を押す</li>
+        <li>画面の下の<strong>「確認へ」</strong>を押し、納品希望日を選ぶ</li>
+        <li><strong>「この内容で注文する」</strong>を押すと注文完了です</li>
+      </ol>
+      <p>ご注文のあと、センターで在庫を確保して<strong>重さと金額を確定</strong>し、ご連絡します（お肉は1パックごとに重さが違うため、画面の金額は概算です）。<br>
+        いまの状況は、いちばん上の「ご注文の状況」と「🧾 注文履歴」で確認できます。</p>
+      <h4>便利な使い方</h4>
+      <p>・<strong>前回と同じ注文</strong>：「🔁 前回の注文」または「🧾 注文履歴」の「もう一度注文」<br>
+        ・<strong>よく頼む商品</strong>：☆を押すと「★ お気に入り」に入ります<br>
+        ・<strong>在庫がない商品</strong>：「予約（在庫なし）」から予約すると、入荷しだい順番にご連絡します</p>
+      <h4>在庫のしるし</h4>
+      <p><b style="color:var(--green)">◎</b> 十分あります　<b style="color:var(--amber)">△</b> 残りわずか　<b style="color:var(--text3)">×</b> 在庫なし（予約できます）</p>
+      <h4>お店のご案内</h4>
+      <p id="shop-info"></p>
+    </div>
+  </details>
 
   <!-- ご相談・お問い合わせ（商品注文とは別に送れる自由メモ） -->
   <details class="consult" id="consultBox">
@@ -318,6 +367,8 @@ body.kb .bar{display:none}
     </div>
 
     <div class="sec">🐗 全商品（在庫あり）</div>
+    <div class="psearch"><input id="p-search" type="search" inputmode="search" autocomplete="off" placeholder="🔍 商品をさがす（例：ロース、ミンチ、シカ）" oninput="onSearch()" aria-label="商品をさがす"><button type="button" id="p-search-clear" class="hidden" onclick="clearSearch()" aria-label="検索を消す">×</button></div>
+    <div class="legend">在庫のしるし：<b class="o">◎</b>十分あります　<b class="t">△</b>残りわずか　<b class="x">×</b>在庫なし（予約できます）</div>
     <div class="tabs" id="sp-tabs"></div>
     <div id="all-rows"></div>
 
@@ -550,8 +601,9 @@ function toast(msg, kind) {
   const d = document.createElement('div');
   d.className = 'toast' + (kind === 'error' ? ' err' : '');
   d.textContent = msg;
+  d.onclick = () => d.remove();          // 押せば消える
   $('toasts').appendChild(d);
-  setTimeout(() => d.remove(), 5000);
+  setTimeout(() => d.remove(), kind === 'error' ? 12000 : 5000);   // 失敗は読み切れる長さで出す
 }
 function sessionExpired(e) {
   return /ログインし直して/.test(String(e && e.message || ''));
@@ -699,12 +751,45 @@ async function enterList() {
     myResv = myr || []; bulletins = bull || [];
   } catch (e) {
     if (sessionExpired(e)) { forceRelogin(); return; }
-    toast('読み込みに失敗しました。再読み込みしてください', 'error'); return;
+    // 5秒で消える知らせだけだと、商品が1つも出ない白い画面が残る。消えない表示にして、押せば読み直せるようにする
+    $('list-err').innerHTML = '商品の一覧を読み込めませんでした。電波の良い場所でもう一度お試しください。<button type="button" onclick="enterList()">🔄 もう一度読み込む</button>';
+    $('list-err').classList.remove('hidden');
+    return;
   }
+  $('list-err').classList.add('hidden'); $('list-err').innerHTML = '';
+  loadActiveOrders();   // 待たない（履歴が読めなくても注文はできる）
   const speciesList = [...new Set(catalog.filter(p => p.mark !== '×').map(p => p.species))];
   if (!currentSpecies || !speciesList.includes(currentSpecies)) currentSpecies = speciesList[0] || '';
-  $('last-warn').innerHTML = '';   // 一覧の読み直しでだけ警告を消す
+  $('last-warn').innerHTML = ''; $('reorder-warn').innerHTML = '';   // 一覧の読み直しでだけ警告を消す
   renderAll();
+}
+
+/* ══════════ 進行中のご注文（一覧のいちばん上）══════════
+   注文したあと「届いているのか・いまどうなっているのか」が、履歴を開かないと分からなかった。
+   受付・確認済み・発送済みの注文を、開いてすぐの場所に出す。 */
+const ACTIVE_STATUS = { '受注': ['受付しました', 'センターで在庫を確認しています'], '確認済': ['確認済み', '重さ・金額が決まりました。発送の準備中です'], '発送済': ['発送しました', 'お届けまでお待ちください'] };
+let activeOrders = [];
+async function loadActiveOrders() {
+  try {
+    const rows = await api.myOrders() || [];
+    histOrders = rows;
+    activeOrders = rows.filter(o => ACTIVE_STATUS[o.status]).slice(0, 5);
+  } catch (e) { activeOrders = []; }   // 読めなくても一覧は使える。「🧾 注文履歴」を開けば失敗が見える
+  renderActiveOrders();
+}
+function renderActiveOrders() {
+  const box = $('myactive'); if (!box) return;
+  if (!activeOrders.length) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+  box.classList.remove('hidden');
+  box.innerHTML = '<div class="bull-head">📦 ご注文の状況</div>' + activeOrders.map(o => {
+    const st = ACTIVE_STATUS[o.status];
+    const names = (o.items || []).map(i => i.name || i.species || '商品');
+    const what = names.slice(0, 2).join('・') + (names.length > 2 ? ' ほか' + (names.length - 2) + '点' : '');
+    return `<button type="button" class="act" onclick="openHistory()">
+      <span class="as">${esc(st[0])}</span>
+      <span class="ab">${esc(what || 'ご注文')}<small>${o.delivery_date ? '納品希望 ' + esc(jdate(o.delivery_date)) + '　' : ''}${esc(st[1])}</small></span>
+      <span style="color:var(--text3)">›</span></button>`;
+  }).join('');
 }
 
 /* ══════════ 料理ギャラリーへの投稿 ══════════ */
@@ -854,12 +939,15 @@ function renderHistory() {
     if (ships.length) {
       ship = ships.map(s => {
         const cs = [s.carrier, s.size_code ? s.size_code + 'サイズ' : '', s.is_cool ? 'クール' : ''].filter(Boolean).join('・');
-        return `<div class="hship">🚚 発送 ${jdate(s.shipment_date)}${cs ? '　' + esc(cs) : ''}${s.notes ? '　' + esc(s.notes) : ''}</div>`;
+        // 出荷の備考はセンターの社内メモ。お客様には出さず、伝票番号（追跡番号）だけを出す
+        const tn = shipTrackingNo(s.notes);
+        return `<div class="hship">🚚 発送 ${jdate(s.shipment_date)}${cs ? '　' + esc(cs) : ''}${tn ? '　伝票番号 ' + esc(tn) : ''}</div>`;
       }).join('');
     } else if (o.status === '発送済' || o.status === '納品完了') {
       ship = '<div class="hship">🚚 発送手配済み</div>';
     }
     if (o.freight != null) ship += `<div class="hship">📦 送料 ¥${Math.round(Number(o.freight) * 1.1).toLocaleString()}<small style="color:var(--text3)">（税込）</small></div>`;
+    const again = (items.length && o.status !== 'キャンセル') ? `<div class="hbtns"><button onclick="reorderFrom('${o.id}', this)">🔁 もう一度注文（カートに入れる）</button></div>` : '';
     const recIssued = Number(o.receipt_issued || 0);
     const docBtns = o.can_doc ? `<div class="hbtns">
         <button onclick="issuePortalDoc('${o.id}','請求書')">🧾 請求書</button>
@@ -872,9 +960,18 @@ function renderHistory() {
       ${itemsHtml}
       ${o.total_amount ? `<div class="htotal">合計 ${yen(o.total_amount)}<small>（税込）</small></div>` : ''}
       ${ship}
+      ${again}
       ${docBtns}
     </div>`;
   }).join('');
+}
+
+/* 出荷の備考から伝票番号だけを取り出す（10〜14桁の数字。ハイフン区切りも可）。それ以外の文は社内メモなので出さない */
+function shipTrackingNo(notes) {
+  const m = String(notes || '').match(/(?:^|[^\d-])(\d{4}-?\d{4}-?\d{2,6})(?![\d-])/);
+  if (!m) return '';
+  const digits = m[1].replace(/-/g, '');
+  return (digits.length >= 10 && digits.length <= 14) ? m[1] : '';
 }
 
 async function issuePortalDoc(orderId, docType) {
@@ -1002,11 +1099,12 @@ function productRow(p, usualKg) {
   const markCls = (p.mark === '◎' || p.mark === '◯') ? 'o' : p.mark === '△' ? 't' : 'x';
   const addLabel = inCart ? '追加済' : (outOfStock ? '取寄' : '追加');
   const canSlice = sliceable(p) && canOrder;
+  const picked = bulletins.some(b => b.product_id === p.product_id);   // センターのいちおし
   const sliced = !!sliceState[p.product_id];
   const uprice = noPrice ? null : p.unit_price + (sliced ? 1000 : 0);
   return `<div class="row${!canOrder ? ' out' : ''}" data-pid="${p.product_id}">
     <div class="rtop" ${p.description ? `onclick="toggleDesc('${p.product_id}')" style="cursor:pointer"` : ''}>
-      <div class="rname">${esc(p.display_name)}${p.grade_label ? ' <span style="font-size:11px;color:var(--text3)">' + esc(p.grade_label) + '</span>' : ''}${(outOfStock && canOrder) ? ' <span style="font-size:10px;color:var(--amber)">お取り寄せ</span>' : ''}${p.description ? ' <span style="color:var(--text3);font-size:11px">ⓘ</span>' : ''}</div>
+      <div class="rname">${esc(p.display_name)}${picked ? '<span class="pick">いちおし</span>' : ''}${p.grade_label ? ' <span style="font-size:11px;color:var(--text3)">' + esc(p.grade_label) + '</span>' : ''}${(outOfStock && canOrder) ? ' <span style="font-size:10px;color:var(--amber)">お取り寄せ</span>' : ''}${p.description ? ' <span style="color:var(--text3);font-size:11px">ⓘ</span>' : ''}</div>
       <span class="mark ${markCls}">${p.mark}</span>
       <span class="price">${noPrice ? '価格はお問い合わせください' : yen(uprice) + '/kg'}${sliced ? ' <span style="font-size:10px;color:var(--gold)">スライス込</span>' : ''}</span>
     </div>
@@ -1071,6 +1169,17 @@ function renderStockMode() {
   const speciesList = [...new Set(catalog.filter(p => p.mark !== '×').map(p => p.species))];
   $('sp-tabs').innerHTML = speciesList.map(sp =>
     `<button class="${sp === currentSpecies ? 'on' : ''}" onclick="switchSpecies('${esc(sp)}')">${esc(sp)}</button>`).join('');
+  const q = searchText();
+  $('sp-tabs').classList.toggle('hidden', !!q);
+  $('p-search-clear').classList.toggle('hidden', !q);
+  if (q) {
+    // さがすときは種類をまたいで全商品から。在庫なし（予約できる商品）も出す
+    const hit = catalog.filter(p => searchHit(p, q)).sort((a, b) => (a.mark === '×') - (b.mark === '×'));
+    $('all-rows').innerHTML = hit.length
+      ? `<div class="legend" style="margin-bottom:6px">「${esc(q)}」で ${hit.length}件</div>` + hit.map(p => productRow(p, usualKgOf(p.product_id))).join('')
+      : `<div class="empty">「${esc(q)}」に合う商品が見つかりません。言葉を短くするか、下の「💬 その他のご相談・お問い合わせ」からお知らせください</div>`;
+    return;
+  }
   const inStock = catalog.filter(p => p.species === currentSpecies && p.mark !== '×');
   $('all-rows').innerHTML = inStock.length
     ? inStock.map(p => productRow(p, usualKgOf(p.product_id))).join('')
@@ -1132,6 +1241,16 @@ function reserveRow(p) {
     </div>
   </div>`;
 }
+
+/* 商品をさがす。ひらがな・カタカナ、全角・半角、大文字・小文字の違いは区別しない */
+function searchNorm(t) {
+  return String(t || '').normalize('NFKC').toLowerCase().replace(/[\u3041-\u3096]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60)).replace(/\s+/g, '');
+}
+function searchText() { const el = $('p-search'); return el ? searchNorm(el.value) : ''; }
+function searchHit(p, q) { return searchNorm([p.display_name, p.species, p.grade_label, p.description].filter(Boolean).join(' ')).includes(q); }
+let searchTimer = null;
+function onSearch() { clearTimeout(searchTimer); searchTimer = setTimeout(() => { if (listMode !== 'stock') listMode = 'stock'; renderAll(); }, 150); }
+function clearSearch() { $('p-search').value = ''; renderAll(); $('p-search').focus(); }
 
 function catFind(pid) { return catalog.find(p => p.product_id === pid); }
 function usualKgOf(pid) { const u = usualItems.find(x => x.product_id === pid); return u ? u.usual_qty_kg : null; }
@@ -1208,6 +1327,11 @@ function isNewBulletin(b) {
   if (isNaN(t)) return false;
   return (Date.now() - t) < BULLETIN_NEW_DAYS * 86400000;
 }
+/* いつの情報かを出す（古いおすすめを今週のものと取り違えないように）。更新日があれば更新日 */
+function bulletinDate(b) {
+  const t = new Date(b.updated_at || b.created_at || '');
+  return isNaN(t.getTime()) ? '' : (t.getMonth() + 1) + '月' + t.getDate() + '日';
+}
 function renderBulletins() {
   const box = $('bulletins');
   if (!bulletins.length) { box.classList.add('hidden'); box.innerHTML = ''; return; }
@@ -1228,6 +1352,7 @@ function renderBulletins() {
     return `<div class="bull${isNew ? ' isnew' : ''}">
       <div class="bt">${isNew ? '<span class="badge-new">NEW!</span>' : ''}${b.badge ? `<span class="badge">${esc(b.badge)}</span>` : ''}${esc(title)}</div>
       ${img}${b.body ? `<div class="bb">${esc(b.body)}</div>` : ''}${sub}${btn}
+      ${bulletinDate(b) ? `<div class="bb" style="margin-top:4px;font-size:11px;color:var(--text3)">${esc(bulletinDate(b))} 掲載</div>` : ''}
     </div>`;
   }).join('');
   box.innerHTML = `<div class="bull-head">🆕 おすすめ入荷情報</div>${cards}`;
@@ -1349,10 +1474,16 @@ async function toggleFav(pid) {
 /* 前回と同じ内容をカートに入れる（即注文はしない。現在の条件で組み直す） */
 async function reorderLast() {
   if (!lastOrder) return;
-  const btn = $('last-btn');
+  await reorderFrom(lastOrder.id, $('last-btn'));
+}
+/* 履歴のどの注文からでも「もう一度注文」できる（即注文はしない。いまの在庫・価格で組み直してカートに入れる） */
+async function reorderFrom(orderId, btn) {
+  if (!orderId || !btn || btn.disabled) return;
+  const label = btn.textContent;
+  const fromHistory = btn.id !== 'last-btn';
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 現在の在庫・価格を確認中…';
   try {
-    const lines = await api.rebuildCart(lastOrder.id);
+    const lines = await api.rebuildCart(orderId);
     const cart = cartGet();
     const warns = [];
     (lines || []).forEach(l => {
@@ -1369,14 +1500,23 @@ async function reorderLast() {
       }
     });
     cartSet(cart);
-    $('last-warn').innerHTML = warns.map(w => `<div class="warn">⚠️ ${esc(w)}</div>`).join('');
-    if ((lines || []).some(l => l.status === 'ok')) toast('カートに入れました。数量は変更できます');
+    const anyOk = (lines || []).some(l => l.status === 'ok');
+    if (fromHistory) {
+      // 履歴からのときは一覧へ戻して、入らなかった商品をそこで見せる（履歴の画面に残すと気づけない）
+      showScreen('list'); listMode = 'stock';
+      if (!$('sec-last').classList.contains('hidden') || warns.length) window.scrollTo(0, 0);
+    }
+    const warnHtml = warns.map(w => `<div class="warn">⚠️ ${esc(w)}</div>`).join('');
+    $('last-warn').innerHTML = warnHtml;
+    $('reorder-warn').innerHTML = fromHistory ? warnHtml : '';
+    if (anyOk) toast('カートに入れました。数量は変更できます。下の「確認へ」から注文できます');
+    else if (!warns.length) toast('この注文の商品は、いまは注文できるものがありません', 'error');
     renderAll();
   } catch (e) {
     if (sessionExpired(e)) { forceRelogin(); return; }
     toast('確認できませんでした。もう一度お試しください', 'error');
   }
-  btn.disabled = false; btn.textContent = '同じ内容をカートに入れる';
+  btn.disabled = false; btn.textContent = label;
 }
 
 /* ══════════ 下部バー ══════════ */
@@ -1458,11 +1598,11 @@ async function placeOrder() {
     } else if (e.status) {
       toast(e.message, 'error');
     } else {
-      toast('通信が不安定です。もう一度「注文を確定する」を押してください（二重注文にはなりません）', 'error');
+      toast('通信が不安定です。もう一度「この内容で注文する」を押してください（二重注文にはなりません）', 'error');
     }
   }
   placing = false;
-  btn.disabled = false; btn.textContent = '同意して注文を確定する';
+  btn.disabled = false; btn.textContent = 'この内容で注文する';
 }
 
 function resetToList() { enterList(); }
@@ -1470,6 +1610,19 @@ function resetToList() { enterList(); }
 /* ══════════ 起動 ══════════
    ログインは「ログインID＋パスワード」に一本化した。URLトークン（#t=）による自動ログインは廃止。
    URLに残った #t= はセッションに保存せず無視する（URLトークンでの認証迂回を残さないため）。 */
+/* お店のご案内。電話番号は、載せる番号が決まるまで出さない（空のままなら「ご案内の書面をご覧ください」） */
+const SHOP_INFO = { name: '館山ジビエセンター（合同会社アルコ）', address: '千葉県館山市西長田1163-5', tel: '', hours: '' };
+function renderShopInfo() {
+  const el = $('shop-info'); if (!el) return;
+  const telLink = SHOP_INFO.tel ? `<a href="tel:${esc(SHOP_INFO.tel.replace(/[^0-9+]/g, ''))}" style="color:var(--gold);font-weight:700">${esc(SHOP_INFO.tel)}</a>` : '';
+  el.innerHTML = esc(SHOP_INFO.name) + '<br>' + esc(SHOP_INFO.address) +
+    (telLink ? '<br>電話 ' + telLink : '<br>お電話番号は、センターからお送りした案内をご覧ください') +
+    (SHOP_INFO.hours ? '<br>' + esc(SHOP_INFO.hours) : '') +
+    '<br>商品のご相談・在庫にない部位のご希望は、この画面の「💬 その他のご相談・お問い合わせ」からも送れます。';
+  const lt = $('lg-tel'); if (lt) lt.innerHTML = telLink ? '<br>' + telLink : '';
+}
+renderShopInfo();
+
 (async function boot() {
   // 万一 #t= 付きURLで開かれても、トークンとして扱わず取り除く（保存しない）。
   if (/[#&]t=/.test(location.hash || '')) {

@@ -9,7 +9,7 @@ const ORDERS = [{
   total_amount: 6000, memo: null, created_at: '2026-08-20T00:00:00Z',
   can_doc: true, receipt_issued: 0, freight: 1300,
   items: [{ name: 'イノシシ ロース', species: 'イノシシ', kg: 1.2, unit_price: 5000, amount: 6000 }],
-  shipments: [{ shipment_date: '2026-08-21', delivery_date: '2026-08-22', status: '出荷済', notes: '送り状番号: 1234-5678', carrier: 'ヤマト', size_code: 100, is_cool: true, freight: 1300 }]
+  shipments: [{ shipment_date: '2026-08-21', delivery_date: '2026-08-22', status: '出荷済', notes: '送り状番号: 1234-5678-9012 ／ 社内メモ: 架空の覚え書き', carrier: 'ヤマト', size_code: 100, is_cool: true, freight: 1300 }]
 }, {
   id: 'o2', order_code: 'ORD-2', status: '受注',
   order_date: '2026-08-23', delivery_date: '2026-08-25', total_amount: 0,
@@ -64,10 +64,11 @@ const RECEIPT = {
   results.push(['注文カードが2件', cards === 2, cards]);
   // 納品情報（送り状番号）表示
   const shipTxt = await page.$eval('#hist-rows', el => el.innerText);
-  results.push(['発送日・送り状番号を表示', /発送 2026年8月21日/.test(shipTxt) && /1234-5678/.test(shipTxt), '']);
+  results.push(['発送日・送り状番号を表示', /発送 2026年8月21日/.test(shipTxt) && /伝票番号 1234-5678-9012/.test(shipTxt), '']);
+  results.push(['出荷の社内メモはお客様に出さない', !/社内メモ|覚え書き/.test(shipTxt), '']);
   results.push(['納品情報に配送(ヤマト100サイズ)・送料税込1430', /ヤマト・100サイズ・クール/.test(shipTxt) && /送料 ¥1,430/.test(shipTxt), '']);
   // can_doc=false の注文には帳票ボタンが無い（ボタンは o1 の2つだけ）
-  const nBtns = await page.$$eval('#hist-rows .hbtns button', els => els.length);
+  const nBtns = await page.$$eval('#hist-rows .hbtns button[onclick^="issuePortalDoc"]', els => els.length);
   results.push(['帳票ボタンは発送済のみ2つ', nBtns === 2, nBtns]);
 
   // 領収書を発行 → 別ウィンドウ（popup）

@@ -809,6 +809,7 @@ th,td{padding:8px 6px;font-size:.8rem}
     <div style="font-size:12.5px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin:22px 0 12px;line-height:1.8;">
       注文ページの一番上に出る<strong>おすすめ掲示板</strong>です。売れ筋・売りたい商品を、ひとことコメント付きで載せられます。商品を選ぶと、お客様は「予約する／商品を見る」ですぐ移動できます。並び順の数字が小さいほど上に出ます。
     </div>
+    <div id="bullStale" role="alert" style="display:none;font-size:13px;background:rgba(192,57,43,.1);border:1px solid var(--red);color:var(--red);border-radius:var(--radius);padding:8px 12px;margin-bottom:10px;line-height:1.7"></div>
     <div class="filter-bar">
       <button class="btn btn-gold btn-sm" onclick="bullOpenEdit('')">+ 掲示を追加</button>
       <button class="btn btn-outline btn-sm" onclick="loadBulletins()">↻ 再読込</button>
@@ -1587,7 +1588,7 @@ function renderPortalProducts(){
       <td>${pm!=null?'¥'+Number(pm).toLocaleString():'—'}</td>
       <td>${p.portal_visible?'<span style="color:var(--green,#6a9e5a)">公開</span>':'<span style="color:var(--text3)">非公開</span>'}</td>
       <td>${p.is_orderable?(noPrice?'<span style="color:var(--red)" title="価格が無いため注文できません">価格なし</span>':'可'):'<span style="color:var(--text3)">停止</span>'}</td>
-      <td><button class="btn btn-outline btn-sm" onclick="ppOpenEdit('${p.id}')">編集</button></td>
+      <td style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="ppOpenEdit('${p.id}')">編集</button> <button class="btn btn-outline btn-sm" data-pick="${p.id}" onclick="bullQuickPick('${p.id}')" title="注文ページの一番上の「おすすめ」に載せます">&#x2b50; いちおし${bullRows.some(b=>b.product_id===p.id&&b.is_active)?'中':''}</button></td>
     </tr>`;
   }).join('');
 }
@@ -1765,13 +1766,41 @@ async function loadBulletins(){
     alert('掲示板の読込みに失敗しました: '+e.message);
   }
 }
+/* 掲示が古くなっていないか（2026-11-20 注文システム見直し）。
+   8月に載せた「今週のおすすめ」が11月まで注文ページの一番上に出たままだった。載せた日と、古いものの知らせを出す。 */
+const BULL_STALE_DAYS=14;
+function bullAgeDays(b){ const t=new Date(b.created_at||'').getTime(); return isNaN(t)?null:Math.floor((Date.now()-t)/86400000); }
+function bullStaleRows(){ return bullRows.filter(b=>b.is_active&&bullAgeDays(b)!=null&&bullAgeDays(b)>=BULL_STALE_DAYS); }
+function renderBullStale(){
+  const el=document.getElementById('bullStale'); if(!el) return;
+  const st=bullStaleRows();
+  if(!st.length){ el.style.display='none'; el.textContent=''; return; }
+  el.style.display='';
+  el.innerHTML='&#x26a0; 載せてから'+BULL_STALE_DAYS+'日以上たった掲示が '+st.length+'件、注文ページの一番上に出たままです（'+st.map(b=>esc(b.title||b.product_name||'無題')+' '+bullAgeDays(b)+'日前').join('、')+'）。いまのおすすめに書き直すか、「表示」を外してください。';
+}
+/* 商品の一覧から、その商品を「いちおし」として掲示板に載せる。すでに載っていればその掲示を開く */
+async function bullQuickPick(pid){
+  if(!bullRows.length){ if(!staffKeyGet()) await staffKeyEnsure(); const k=staffKeyGet(); if(!k) return;
+    try{ bullRows=await sbRpc('admin_list_bulletins',{p_staff_key:k})||[]; }
+    catch(e){ if(String(e.message).includes('スタッフキー')) staffKeyClear(); alert('掲示板の読込みに失敗しました: '+e.message); return; } }
+  const cur=bullRows.find(b=>b.product_id===pid&&b.is_active);
+  if(cur){ bullOpenEdit(cur.id); return; }
+  const p=ppProducts.find(x=>x.id===pid); if(!p) return;
+  bullOpenEdit('');
+  bullFillProductDropdown(pid);
+  document.getElementById('bullfBadge').value='いちおし';
+  document.getElementById('bullfTitle').value=p.display_name;
+  document.getElementById('bullfSort').value=10;
+  document.getElementById('bullfBody').focus();
+}
 function renderBulletins(){
+  renderBullStale();
   const body=document.getElementById('bullBody'); if(!body) return;
   if(!bullRows.length){ body.innerHTML='<tr><td colspan="7" style="color:var(--text3);padding:16px">掲示はまだありません。「+ 掲示を追加」で作成できます。</td></tr>'; return; }
   body.innerHTML=bullRows.map(b=>`<tr style="${b.is_active?'':'opacity:.45;'}">
     <td>${b.sort_order}</td>
     <td>${b.badge?('<span style="background:var(--gold);color:#0d0f0a;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:700">'+esc(b.badge)+'</span>'):'—'}</td>
-    <td style="font-weight:700">${b.image_url?('<img src="'+b.image_url.replace(/"/g,'&quot;')+'" style="width:40px;height:40px;object-fit:cover;border-radius:4px;vertical-align:middle;margin-right:6px">'):''}${esc(b.title||'')}</td>
+    <td style="font-weight:700">${b.image_url?('<img src="'+b.image_url.replace(/"/g,'&quot;')+'" style="width:40px;height:40px;object-fit:cover;border-radius:4px;vertical-align:middle;margin-right:6px">'):''}${esc(b.title||'')}${bullAgeDays(b)!=null?`<div style="font-size:11px;font-weight:400;color:${b.is_active&&bullAgeDays(b)>=BULL_STALE_DAYS?'var(--red)':'var(--text3)'}">${bullAgeDays(b)===0?'今日':bullAgeDays(b)+'日前'}に掲載</div>`:''}</td>
     <td style="font-size:12px;color:var(--text2);max-width:220px">${esc((b.body||'').slice(0,60))}</td>
     <td style="font-size:12px">${esc(b.product_name||'—')}</td>
     <td>${b.is_active?'<span style="color:var(--green,#6a9e5a)">表示</span>':'<span style="color:var(--text3)">非表示</span>'}</td>
@@ -1975,7 +2004,7 @@ function renderOrders(){
     return `<tr>
       <td style="font-weight:700;color:var(--gold)">${esc(o.order_code||'--')}</td>
       <td>${esc(o.customer_name||'--')}</td>
-      <td>${o.delivery_date||'--'}</td>
+      <td>${['受注','確認済'].includes(o.status)?dueBadgeHtml(o.delivery_date)+(o.delivery_time_zone?'<div style="font-size:.72rem;margin-top:2px">'+esc(o.delivery_time_zone)+'</div>':''):(o.delivery_date||'--')}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(summary||'--')}</td>
       <td>${amt}</td>
       <td><span class="badge badge-${o.status||''}">${o.status||'--'}</span>${olBadge(o.id)}</td>
@@ -2219,7 +2248,8 @@ function renderShipping(){
         <span class="ship-card-title">${esc(o.order_code||'')}</span>
         <span class="badge badge-${o.status}">${o.status}</span>
       </div>
-      <div class="ship-card-info">${esc(o.customer_name||'')} | 納品: ${o.delivery_date||'未定'} | ${esc(o.delivery_address||'')}</div>
+      <div class="ship-card-info">${esc(o.customer_name||'')} | ${dueBadgeHtml(o.delivery_date)}${o.delivery_time_zone?' <strong>'+esc(o.delivery_time_zone)+'</strong>':''} | ${esc(o.delivery_address||'')}</div>
+      ${o.memo?`<div class="ship-card-info" data-order-memo style="white-space:pre-wrap;overflow-wrap:anywhere">&#x1F4DD; ${esc(o.memo)}</div>`:''}
       <div class="ship-card-items">${esc(summary)}</div>
       <div class="ship-actions">
         ${o.status==='受注'?`<button class="btn btn-blue btn-sm" onclick="changeStatus('${o.id}','確認済')">確認済にする</button>`:''}
@@ -2848,6 +2878,26 @@ function wipeIssuedSecrets(rerender){
 const ORDER_URL='https://tateyama-gibier.vercel.app/order.html';
 // ジビエ料理ギャラリー（誰でも見られる・2026-10-05）。注文ページの案内と一緒に送る
 const GALLERY_URL='https://tateyama-gibier.vercel.app/dishes.html';
+/* 納品希望日が「今日・明日・あと何日・過ぎている」かをひと目で分かる印にする（2026-11-20 注文システム見直し）。
+   日付だけだと、今日が何日かを思い出して引き算しないと急ぎかどうか分からなかった。 */
+function dueInfo(dateStr, today) {
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}/.test(String(dateStr))) return { days: null, label: '納品日 未定', level: 'none' };
+  const p = String(dateStr).slice(0, 10).split('-').map(Number);
+  const t = today || new Date();
+  const days = Math.round((Date.UTC(p[0], p[1] - 1, p[2]) - Date.UTC(t.getFullYear(), t.getMonth(), t.getDate())) / 86400000);
+  const wd = '日月火水木金土'[new Date(p[0], p[1] - 1, p[2]).getDay()];
+  const md = p[1] + '/' + p[2] + '（' + wd + '）';
+  if (days < 0) return { days, label: '⚠ 納品希望日を' + (-days) + '日過ぎています ' + md, level: 'over' };
+  if (days === 0) return { days, label: '🔥 今日が納品希望日 ' + md, level: 'today' };
+  if (days === 1) return { days, label: '⏰ 明日が納品希望日 ' + md, level: 'soon' };
+  return { days, label: '納品希望 ' + md + '・あと' + days + '日', level: days <= 3 ? 'near' : 'later' };
+}
+function dueBadgeHtml(dateStr) {
+  const d = dueInfo(dateStr);
+  const st = { over: 'background:#c0392b;color:#fff', today: 'background:#c0392b;color:#fff', soon: 'background:#d98a00;color:#fff', near: 'background:rgba(217,138,0,.18);color:#d98a00;border:1px solid #d98a00', later: 'background:rgba(127,127,127,.14);color:inherit;border:1px solid rgba(127,127,127,.4)', none: 'background:rgba(127,127,127,.14);color:inherit;border:1px dashed rgba(127,127,127,.6)' }[d.level];
+  return '<span data-due="' + d.level + '" style="display:inline-block;font-size:12px;font-weight:800;border-radius:6px;padding:2px 8px;max-width:100%;overflow-wrap:anywhere;' + st + '">' + d.label + '</span>';
+}
+function dueEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 let orgInfo={name:'館山ジビエセンター',address:'千葉県館山市西長田1163-5',phone:'',email:''};
 let custFiltered=[];
 let orderedCustomerIds=new Set();
