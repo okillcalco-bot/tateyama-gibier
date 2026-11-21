@@ -3710,6 +3710,25 @@ async function loadTodayCount() {
 }
 
 /* ── List tab ── */
+/* 受入時刻（"9:05"・"09:05"・"0905"・"９：０５"）を、その日の0時からの分に直す。読めなければ null */
+function receiveMinutes(t) {
+  const m = String(t == null ? '' : t).normalize('NFKC').trim().match(/^(\d{1,2})[:：時]?(\d{2})/);
+  if (!m) return null;
+  const h = +m[1], mi = +m[2];
+  return (h < 24 && mi < 60) ? h * 60 + mi : null;
+}
+/* 到着の早い順: 受入時刻（無いものは登録時刻）→ 登録時刻 → 通し番号。一覧はどれも今日の搬入なので捕獲日では並べない
+   （前日に獲れて今日搬入した個体を先頭にしない） */
+function intakeArrivalKey(r) {
+  let min = receiveMinutes(r.receive_time);
+  if (min == null && r.created_at) { const d = new Date(r.created_at); if (!isNaN(d)) { const j = new Date(d.getTime() + 9 * 3600000); min = j.getUTCHours() * 60 + j.getUTCMinutes(); } }
+  return [min == null ? 99999 : min, String(r.created_at || ''), Number(r.serial_number) || 0];
+}
+function intakeArrivalCmp(a, b) {
+  const x = intakeArrivalKey(a), y = intakeArrivalKey(b);
+  for (let i = 0; i < x.length; i++) { if (x[i] < y[i]) return -1; if (x[i] > y[i]) return 1; }
+  return 0;
+}
 async function loadList() {
   try {
     const _t = today();
@@ -3749,13 +3768,16 @@ function renderList() {
   }
   empty.style.display = 'none';
 
-  // その日の到着順（作成時刻→受入時刻で昇順）に、種別関係なく通し番号を振る
-  const akey = r => String(r.created_at || '') + '|' + String(r.receive_time || '');
+  // その日の到着順（搬入＝受入時刻の昇順）に、種別関係なく番号を振る。一覧は新しい搬入が上（受入時刻の降順）。
+  // 2026-11-21 今泉さん「搬入時刻ではなく、登録順でソートしているようです」: 以前は番号を登録時刻（created_at）で
+  // 振っていたため、先に登録して後から受入時刻を直した個体（M246 09:13登録・10:09受入）が 1番になり、一覧の並びと食い違った。
+  // 受入時刻は文字列（"9:05" と "10:09" を文字で比べると 10時台が先に来る）なので、分に直して比べる。
   const dayNo = {};
-  [...todayData].sort((a, b) => akey(a) < akey(b) ? -1 : akey(a) > akey(b) ? 1 : 0)
-    .forEach((r, i) => { dayNo[r.id] = i + 1; });
+  const arrived = [...todayData].sort(intakeArrivalCmp);
+  arrived.forEach((r, i) => { dayNo[r.id] = i + 1; });
+  const shown = arrived.slice().reverse();
 
-  container.innerHTML = todayData.map(r => {
+  container.innerHTML = shown.map(r => {
     const emojiMap = {'イノシシ':'&#x1F417;','シカ':'&#x1F98C;','アライグマ':'&#x1F99D;','ハクビシン':'&#x1F43C;','キョン':'&#x1F98C;','タヌキ':'&#x1F99D;','ノウサギ':'&#x1F430;'};
     const emoji = emojiMap[r.species] || '&#x1F43E;';
     const qClass = r.quality === '良' ? 'q-good' : r.quality === '可' ? 'q-ok' : 'q-bad';
