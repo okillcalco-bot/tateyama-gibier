@@ -15,17 +15,20 @@
 //        取消の注文は除く
 //     5. 「印刷/PDF」で表紙（施設情報・対応表）＋帳票一式が1つの印刷物になる
 //     6. スマホ幅で横スクロールしない
+//     7. 賠償保険（2026-11-04「保険の加入者証だから登録しといて」）: 施設情報に保険の欄が2つあり、
+//        表紙にも載る。保存しても画面に欄の無い項目を消さない（以前は欄の無い項目が保存のたびに消えた）
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const path = require('path');
 
 (async () => {
-  const browser = await chromium.launch({ executablePath: process.env.CHROME || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const browser = await chromium.launch({ executablePath: process.env.CHROME || '/opt/pw-browsers/chromium' });
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await ctx.addInitScript(() => { try { sessionStorage.setItem('tg_access_v1', 'ok'); sessionStorage.setItem('tg_role_v1', 'admin'); } catch (e) {} });
   const page = await ctx.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message));
 
   const reqs = [];
+  const saved = [];
   await page.route('**/*', r => {
     const u = r.request().url();
     if (u.includes('jsdelivr') || u.includes('cdn')) return r.fulfill({ status: 200, contentType: 'application/javascript', body: 'window.JsBarcode=function(){};' });
@@ -33,7 +36,12 @@ const path = require('path');
     const J = b => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(b) });
     const qs = decodeURIComponent(u.split('?')[1] || '');
     reqs.push(u.replace(/^.*\/rest\/v1\//, '').split('?')[0] + '?' + qs);
-    if (/\/rest\/v1\/app_settings/.test(u)) return J([{ key: 'haccp_facility', value: { license_no: '安保 第12-345号', hygiene_manager: '沖 浩志' } }]);
+    if (/\/rest\/v1\/app_settings/.test(u)) {
+      const m = r.request().method();
+      if (m === 'PATCH' || m === 'POST') { saved.push({ method: m, body: JSON.parse(r.request().postData() || '{}') }); return J([]); }
+      // 架空の値（実際の加入者番号ではない）。old_key は画面に欄の無い項目
+      return J([{ key: 'haccp_facility', value: { license_no: '安保 第12-345号', hygiene_manager: '沖 浩志', insurance: '架空共済「テスト君」加入者No.000-TEST', insurance_period: '令和8年10月1日から1年間', old_key: '残す値' } }]);
+    }
     if (/\/rest\/v1\/individuals/.test(u)) {
       const rows = [
         { id: 'i1', label_id: 'TGC-08-T300', species: 'イノシシ', capture_date: '2026-09-02', capture_city: '館山市', weight_total: 45, radiation_test_date: '2026-09-03', radiation_result_date: '2026-09-03', radiation_result: '検出下限値以下', capture_anomalies: 'なし', organ_anomalies: 'なし' },
@@ -79,6 +87,9 @@ const path = require('path');
   T('HACCP提出セットの欄がある', await page.$('#haccp-pack') !== null, '');
   T('施設情報は app_settings の値で埋まる（許可番号・食品衛生責任者）', (await page.$eval('#hf-license_no', el => el.value)) === '安保 第12-345号' && (await page.$eval('#hf-hygiene_manager', el => el.value)) === '沖 浩志', '');
   T('未設定の項目は既定値（施設名・管轄保健所）', /館山ジビエセンター/.test(await page.$eval('#hf-name', el => el.value)) && /安房保健所/.test(await page.$eval('#hf-hokenjo', el => el.value)), '');
+
+  T('賠償保険の欄が2つあり、app_settings の値で埋まる', (await page.$eval('#hf-insurance', el => el.value)) === '架空共済「テスト君」加入者No.000-TEST' && (await page.$eval('#hf-insurance_period', el => el.value)) === '令和8年10月1日から1年間', '');
+  T('賠償保険の欄の案内は「加入者証」（許可証ではない）', /加入者証/.test(await page.$eval('#hf-insurance', el => el.placeholder)), await page.$eval('#hf-insurance', el => el.placeholder));
 
   // 2) 対応表
   const rowN = await page.$$eval('#haccp-map tr.haccp-row', els => els.length);
@@ -129,6 +140,17 @@ const path = require('path');
   T('新しい帳票（放射能・駆除・産廃・販売台帳・教育訓練）も一式に入る', /放射性物質検査記録/.test(pack) && /ねずみ・昆虫駆除記録/.test(pack) && /産業廃棄物 搬出前チェック記録/.test(pack) && /出荷・販売台帳/.test(pack) && /衛生教育・訓練記録/.test(pack), '');
   T('備品台帳（別表17 三の設備一覧）も一式に入る', /備品管理台帳/.test(pack) && /金属検出機/.test(pack), '');
   T('印刷ダイアログが呼ばれる', await page.evaluate(() => window.__printed), '');
+
+  T('表紙に賠償保険（内容・期間）が入る', /賠償保険（PL・リコール）/.test(pack) && /架空共済「テスト君」加入者No\.000-TEST/.test(pack) && /令和8年10月1日から1年間/.test(pack), '');
+
+  // 7) 保存しても欄の無い項目を消さない
+  await page.fill('#hf-insurance_period', '令和8年10月1日から1年間（令和9年9月30日まで）');
+  await page.evaluate(() => haccpSaveFacility());
+  await page.waitForTimeout(400);
+  const body = saved.length ? saved[saved.length - 1].body : null;
+  const v = body && body.value;
+  T('保存: 書き換えた保険の期間が入る', !!v && v.insurance_period === '令和8年10月1日から1年間（令和9年9月30日まで）' && v.insurance === '架空共済「テスト君」加入者No.000-TEST', JSON.stringify(v || body));
+  T('保存: 画面に欄の無い項目（old_key）を消さない', !!v && v.old_key === '残す値', JSON.stringify(v || body));
 
   // 6) スマホ幅
   const of = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
