@@ -42,6 +42,8 @@
 
 ## 1. ジビエ基幹システム（本番稼働中・ルート直下）
 
+全体の設計書: `docs/system-design.md`（業務の流れ・画面・データ・権限・弱いところ。変更したら更新する）
+
 `index.html` / `capture-form.html` / `order-portal.html` / `punch.html` など、
 静的HTML + Supabase 直結の PWA 群。館山ジビエセンターの現場で毎日使われている。
 
