@@ -2339,6 +2339,18 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 
   <!-- Data Management (データ管理) -->
   <div class="tab-panel" id="panel-datamgmt">
+    <div class="section" id="backup-section">
+      <div class="section-title">📦 業務データの一括保存（退避用）</div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;line-height:1.7;">
+        Supabase の自動バックアップは<strong>「全体を丸ごと、その日の状態に戻す」</strong>ことしかできず、写真は対象外です。
+        ここで主な業務の表をまとめて1つのファイルに保存しておくと、「昨日の在庫の誤更新だけ」のように表・行の単位で見比べて戻せます。
+        週に1回、パソコンで保存して Google ドライブに置いてください（写真は一覧＝場所だけを入れます）。</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <button class="btn btn-primary" id="backup-btn" onclick="backupAll()">📦 まとめて保存（JSON）</button>
+        <span id="backup-last" style="font-size:12.5px;color:var(--text2);"></span>
+      </div>
+      <div id="backup-result" style="margin-top:10px;"></div>
+    </div>
     <div class="section">
       <div class="section-title">CSV出力</div>
       <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;">大元のデータはこの画面から直接編集できません。CSVで確認し、修正が必要な場合は下の「気になる点フラグ」に記録して管理者に指示してください。</div>
@@ -12749,7 +12761,104 @@ const CSV_TABLES = [
   ['cleaning_logs', '清掃記録'], ['supplies', '資材在庫'], ['equipment', '備品台帳'],
 ];
 
+/* ───────── 業務データの一括保存（2026-11-24 伴走支援の指摘「業務テーブル単位の定期エクスポートが無い」）
+   Supabase の日次バックアップは「プロジェクト全体を特定の日に丸ごと戻す」しかできず、写真（Storage）は対象外。
+   表ごとに全行を読み、件数をDBの件数と照合して1つのJSONに入れる。読めなかった表・件数が合わない表は画面に出す（黙って欠けたファイルにしない）。 */
+const BACKUP_TABLES = [
+  ['individuals', '個体'], ['individuals_history', '個体の変更履歴'], ['inventory', '在庫パック'], ['processing_log', '精肉・加工の記録'],
+  ['orders', '注文'], ['order_items', '注文明細'], ['shipments', '出荷'],
+  ['documents', '書類'], ['document_items', '書類の明細'], ['document_orders', '書類と注文の対応'],
+  ['customers', '顧客'], ['hunters', '捕獲者（公開してよい列）'], ['products', '加工品'], ['product_movements', '加工品の出入り'],
+  ['price_master', '単価'], ['customer_prices', '顧客別単価'], ['marketplace_orders', '通販の注文'], ['marketplace_item_map', '通販の在庫対応'],
+  ['sale_events', 'イベント'], ['sale_event_items', 'イベントの売上'], ['meal_voices', '食べた人の声'],
+  ['staff', 'スタッフ'], ['attendance', '出退勤'], ['shifts', 'シフト'], ['cleaning_logs', '清掃記録'], ['facility_check_logs', '施設点検'],
+  ['waste_weighings', '産廃の計量'], ['area_master', '地区マスタ'], ['shipping_rates', '送料表'],
+];
+const BACKUP_LAST_KEY = 'tg_backup_last_v1';
+function backupLastShow() {
+  const el = document.getElementById('backup-last'); if (!el) return;
+  let last = null; try { last = JSON.parse(localStorage.getItem(BACKUP_LAST_KEY) || 'null'); } catch (e) {}
+  if (!last || !last.at) { el.innerHTML = '<span style="color:var(--red);">この端末ではまだ保存していません</span>'; return; }
+  const days = Math.floor((Date.now() - new Date(last.at).getTime()) / 86400000);
+  el.innerHTML = 'この端末の前回の保存: ' + dueEsc(String(last.at).slice(0, 10)) + '（' + (days === 0 ? '今日' : days + '日前') + '）' +
+    (days >= 7 ? ' <span style="color:var(--red);font-weight:700;">⚠ 1週間以上たっています</span>' : '') +
+    (last.problems ? ' <span style="color:var(--red);">・前回は ' + last.problems + '表に問題あり</span>' : '');
+}
+/* DB の件数（Prefer: count=exact）。読めなければ null（＝照合できない） */
+async function backupCount(table) {
+  try {
+    const headers = { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, Prefer: 'count=exact', Range: '0-0' };
+    const sk = staffKeyGet(); if (sk) headers['x-staff-key'] = sk;
+    const res = await fetch(`${SB_URL}/rest/v1/${table}?select=*&limit=1`, { headers });
+    if (!res.ok) return null;
+    const m = /\/(\d+)$/.exec(res.headers.get('content-range') || '');
+    return m ? Number(m[1]) : null;
+  } catch (e) { return null; }
+}
+async function backupReadTable(table) {
+  if (table === 'hunters') {
+    // 口座・住所・電話はファイルに入れない（持ち出し先で漏れないように）。公開してよい列だけ
+    return sb('GET', table, null, `?select=${HUNTER_PUBLIC_COLS}&order=id.asc&limit=100000`);
+  }
+  try { return await sb('GET', table, null, '?select=*&order=id.asc&limit=100000'); }
+  catch (e) {
+    if (/column .*id.* does not exist|42703/.test(String(e.message || e))) return sb('GET', table, null, '?select=*&limit=100000');
+    throw e;
+  }
+}
+let backupRunning = false;
+async function backupAll() {
+  if (backupRunning) return;
+  backupRunning = true;
+  const btn = document.getElementById('backup-btn'), out = document.getElementById('backup-result');
+  btn.disabled = true;
+  const started = new Date();
+  const bundle = { kind: 'tateyama-gibier-backup', version: 1, created_at: started.toISOString(), project: SB_URL.replace(/^https:\/\//, '').split('.')[0], tables: {}, summary: [], photos: [] };
+  const rowsOut = [];
+  try {
+    for (let i = 0; i < BACKUP_TABLES.length; i++) {
+      const [t, label] = BACKUP_TABLES[i];
+      out.innerHTML = `<div class="loading"><span class="spin"></span>${i + 1} / ${BACKUP_TABLES.length}: ${dueEsc(label)} を読んでいます…</div>`;
+      let rows = null, err = '';
+      try { rows = await backupReadTable(t); if (!Array.isArray(rows)) { err = '読めない形式'; rows = null; } }
+      catch (e) { err = sbSafeMsg(e); }
+      const dbCount = rows ? await backupCount(t) : null;
+      const status = !rows ? 'error' : (dbCount == null ? 'unchecked' : (dbCount === rows.length ? 'ok' : 'mismatch'));
+      if (rows) bundle.tables[t] = rows;
+      const rec = { table: t, label, rows: rows ? rows.length : 0, db_count: dbCount, status, error: err || null };
+      bundle.summary.push(rec); rowsOut.push(rec);
+    }
+    // 写真はDBのバックアップに入らない。場所（URL）だけ一覧にしておく（写真そのものの退避は別途）
+    (bundle.tables.individuals || []).forEach(r => { if (r.image_url) bundle.photos.push({ table: 'individuals', label_id: r.label_id, url: r.image_url }); });
+    const json = JSON.stringify(bundle);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    a.download = `tgc-backup-${ymdLocal(started)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    const problems = rowsOut.filter(r => r.status === 'error' || r.status === 'mismatch');
+    const unchecked = rowsOut.filter(r => r.status === 'unchecked');
+    try { localStorage.setItem(BACKUP_LAST_KEY, JSON.stringify({ at: started.toISOString(), problems: problems.length })); } catch (e) {}
+    const total = rowsOut.reduce((s, r) => s + r.rows, 0);
+    const badge = st => st === 'ok' ? '<span style="color:var(--green,#4caf50);font-weight:700;">一致</span>'
+      : st === 'mismatch' ? '<span style="color:var(--red);font-weight:700;">件数が合わない</span>'
+      : st === 'unchecked' ? '<span style="color:var(--text2);">照合できず</span>'
+      : '<span style="color:var(--red);font-weight:700;">読めなかった</span>';
+    out.innerHTML = (problems.length
+      ? `<div role="alert" style="border:1px solid var(--red);color:var(--red);border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:13px;">⚠ ${problems.length}表が欠けています（${problems.map(r => dueEsc(r.label)).join('・')}）。このファイルだけでは完全な退避になりません。スタッフキーのある端末で、もう一度保存してください。</div>`
+      : `<div style="border:1px solid var(--green,#4caf50);border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:13px;">✅ ${rowsOut.length}表・${total.toLocaleString()}行・写真${bundle.photos.length}枚の場所を保存しました${unchecked.length ? `（${unchecked.length}表は件数を照合できませんでした）` : ''}。ファイルを Google ドライブに置いてください。</div>`) +
+      `<div style="overflow-x:auto;"><table><thead><tr><th>表</th><th>保存した行</th><th>DBの件数</th><th>照合</th></tr></thead><tbody>` +
+      rowsOut.map(r => `<tr data-backup-table="${dueEsc(r.table)}" data-backup-status="${r.status}"><td>${dueEsc(r.label)}<div style="font-size:11px;color:var(--text2)">${dueEsc(r.table)}</div></td><td>${r.rows.toLocaleString()}</td><td>${r.db_count == null ? '—' : r.db_count.toLocaleString()}</td><td>${badge(r.status)}${r.error ? `<div style="font-size:11px;color:var(--red);overflow-wrap:anywhere;">${dueEsc(r.error).slice(0, 160)}</div>` : ''}</td></tr>`).join('') +
+      `</tbody></table></div>`;
+  } catch (e) {
+    out.innerHTML = `<div role="alert" style="color:var(--red);">保存に失敗しました: ${dueEsc(sbSafeMsg(e))}</div>`;
+  } finally {
+    backupRunning = false; btn.disabled = false; backupLastShow();
+  }
+}
+
 function loadDataMgmt() {
+  backupLastShow();
   const grid = document.getElementById('csv-buttons');
   grid.innerHTML = CSV_TABLES.map(([t, label]) => `<button class="btn" onclick="exportCSV('${t}','${label}')">⬇ ${label}</button>`).join('');
   loadFlags();
