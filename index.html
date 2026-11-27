@@ -551,6 +551,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
   <button class="tab-btn" data-tab="shipping">&#x1F4E4; 出荷処理<span class="nav-badge" id="nav-badge-shipping"></span></button>
   <button class="tab-btn" data-tab="trace">&#x1F50D; トレーサビリティ</button>
   <button class="tab-btn" data-tab="voices">&#x1F4AC; 食べた人の声<span class="nav-badge" id="nav-badge-voices"></span></button>
+  <button class="tab-btn" data-tab="yield">&#x1F417; 1頭から取れる量（説明用）</button>
   <div class="nav-group">受発注</div>
   <a class="tab-btn" href="order-admin.html">&#x1F4CB; 受発注管理<span class="nav-badge" id="nav-badge-orders"></span></a>
   <a class="tab-btn" href="order.html" target="_blank">&#x1F6D2; 注文ポータル（お客様用）</a>
@@ -1238,6 +1239,27 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
       </div>
       <div id="mv-list" style="margin-top:10px;"></div>
     </div>
+  </div>
+
+  <!-- 1頭から取れる量（説明用・2026-11-27）: 「1頭からどれくらい肉が取れるの？」に、いつでも最新の実測で答える -->
+  <div class="tab-panel" id="panel-yield">
+    <style>#panel-yield .yd-table{border-collapse:collapse}#panel-yield .yd-table th,#panel-yield .yd-table td{border-bottom:1px solid var(--border);padding:6px 8px;text-align:left;vertical-align:top}#panel-yield .yd-table th{font-weight:700;color:var(--text3);white-space:nowrap}</style>
+    <div class="section">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <span>🐗 1頭から取れる量（お客様への説明用）</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-sm active" id="yd-sp-イノシシ" onclick="yieldSetSpecies('イノシシ')">イノシシ</button>
+          <button class="btn btn-sm" id="yd-sp-シカ" onclick="yieldSetSpecies('シカ')">シカ</button>
+          <button class="btn btn-sm" onclick="loadYield()">↻ 最新にする</button>
+        </div>
+      </div>
+      <div style="font-size:13px;color:var(--text3);line-height:1.7;">
+        精肉まで終えた個体の<strong>搬入時の体重</strong>と<strong>精肉パックの重さ</strong>から、開くたびに計算し直します。
+        枝肉のまま出した個体は数えません。下の「話し方」はこの数字から作っているので、そのまま読めます。
+      </div>
+      <div id="yd-status" style="font-size:13px;margin-top:8px;" role="status"></div>
+    </div>
+    <div id="yd-result"></div>
   </div>
 
   <!-- Punch (出退勤打刻) -->
@@ -3306,6 +3328,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'shifts') loadShiftBoard();
     if (btn.dataset.tab === 'board') loadBoard();
     if (btn.dataset.tab === 'voices') loadVoices();
+    if (btn.dataset.tab === 'yield') loadYield();
     if (btn.dataset.tab === 'event') loadEventSheet();
     if (btn.dataset.tab === 'waste') loadWaste();
     if (btn.dataset.tab === 'analysis') loadAnalysisHub();
@@ -13544,6 +13567,210 @@ function vcSetStatus(st) {
     if (b) b.classList.toggle('active', s === st);
   });
   loadVoices();
+}
+
+/* ── 1頭から取れる量（説明用・2026-11-27 沖「いつでも最新データで伝えられるように」） ──
+   よく聞かれる「1頭からどれくらいの肉が取れるの？」に、決め打ちの数字ではなく実測で答える。
+   数え方（2026-11-26 に手で数えた結果と同じ決まり。数え方を変えるときはテスト yield-story も直す）:
+   - 体重 = individuals.weight_total（搬入時）。0・空の個体は数えない
+   - 肉 = inventory の部位パック（tier=2）。削除・取消は数えない
+   - 枝肉のまま出した個体（識別コードに -ED）は、精肉していないので数えない
+   - 「食べるお肉」= 希少部位＋ブロック＋加工向け。ペットフード用・内臓・骨は別に数える
+     （最初の手計算でペットフード用を肉に入れて「約3割」と言ってしまった。混ぜない）
+   - 食べるお肉が体重の5%未満・70%超の個体は、記録の食い違いとして数えず、件数を出す */
+const YIELD_PREMIUM = ['ロース', 'ヒレ'];
+const YIELD_BLOCK = ['モモ', '外モモ', '内モモ', 'シンタマ', 'ランプ', 'カタ', 'ウデ', '肩ロース', 'バラ', 'スネ', 'ネック', 'チチカブ'];
+const YIELD_OFFAL = /(レバー|ハツ|フワ|ショウチョウ|ダイチョウ|タン|マメ|ガツ|内臓|ホルモン|骨|ガラ|皮|脂|ラード)/;
+const YIELD_BANDS = [[0, 20, '20kg未満'], [20, 40, '20〜40kg'], [40, 60, '40〜60kg'], [60, 1e9, '60kg以上']];
+let yieldSpecies = 'イノシシ';
+
+function yieldPartName(p) {
+  return String(p || '').replace(/\s*\[小売\]/g, '').replace(/（[^）]*）|\([^)]*\)/g, '').replace(/^骨付き\s*/, '').trim();
+}
+function yieldCategory(part) {
+  const p = yieldPartName(part);
+  if (/ペット/.test(p)) return 'pet';
+  if (YIELD_PREMIUM.includes(p)) return 'premium';
+  if (YIELD_BLOCK.includes(p)) return 'block';
+  if (YIELD_OFFAL.test(p)) return 'offal';
+  return 'processing';
+}
+function yieldQuantile(sorted, q) {
+  if (!sorted.length) return null;
+  const pos = (sorted.length - 1) * q, lo = Math.floor(pos), hi = Math.ceil(pos);
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+}
+/* 純粋な計算（画面・テストの両方から使う）。individuals: [{label_id,species,weight_total}]、packs: inventory の部位パック */
+function yieldCompute(individuals, packs, species) {
+  const live = new Map();
+  for (const d of individuals || []) {
+    const w = Number(d.weight_total);
+    if (d.species === species && d.label_id && w > 0) live.set(d.label_id, w);
+  }
+  const by = new Map();
+  for (const r of packs || []) {
+    if (!r || !live.has(r.individual_id) || r.deleted_at) continue;
+    if (['取消', '削除'].includes(r.status)) continue;
+    const kg = Number(r.weight_kg) || 0;
+    let a = by.get(r.individual_id);
+    if (!a) by.set(r.individual_id, a = { ed: false, n: 0, cat: { premium: 0, block: 0, processing: 0, pet: 0, offal: 0 }, parts: {} });
+    if (/-ED(-\d+)?$/.test(r.ident_code || '')) a.ed = true;
+    const c = yieldCategory(r.part_name); a.cat[c] += kg; a.n++;
+    const pn = yieldPartName(r.part_name) || '（部位なし）';
+    a.parts[pn] = (a.parts[pn] || { kg: 0, cat: c }); a.parts[pn].kg += kg;
+  }
+  let edCount = 0, outlier = 0;
+  const heads = [];
+  for (const [id, a] of by) {
+    if (a.ed) { edCount++; continue; }
+    const w = live.get(id), edible = a.cat.premium + a.cat.block + a.cat.processing;
+    const rate = edible / w;
+    if (!(rate >= 0.05 && rate <= 0.7)) { outlier++; continue; }
+    heads.push({ id, w, edible, rate, a });
+  }
+  const n = heads.length;
+  const sum = f => heads.reduce((s, h) => s + f(h), 0);
+  const res = { species, heads: n, edCount, outlier, total: by.size };
+  if (!n) return res;
+  const liveSum = sum(h => h.w), edibleSum = sum(h => h.edible);
+  const catSum = k => sum(h => h.a.cat[k]);
+  res.avgLive = liveSum / n;
+  res.avgEdible = edibleSum / n;
+  res.edibleRate = edibleSum / liveSum;
+  const rates = heads.map(h => h.rate).sort((x, y) => x - y);
+  res.q1 = yieldQuantile(rates, 0.25); res.q3 = yieldQuantile(rates, 0.75);
+  res.avgPet = catSum('pet') / n; res.petRate = catSum('pet') / liveSum;
+  res.avgOffal = catSum('offal') / n;
+  res.avgPacks = sum(h => h.a.n) / n;
+  res.cats = ['premium', 'block', 'processing'].map(k => ({ key: k, perHead: catSum(k) / n, share: edibleSum ? catSum(k) / edibleSum : 0 }));
+  const parts = {};
+  for (const h of heads) for (const [pn, v] of Object.entries(h.a.parts)) {
+    parts[pn] = parts[pn] || { name: pn, cat: v.cat, kg: 0 }; parts[pn].kg += v.kg;
+  }
+  res.parts = Object.values(parts).map(p => ({ ...p, perHead: p.kg / n })).sort((x, y) => y.kg - x.kg);
+  res.bands = YIELD_BANDS.map(([lo, hi, label]) => {
+    const hs = heads.filter(h => h.w >= lo && h.w < hi);
+    const lw = hs.reduce((s, h) => s + h.w, 0), ew = hs.reduce((s, h) => s + h.edible, 0);
+    return { label, n: hs.length, avgLive: hs.length ? lw / hs.length : null, avgEdible: hs.length ? ew / hs.length : null, rate: lw ? ew / lw : null };
+  });
+  return res;
+}
+/* 話し方（数字から作る。数字を書き換えたら文も変わる） */
+function yieldStory(r) {
+  if (!r || !r.heads) return null;
+  const pct = x => Math.round(x * 100);
+  const kg1 = x => (Math.round(x * 10) / 10).toFixed(1);
+  const ref = r.species === 'シカ' ? 50 : 40;           // 例に使う体重（平均に近い切りのよい数）
+  const meat = Math.round(ref * r.edibleRate);
+  const pet = Math.round(ref * r.petRate);
+  const prem = r.cats.find(c => c.key === 'premium'), proc = r.cats.find(c => c.key === 'processing');
+  const roseP = r.parts.find(p => p.name === 'ロース'), hireP = r.parts.find(p => p.name === 'ヒレ');
+  const premKg = ref / r.avgLive * prem.perHead;
+  const bands = r.bands.filter(b => b.n >= 5 && b.rate != null);
+  const lo = bands[0], hi = bands[bands.length - 1];
+  const s30 = `体重の約${pct(r.edibleRate)}%が、食べられるお肉になります。${ref}kgの${r.species}なら${meat}kgくらいです。` +
+    `残りは骨・内臓・皮などで、ペットフードになる分が${pet ? pet + 'kgほど' : '少し'}あります。` +
+    `ロースとヒレは合わせて${kg1(premKg)}kgほどで、お肉全体の${pct(prem.share)}%しかありません。` +
+    `どのパックにも個体の番号が付いていて、QRコードを読むと、いつ・どこで獲れた1頭かが分かります。`;
+  const s3 = [
+    `問いかけ:「${ref}kgの${r.species}から、お肉は何kg取れると思いますか？」（半分くらい、と答える人が多い）`,
+    `答え:「${meat}kgくらい、体重の約${pct(r.edibleRate)}%です。当センターで精肉した${r.heads}頭の実測です。」`,
+    lo && hi && lo !== hi ? `大きさで変わる:「${lo.label}だと${pct(lo.rate)}%、${hi.label}だと${pct(hi.rate)}%。大きいほど肉になる割合が上がります。」` : null,
+    `希少さ:「ロースは1頭から${roseP ? kg1(roseP.perHead) : '—'}kg、ヒレは${hireP ? kg1(hireP.perHead) : '—'}kg。合わせてもお肉の${pct(prem.share)}%です。」`,
+    `使い切る:「お肉の${pct(proc.share)}%はミンチやスライスにして余さず使い、食べられない部分の${kg1(r.avgPet)}kgほどはペットフードにしています。」`,
+    `1頭が見える:「パックの番号から、捕獲した地区・日付・獲った人までたどれます。」`,
+    `締め:「館山の山で獲れた1頭を、最後まで責任を持ってお届けしています。」`,
+  ].filter(Boolean);
+  return { s30, s3, ref, meat };
+}
+function yieldSetSpecies(sp) {
+  yieldSpecies = sp;
+  document.querySelectorAll('[id^="yd-sp-"]').forEach(b => b.classList.toggle('active', b.id === 'yd-sp-' + sp));
+  loadYield();
+}
+async function loadYield() {
+  const st = document.getElementById('yd-status'), out = document.getElementById('yd-result');
+  if (!st || !out) return;
+  st.textContent = '最新のデータで計算しています…'; st.style.color = 'var(--text3)'; st.removeAttribute('role'); st.setAttribute('role', 'status');
+  try {
+    const [inds, packs] = await Promise.all([
+      sb('GET', 'individuals', null, '?select=label_id,species,weight_total&weight_total=gt.0&limit=200000'),
+      sb('GET', 'inventory', null, '?select=individual_id,part_name,weight_kg,ident_code,status,deleted_at&tier=eq.2&deleted_at=is.null&individual_id=not.is.null&limit=200000'),
+    ]);
+    const r = yieldCompute(inds, packs, yieldSpecies);
+    yieldRender(r);
+    const now = new Date();
+    st.textContent = `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} 時点の実測`;
+  } catch (e) {
+    out.innerHTML = '';
+    st.textContent = '⚠ データを読めませんでした（数字は出していません）: ' + (e.message || e);
+    st.style.color = 'var(--red)'; st.setAttribute('role', 'alert');
+  }
+}
+function yieldRender(r) {
+  const out = document.getElementById('yd-result');
+  const pct = x => x == null ? '—' : Math.round(x * 100) + '%';
+  const kg = x => x == null ? '—' : (Math.round(x * 10) / 10).toFixed(1) + 'kg';
+  const kg2 = x => (Math.round(x * 100) / 100).toFixed(2) + 'kg';
+  if (!r.heads) {
+    out.innerHTML = `<div class="section"><div style="font-size:14px;">${dueEsc(r.species)}で数えられる個体がまだありません（精肉まで終えた個体が0頭）。</div></div>`;
+    return;
+  }
+  const story = yieldStory(r);
+  const CAT = { premium: '希少部位', block: 'ブロック', processing: '加工向け' };
+  const partsOf = k => r.parts.filter(p => p.cat === k).slice(0, 8).map(p => `${dueEsc(p.name)} ${kg2(p.perHead)}`).join('、');
+  const small = r.heads < 30 ? `<div role="alert" style="margin-top:8px;font-size:13px;color:#b9770e;">⚠ まだ${r.heads}頭分の記録です。数字がぶれやすいので「今のところ」と添えてください。</div>` : '';
+  const box = (big, label) => `<div style="flex:1 1 140px;min-width:0;padding:12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);">
+      <div style="font-size:24px;font-weight:800;line-height:1.2;">${big}</div><div style="font-size:12px;color:var(--text3);margin-top:4px;">${label}</div></div>`;
+  out.innerHTML = `
+    <div class="section">
+      <div class="section-title">いま言える数字（${dueEsc(r.species)}・${r.heads}頭の実測）</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;" id="yd-kpi">
+        ${box(pct(r.edibleRate), '体重のうち食べられるお肉')}
+        ${box(kg(r.avgEdible), `1頭あたりのお肉（平均体重 ${kg(r.avgLive)}）`)}
+        ${box(kg(r.avgPet), `ペットフード用（体重の${pct(r.petRate)}）`)}
+        ${box(pct(r.cats[0].share), 'お肉のうちロース・ヒレ')}
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-top:6px;">半数の個体は ${pct(r.q1)}〜${pct(r.q3)} の間。1頭あたりのパックは平均 ${(Math.round(r.avgPacks * 10) / 10).toFixed(1)}個。</div>
+      ${small}
+    </div>
+    <div class="section">
+      <div class="section-title">🗣 話し方（この数字から自動で作っています）</div>
+      <div style="font-size:13px;font-weight:700;margin-bottom:4px;">30秒版（店頭・電話）</div>
+      <div id="yd-s30" style="font-size:15px;line-height:1.9;padding:10px 12px;background:var(--surface2, rgba(0,0,0,.03));border-radius:var(--radius);overflow-wrap:anywhere;">${dueEsc(story.s30)}</div>
+      <button class="btn btn-sm" style="margin-top:6px;" onclick="yieldCopy('yd-s30', this)">📋 コピー</button>
+      <div style="font-size:13px;font-weight:700;margin:12px 0 4px;">3分版（見学・講演・取材）</div>
+      <ol id="yd-s3" style="font-size:14px;line-height:1.9;padding-left:22px;margin:0;overflow-wrap:anywhere;">${story.s3.map(x => `<li>${dueEsc(x)}</li>`).join('')}</ol>
+      <button class="btn btn-sm" style="margin-top:6px;" onclick="yieldCopy('yd-s3', this)">📋 コピー</button>
+    </div>
+    <div class="section">
+      <div class="section-title">体重の大きさで変わる</div>
+      <div style="overflow-x:auto;"><table class="yd-table" id="yd-bands" style="width:100%;font-size:13px;">
+        <thead><tr><th>体重</th><th>頭数</th><th>平均体重</th><th>お肉</th><th>割合</th></tr></thead>
+        <tbody>${r.bands.map(b => `<tr><td>${b.label}</td><td>${b.n}</td><td>${kg(b.avgLive)}</td><td>${kg(b.avgEdible)}</td><td>${b.n < 5 && b.n ? pct(b.rate) + '（頭数少）' : pct(b.rate)}</td></tr>`).join('')}</tbody>
+      </table></div>
+    </div>
+    <div class="section">
+      <div class="section-title">お肉の内訳（1頭あたり）</div>
+      <div style="overflow-x:auto;"><table class="yd-table" id="yd-cats" style="width:100%;font-size:13px;">
+        <thead><tr><th>分け方</th><th>1頭あたり</th><th>お肉に占める割合</th><th>中身</th></tr></thead>
+        <tbody>${r.cats.map(c => `<tr data-cat="${c.key}"><td>${CAT[c.key]}</td><td>${kg(c.perHead)}</td><td>${pct(c.share)}</td><td style="overflow-wrap:anywhere;">${partsOf(c.key)}</td></tr>`).join('')}
+          <tr style="font-weight:700;"><td>食べるお肉の合計</td><td>${kg(r.avgEdible)}</td><td>体重の${pct(r.edibleRate)}</td><td></td></tr>
+          <tr><td>ペットフード用</td><td>${kg(r.avgPet)}</td><td>（別に数える）</td><td>体重の${pct(r.petRate)}</td></tr>
+          <tr><td>内臓・骨など</td><td>${kg(r.avgOffal)}</td><td>（別に数える）</td><td>${partsOf('offal')}</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="section" style="font-size:12px;color:var(--text3);line-height:1.8;" id="yd-notes">
+      数えていないもの: 枝肉のまま出した ${r.edCount}頭／記録の食い違い（お肉が体重の5%未満・70%超）${r.outlier}頭。
+      台帳の「歩留まり」列とは数え方が違うので、外で話すときはこの画面の数字を使ってください。
+    </div>`;
+}
+function yieldCopy(id, btn) {
+  const el = document.getElementById(id); if (!el) return;
+  const text = el.tagName === 'OL' ? [...el.querySelectorAll('li')].map((li, i) => `${i + 1}. ${li.innerText}`).join('\n') : el.innerText;
+  const done = ok => { btn.textContent = ok ? '✓ コピーしました' : '⚠ コピーできませんでした（長押しで選んでください）'; setTimeout(() => { btn.textContent = '📋 コピー'; }, 2500); };
+  try { navigator.clipboard.writeText(text).then(() => done(true), () => done(false)); } catch (e) { done(false); }
 }
 
 async function loadVoices() {
